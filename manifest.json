@@ -1,13 +1,13 @@
 {
-  "name": "Plano Evolve",
-  "short_name": "Plano Evolve",
-  "description": "Gerador de planos alimentares personalizados para alunos de personal training, com cálculo automático de macros.",
+  "name": "Evolve Nutrition",
+  "short_name": "Evolve",
+  "description": "Protótipo do sistema de acompanhamento alimentar Evolve — vista Aluno e vista Profissional, com dados de exemplo.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#F6F5F0",
-  "theme_color": "#1E7A4C",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
   "lang": "pt-PT",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
