@@ -95,9 +95,10 @@
   /* ============ ALUNO MODE ============ */
   #alunoApp{max-width:430px; margin:0 auto;}
   @media (min-width:760px){
+    body{ background: radial-gradient(ellipse at 50% 0%, #17170f 0%, var(--bg) 60%); }
     #alunoApp{
-      background:var(--surface); border:1px solid var(--line-strong); border-radius:32px;
-      padding:22px 18px 32px; box-shadow:0 40px 80px -30px rgba(0,0,0,0.65);
+      background:var(--bg); border:2px solid var(--line-strong); border-radius:36px;
+      padding:24px 18px 34px; box-shadow:0 50px 90px -30px rgba(0,0,0,0.8), 0 0 0 8px var(--surface);
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
@@ -220,6 +221,7 @@
     width:200px; flex-shrink:0; display:flex; flex-direction:column; gap:2px;
     background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
     padding:14px 10px; position:sticky; top:16px; box-shadow:var(--shadow);
+    min-height:min(560px, calc(100vh - 96px));
   }
   .pro-nav-item{
     text-align:left; border:none; background:transparent; padding:10px 12px; border-radius:10px; cursor:pointer;
