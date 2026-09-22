@@ -245,7 +245,7 @@
   textarea.notes-area{width:100%; min-height:160px; border:1px solid var(--line-strong); border-radius:11px; padding:12px 14px; background:var(--bg); font-size:0.9rem; line-height:1.5; resize:vertical;}
 
   .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px;}
-  .evolve-mark{height:22px; width:auto; color:var(--ink); flex-shrink:0;}
+  .evolve-mark{height:26px; width:auto; color:var(--ink); flex-shrink:0;}
   .section-gap{margin-top:22px;}
   .muted-p{font-size:0.85rem; color:var(--muted); line-height:1.5;}
 
@@ -253,9 +253,11 @@
   table.assess-table{width:100%; border-collapse:collapse; margin-top:12px; font-size:0.82rem;}
   table.assess-table th, table.assess-table td{padding:7px 6px; text-align:right; border-bottom:1px solid var(--line);}
   table.assess-table th:first-child, table.assess-table td:first-child{text-align:left;}
-  table.assess-table th{font-size:0.66rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); font-weight:600;}
-  table.assess-table td{font-family:var(--mono); font-variant-numeric:tabular-nums;}
+  table.assess-table th{font-size:0.66rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); font-weight:600; white-space:nowrap;}
+  table.assess-table td{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap;}
   table.assess-table td.date-cell{font-family:var(--sans);}
+  .assess-table-scroll{overflow-x:auto; margin-top:12px; -webkit-overflow-scrolling:touch;}
+  .assess-table-scroll table.assess-table{margin-top:0;}
   .assess-delta{font-size:0.68rem; color:var(--muted-2); margin-left:3px;}
   .assess-form-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:10px; margin-top:12px; align-items:end;}
   .assess-form-grid .f label{display:block; font-size:0.65rem; color:var(--muted); text-transform:uppercase; margin-bottom:4px; font-weight:600;}
@@ -267,6 +269,12 @@
   .photo-thumb{position:relative; border-radius:10px; overflow:hidden; aspect-ratio:3/4; background:var(--surface-2); border:1px solid var(--line);}
   .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
   .photo-thumb .pdate{position:absolute; bottom:4px; left:4px; font-size:0.6rem; background:rgba(0,0,0,0.65); color:#fff; padding:2px 6px; border-radius:6px; font-family:var(--mono);}
+
+  .mini-select{border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:9px; padding:8px 10px; font-size:0.82rem; font-family:var(--sans);}
+  .compare-row{display:flex; gap:10px;}
+  .compare-row .compare-item{flex:1; text-align:center;}
+  .compare-row img{width:100%; display:block; border-radius:12px; aspect-ratio:3/4; object-fit:cover; border:1px solid var(--line-strong);}
+  .compare-row .clabel{font-size:0.68rem; color:var(--muted); margin-top:6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.03em;}
 
   /* Onboarding form */
   .onb-field{margin-bottom:14px;}
@@ -285,17 +293,17 @@
 
 <div class="app-wrap">
   <div class="brand-header">
-    <svg class="evolve-mark" viewBox="0 0 750 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Evolve">
-      <rect x="0" y="20" width="110" height="10" fill="currentColor"></rect>
-      <rect x="0" y="95" width="110" height="10" fill="currentColor"></rect>
-      <rect x="0" y="170" width="110" height="10" fill="currentColor"></rect>
-      <polyline points="150,20 215,180 280,20" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
-      <circle cx="375" cy="100" r="55" fill="none" stroke="currentColor" stroke-width="10"></circle>
-      <line x1="375" y1="0" x2="375" y2="200" stroke="currentColor" stroke-width="10"></line>
-      <polyline points="470,20 535,180 600,20" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
-      <rect x="640" y="20" width="110" height="10" fill="currentColor"></rect>
-      <rect x="640" y="95" width="110" height="10" fill="currentColor"></rect>
-      <rect x="640" y="170" width="110" height="10" fill="currentColor"></rect>
+    <svg class="evolve-mark" viewBox="0 0 1060 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Evolve">
+      <rect x="0" y="60" width="220" height="20" fill="currentColor"></rect>
+      <rect x="0" y="150" width="220" height="20" fill="currentColor"></rect>
+      <rect x="0" y="240" width="220" height="20" fill="currentColor"></rect>
+      <polyline points="260,60 325,260 390,60" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
+      <circle cx="530" cy="160" r="90" fill="none" stroke="currentColor" stroke-width="20"></circle>
+      <line x1="530" y1="0" x2="530" y2="320" stroke="currentColor" stroke-width="20"></line>
+      <polyline points="670,60 735,260 800,60" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
+      <rect x="840" y="60" width="220" height="20" fill="currentColor"></rect>
+      <rect x="840" y="150" width="220" height="20" fill="currentColor"></rect>
+      <rect x="840" y="240" width="220" height="20" fill="currentColor"></rect>
     </svg>
     <div class="mode-switch" id="modeSwitch">
       <button data-mode="aluno">Aluno</button>
@@ -862,7 +870,7 @@ function tplAssessForm(s){
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(function(a,b){ return a.date<b.date?1:-1; });
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
-  var html = "<table class=\"assess-table\"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th>" + (editable?"<th></th>":"") + "</tr></thead><tbody>";
+  var html = "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th>" + (editable?"<th></th>":"") + "</tr></thead><tbody>";
   list.forEach(function(a, idx){
     var prev = list[idx+1];
     html += "<tr>" +
@@ -875,7 +883,7 @@ function tplAssessTable(s, editable){
       (editable ? "<td><button type=\"button\" class=\"assess-del\" data-idx=\"" + idx + "\" aria-label=\"Remover\">✕</button></td>" : "") +
     "</tr>";
   });
-  html += "</tbody></table>";
+  html += "</tbody></table></div>";
   return html;
 }
 
@@ -886,17 +894,52 @@ function photoGridHtml(s){
   }).join("") + "</div>";
 }
 
+function tplPhotoCompare(s){
+  if (!s.photos || s.photos.length < 2) return "";
+  var sorted = s.photos.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
+  var lastIdx = sorted.length-1;
+  var optionsBefore = sorted.map(function(p,i){ return "<option value=\"" + i + "\">" + fmtDatePt(p.date) + "</option>"; }).join("");
+  var optionsAfter = sorted.map(function(p,i){ return "<option value=\"" + i + "\"" + (i===lastIdx?" selected":"") + ">" + fmtDatePt(p.date) + "</option>"; }).join("");
+  return "<div style=\"margin-top:14px; padding-top:14px; border-top:1px solid var(--line);\">" +
+    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Comparar antes / depois</div>" +
+    "<div style=\"display:flex; gap:10px; margin-bottom:12px;\">" +
+      "<select class=\"mini-select\" id=\"compareBefore\" style=\"flex:1;\">" + optionsBefore + "</select>" +
+      "<select class=\"mini-select\" id=\"compareAfter\" style=\"flex:1;\">" + optionsAfter + "</select>" +
+    "</div>" +
+    "<div class=\"compare-row\" id=\"compareRow\"></div>" +
+  "</div>";
+}
+
+function wirePhotoCompare(s, el){
+  var beforeSel = el.querySelector("#compareBefore");
+  var afterSel = el.querySelector("#compareAfter");
+  var row = el.querySelector("#compareRow");
+  if (!beforeSel || !afterSel || !row) return;
+  var sorted = s.photos.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
+  function update(){
+    var b = sorted[parseInt(beforeSel.value,10)];
+    var a = sorted[parseInt(afterSel.value,10)];
+    row.innerHTML =
+      "<div class=\"compare-item\"><img src=\"" + b.dataUrl + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
+      "<div class=\"compare-item\"><img src=\"" + a.dataUrl + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
+  }
+  beforeSel.addEventListener("change", update);
+  afterSel.addEventListener("change", update);
+  update();
+}
+
 function tplPhotosSection(s, opts){
   var html = "<div class=\"card\"><div class=\"eyebrow\">Fotografias de progresso</div>";
   if (opts.editable){
     html += "<label style=\"display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; margin:10px 0;\">" +
       "<input type=\"checkbox\" id=\"togglePhotos\"" + (s.allowPhotos?" checked":"") + "> Permitir que o aluno carregue fotos de progresso</label>" +
-      photoGridHtml(s);
+      photoGridHtml(s) + tplPhotoCompare(s);
   } else if (!s.allowPhotos){
     html += "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional ainda não ativou fotografias de progresso para ti.</p>";
   } else {
     html += photoGridHtml(s) +
-      "<label class=\"btn-file\" style=\"margin-top:10px; display:inline-block;\">Adicionar fotografia<input type=\"file\" accept=\"image/*\" id=\"photoUpload\" style=\"display:none;\"></label>";
+      "<label class=\"btn-file\" style=\"margin-top:10px; display:inline-block;\">Adicionar fotografia<input type=\"file\" accept=\"image/*\" id=\"photoUpload\" style=\"display:none;\"></label>" +
+      tplPhotoCompare(s);
   }
   html += "</div>";
   return html;
@@ -980,6 +1023,7 @@ function wireAlunoTab(s){
     };
     reader.readAsDataURL(file);
   });
+  wirePhotoCompare(s, el);
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
@@ -1358,6 +1402,7 @@ function wireProTab(s){
     s.allowPhotos = togglePhotos.checked;
     renderProTabContent(s);
   });
+  wirePhotoCompare(s, el);
 
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){
