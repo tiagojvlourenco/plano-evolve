@@ -94,6 +94,12 @@
 
   /* ============ ALUNO MODE ============ */
   #alunoApp{max-width:430px; margin:0 auto;}
+  @media (min-width:760px){
+    #alunoApp{
+      background:var(--surface); border:1px solid var(--line-strong); border-radius:32px;
+      padding:22px 18px 32px; box-shadow:0 40px 80px -30px rgba(0,0,0,0.65);
+    }
+  }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
   .phone-header .greet{font-family:var(--display); font-size:1.3rem; font-weight:700;}
   .phone-header .sub{font-size:0.78rem; color:var(--muted); margin-top:2px;}
@@ -206,21 +212,32 @@
   .student-card .adherence-row .num{font-size:0.78rem; font-weight:700;}
 
   .detail-header{display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap;}
-  .detail-header .back{cursor:pointer; font-weight:600; font-size:0.72rem; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;}
   .detail-header .sname{font-family:var(--display); font-size:1.5rem; font-weight:800;}
 
-  .detail-layout{display:grid; grid-template-columns:190px 1fr; gap:22px; align-items:flex-start;}
-  .pro-tab-rail{display:flex; flex-direction:column; gap:2px; position:sticky; top:12px;}
-  .pro-tab-rail button{
+  /* Menu lateral persistente (Profissional) */
+  .pro-shell{display:flex; align-items:flex-start; gap:24px;}
+  .pro-sidebar{
+    width:200px; flex-shrink:0; display:flex; flex-direction:column; gap:2px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 10px; position:sticky; top:16px; box-shadow:var(--shadow);
+  }
+  .pro-nav-item{
     text-align:left; border:none; background:transparent; padding:10px 12px; border-radius:10px; cursor:pointer;
     font-size:0.72rem; font-weight:600; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;
   }
-  .pro-tab-rail button.active{background:var(--accent); color:var(--accent-ink);}
+  .pro-nav-item.active{background:var(--accent); color:var(--accent-ink);}
+  .pro-sidebar-divider{height:1px; background:var(--line); margin:10px 4px;}
+  .pro-sidebar-student{display:flex; align-items:center; gap:8px; padding:4px 12px 8px; font-size:0.78rem; font-weight:600; color:var(--ink);}
+  .pro-main{flex:1; min-width:0;}
 
   @media (max-width:760px){
-    .detail-layout{grid-template-columns:1fr;}
-    .pro-tab-rail{flex-direction:row; overflow-x:auto; position:static; gap:6px; padding-bottom:4px;}
-    .pro-tab-rail button{white-space:nowrap; flex-shrink:0;}
+    .pro-shell{flex-direction:column; gap:14px;}
+    .pro-sidebar{
+      width:100%; flex-direction:row; overflow-x:auto; position:static; align-items:center;
+    }
+    .pro-sidebar-divider{width:1px; height:24px; margin:0 4px;}
+    .pro-sidebar-student{padding:4px 10px; white-space:nowrap;}
+    .pro-nav-item{white-space:nowrap; flex-shrink:0;}
     .pro-stat-row{grid-template-columns:repeat(2,1fr);}
   }
 
@@ -1209,12 +1226,30 @@ function wireAlunoTab(s){
 var proRoot = document.getElementById("proApp");
 
 function renderProShell(){
-  if (state.proSelectedId) renderProDetail(); else renderProDashboard();
+  var sidebar = "<div class=\"pro-sidebar\">" +
+    "<button type=\"button\" class=\"pro-nav-item" + (!state.proSelectedId ? " active" : "") + "\" id=\"navDashboard\">Dashboard</button>";
+  var selected = state.proSelectedId ? findStudent(state.proSelectedId) : null;
+  if (selected){
+    sidebar += "<div class=\"pro-sidebar-divider\"></div>" +
+      "<div class=\"pro-sidebar-student\"><div class=\"avatar\" style=\"width:28px; height:28px; font-size:0.66rem;\">" + selected.initials + "</div><span>" + selected.name + "</span></div>" +
+      PRO_TABS.map(function(t){ return "<button type=\"button\" class=\"pro-nav-item" + (state.proTab===t[0]?" active":"") + "\" data-t=\"" + t[0] + "\">" + t[1] + "</button>"; }).join("");
+  }
+  sidebar += "</div>";
+
+  proRoot.innerHTML = "<div class=\"pro-shell\">" + sidebar + "<div class=\"pro-main\" id=\"proMain\"></div></div>";
+
+  document.getElementById("navDashboard").addEventListener("click", function(){ state.proSelectedId=null; renderProShell(); });
+  proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
+    btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
+  });
+
+  if (selected) renderProDetailMain(selected); else renderProDashboardMain();
 }
 
 function daysAgoLabel(n){ if (n===0) return "hoje"; if (n===1) return "há 1 dia"; return "há " + n + " dias"; }
 
-function renderProDashboard(){
+function renderProDashboardMain(){
+  var main = document.getElementById("proMain");
   var activeCount = STUDENTS.length;
   var pendingCheckins = STUDENTS.filter(function(s){ return s.lastCheckinDaysAgo>=7; }).length;
   var alertCount = STUDENTS.reduce(function(a,s){ return a + s.alerts.length; }, 0);
@@ -1246,8 +1281,8 @@ function renderProDashboard(){
   });
   html += "</div>";
 
-  proRoot.innerHTML = html;
-  proRoot.querySelectorAll(".student-card").forEach(function(c){
+  main.innerHTML = html;
+  main.querySelectorAll(".student-card").forEach(function(c){
     c.addEventListener("click", function(){ state.proSelectedId = c.getAttribute("data-id"); state.proTab="perfil"; renderProShell(); });
   });
   document.getElementById("btnInvite").addEventListener("click", openInviteModal);
@@ -1395,22 +1430,13 @@ function proStat(v, l){
 
 var PRO_TABS = [["perfil","Perfil"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
-function renderProDetail(){
-  var s = findStudent(state.proSelectedId);
-  var html = "<div class=\"detail-header\">" +
-    "<span class=\"back\" id=\"backToDash\">← Alunos</span>" +
+function renderProDetailMain(s){
+  var main = document.getElementById("proMain");
+  main.innerHTML = "<div class=\"detail-header\">" +
     "<div class=\"avatar\">" + s.initials + "</div>" +
     "<div><div class=\"sname\">" + s.name + "</div><div class=\"muted-p\">" + s.goal + "</div></div>" +
-  "</div>";
-  html += "<div class=\"detail-layout\">" +
-    "<div class=\"pro-tab-rail\">" + PRO_TABS.map(function(t){ return "<button data-t=\"" + t[0] + "\" class=\"" + (state.proTab===t[0]?"active":"") + "\">" + t[1] + "</button>"; }).join("") + "</div>" +
-    "<div id=\"proTabContent\" class=\"card\"></div>" +
-  "</div>";
-  proRoot.innerHTML = html;
-  document.getElementById("backToDash").addEventListener("click", function(){ state.proSelectedId=null; renderProShell(); });
-  proRoot.querySelectorAll(".pro-tab-rail button").forEach(function(btn){
-    btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
-  });
+  "</div>" +
+  "<div id=\"proTabContent\" class=\"card\"></div>";
   renderProTabContent(s);
 }
 
