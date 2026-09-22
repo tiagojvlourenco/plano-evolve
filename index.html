@@ -394,12 +394,126 @@ var SCENARIOS = {
   }
 };
 
-function meal(name, time, group, foods, kcal, p, c, f, opts){
-  opts = opts || {};
-  return {name:name, time:time, kcal:kcal, p:p, c:c, f:f, foods:foods, builder:!!opts.builder, done:false};
+function meal(name, time, foods){
+  return {name:name, time:time, foods:foods, liveChoice:null, done:false};
 }
 
 function food(name, qty, group){ return {name:name, qty:qty, group:group}; }
+
+/* ---------- Base de alimentos: fonte única de verdade nutricional ---------- */
+var FOOD_DB = {
+  "Frango (peito)": {per:"100g", kcal:165, p:31, c:0, f:3.6},
+  "Peru (fatiado)": {per:"100g", kcal:135, p:30, c:1, f:1},
+  "Pescada": {per:"100g", kcal:90, p:18, c:0, f:1.5},
+  "Atum (natural)": {per:"100g", kcal:116, p:26, c:0, f:1},
+  "Carne vermelha magra": {per:"100g", kcal:182, p:27, c:0, f:8},
+  "Carne magra": {per:"100g", kcal:182, p:27, c:0, f:8},
+  "Tofu": {per:"100g", kcal:76, p:8, c:1.9, f:4.8},
+  "Iogurte grego natural": {per:"100g", kcal:97, p:9, c:4, f:5},
+  "Arroz (cozido)": {per:"100g", kcal:130, p:2.7, c:28, f:0.3},
+  "Massa (cozida)": {per:"100g", kcal:131, p:5, c:25, f:1.1},
+  "Batata": {per:"100g", kcal:87, p:2, c:20, f:0.1},
+  "Batata-doce": {per:"100g", kcal:90, p:2, c:21, f:0.1},
+  "Pão integral": {per:"100g", kcal:247, p:13, c:41, f:4.2},
+  "Couscous (cozido)": {per:"100g", kcal:112, p:3.8, c:23, f:0.2},
+  "Quinoa (cozida)": {per:"100g", kcal:120, p:4.4, c:21, f:1.9},
+  "Aveia": {per:"100g", kcal:389, p:17, c:66, f:7},
+  "Azeite": {per:"100g", kcal:884, p:0, c:0, f:100},
+  "Abacate": {per:"100g", kcal:160, p:2, c:9, f:15},
+  "Frutos secos": {per:"100g", kcal:607, p:20, c:21, f:54},
+  "Manteiga de amendoim": {per:"100g", kcal:588, p:25, c:20, f:50},
+  "Maçã": {per:"unit", kcal:95, p:0.5, c:25, f:0.3},
+  "Banana": {per:"unit", kcal:105, p:1.3, c:27, f:0.4},
+  "Laranja": {per:"unit", kcal:62, p:1.2, c:15, f:0.2},
+  "Mirtilos": {per:"100g", kcal:57, p:0.7, c:14, f:0.3},
+  "Ovos": {per:"unit", kcal:78, p:6.3, c:0.6, f:5.3},
+  "Brócolos": {per:"fixed", kcal:53, p:3.6, c:7, f:0.6},
+  "Salada mista": {per:"fixed", kcal:25, p:1.5, c:3, f:0.2},
+  "Cenoura": {per:"fixed", kcal:30, p:0.7, c:7, f:0.1},
+  "Courgette": {per:"fixed", kcal:20, p:1.5, c:3, f:0.3},
+  "Espinafres": {per:"fixed", kcal:23, p:2.9, c:3.6, f:0.4},
+  "Fruta": {per:"unit", kcal:80, p:0.6, c:20, f:0.3}
+};
+
+function parseQtyAmount(qty){
+  qty = (qty||"").trim();
+  if (/vontade/i.test(qty)) return {kind:"fixed", value:1};
+  var m = qty.match(/^(\d+)\s*unid/i); if (m) return {kind:"unit", value:parseInt(m[1],10)};
+  m = qty.match(/^(\d+)\s*pe[çc]a/i); if (m) return {kind:"unit", value:parseInt(m[1],10)};
+  m = qty.match(/^([\d.]+)\s*g\b/i); if (m) return {kind:"g", value:parseFloat(m[1])};
+  m = qty.match(/^([\d.]+)\s*ml\b/i); if (m) return {kind:"g", value:parseFloat(m[1])};
+  return {kind:"fixed", value:1};
+}
+
+function round1(n){ return Math.round(n*10)/10; }
+
+function foodNutrition(name, qty){
+  var db = FOOD_DB[name];
+  if (!db) return {kcal:0, p:0, c:0, f:0};
+  var amt = parseQtyAmount(qty);
+  var scale = 1;
+  if (db.per==="100g" && amt.kind==="g") scale = amt.value/100;
+  else if (db.per==="unit" && amt.kind==="unit") scale = amt.value;
+  else if (db.per==="fixed") scale = amt.value;
+  return { kcal: Math.round(db.kcal*scale), p: round1(db.p*scale), c: round1(db.c*scale), f: round1(db.f*scale) };
+}
+
+function sumNutrition(list){
+  return list.reduce(function(acc,n){ acc.kcal+=n.kcal; acc.p+=n.p; acc.c+=n.c; acc.f+=n.f; return acc; }, {kcal:0,p:0,c:0,f:0});
+}
+
+function foodsTotals(foods){
+  var t = sumNutrition(foods.map(function(f){ return foodNutrition(f.name, f.qty); }));
+  return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
+}
+
+/* ---------- Flexibilidade: deriva a apresentação da refeição, não é só visual ---------- */
+function flexTier(v){ if (v<34) return "estruturado"; if (v<67) return "equilibrado"; return "flexivel"; }
+var GROUP_LABELS = {protein:"Proteína", carb:"Hidrato", veg:"Legumes", fat:"Gordura", fruit:"Fruta"};
+function groupLabel(g){ return GROUP_LABELS[g] || g; }
+
+function resolvedMealTotals(s, meal){
+  var tier = flexTier(s.flexibility);
+  if (tier !== "estruturado" && meal.liveChoice){
+    var groups = Object.keys(meal.liveChoice);
+    if (groups.length){
+      var chosen = groups.map(function(g){
+        var idx = meal.liveChoice[g];
+        var opt = (FOOD_GROUPS[g]||[])[idx];
+        return opt ? foodNutrition(opt.name, opt.qty) : {kcal:0,p:0,c:0,f:0};
+      });
+      var groupless = meal.foods.filter(function(f){ return !f.group; }).map(function(f){ return foodNutrition(f.name, f.qty); });
+      var t = sumNutrition(chosen.concat(groupless));
+      return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
+    }
+  }
+  return foodsTotals(meal.foods);
+}
+
+function expectedKcalFromMacros(t){
+  var carbs = t.carbs!=null ? t.carbs : (t.carbsMin!=null && t.carbsMax!=null ? (t.carbsMin+t.carbsMax)/2 : 0);
+  var fat = t.fat!=null ? t.fat : (t.fatMin!=null && t.fatMax!=null ? (t.fatMin+t.fatMax)/2 : 0);
+  return Math.round((t.protein||0)*4 + carbs*4 + fat*9);
+}
+
+function toMinutes(t){ var p=t.split(":"); return parseInt(p[0],10)*60+parseInt(p[1],10); }
+function getNextMeal(s){
+  if (!s.meals.length) return null;
+  var now = new Date();
+  var nowMin = now.getHours()*60 + now.getMinutes();
+  var sorted = s.meals.slice().sort(function(a,b){ return toMinutes(a.time)-toMinutes(b.time); });
+  for (var i=0;i<sorted.length;i++){
+    if (toMinutes(sorted[i].time) >= nowMin) return {meal:sorted[i], tomorrow:false};
+  }
+  return {meal:sorted[0], tomorrow:true};
+}
+
+function computeAdherence(s){
+  if (!s.checkins.length) return null;
+  var recent = s.checkins.slice(-4);
+  var avg = recent.reduce(function(a,c){ return a + c.adherence; }, 0) / recent.length;
+  return avg/10;
+}
 
 var STUDENTS = [
   {
@@ -410,17 +524,16 @@ var STUDENTS = [
     likes:["Frango","Iogurte grego","Batata-doce"], dislikes:["Peixe azul"], avoid:["Marisco"],
     allergies:["Sensibilidade à lactose"], mealsPreferred:5, budget:"Médio", cookTime:"20-30 min/dia",
     work:"Escritório (sentada)", weekendNote:"Janta fora ~1x por fim de semana",
-    targets:{kcal:1850, protein:150, carbs:170, fat:55},
+    targets:{kcal:1700, protein:131, carbs:177, fat:52},
     flexibility:65,
-    adherenceWeek:0.8,
     alerts:[{type:"warn", text:"Adesão abaixo de 85% esta semana"}],
     notes:"Prefere treinar ao final do dia. Sensível a lactose — evitar leite gordo, iogurte grego normalmente tolerado bem.",
     meals:[
-      meal("Pequeno-almoço","07:30",null,[food("Iogurte grego natural","200 g","protein"),food("Aveia","40 g","carb"),food("Mirtilos","80 g","fruit")],345,30,35,10),
-      meal("Meio da manhã","10:30",null,[food("Maçã","1 unid.","fruit"),food("Frutos secos","15 g","fat")],180,4,20,10),
-      meal("Almoço","13:00",null,[food("Frango (peito)","150 g","protein"),food("Arroz (cozido)","120 g","carb"),food("Brócolos","à vontade","veg"),food("Azeite","10 ml","fat")],520,42,48,15),
-      meal("Lanche pré-treino","17:00",null,[food("Banana","1 unid.","fruit"),food("Ovos","2 unid.","protein")],230,14,24,8),
-      meal("Jantar","20:30",null,[food("Pescada","170 g","protein"),food("Batata-doce","150 g","carb"),food("Salada mista","à vontade","veg")],450,38,40,12)
+      meal("Pequeno-almoço","07:30",[food("Iogurte grego natural","200 g","protein"),food("Aveia","40 g","carb"),food("Mirtilos","80 g","fruit")]),
+      meal("Meio da manhã","10:30",[food("Maçã","1 unid.","fruit"),food("Frutos secos","15 g","fat")]),
+      meal("Almoço","13:00",[food("Frango (peito)","150 g","protein"),food("Arroz (cozido)","120 g","carb"),food("Brócolos","à vontade","veg"),food("Azeite","10 ml","fat")]),
+      meal("Lanche pré-treino","17:00",[food("Banana","1 unid.","fruit"),food("Ovos","2 unid.","protein")]),
+      meal("Jantar","20:30",[food("Pescada","170 g","protein"),food("Batata-doce","150 g","carb"),food("Salada mista","à vontade","veg")])
     ],
     checkins:[
       {date:"2026-08-18", weight:70.4, hunger:6, energy:6, adherence:7, workouts:3, mealsOff:1, notes:"Semana ok, fim de semana mais difícil."},
@@ -454,17 +567,16 @@ var STUDENTS = [
     likes:["Carne vermelha","Arroz","Batata"], dislikes:["Legumes verdes"], avoid:[],
     allergies:[], mealsPreferred:5, budget:"Alto", cookTime:"< 15 min/dia (meal prep ao fim de semana)",
     work:"Trabalho de terreno, ativo", weekendNote:"Treina normalmente ao sábado de manhã",
-    targets:{kcal:2900, protein:180, carbs:340, fat:80},
+    targets:{kcal:3100, protein:262, carbs:292, fat:98},
     flexibility:30,
-    adherenceWeek:0.65,
     alerts:[{type:"critical", text:"Sem check-in há 12 dias"},{type:"warn", text:"Peso sem evolução há 3 semanas"}],
     notes:"Motivado mas com pouco tempo para cozinhar durante a semana — depende muito do meal prep de domingo.",
     meals:[
-      meal("Pequeno-almoço","06:30",null,[food("Ovos","4 unid.","protein"),food("Pão integral","90 g","carb"),food("Manteiga de amendoim","20 g","fat")],620,32,55,26),
-      meal("Pós-treino","09:00",null,[food("Iogurte grego natural","250 g","protein"),food("Aveia","70 g","carb"),food("Banana","1 unid.","fruit")],560,32,80,10),
-      meal("Almoço","13:30",null,[food("Frango (peito)","220 g","protein"),food("Arroz (cozido)","250 g","carb"),food("Azeite","15 ml","fat")],820,55,90,22),
-      meal("Lanche","17:00",null,[food("Atum (natural)","140 g","protein"),food("Pão integral","70 g","carb")],320,32,32,6),
-      meal("Jantar","20:00",null,[food("Carne vermelha magra","200 g","protein"),food("Batata","300 g","carb"),food("Brócolos","à vontade","veg")],580,45,72,14)
+      meal("Pequeno-almoço","06:30",[food("Ovos","4 unid.","protein"),food("Pão integral","90 g","carb"),food("Manteiga de amendoim","20 g","fat")]),
+      meal("Pós-treino","09:00",[food("Iogurte grego natural","250 g","protein"),food("Aveia","70 g","carb"),food("Banana","1 unid.","fruit")]),
+      meal("Almoço","13:30",[food("Frango (peito)","220 g","protein"),food("Arroz (cozido)","250 g","carb"),food("Azeite","15 ml","fat")]),
+      meal("Lanche","17:00",[food("Atum (natural)","140 g","protein"),food("Pão integral","70 g","carb")]),
+      meal("Jantar","20:00",[food("Carne vermelha magra","200 g","protein"),food("Batata","300 g","carb"),food("Brócolos","à vontade","veg")])
     ],
     checkins:[
       {date:"2026-08-11", weight:74.0, hunger:7, energy:7, adherence:7, workouts:5, mealsOff:2, notes:""},
@@ -493,16 +605,15 @@ var STUDENTS = [
     likes:["Peixe","Legumes variados","Quinoa"], dislikes:[], avoid:["Glúten (preferência, não celíaca)"],
     allergies:[], mealsPreferred:4, budget:"Médio-alto", cookTime:"30-40 min/dia, gosta de cozinhar",
     work:"Trabalho híbrido", weekendNote:"Muito social, janta fora com frequência",
-    targets:{kcal:2050, protein:130, carbsMin:150, carbsMax:220, fatMin:55, fatMax:80},
+    targets:{kcal:1800, protein:135, carbsMin:130, carbsMax:180, fatMin:55, fatMax:75},
     flexibility:85,
-    adherenceWeek:0.9,
     alerts:[],
     notes:"Muito autónoma — beneficia mais de regras e intervalos do que de refeições fixas.",
     meals:[
-      meal("Pequeno-almoço","08:00",null,[food("Ovos","2 unid.","protein"),food("Pão integral","60 g","carb"),food("Abacate","40 g","fat")],400,20,32,20),
-      meal("Almoço","13:00","builder",[],620,40,60,18,{builder:true}),
-      meal("Lanche","17:30",null,[food("Iogurte grego natural","200 g","protein"),food("Fruta","1 peça","fruit")],220,20,22,5),
-      meal("Jantar","20:00",null,[food("Pescada","180 g","protein"),food("Quinoa (cozida)","120 g","carb"),food("Salada mista","à vontade","veg"),food("Azeite","10 ml","fat")],540,40,45,18)
+      meal("Pequeno-almoço","08:00",[food("Ovos","2 unid.","protein"),food("Pão integral","80 g","carb"),food("Abacate","50 g","fat")]),
+      meal("Almoço","13:00",[food("Frango (peito)","160 g","protein"),food("Arroz (cozido)","160 g","carb"),food("Salada mista","à vontade","veg"),food("Azeite","10 ml","fat")]),
+      meal("Lanche","17:30",[food("Iogurte grego natural","200 g","protein"),food("Fruta","1 peça","fruit")]),
+      meal("Jantar","20:00",[food("Pescada","190 g","protein"),food("Quinoa (cozida)","150 g","carb"),food("Salada mista","à vontade","veg"),food("Azeite","10 ml","fat")])
     ],
     checkins:[
       {date:"2026-08-25", weight:63.4, hunger:4, energy:8, adherence:9, workouts:3, mealsOff:1, notes:""},
@@ -528,7 +639,7 @@ var STUDENTS = [
 ];
 
 function findStudent(id){ for (var i=0;i<STUDENTS.length;i++) if (STUDENTS[i].id===id) return STUDENTS[i]; return null; }
-function flexZoneLabel(v){ if (v<34) return "Estruturado"; if (v<67) return "Equilibrado"; return "Flexível"; }
+function flexZoneLabel(v){ return TIER_LABEL[flexTier(v)]; }
 function fmtDatePt(iso){ var d=new Date(iso+"T00:00:00"); return d.toLocaleDateString("pt-PT",{day:"2-digit",month:"short"}); }
 
 function activityFromTrainings(n){
@@ -632,7 +743,11 @@ var alunoRoot = document.getElementById("alunoApp");
 
 function consumedTotals(student){
   var t = {kcal:0,p:0,c:0,f:0};
-  student.meals.forEach(function(m){ if (m.done){ t.kcal+=m.kcal; t.p+=m.p; t.c+=m.c; t.f+=m.f; } });
+  student.meals.forEach(function(m){
+    if (!m.done) return;
+    var mt = resolvedMealTotals(student, m);
+    t.kcal+=mt.kcal; t.p+=mt.p; t.c+=mt.c; t.f+=mt.f;
+  });
   return t;
 }
 
@@ -680,7 +795,7 @@ function tplHoje(s){
   }
   var totals = consumedTotals(s);
   var pct = Math.min(100, Math.round((totals.kcal / s.targets.kcal) * 100));
-  var nextMeal = s.meals.find(function(m){ return !m.done; });
+  var nm = getNextMeal(s);
   var html = "";
 
   html += "<div class=\"card\">" +
@@ -692,32 +807,33 @@ function tplHoje(s){
       "</div>" +
     "</div>" +
     "<div class=\"macro-mini\">" +
-      macroMiniRow("Proteína", totals.p, s.targets.protein) +
-      macroMiniRow("Hidratos", totals.c, s.targets.carbs || s.targets.carbsMax) +
-      macroMiniRow("Gordura", totals.f, s.targets.fat || s.targets.fatMax) +
+      macroMiniRow("Proteína", totals.p, s.targets.protein, s.targets.proteinMin, s.targets.proteinMax) +
+      macroMiniRow("Hidratos", totals.c, s.targets.carbs, s.targets.carbsMin, s.targets.carbsMax) +
+      macroMiniRow("Gordura", totals.f, s.targets.fat, s.targets.fatMin, s.targets.fatMax) +
     "</div>" +
   "</div>";
 
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Refeições de hoje</div>" +
     s.meals.map(function(m, idx){
+      var mt = resolvedMealTotals(s, m);
       return "<div class=\"meal-row\">" +
         "<div class=\"check-circle" + (m.done?" done":"") + "\" data-midx=\"" + idx + "\">" + (m.done? "✓":"") + "</div>" +
         "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + m.time + "</div></div>" +
-        "<div class=\"kcal\">" + m.kcal + " kcal</div>" +
+        "<div class=\"kcal\">" + mt.kcal + " kcal</div>" +
       "</div>";
     }).join("") +
   "</div>";
 
-  if (nextMeal){
+  if (nm){
+    var mt2 = resolvedMealTotals(s, nm.meal);
     html += "<div class=\"next-meal-card\">" +
-      "<div class=\"eyebrow\">Próxima refeição · " + nextMeal.time + "</div>" +
-      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + nextMeal.name + "</div>" +
-      "<div class=\"foods\">" + (nextMeal.builder ? "Constrói a tua refeição dentro das regras definidas." : nextMeal.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(", ")) + "</div>" +
+      "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + nm.meal.time + "</div>" +
+      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + nm.meal.name + "</div>" +
+      "<div class=\"foods\">" + nm.meal.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(", ") + "</div>" +
+      "<div class=\"foods\" style=\"margin-top:2px;\">" + mt2.kcal + " kcal · P " + mt2.p + "g · H " + mt2.c + "g · G " + mt2.f + "g</div>" +
       "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\">Ver refeição</button>" +
     "</div>";
-  } else {
-    html += "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Hoje</div><div style=\"font-weight:700; margin-top:6px;\">Todas as refeições concluídas 🎯</div></div>";
   }
 
   html += "<div class=\"card\">" +
@@ -730,12 +846,16 @@ function tplHoje(s){
     "<p class=\"muted-p\" style=\"margin-top:12px;\">Definido pelo teu profissional. Quanto mais alto, maior a tua liberdade para escolher dentro do plano.</p>" +
   "</div>";
 
+  var adh = computeAdherence(s);
   html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Adesão esta semana</div>" +
-    "<div style=\"display:flex; align-items:center; gap:10px; margin-top:10px;\">" +
-      "<div class=\"bar-track\" style=\"flex:1;\"><div class=\"bar-fill\" style=\"width:" + Math.round(s.adherenceWeek*100) + "%\"></div></div>" +
-      "<span class=\"num\" style=\"font-weight:700;\">" + Math.round(s.adherenceWeek*100) + "%</span>" +
-    "</div>" +
+    "<div class=\"eyebrow\">Adesão recente</div>" +
+    (adh==null ?
+      "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem check-ins suficientes para calcular.</p>" :
+      "<div style=\"display:flex; align-items:center; gap:10px; margin-top:10px;\">" +
+        "<div class=\"bar-track\" style=\"flex:1;\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div>" +
+        "<span class=\"num\" style=\"font-weight:700;\">" + Math.round(adh*100) + "%</span>" +
+      "</div>"
+    ) +
     "<p class=\"muted-p\" style=\"margin-top:10px;\">Consistência ao longo do tempo importa mais do que perfeição num único dia.</p>" +
   "</div>";
 
@@ -744,54 +864,93 @@ function tplHoje(s){
   return html;
 }
 
-function macroMiniRow(label, curr, target){
+function macroMiniRow(label, curr, target, min, max){
+  if (target==null && min!=null && max!=null){
+    var mid = (min+max)/2;
+    var pct2 = Math.min(100, Math.round((curr/mid)*100));
+    return "<div class=\"macro-mini-row\"><span class=\"lbl\">" + label + "</span>" +
+      "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + pct2 + "%\"></div></div>" +
+      "<span class=\"amt\">" + Math.round(curr) + " / " + Math.round(min) + "–" + Math.round(max) + " g</span></div>";
+  }
   var pct = target ? Math.min(100, Math.round((curr/target)*100)) : 0;
   return "<div class=\"macro-mini-row\"><span class=\"lbl\">" + label + "</span>" +
     "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div>" +
     "<span class=\"amt\">" + Math.round(curr) + " / " + Math.round(target) + " g</span></div>";
 }
 
+var TIER_LABEL = {estruturado:"Estruturado", equilibrado:"Equilibrado", flexivel:"Flexível"};
+var TIER_HINT = {
+  estruturado: "Segue esta refeição — toca num alimento para veres alternativas.",
+  equilibrado: "Escolhe uma opção em cada grupo desta refeição.",
+  flexivel: "Constrói a tua refeição dentro dos intervalos definidos."
+};
+
 function tplPlano(s){
   if (!s.meals.length){
     return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Plano</div>" +
       "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional ainda não construiu o teu plano alimentar.</p></div>";
   }
+  var tier = flexTier(s.flexibility);
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:2px;\">Plano de hoje</div>";
-  html += "<h2 style=\"font-size:1.15rem; margin-bottom:12px;\">Nível: " + flexZoneLabel(s.flexibility) + "</h2>";
+  html += "<h2 style=\"font-size:1.15rem; margin-bottom:4px;\">Nível: " + TIER_LABEL[tier] + "</h2>";
+  html += "<p class=\"muted-p\" style=\"margin-bottom:12px;\">" + TIER_HINT[tier] + "</p>";
   s.meals.forEach(function(m, idx){
+    var totals = resolvedMealTotals(s, m);
     html += "<div class=\"card plano-meal-card\">" +
       "<div class=\"plano-meal-head\"><span class=\"mname\">" + m.name + "</span><span class=\"mtime\">" + m.time + "</span></div>";
-    if (m.builder){
-      html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Constrói esta refeição escolhendo uma opção de cada grupo.</p>" + tplBuilder(s, idx);
-    } else {
-      html += "<div>" + m.foods.map(function(f, fi){
-        return "<div class=\"food-item\" data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\">" +
-          "<span class=\"fname\">" + f.name + "</span>" +
-          "<span><span class=\"fqty\">" + f.qty + "</span><span class=\"swap-hint\">trocar</span></span>" +
-        "</div>";
-      }).join("") + "</div>";
-    }
-    html += "<div class=\"plano-meal-macros\">" + m.kcal + " kcal · P " + m.p + "g · H " + m.c + "g · G " + m.f + "g</div>";
+    if (tier === "estruturado") html += tplMealFixed(m, idx);
+    else if (tier === "equilibrado") html += tplMealChoice(m, idx);
+    else html += tplMealBuilder(m, idx);
+    html += "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
     html += "</div>";
   });
   return html;
 }
 
-function tplBuilder(s, mIdx){
-  var groups = [["protein","Proteína"],["carb","Hidrato"],["veg","Legumes"],["fat","Gordura"]];
-  var m = s.meals[mIdx];
-  if (!m.builderChoice) m.builderChoice = {protein:0, carb:0, veg:0, fat:0};
+function tplMealFixed(m, idx){
+  return "<div>" + m.foods.map(function(f, fi){
+    return "<div class=\"food-item\" data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\">" +
+      "<span class=\"fname\">" + f.name + "</span>" +
+      "<span><span class=\"fqty\">" + f.qty + "</span>" + (f.group ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+    "</div>";
+  }).join("") + "</div>";
+}
+
+function tplMealChoice(m, idx){
+  if (!m.liveChoice) m.liveChoice = {};
   var html = "";
-  groups.forEach(function(g){
-    var key = g[0], label = g[1];
-    html += "<div class=\"builder-group\"><div class=\"gtitle\">" + label + " — escolhe 1</div>";
-    FOOD_GROUPS[key].slice(0,4).forEach(function(o, oi){
-      var sel = m.builderChoice[key]===oi;
-      html += "<div class=\"builder-opt" + (sel?" sel":"") + "\" data-mkey=\"" + key + "\" data-oi=\"" + oi + "\"><span class=\"radio\"></span><span>" + o.name + " <span class=\"num\" style=\"color:var(--muted);\">(" + o.qty + ")</span></span></div>";
+  m.foods.forEach(function(f){
+    if (!f.group){
+      html += "<div class=\"food-item\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>";
+      return;
+    }
+    var options = FOOD_GROUPS[f.group] || [];
+    if (m.liveChoice[f.group]==null){
+      var di = options.findIndex(function(o){ return o.name===f.name; });
+      m.liveChoice[f.group] = di>=0 ? di : 0;
+    }
+    html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + " — escolhe 1</div>";
+    options.forEach(function(o, oi){
+      var sel = m.liveChoice[f.group]===oi;
+      html += "<div class=\"builder-opt" + (sel?" sel":"") + "\" data-midx=\"" + idx + "\" data-group=\"" + f.group + "\" data-oi=\"" + oi + "\"><span class=\"radio\"></span><span>" + o.name + " <span class=\"num\" style=\"color:var(--muted);\">(" + o.qty + ")</span></span></div>";
     });
     html += "</div>";
   });
   return html;
+}
+
+function rangeTile(label, center){
+  var lo = Math.max(0, Math.round(center*0.85));
+  var hi = Math.round(center*1.15);
+  return "<div class=\"f\"><label>" + label + "</label><div class=\"v num\">" + lo + "–" + hi + " g</div></div>";
+}
+
+function tplMealBuilder(m, idx){
+  var base = foodsTotals(m.foods);
+  var html = "<div class=\"macro-target-grid\" style=\"margin-bottom:12px;\">" +
+    rangeTile("Proteína", base.p) + rangeTile("Hidratos", base.c) + rangeTile("Gordura", base.f) +
+  "</div>";
+  return html + tplMealChoice(m, idx);
 }
 
 function tplCheckin(s){
@@ -999,10 +1158,12 @@ function wireAlunoTab(s){
 
   el.querySelectorAll(".builder-opt").forEach(function(opt){
     opt.addEventListener("click", function(){
-      var key = opt.getAttribute("data-mkey");
+      var midx = parseInt(opt.getAttribute("data-midx"),10);
+      var group = opt.getAttribute("data-group");
       var oi = parseInt(opt.getAttribute("data-oi"),10);
-      var m = s.meals.find(function(mm){ return mm.builder; });
-      m.builderChoice[key] = oi;
+      var m = s.meals[midx];
+      if (!m.liveChoice) m.liveChoice = {};
+      m.liveChoice[group] = oi;
       renderAlunoTab(s);
     });
   });
@@ -1071,11 +1232,15 @@ function renderProDashboard(){
 
   html += "<div class=\"student-list\">";
   STUDENTS.forEach(function(s){
+    var adh = computeAdherence(s);
     html += "<div class=\"card student-card\" data-id=\"" + s.id + "\">" +
       "<div class=\"student-card-top\"><div class=\"avatar\">" + s.initials + "</div>" +
         "<div><div class=\"sname\">" + s.name + "</div><div class=\"sgoal\">" + s.goal + "</div></div></div>" +
       (s.alerts.length ? "<div class=\"alerts\">" + s.alerts.map(function(a){ return "<span class=\"pill " + a.type + "\">⚠ " + a.text + "</span>"; }).join("") + "</div>" : "") +
-      "<div class=\"adherence-row\"><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + Math.round(s.adherenceWeek*100) + "%\"></div></div><span class=\"num\">" + Math.round(s.adherenceWeek*100) + "%</span></div>" +
+      (adh==null ?
+        "<div class=\"muted-p\" style=\"margin-top:12px;\">Sem check-ins ainda</div>" :
+        "<div class=\"adherence-row\"><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div><span class=\"num\">" + Math.round(adh*100) + "%</span></div>"
+      ) +
       "<div class=\"muted-p\" style=\"margin-top:8px;\">Último check-in: " + daysAgoLabel(s.lastCheckinDaysAgo) + "</div>" +
     "</div>";
   });
@@ -1203,7 +1368,6 @@ function openOnboardingForm(){
       work:profile.work||"—", weekendNote:profile.weekendNote||"—",
       targets:{kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat},
       flexibility:50,
-      adherenceWeek:0,
       alerts:[{type:"warn", text:"Plano ainda por definir"}],
       notes:"",
       meals:[],
@@ -1298,24 +1462,48 @@ function tplProPlano(s){
     "<div class=\"macro-target-grid\">" +
     "<div class=\"f\"><label>Calorias</label><input type=\"number\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
     "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
-    "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" id=\"tCarbs\" value=\"" + (t.carbs||t.carbsMax) + "\"></div>" +
-    "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" id=\"tFat\" value=\"" + (t.fat||t.fatMax) + "\"></div>" +
+    "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
+    "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" id=\"tFat\" value=\"" + (t.fat!=null?t.fat:t.fatMax) + "\"></div>" +
     "</div>" +
+    "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
 
-  html += "<div class=\"section-gap eyebrow\" style=\"margin-bottom:10px;\">Refeições do plano</div>";
+  html += "<div class=\"section-gap eyebrow\" style=\"margin-bottom:4px;\">Refeições do plano</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Nível " + TIER_LABEL[flexTier(s.flexibility)] + " — o aluno vê: " + TIER_HINT[flexTier(s.flexibility)].toLowerCase() + "</p>";
   if (!s.meals.length){
     html += "<p class=\"muted-p\">Ainda sem refeições definidas — confirma os alvos acima e começa a montar o plano deste aluno.</p>";
   }
+  var mealsSum = 0;
   s.meals.forEach(function(m){
+    var totals = foodsTotals(m.foods);
+    mealsSum += totals.kcal;
     html += "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:12px;\">" +
       "<div class=\"plano-meal-head\"><span class=\"mname\">" + m.name + "</span><span class=\"mtime\">" + m.time + "</span></div>" +
-      (m.builder ? "<p class=\"muted-p\">Refeição construída pelo aluno (construtor ativo).</p>" :
-        "<div class=\"muted-p\">" + m.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(" · ") + "</div>") +
-      "<div class=\"plano-meal-macros\">" + m.kcal + " kcal · P " + m.p + "g · H " + m.c + "g · G " + m.f + "g</div>" +
+      "<div class=\"muted-p\">" + m.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(" · ") + "</div>" +
+      "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>" +
     "</div>";
   });
+  if (s.meals.length){
+    var mealsDiffPct = t.kcal ? Math.abs(mealsSum - t.kcal)/t.kcal : 0;
+    html += "<p class=\"muted-p\" style=\"margin-top:4px;\">Soma das refeições: <span class=\"num\">" + mealsSum + " kcal</span>" +
+      (mealsDiffPct > 0.05 ? " <span class=\"pill warn\">⚠ " + Math.round(mealsDiffPct*100) + "% de diferença face ao alvo</span>" : " ✓ coerente com o alvo") +
+    "</p>";
+  }
   return html;
+}
+
+function renderTargetWarning(el){
+  var box = el.querySelector("#targetWarning");
+  if (!box) return;
+  var kcal = parseFloat(el.querySelector("#tKcal").value) || 0;
+  var protein = parseFloat(el.querySelector("#tProtein").value) || 0;
+  var carbs = parseFloat(el.querySelector("#tCarbs").value) || 0;
+  var fat = parseFloat(el.querySelector("#tFat").value) || 0;
+  var expected = expectedKcalFromMacros({protein:protein, carbs:carbs, fat:fat});
+  var diffPct = kcal ? Math.abs(expected - kcal)/kcal : 0;
+  box.innerHTML = diffPct > 0.05
+    ? "<div class=\"pill warn\" style=\"margin-top:10px;\">⚠ Estes macros correspondem a ~" + expected + " kcal, mas o alvo indicado é " + kcal + " kcal</div>"
+    : "<div class=\"pill good\" style=\"margin-top:10px;\">✓ Macros coerentes com o alvo (~" + expected + " kcal)</div>";
 }
 
 function tplProFlex(s){
@@ -1365,17 +1553,25 @@ function wireProTab(s){
   var el = document.getElementById("proTabContent");
 
   var saveT = el.querySelector("#saveTargets");
-  if (saveT) saveT.addEventListener("click", function(){
-    s.targets.kcal = parseInt(el.querySelector("#tKcal").value,10) || s.targets.kcal;
-    s.targets.protein = parseInt(el.querySelector("#tProtein").value,10) || s.targets.protein;
-    s.targets.carbs = parseInt(el.querySelector("#tCarbs").value,10) || s.targets.carbs;
-    s.targets.fat = parseInt(el.querySelector("#tFat").value,10) || s.targets.fat;
-    s.fromOnboarding = false;
-    var banner = el.querySelector(".suggestion-banner");
-    if (banner) banner.remove();
-    saveT.textContent = "Guardado ✓";
-    setTimeout(function(){ saveT.textContent = "Guardar alvos"; }, 1400);
-  });
+  if (saveT) {
+    renderTargetWarning(el);
+    ["tKcal","tProtein","tCarbs","tFat"].forEach(function(id){
+      el.querySelector("#"+id).addEventListener("input", function(){ renderTargetWarning(el); });
+    });
+    saveT.addEventListener("click", function(){
+      s.targets = {
+        kcal: parseInt(el.querySelector("#tKcal").value,10) || s.targets.kcal,
+        protein: parseInt(el.querySelector("#tProtein").value,10) || s.targets.protein,
+        carbs: parseInt(el.querySelector("#tCarbs").value,10) || 0,
+        fat: parseInt(el.querySelector("#tFat").value,10) || 0
+      };
+      s.fromOnboarding = false;
+      var banner = el.querySelector(".suggestion-banner");
+      if (banner) banner.remove();
+      saveT.textContent = "Guardado ✓";
+      setTimeout(function(){ saveT.textContent = "Guardar alvos"; }, 1400);
+    });
+  }
 
   var slider = el.querySelector("#flexSlider");
   if (slider) slider.addEventListener("input", function(){
