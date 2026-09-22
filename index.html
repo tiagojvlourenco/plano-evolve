@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Evolve Nutrition</title>
-<meta name="description" content="Protótipo do sistema de acompanhamento alimentar Evolve — vista Aluno e vista Profissional, com dados de exemplo.">
+<meta name="description" content="Protótipo do sistema de acompanhamento alimentar Evolve — vista Aluno e vista Profissional.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Evolve Nutrition">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0A0A0A;
@@ -343,8 +344,12 @@
     <span>Evolve Nutrition · protótipo <span class="dim">· dados de exemplo, sem ligação a contas reais</span></span>
   </div>
 
-  <div id="alunoApp"></div>
-  <div id="proApp"></div>
+  <div id="appLoading" class="card" style="max-width:430px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Evolve Nutrition</div>
+    <p class="muted-p" id="appLoadingText">A carregar dados...</p>
+  </div>
+  <div id="alunoApp" class="hidden"></div>
+  <div id="proApp" class="hidden"></div>
 </div>
 
 <div id="modalRoot"></div>
@@ -451,6 +456,7 @@ function ensureFreshDay(s){
   if (s.mealsDate !== today){
     s.meals.forEach(function(m){ m.done=false; m.adapted=false; m.liveChoice=null; });
     s.mealsDate = today;
+    persistStudent(s);
   }
 }
 
@@ -579,6 +585,13 @@ function getNextMeal(s){
     if (toMinutes(sorted[i].time) >= nowMin) return {meal:sorted[i], tomorrow:false};
   }
   return {meal:sorted[0], tomorrow:true};
+}
+
+function computeLastCheckinDaysAgo(s){
+  if (!s.checkins || !s.checkins.length) return 999;
+  var last = s.checkins[s.checkins.length-1];
+  var days = Math.floor((new Date() - new Date(last.date + "T00:00:00")) / 86400000);
+  return Math.max(0, days);
 }
 
 function computeAdherence(s){
@@ -712,6 +725,67 @@ var STUDENTS = [
 ];
 
 function findStudent(id){ for (var i=0;i<STUDENTS.length;i++) if (STUDENTS[i].id===id) return STUDENTS[i]; return null; }
+
+/* ===================== SUPABASE (base de dados real) ===================== */
+var SUPABASE_URL = "https://qjzmiucmzbsdkoaqrbxd.supabase.co";
+var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqem1pdWNtemJzZGtvYXFyYnhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMDc3NzgsImV4cCI6MjEwNTY4Mzc3OH0.eo8C6iPc-7ldy3m6jVTKMByOccaMX3_qnTVkLc7N1eU";
+var sb = null;
+var sbReady = false;
+
+function initSupabase(){
+  try {
+    if (window.supabase && typeof window.supabase.createClient === "function"){
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      sbReady = true;
+    }
+  } catch(e){ sbReady = false; }
+}
+
+function studentToRow(s){
+  return {
+    id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
+    weight_initial: s.weightInitial, weight_current: s.weightCurrent, weight_goal: s.weightGoal,
+    goal: s.goal, trainings_per_week: s.trainingsPerWeek, training_days: s.trainingDays || [],
+    training_type: s.trainingType, training_time: s.trainingTime, wake_time: s.wakeTime, sleep_time: s.sleepTime,
+    likes: s.likes || [], dislikes: s.dislikes || [], avoid: s.avoid || [], allergies: s.allergies || [],
+    meals_preferred: s.mealsPreferred, budget: s.budget, cook_time: s.cookTime, work: s.work, weekend_note: s.weekendNote,
+    targets: s.targets || {}, flexibility: s.flexibility, alerts: s.alerts || [], notes: s.notes || "",
+    meals: s.meals || [], checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
+    allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
+    meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding
+  };
+}
+
+function rowToStudent(r){
+  return {
+    id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
+    weightInitial: r.weight_initial, weightCurrent: r.weight_current, weightGoal: r.weight_goal,
+    goal: r.goal, trainingsPerWeek: r.trainings_per_week, trainingDays: r.training_days || [],
+    trainingType: r.training_type, trainingTime: r.training_time, wakeTime: r.wake_time, sleepTime: r.sleep_time,
+    likes: r.likes || [], dislikes: r.dislikes || [], avoid: r.avoid || [], allergies: r.allergies || [],
+    mealsPreferred: r.meals_preferred, budget: r.budget, cookTime: r.cook_time, work: r.work, weekendNote: r.weekend_note,
+    targets: r.targets || {}, flexibility: r.flexibility, alerts: r.alerts || [], notes: r.notes || "",
+    meals: r.meals || [], checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
+    allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
+    mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding
+  };
+}
+
+function persistStudent(s){
+  if (!sbReady) return;
+  sb.from("students").upsert(studentToRow(s)).then(function(res){
+    if (res && res.error) console.error("Supabase: falha ao guardar", s.id, res.error.message);
+  });
+}
+
+function loadStudentsFromSupabase(){
+  if (!sbReady) return Promise.resolve(false);
+  return sb.from("students").select("*").then(function(res){
+    if (res.error || !res.data || !res.data.length) return false;
+    STUDENTS = res.data.map(rowToStudent);
+    return true;
+  }).catch(function(){ return false; });
+}
 function flexZoneLabel(v){ return TIER_LABEL[flexTier(v)]; }
 function fmtDatePt(iso){ var d=new Date(iso+"T00:00:00"); return d.toLocaleDateString("pt-PT",{day:"2-digit",month:"short"}); }
 
@@ -859,6 +933,7 @@ function openMealDetail(s, idx){
           m.adapted = true;
           render();
           renderAlunoTab(s);
+          persistStudent(s);
           showToast("Refeição adaptada");
         });
       });
@@ -869,6 +944,7 @@ function openMealDetail(s, idx){
       var wasCompleted = m.done;
       render();
       renderAlunoTab(s);
+      persistStudent(s);
       if (wasCompleted) showToast("✓ " + m.name + " concluído");
     });
     var subBtn = sheet.querySelector("#mdSubstitute");
@@ -879,6 +955,7 @@ function openMealDetail(s, idx){
         m.adapted = true;
         render();
         renderAlunoTab(s);
+        persistStudent(s);
         showToast("Refeição adaptada");
       });
     });
@@ -887,6 +964,7 @@ function openMealDetail(s, idx){
       m.adapted = true;
       render();
       renderAlunoTab(s);
+      persistStudent(s);
       showToast("Refeição adaptada");
     });
   }
@@ -1321,6 +1399,7 @@ function wireAlunoTab(s){
       var m = s.meals[idx];
       m.done = !m.done;
       renderAlunoTab(s);
+      persistStudent(s);
       if (m.done) showToast("✓ " + m.name + " concluído");
     });
   });
@@ -1334,6 +1413,7 @@ function wireAlunoTab(s){
       m.foods[fi] = {name:chosen.name, qty:chosen.qty, group:m.foods[fi].group};
       m.adapted = true;
       renderAlunoTab(s);
+      persistStudent(s);
       showToast("Refeição adaptada");
     });
   });
@@ -1342,6 +1422,7 @@ function wireAlunoTab(s){
     var m = s.meals[parseInt(nmAdapt.getAttribute("data-midx"),10)];
     m.adapted = true;
     renderAlunoTab(s);
+    persistStudent(s);
     showToast("Refeição adaptada");
   });
 
@@ -1358,7 +1439,9 @@ function wireAlunoTab(s){
       var f = s.meals[midx].foods[fidx];
       openSubstitution(f, function(chosen){
         s.meals[midx].foods[fidx] = {name:chosen.name, qty:chosen.qty, group:f.group};
+        s.meals[midx].adapted = true;
         renderAlunoTab(s);
+        persistStudent(s);
       });
     });
   });
@@ -1372,6 +1455,7 @@ function wireAlunoTab(s){
       if (!m.liveChoice) m.liveChoice = {};
       m.liveChoice[group] = oi;
       renderAlunoTab(s);
+      persistStudent(s);
     });
   });
 
@@ -1388,6 +1472,7 @@ function wireAlunoTab(s){
     reader.onload = function(){
       s.photos.push({date: new Date().toISOString().slice(0,10), dataUrl: reader.result});
       renderAlunoTab(s);
+      persistStudent(s);
     };
     reader.readAsDataURL(file);
   });
@@ -1409,6 +1494,8 @@ function wireAlunoTab(s){
     s.weights.push({date: today, w: w});
     s.weightCurrent = w;
     renderAlunoTab(s);
+    persistStudent(s);
+    showToast("✓ Check-in enviado");
   });
 }
 
@@ -1441,7 +1528,7 @@ function daysAgoLabel(n){ if (n===0) return "hoje"; if (n===1) return "há 1 dia
 function renderProDashboardMain(){
   var main = document.getElementById("proMain");
   var activeCount = STUDENTS.length;
-  var pendingCheckins = STUDENTS.filter(function(s){ return s.lastCheckinDaysAgo>=7; }).length;
+  var pendingCheckins = STUDENTS.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
   var alertCount = STUDENTS.reduce(function(a,s){ return a + s.alerts.length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
@@ -1466,7 +1553,7 @@ function renderProDashboardMain(){
         "<div class=\"muted-p\" style=\"margin-top:12px;\">Sem check-ins ainda</div>" :
         "<div class=\"adherence-row\"><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div><span class=\"num\">" + Math.round(adh*100) + "%</span></div>"
       ) +
-      "<div class=\"muted-p\" style=\"margin-top:8px;\">Último check-in: " + daysAgoLabel(s.lastCheckinDaysAgo) + "</div>" +
+      "<div class=\"muted-p\" style=\"margin-top:8px;\">Último check-in: " + daysAgoLabel(computeLastCheckinDaysAgo(s)) + "</div>" +
     "</div>";
   });
   html += "</div>";
@@ -1607,6 +1694,7 @@ function openOnboardingForm(){
     };
 
     STUDENTS.push(newStudent);
+    persistStudent(newStudent);
     closeModal();
     state.proSelectedId = id;
     state.proTab = "plano";
@@ -1785,20 +1873,25 @@ function wireProTab(s){
       var banner = el.querySelector(".suggestion-banner");
       if (banner) banner.remove();
       saveT.textContent = "Guardado ✓";
+      persistStudent(s);
       setTimeout(function(){ saveT.textContent = "Guardar alvos"; }, 1400);
     });
   }
 
   var slider = el.querySelector("#flexSlider");
-  if (slider) slider.addEventListener("input", function(){
-    s.flexibility = parseInt(slider.value,10);
-    el.querySelector("#flexValLabel").textContent = s.flexibility;
-    el.querySelector("#flexZoneLabel").textContent = flexZoneLabel(s.flexibility);
-  });
+  if (slider) {
+    slider.addEventListener("input", function(){
+      s.flexibility = parseInt(slider.value,10);
+      el.querySelector("#flexValLabel").textContent = s.flexibility;
+      el.querySelector("#flexZoneLabel").textContent = flexZoneLabel(s.flexibility);
+    });
+    slider.addEventListener("change", function(){ persistStudent(s); });
+  }
   el.querySelectorAll(".preset-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       s.flexibility = parseInt(btn.getAttribute("data-v"),10);
       renderProTabContent(s);
+      persistStudent(s);
     });
   });
 
@@ -1806,6 +1899,7 @@ function wireProTab(s){
   if (saveN) saveN.addEventListener("click", function(){
     s.notes = el.querySelector("#proNotes").value;
     saveN.textContent = "Guardado ✓";
+    persistStudent(s);
     setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
   });
 
@@ -1813,6 +1907,7 @@ function wireProTab(s){
   if (togglePhotos) togglePhotos.addEventListener("change", function(){
     s.allowPhotos = togglePhotos.checked;
     renderProTabContent(s);
+    persistStudent(s);
   });
   wirePhotoCompare(s, el);
 
@@ -1829,6 +1924,7 @@ function wireProTab(s){
     s.assessments.push({date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0});
     if (!isNaN(weight)){ s.weightCurrent = weight; s.weights.push({date:date, w:weight}); }
     renderProTabContent(s);
+    persistStudent(s);
   });
   el.querySelectorAll(".assess-del").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -1837,6 +1933,7 @@ function wireProTab(s){
       var target = sorted[idx];
       s.assessments = s.assessments.filter(function(a){ return a!==target; });
       renderProTabContent(s);
+      persistStudent(s);
     });
   });
 }
@@ -1859,7 +1956,29 @@ document.querySelectorAll("#modeSwitch button").forEach(function(b){
   b.addEventListener("click", function(){ setMode(b.getAttribute("data-mode")); });
 });
 
-setMode("aluno");
+function boot(){
+  initSupabase();
+  var loadingText = document.getElementById("appLoadingText");
+  if (!sbReady){
+    if (loadingText) loadingText.textContent = "Sem ligação à base de dados — a usar dados de exemplo locais.";
+    setTimeout(reveal, 500);
+    return;
+  }
+  loadStudentsFromSupabase().then(function(ok){
+    if (!ok && loadingText) loadingText.textContent = "Não consegui ligar à base de dados — a usar dados de exemplo locais.";
+    reveal();
+  });
+}
+
+function reveal(){
+  var loading = document.getElementById("appLoading");
+  if (loading) loading.classList.add("hidden");
+  document.getElementById("alunoApp").classList.remove("hidden");
+  document.getElementById("proApp").classList.remove("hidden");
+  setMode("aluno");
+}
+
+boot();
 
 })();
 </script>
