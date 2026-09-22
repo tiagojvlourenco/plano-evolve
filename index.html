@@ -2038,6 +2038,15 @@ function translateAuthError(msg){
   return msg;
 }
 
+function offerToSaveCredential(email, password){
+  try {
+    if (window.PasswordCredential){
+      var cred = new window.PasswordCredential({ id: email, password: password, name: email });
+      navigator.credentials.store(cred).catch(function(){});
+    }
+  } catch(e){}
+}
+
 function handleSession(session){
   if (!session){ showAuthScreen("signin"); return; }
   showLoading("A preparar a tua conta...");
@@ -2111,6 +2120,7 @@ document.getElementById("authForm").addEventListener("submit", function(e){
       errEl.style.display = "block";
       return;
     }
+    offerToSaveCredential(email, password);
     handleSession(res.data.session);
   }).catch(function(){
     submitBtn.disabled = false;
