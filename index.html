@@ -127,6 +127,7 @@
   .meal-row:last-child{border-bottom:none;}
   .check-circle{width:24px; height:24px; border-radius:50%; border:2px solid var(--line-strong); flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface);}
   .check-circle.done{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .check-circle.adapted{background:var(--surface-3); border-color:var(--accent); color:var(--accent-strong); font-size:0.85rem;}
   .meal-row .info{flex:1; min-width:0;}
   .meal-row .name{font-weight:600; font-size:0.92rem;}
   .meal-row .time{color:var(--muted); font-size:0.76rem;}
@@ -305,6 +306,14 @@
   .invite-link-box{display:flex; gap:8px; align-items:center; background:var(--surface-2); border:1px solid var(--line-strong); border-radius:10px; padding:10px 12px; margin:12px 0;}
   .invite-link-box .num{flex:1; font-size:0.8rem; overflow-x:auto; white-space:nowrap;}
   .suggestion-banner{display:flex; align-items:center; gap:8px; background:var(--accent-soft); color:var(--accent-strong); border-radius:10px; padding:10px 14px; font-size:0.82rem; font-weight:600; margin-bottom:14px;}
+
+  .toast{
+    position:fixed; left:50%; bottom:90px; transform:translateX(-50%) translateY(20px); z-index:200;
+    background:var(--ink); color:var(--bg); font-weight:600; font-size:0.85rem;
+    padding:11px 20px; border-radius:999px; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5);
+    opacity:0; transition:opacity 0.25s ease, transform 0.25s ease; pointer-events:none; white-space:nowrap;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 </style>
 </head>
 <body>
@@ -372,49 +381,94 @@ var FOOD_GROUPS = {
 
 var SCENARIOS = {
   restaurante: {
-    label:"Restaurante", tips:[
+    label:"🍽️ Vou a um restaurante", tips:[
       "Prioriza proteína magra e legumes como base do prato.",
       "Pede molhos e acompanhamentos à parte para controlares a quantidade.",
       "Se houver pão ou entradas, escolhe uma coisa em vez de tudo.",
       "Bebe água como bebida principal."
     ]
   },
+  jantar_amigos: {
+    label:"👥 Vou jantar com amigos", tips:[
+      "Mantém as refeições anteriores do dia normalmente.",
+      "Dá prioridade à proteína quando escolheres o prato.",
+      "Come de acordo com a tua fome, sem pressa.",
+      "Não precisas de compensar amanhã — volta ao plano na próxima refeição."
+    ]
+  },
   festa: {
-    label:"Festa / evento", tips:[
+    label:"🎉 Tenho uma festa", tips:[
       "Come uma refeição normal antes de saíres, para não chegares esfomeado(a).",
       "Escolhe 1-2 coisas que realmente te apetecem e aproveita-as com calma.",
       "Alterna bebida alcoólica com água, se beberes.",
       "Não é preciso recuperar nada amanhã — só voltar ao plano na refeição seguinte."
     ]
   },
-  fastfood: {
-    label:"Fast food", tips:[
-      "Opções grelhadas em vez de panadas tendem a ter menos gordura.",
-      "Reduz o tamanho do menu (sem extra de batata ou refrigerante) se fizer sentido para ti.",
-      "Prioriza proteína — hambúrguer simples ou frango grelhado.",
-      "Uma refeição de fast food não desfaz o teu progresso."
-    ]
-  },
   viagem: {
-    label:"Viagem", tips:[
+    label:"✈️ Estou a viajar", tips:[
       "Leva snacks práticos: fruta, frutos secos, barras proteicas.",
       "Mantém a proteína em cada refeição sempre que possível.",
       "Não tentes seguir o plano ao detalhe — foca-te nas escolhas gerais.",
       "Bebe água com regularidade, sobretudo em viagens de avião."
     ]
   },
-  refeicao_livre: {
-    label:"Refeição livre", tips:[
-      "Aproveita a refeição sem culpa — faz parte da estratégia, não é um erro.",
-      "Come com calma e presta atenção à saciedade.",
-      "Na refeição seguinte, volta ao plano normalmente.",
-      "Uma refeição não define a tua evolução."
+  ferias: {
+    label:"🏖️ Estou de férias", tips:[
+      "Mantém alguma estrutura sem te preocupares com precisão total.",
+      "Prioriza proteína e movimento sempre que for fácil.",
+      "Aproveita a experiência — férias fazem parte de uma vida equilibrada.",
+      "Quando voltares à rotina, volta ao plano com naturalidade."
+    ]
+  },
+  fastfood: {
+    label:"🍔 Quero fazer uma refeição diferente", tips:[
+      "Opções grelhadas em vez de panadas tendem a ter menos gordura.",
+      "Reduz o tamanho do menu se fizer sentido para ti.",
+      "Prioriza proteína — hambúrguer simples ou frango grelhado, por exemplo.",
+      "Uma refeição diferente não desfaz o teu progresso."
+    ]
+  },
+  outra: {
+    label:"✏️ Outra situação", freeText:true, tips:[
+      "Mantém a proteína como prioridade sempre que conseguires.",
+      "Come de acordo com a tua fome, sem regras rígidas.",
+      "Volta ao plano com naturalidade na refeição seguinte.",
+      "Uma situação diferente não é uma falha — é só um dia diferente."
     ]
   }
 };
 
 function meal(name, time, foods){
-  return {name:name, time:time, foods:foods, liveChoice:null, done:false};
+  return {name:name, time:time, foods:foods, liveChoice:null, done:false, adapted:false};
+}
+
+function mealStatusIcon(m){ return m.adapted ? "↻" : (m.done ? "✓" : ""); }
+function mealCountsToday(m){ return m.done || m.adapted; }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+function ensureFreshDay(s){
+  var today = todayISO();
+  if (s.mealsDate !== today){
+    s.meals.forEach(function(m){ m.done=false; m.adapted=false; m.liveChoice=null; });
+    s.mealsDate = today;
+  }
+}
+
+function isTrainingDayToday(s){
+  if (!s.trainingDays) return null;
+  return s.trainingDays.indexOf(new Date().getDay()) !== -1;
+}
+
+function showToast(msg){
+  var t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(function(){ t.classList.add("show"); });
+  setTimeout(function(){
+    t.classList.remove("show");
+    setTimeout(function(){ t.remove(); }, 300);
+  }, 1800);
 }
 
 function food(name, qty, group){ return {name:name, qty:qty, group:group}; }
@@ -538,7 +592,7 @@ var STUDENTS = [
   {
     id:"maria", initials:"MS", name:"Maria Silva", age:32, sex:"Feminino", height:165,
     weightInitial:74.0, weightCurrent:68.0, weightGoal:64,
-    goal:"Perda de gordura", trainingsPerWeek:4, trainingType:"Musculação + cardio leve", trainingTime:"19:00",
+    goal:"Perda de gordura", trainingsPerWeek:4, trainingDays:[1,2,4,5], trainingType:"Musculação + cardio leve", trainingTime:"19:00",
     wakeTime:"07:00", sleepTime:"23:30",
     likes:["Frango","Iogurte grego","Batata-doce"], dislikes:["Peixe azul"], avoid:["Marisco"],
     allergies:["Sensibilidade à lactose"], mealsPreferred:5, budget:"Médio", cookTime:"20-30 min/dia",
@@ -581,7 +635,7 @@ var STUDENTS = [
   {
     id:"rui", initials:"RC", name:"Rui Costa", age:26, sex:"Masculino", height:180,
     weightInitial:71.0, weightCurrent:74.5, weightGoal:80,
-    goal:"Ganho de massa muscular", trainingsPerWeek:5, trainingType:"Musculação (hipertrofia)", trainingTime:"07:00",
+    goal:"Ganho de massa muscular", trainingsPerWeek:5, trainingDays:[1,2,3,4,5], trainingType:"Musculação (hipertrofia)", trainingTime:"07:00",
     wakeTime:"06:00", sleepTime:"23:00",
     likes:["Carne vermelha","Arroz","Batata"], dislikes:["Legumes verdes"], avoid:[],
     allergies:[], mealsPreferred:5, budget:"Alto", cookTime:"< 15 min/dia (meal prep ao fim de semana)",
@@ -619,7 +673,7 @@ var STUDENTS = [
   {
     id:"sofia", initials:"SM", name:"Sofia Martins", age:29, sex:"Feminino", height:170,
     weightInitial:63.0, weightCurrent:63.2, weightGoal:63,
-    goal:"Manutenção / recomposição", trainingsPerWeek:3, trainingType:"Treino funcional", trainingTime:"18:30",
+    goal:"Manutenção / recomposição", trainingsPerWeek:3, trainingDays:[1,3,5], trainingType:"Treino funcional", trainingTime:"18:30",
     wakeTime:"07:30", sleepTime:"23:45",
     likes:["Peixe","Legumes variados","Quinoa"], dislikes:[], avoid:["Glúten (preferência, não celíaca)"],
     allergies:[], mealsPreferred:4, budget:"Médio-alto", cookTime:"30-40 min/dia, gosta de cozinhar",
@@ -737,7 +791,7 @@ function openSubstitution(f, onPick){
 }
 
 function openScenarioPicker(){
-  var html = "<div class=\"mtitle\">Hoje vai ser diferente?</div>" +
+  var html = "<div class=\"mtitle\">O que vai acontecer?</div>" +
     "<p class=\"muted-p\" style=\"margin:4px 0 4px;\">Escolhe a situação — não é um prémio nem um castigo, é só adaptar.</p>" +
     "<div class=\"scenario-grid\">" +
     Object.keys(SCENARIOS).map(function(k){ return "<button type=\"button\" class=\"scenario-btn\" data-k=\"" + k + "\">" + SCENARIOS[k].label + "</button>"; }).join("") +
@@ -747,14 +801,98 @@ function openScenarioPicker(){
     btn.addEventListener("click", function(){
       var k = btn.getAttribute("data-k");
       var sc = SCENARIOS[k];
-      var tipsHtml = "<div class=\"mtitle\">" + sc.label + "</div><ul style=\"padding-left:18px; margin:12px 0;\">" +
-        sc.tips.map(function(t){ return "<li class=\"muted-p\" style=\"margin-bottom:8px;\">" + t + "</li>"; }).join("") + "</ul>" +
-        "<button type=\"button\" class=\"btn primary\" id=\"scenarioDone\" style=\"width:100%;\">Percebido</button>";
-      sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + tipsHtml;
-      sheet.querySelector(".mclose button").addEventListener("click", closeModal);
-      sheet.querySelector("#scenarioDone").addEventListener("click", closeModal);
+      renderScenarioTips(sc);
     });
   });
+
+  function renderScenarioTips(sc){
+    var extraField = sc.freeText ? "<textarea id=\"scenarioNote\" placeholder=\"Descreve a situação (opcional)\" style=\"width:100%; min-height:60px; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.88rem; margin-bottom:12px;\"></textarea>" : "";
+    var tipsHtml = "<div class=\"eyebrow\" style=\"margin-bottom:4px;\">Hoje podes ser flexível</div>" +
+      "<div class=\"mtitle\" style=\"margin-bottom:12px;\">" + sc.label + "</div>" +
+      extraField +
+      "<ul style=\"padding-left:18px; margin:0 0 14px;\">" +
+      sc.tips.map(function(t){ return "<li class=\"muted-p\" style=\"margin-bottom:8px;\">" + t + "</li>"; }).join("") + "</ul>" +
+      "<button type=\"button\" class=\"btn primary\" id=\"scenarioDone\" style=\"width:100%;\">Ver opções</button>";
+    sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + tipsHtml;
+    sheet.querySelector(".mclose button").addEventListener("click", closeModal);
+    sheet.querySelector("#scenarioDone").addEventListener("click", closeModal);
+  }
+}
+
+function openMealDetail(s, idx){
+  var m = s.meals[idx];
+
+  function render(){
+    var totals = resolvedMealTotals(s, m);
+    var statusLabel = m.adapted ? "Refeição adaptada" : (m.done ? "Refeição concluída" : "Por fazer");
+    var substitutableIdx = m.foods.findIndex(function(f){ return f.group; });
+    var html = "<div class=\"mtitle\">" + m.name.toUpperCase() + "</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + m.time + " · " + statusLabel + "</p>" +
+      "<div class=\"macro-target-grid\" style=\"margin-bottom:14px;\">" +
+        "<div class=\"f\"><label>Calorias</label><div class=\"v num\">" + totals.kcal + " kcal</div></div>" +
+        "<div class=\"f\"><label>Proteína</label><div class=\"v num\">" + totals.p + " g</div></div>" +
+        "<div class=\"f\"><label>Hidratos</label><div class=\"v num\">" + totals.c + " g</div></div>" +
+        "<div class=\"f\"><label>Gordura</label><div class=\"v num\">" + totals.f + " g</div></div>" +
+      "</div>" +
+      "<div style=\"border-top:1px solid var(--line); padding-top:8px; margin-bottom:16px;\">" +
+        m.foods.map(function(f, fi){
+          return "<div class=\"food-item\"" + (f.group ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
+            "<span class=\"fname\">" + f.name + "</span>" +
+            "<span><span class=\"fqty\">" + f.qty + "</span>" + (f.group ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+          "</div>";
+        }).join("") +
+      "</div>" +
+      "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
+        "<button type=\"button\" class=\"btn primary\" id=\"mdComplete\">" + (m.done ? "✓ Concluída — toca para desfazer" : "✓ Marcar como concluída") + "</button>" +
+        (substitutableIdx>=0 ? "<button type=\"button\" class=\"btn\" id=\"mdSubstitute\">↻ Substituir alimento</button>" : "") +
+        "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" +
+      "</div>";
+    sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
+    sheet.querySelector(".mclose button").addEventListener("click", closeModal);
+
+    sheet.querySelectorAll(".food-item[data-fidx]").forEach(function(el){
+      el.addEventListener("click", function(){
+        var fi = parseInt(el.getAttribute("data-fidx"),10);
+        var f = m.foods[fi];
+        openSubstitution(f, function(chosen){
+          m.foods[fi] = {name:chosen.name, qty:chosen.qty, group:f.group};
+          m.adapted = true;
+          render();
+          renderAlunoTab(s);
+          showToast("Refeição adaptada");
+        });
+      });
+    });
+    var completeBtn = sheet.querySelector("#mdComplete");
+    if (completeBtn) completeBtn.addEventListener("click", function(){
+      m.done = !m.done;
+      var wasCompleted = m.done;
+      render();
+      renderAlunoTab(s);
+      if (wasCompleted) showToast("✓ " + m.name + " concluído");
+    });
+    var subBtn = sheet.querySelector("#mdSubstitute");
+    if (subBtn) subBtn.addEventListener("click", function(){
+      var f = m.foods[substitutableIdx];
+      openSubstitution(f, function(chosen){
+        m.foods[substitutableIdx] = {name:chosen.name, qty:chosen.qty, group:f.group};
+        m.adapted = true;
+        render();
+        renderAlunoTab(s);
+        showToast("Refeição adaptada");
+      });
+    });
+    var adaptBtn = sheet.querySelector("#mdAdapt");
+    if (adaptBtn) adaptBtn.addEventListener("click", function(){
+      m.adapted = true;
+      render();
+      renderAlunoTab(s);
+      showToast("Refeição adaptada");
+    });
+  }
+
+  var sheet = openModal("");
+  render();
 }
 
 /* ===================== ALUNO RENDER ===================== */
@@ -763,7 +901,7 @@ var alunoRoot = document.getElementById("alunoApp");
 function consumedTotals(student){
   var t = {kcal:0,p:0,c:0,f:0};
   student.meals.forEach(function(m){
-    if (!m.done) return;
+    if (!mealCountsToday(m)) return;
     var mt = resolvedMealTotals(student, m);
     t.kcal+=mt.kcal; t.p+=mt.p; t.c+=mt.c; t.f+=mt.f;
   });
@@ -772,10 +910,15 @@ function consumedTotals(student){
 
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
+  ensureFreshDay(s);
   var optsHtml = STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + st.name + "</option>"; }).join("");
+  var trainingToday = isTrainingDayToday(s);
+  var trainingLine = trainingToday==null ? "" :
+    (trainingToday ? "<div class=\"sub\" style=\"margin-top:2px; color:var(--accent-strong);\">Treino hoje" + (s.trainingTime && s.trainingTime!=="—" ? " · " + s.trainingTime : "") + "</div>"
+                   : "<div class=\"sub\" style=\"margin-top:2px;\">Dia de descanso</div>");
   alunoRoot.innerHTML =
     "<div class=\"phone-header\">" +
-      "<div><div class=\"greet\">Olá, " + s.name.split(" ")[0] + "</div><div class=\"sub\">" + s.goal + "</div></div>" +
+      "<div><div class=\"greet\">Olá, " + s.name.split(" ")[0] + "</div><div class=\"sub\">" + s.goal + "</div>" + trainingLine + "</div>" +
       "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" +
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
@@ -836,9 +979,10 @@ function tplHoje(s){
     "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Refeições de hoje</div>" +
     s.meals.map(function(m, idx){
       var mt = resolvedMealTotals(s, m);
-      return "<div class=\"meal-row\">" +
-        "<div class=\"check-circle" + (m.done?" done":"") + "\" data-midx=\"" + idx + "\">" + (m.done? "✓":"") + "</div>" +
-        "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + m.time + "</div></div>" +
+      var icon = mealStatusIcon(m);
+      return "<div class=\"meal-row\" data-midx=\"" + idx + "\" style=\"cursor:pointer;\">" +
+        "<div class=\"check-circle" + (m.done?" done":"") + (m.adapted?" adapted":"") + "\" data-circle=\"" + idx + "\">" + icon + "</div>" +
+        "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + m.time + (m.adapted?" · adaptada":"") + "</div></div>" +
         "<div class=\"kcal\">" + mt.kcal + " kcal</div>" +
       "</div>";
     }).join("") +
@@ -846,12 +990,18 @@ function tplHoje(s){
 
   if (nm){
     var mt2 = resolvedMealTotals(s, nm.meal);
+    var tier0 = flexTier(s.flexibility);
+    var nmIdx = s.meals.indexOf(nm.meal);
     html += "<div class=\"next-meal-card\">" +
       "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + nm.meal.time + "</div>" +
       "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + nm.meal.name + "</div>" +
       "<div class=\"foods\">" + nm.meal.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(", ") + "</div>" +
       "<div class=\"foods\" style=\"margin-top:2px;\">" + mt2.kcal + " kcal · P " + mt2.p + "g · H " + mt2.c + "g · G " + mt2.f + "g</div>" +
-      "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\">Ver refeição</button>" +
+      "<div style=\"display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;\">" +
+        "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\" data-midx=\"" + nmIdx + "\">Ver refeição</button>" +
+        (tier0 !== "estruturado" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmSubstitute\" data-midx=\"" + nmIdx + "\">Substituir</button>" : "") +
+        (tier0 !== "estruturado" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmAdapt\" data-midx=\"" + nmIdx + "\">Adaptar</button>" : "") +
+      "</div>" +
     "</div>";
   }
 
@@ -867,7 +1017,7 @@ function tplHoje(s){
 
   var adh = computeAdherence(s);
   html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Adesão recente</div>" +
+    "<div class=\"eyebrow\">Consistência esta semana</div>" +
     (adh==null ?
       "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem check-ins suficientes para calcular.</p>" :
       "<div style=\"display:flex; align-items:center; gap:10px; margin-top:10px;\">" +
@@ -875,7 +1025,7 @@ function tplHoje(s){
         "<span class=\"num\" style=\"font-weight:700;\">" + Math.round(adh*100) + "%</span>" +
       "</div>"
     ) +
-    "<p class=\"muted-p\" style=\"margin-top:10px;\">Consistência ao longo do tempo importa mais do que perfeição num único dia.</p>" +
+    "<p class=\"muted-p\" style=\"margin-top:10px;\">A consistência ao longo do tempo importa mais do que um único dia.</p>" +
   "</div>";
 
   html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%;\">Hoje vai ser diferente?</button>";
@@ -998,9 +1148,18 @@ function rangeField(id, label, val){
     "<input type=\"range\" min=\"1\" max=\"10\" id=\"" + id + "\" value=\"" + val + "\"></div>";
 }
 
+function computeWeeklyTrend(weights){
+  if (weights.length < 2) return null;
+  var first = weights[0], last = weights[weights.length-1];
+  var days = (new Date(last.date) - new Date(first.date)) / 86400000;
+  if (days < 7) return null;
+  return (last.w - first.w) / (days/7);
+}
+
 function tplEvolucaoAluno(s, opts){
   opts = opts || {};
   var diff = (s.weightCurrent - s.weightInitial).toFixed(1);
+  var trend = computeWeeklyTrend(s.weights);
   var html = "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
     "<div class=\"weight-chart-wrap\">" + weightSvg(s.weights) + "</div>" +
@@ -1010,6 +1169,7 @@ function tplEvolucaoAluno(s, opts){
       statTile("Objetivo", (s.weightGoal || "—") + (s.weightGoal ? " kg":"")) +
       statTile("Diferença", (diff>0?"+":"") + diff + " kg") +
     "</div>" +
+    (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + trend.toFixed(2) + " kg/semana</span></p>" : "") +
   "</div>";
 
   html += "<div class=\"card\">" +
@@ -1149,16 +1309,44 @@ function weightSvg(weights){
 function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
 
-  el.querySelectorAll(".check-circle").forEach(function(c){
-    c.addEventListener("click", function(){
-      var idx = parseInt(c.getAttribute("data-midx"),10);
-      s.meals[idx].done = !s.meals[idx].done;
+  el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
+    row.addEventListener("click", function(){
+      openMealDetail(s, parseInt(row.getAttribute("data-midx"),10));
+    });
+  });
+  el.querySelectorAll(".check-circle[data-circle]").forEach(function(c){
+    c.addEventListener("click", function(e){
+      e.stopPropagation();
+      var idx = parseInt(c.getAttribute("data-circle"),10);
+      var m = s.meals[idx];
+      m.done = !m.done;
       renderAlunoTab(s);
+      if (m.done) showToast("✓ " + m.name + " concluído");
     });
   });
 
+  var nmSub = el.querySelector("#nmSubstitute");
+  if (nmSub) nmSub.addEventListener("click", function(){
+    var m = s.meals[parseInt(nmSub.getAttribute("data-midx"),10)];
+    var fi = m.foods.findIndex(function(f){ return f.group; });
+    if (fi<0) return;
+    openSubstitution(m.foods[fi], function(chosen){
+      m.foods[fi] = {name:chosen.name, qty:chosen.qty, group:m.foods[fi].group};
+      m.adapted = true;
+      renderAlunoTab(s);
+      showToast("Refeição adaptada");
+    });
+  });
+  var nmAdapt = el.querySelector("#nmAdapt");
+  if (nmAdapt) nmAdapt.addEventListener("click", function(){
+    var m = s.meals[parseInt(nmAdapt.getAttribute("data-midx"),10)];
+    m.adapted = true;
+    renderAlunoTab(s);
+    showToast("Refeição adaptada");
+  });
+
   var goBtn = el.querySelector("#goToMeal");
-  if (goBtn) goBtn.addEventListener("click", function(){ state.alunoTab="plano"; renderAlunoShell(); });
+  if (goBtn) goBtn.addEventListener("click", function(){ openMealDetail(s, parseInt(goBtn.getAttribute("data-midx"),10)); });
 
   var scBtn = el.querySelector("#openScenario");
   if (scBtn) scBtn.addEventListener("click", openScenarioPicker);
