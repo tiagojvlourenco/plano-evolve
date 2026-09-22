@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Evolve Nutrition</title>
-<meta name="description" content="Protótipo do sistema de acompanhamento alimentar Evolve — vista Aluno e vista Profissional.">
+<meta name="description" content="Protótipo do sistema de acompanhamento alimentar Evolve.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Evolve Nutrition">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -334,20 +334,50 @@
       <rect x="1000" y="150" width="160" height="20" fill="currentColor"></rect>
       <rect x="1000" y="220" width="160" height="20" fill="currentColor"></rect>
     </svg>
-    <div class="mode-switch" id="modeSwitch">
+    <div class="mode-switch hidden" id="modeSwitch">
       <button data-mode="aluno">Aluno</button>
       <button data-mode="pro">Profissional</button>
     </div>
+    <button type="button" class="btn btn-sm hidden" id="signOutBtn">Sair</button>
   </div>
 
   <div class="proto-ribbon">
-    <span>Evolve Nutrition · protótipo <span class="dim">· dados de exemplo, sem ligação a contas reais</span></span>
+    <span>Evolve Nutrition · protótipo <span class="dim">· ligado a uma base de dados real</span></span>
   </div>
 
   <div id="appLoading" class="card" style="max-width:430px; margin:60px auto; text-align:center;">
     <div class="eyebrow" style="margin-bottom:8px;">Evolve Nutrition</div>
-    <p class="muted-p" id="appLoadingText">A carregar dados...</p>
+    <p class="muted-p" id="appLoadingText">A carregar...</p>
   </div>
+
+  <div id="authScreen" class="hidden" style="max-width:380px; margin:40px auto;">
+    <div class="card">
+      <div class="eyebrow" style="margin-bottom:4px;" id="authTitle">Entrar</div>
+      <p class="muted-p" style="margin-bottom:16px;" id="authSubtitle">Acede à tua conta Evolve.</p>
+      <form id="authForm">
+        <div class="checkin-field">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" name="email" autocomplete="username" required>
+        </div>
+        <div class="checkin-field">
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" name="password" autocomplete="current-password" minlength="6" required>
+        </div>
+        <p class="muted-p" id="authError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>
+        <button type="submit" class="btn primary" id="authSubmit" style="width:100%;">Entrar</button>
+      </form>
+      <p class="muted-p" style="margin-top:14px; text-align:center;">
+        <a href="#" id="authToggle" class="linklike">Ainda não tens conta? Criar conta</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="noStudentScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Conta sem plano associado</div>
+    <p class="muted-p">A tua conta ainda não está associada a nenhum aluno. Pede ao teu profissional Evolve para te convidar com este email.</p>
+    <button type="button" class="btn" id="noStudentSignOut" style="margin-top:14px;">Sair</button>
+  </div>
+
   <div id="alunoApp" class="hidden"></div>
   <div id="proApp" class="hidden"></div>
 </div>
@@ -752,7 +782,7 @@ function studentToRow(s){
     targets: s.targets || {}, flexibility: s.flexibility, alerts: s.alerts || [], notes: s.notes || "",
     meals: s.meals || [], checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
     allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
-    meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding
+    meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null
   };
 }
 
@@ -767,7 +797,7 @@ function rowToStudent(r){
     targets: r.targets || {}, flexibility: r.flexibility, alerts: r.alerts || [], notes: r.notes || "",
     meals: r.meals || [], checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
     allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
-    mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding
+    mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null
   };
 }
 
@@ -778,14 +808,6 @@ function persistStudent(s){
   });
 }
 
-function loadStudentsFromSupabase(){
-  if (!sbReady) return Promise.resolve(false);
-  return sb.from("students").select("*").then(function(res){
-    if (res.error || !res.data || !res.data.length) return false;
-    STUDENTS = res.data.map(rowToStudent);
-    return true;
-  }).catch(function(){ return false; });
-}
 function flexZoneLabel(v){ return TIER_LABEL[flexTier(v)]; }
 function fmtDatePt(iso){ var d=new Date(iso+"T00:00:00"); return d.toLocaleDateString("pt-PT",{day:"2-digit",month:"short"}); }
 
@@ -825,6 +847,7 @@ function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]
 
 /* ===================== STATE ===================== */
 var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil" };
+var authRole = null; // 'professional' | 'student' | null
 
 /* ===================== MODAL ===================== */
 var modalRoot = document.getElementById("modalRoot");
@@ -988,8 +1011,10 @@ function consumedTotals(student){
 
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
+  if (!s) return;
   ensureFreshDay(s);
-  var optsHtml = STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + st.name + "</option>"; }).join("");
+  var showSwitcher = authRole !== "student";
+  var optsHtml = showSwitcher ? STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + st.name + "</option>"; }).join("") : "";
   var trainingToday = isTrainingDayToday(s);
   var trainingLine = trainingToday==null ? "" :
     (trainingToday ? "<div class=\"sub\" style=\"margin-top:2px; color:var(--accent-strong);\">Treino hoje" + (s.trainingTime && s.trainingTime!=="—" ? " · " + s.trainingTime : "") + "</div>"
@@ -997,7 +1022,7 @@ function renderAlunoShell(){
   alunoRoot.innerHTML =
     "<div class=\"phone-header\">" +
       "<div><div class=\"greet\">Olá, " + s.name.split(" ")[0] + "</div><div class=\"sub\">" + s.goal + "</div>" + trainingLine + "</div>" +
-      "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" +
+      (showSwitcher ? "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" : "") +
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
     "<div class=\"tabbar\">" +
@@ -1006,7 +1031,8 @@ function renderAlunoShell(){
       "<button data-tab=\"checkin\">Check-in</button>" +
       "<button data-tab=\"evolucao\">Evolução</button>" +
     "</div>";
-  document.getElementById("alunoStudentSwitch").addEventListener("change", function(e){
+  var switcherEl = document.getElementById("alunoStudentSwitch");
+  if (switcherEl) switcherEl.addEventListener("change", function(e){
     state.alunoStudentId = e.target.value; renderAlunoShell();
   });
   alunoRoot.querySelectorAll(".tabbar button").forEach(function(btn){
@@ -1568,18 +1594,16 @@ function renderProDashboardMain(){
 /* ---------- Convite / questionário inicial ---------- */
 
 function openInviteModal(){
-  var linkId = Math.random().toString(36).slice(2,8);
-  var link = "app.evolve.pt/questionario/" + linkId;
+  var link = window.location.origin + window.location.pathname;
   var html = "<div class=\"mtitle\">Convidar novo aluno</div>" +
-    "<p class=\"muted-p\" style=\"margin-top:6px;\">Envia este link ao aluno (WhatsApp, email). Ele preenche o questionário inicial no telemóvel e a resposta aparece aqui automaticamente, já com uma sugestão de calorias e macros calculada a partir do objetivo dele.</p>" +
+    "<p class=\"muted-p\" style=\"margin-top:6px;\">1. Preenche o questionário do aluno abaixo (com o email dele). 2. Envia-lhe este link e diz-lhe para criar conta com esse mesmo email.</p>" +
     "<div class=\"invite-link-box\"><span class=\"num\">" + link + "</span><button type=\"button\" class=\"btn btn-sm\" id=\"copyLink\">Copiar</button></div>" +
-    "<p class=\"muted-p\">Neste protótipo não há envio real — usa o botão abaixo para simulares a resposta do aluno.</p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"simulateFill\" style=\"width:100%; margin-top:8px;\">Simular preenchimento do aluno</button>";
+    "<button type=\"button\" class=\"btn primary\" id=\"simulateFill\" style=\"width:100%; margin-top:8px;\">Preencher questionário do aluno</button>";
   var sheet = openModal(html, {centered:true});
   var copyBtn = sheet.querySelector("#copyLink");
   copyBtn.addEventListener("click", function(){
     try {
-      navigator.clipboard.writeText("https://" + link);
+      navigator.clipboard.writeText(link);
       copyBtn.textContent = "Copiado ✓";
       setTimeout(function(){ copyBtn.textContent = "Copiar"; }, 1400);
     } catch(e){}
@@ -1593,6 +1617,7 @@ function openOnboardingForm(){
 
     "<div class=\"onb-section-title\">Dados pessoais</div>" +
     "<div class=\"onb-field\"><label>Nome</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
+    "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Idade</label><input type=\"number\" id=\"obAge\" value=\"30\"></div>" +
       "<div class=\"onb-field\"><label>Sexo</label><select id=\"obSex\"><option>Feminino</option><option>Masculino</option></select></div>" +
@@ -1639,6 +1664,7 @@ function openOnboardingForm(){
   sheet.querySelector("#submitOnboarding").addEventListener("click", function(){
     var name = sheet.querySelector("#obName").value.trim();
     if (!name){ sheet.querySelector("#obName").focus(); return; }
+    var inviteEmail = sheet.querySelector("#obEmail").value.trim().toLowerCase();
 
     var profile = {
       name:name,
@@ -1690,7 +1716,8 @@ function openOnboardingForm(){
       photos:[],
       planHistory:[],
       lastCheckinDaysAgo:0,
-      fromOnboarding:true
+      fromOnboarding:true,
+      inviteEmail: inviteEmail || null
     };
 
     STUDENTS.push(newStudent);
@@ -1956,26 +1983,164 @@ document.querySelectorAll("#modeSwitch button").forEach(function(b){
   b.addEventListener("click", function(){ setMode(b.getAttribute("data-mode")); });
 });
 
-function boot(){
-  initSupabase();
-  var loadingText = document.getElementById("appLoadingText");
-  if (!sbReady){
-    if (loadingText) loadingText.textContent = "Sem ligação à base de dados — a usar dados de exemplo locais.";
-    setTimeout(reveal, 500);
-    return;
+/* ===================== AUTENTICAÇÃO ===================== */
+var authFormMode = "signin";
+var SCREEN_IDS = ["appLoading","authScreen","noStudentScreen","alunoApp","proApp"];
+
+function hideAllScreens(){
+  SCREEN_IDS.forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
+}
+
+function showLoading(text){
+  hideAllScreens();
+  document.getElementById("appLoading").classList.remove("hidden");
+  document.getElementById("appLoadingText").textContent = text || "A carregar...";
+}
+
+function setAuthMode(mode){
+  authFormMode = mode;
+  var pw = document.getElementById("authPassword");
+  var errEl = document.getElementById("authError");
+  errEl.style.display = "none";
+  errEl.style.color = "var(--critical)";
+  if (mode === "signup"){
+    document.getElementById("authTitle").textContent = "Criar conta";
+    document.getElementById("authSubtitle").textContent = "Usa o email para o qual foste convidado (ou o teu, se és o profissional).";
+    document.getElementById("authSubmit").textContent = "Criar conta";
+    document.getElementById("authToggle").textContent = "Já tens conta? Entrar";
+    pw.setAttribute("autocomplete","new-password");
+  } else {
+    document.getElementById("authTitle").textContent = "Entrar";
+    document.getElementById("authSubtitle").textContent = "Acede à tua conta Evolve.";
+    document.getElementById("authSubmit").textContent = "Entrar";
+    document.getElementById("authToggle").textContent = "Ainda não tens conta? Criar conta";
+    pw.setAttribute("autocomplete","current-password");
   }
-  loadStudentsFromSupabase().then(function(ok){
-    if (!ok && loadingText) loadingText.textContent = "Não consegui ligar à base de dados — a usar dados de exemplo locais.";
-    reveal();
+}
+
+function showAuthScreen(mode){
+  hideAllScreens();
+  document.getElementById("authScreen").classList.remove("hidden");
+  document.getElementById("signOutBtn").classList.add("hidden");
+  document.getElementById("modeSwitch").classList.add("hidden");
+  setAuthMode(mode || "signin");
+}
+
+function translateAuthError(msg){
+  if (/already registered|already exists/i.test(msg)) return "Já existe uma conta com este email — tenta entrar.";
+  if (/invalid login credentials/i.test(msg)) return "Email ou password incorretos.";
+  if (/password should be/i.test(msg)) return "A password deve ter pelo menos 6 caracteres.";
+  if (/email not confirmed/i.test(msg)) return "Confirma o teu email antes de entrares (verifica a caixa de entrada).";
+  return msg;
+}
+
+function handleSession(session){
+  if (!session){ showAuthScreen("signin"); return; }
+  showLoading("A preparar a tua conta...");
+  var email = session.user.email;
+  var isProfessional = email === "tiagojvlourenco@gmail.com";
+
+  var claim = isProfessional ? Promise.resolve() :
+    sb.from("students").update({auth_user_id: session.user.id}).eq("invite_email", email).is("auth_user_id", null);
+
+  Promise.resolve(claim).then(function(){
+    return sb.from("students").select("*");
+  }).then(function(res){
+    STUDENTS = (res.data || []).map(rowToStudent);
+    document.getElementById("signOutBtn").classList.remove("hidden");
+    if (isProfessional){
+      authRole = "professional";
+      hideAllScreens();
+      document.getElementById("modeSwitch").classList.remove("hidden");
+      document.getElementById("alunoApp").classList.remove("hidden");
+      document.getElementById("proApp").classList.remove("hidden");
+      state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
+      setMode("pro");
+    } else if (STUDENTS.length){
+      authRole = "student";
+      hideAllScreens();
+      document.getElementById("modeSwitch").classList.add("hidden");
+      document.getElementById("alunoApp").classList.remove("hidden");
+      state.alunoStudentId = STUDENTS[0].id;
+      state.mode = "aluno";
+      renderAlunoShell();
+    } else {
+      authRole = null;
+      hideAllScreens();
+      document.getElementById("noStudentScreen").classList.remove("hidden");
+      document.getElementById("signOutBtn").classList.remove("hidden");
+    }
+  }).catch(function(err){
+    showLoading("Erro ao carregar a tua conta: " + (err && err.message ? err.message : "tenta novamente."));
   });
 }
 
-function reveal(){
-  var loading = document.getElementById("appLoading");
-  if (loading) loading.classList.add("hidden");
-  document.getElementById("alunoApp").classList.remove("hidden");
-  document.getElementById("proApp").classList.remove("hidden");
-  setMode("aluno");
+document.getElementById("authToggle").addEventListener("click", function(e){
+  e.preventDefault();
+  setAuthMode(authFormMode === "signin" ? "signup" : "signin");
+});
+
+document.getElementById("authForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var email = document.getElementById("authEmail").value.trim();
+  var password = document.getElementById("authPassword").value;
+  var errEl = document.getElementById("authError");
+  errEl.style.display = "none";
+  var submitBtn = document.getElementById("authSubmit");
+  submitBtn.disabled = true;
+
+  var action = authFormMode === "signup"
+    ? sb.auth.signUp({ email: email, password: password })
+    : sb.auth.signInWithPassword({ email: email, password: password });
+
+  action.then(function(res){
+    submitBtn.disabled = false;
+    if (res.error){
+      errEl.style.color = "var(--critical)";
+      errEl.textContent = translateAuthError(res.error.message);
+      errEl.style.display = "block";
+      return;
+    }
+    if (authFormMode === "signup" && res.data && !res.data.session){
+      errEl.style.color = "var(--accent-strong)";
+      errEl.textContent = "Conta criada — verifica o teu email para confirmar antes de entrares.";
+      errEl.style.display = "block";
+      return;
+    }
+    handleSession(res.data.session);
+  }).catch(function(){
+    submitBtn.disabled = false;
+    errEl.style.color = "var(--critical)";
+    errEl.textContent = "Não foi possível ligar — tenta novamente.";
+    errEl.style.display = "block";
+  });
+});
+
+function doSignOut(){
+  sb.auth.signOut().then(function(){ authRole = null; showAuthScreen("signin"); });
+}
+document.getElementById("signOutBtn").addEventListener("click", doSignOut);
+document.getElementById("noStudentSignOut").addEventListener("click", doSignOut);
+
+function boot(){
+  initSupabase();
+  if (!sbReady){
+    hideAllScreens();
+    document.getElementById("alunoApp").classList.remove("hidden");
+    document.getElementById("proApp").classList.remove("hidden");
+    document.getElementById("modeSwitch").classList.remove("hidden");
+    setMode("aluno");
+    return;
+  }
+  showLoading("A verificar sessão...");
+  sb.auth.getSession().then(function(res){
+    handleSession(res.data && res.data.session);
+  }).catch(function(){
+    showAuthScreen("signin");
+  });
+  sb.auth.onAuthStateChange(function(event){
+    if (event === "SIGNED_OUT") showAuthScreen("signin");
+  });
 }
 
 boot();
