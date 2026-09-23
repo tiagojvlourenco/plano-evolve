@@ -2059,7 +2059,7 @@ function renderProDashboardMain(){
   var main = document.getElementById("proMain");
   var activeCount = STUDENTS.length;
   var pendingCheckins = STUDENTS.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
-  var alertCount = STUDENTS.reduce(function(a,s){ return a + s.alerts.length; }, 0);
+  var alertCount = STUDENTS.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
     proStat(STUDENTS.length, "Total de alunos") +
@@ -2075,10 +2075,11 @@ function renderProDashboardMain(){
   html += "<div class=\"student-list\">";
   STUDENTS.forEach(function(s){
     var adh = computeAdherence(s);
+    var alerts = computeDashboardAlerts(s);
     html += "<div class=\"card student-card\" data-id=\"" + s.id + "\">" +
       "<div class=\"student-card-top\"><div class=\"avatar\">" + s.initials + "</div>" +
         "<div><div class=\"sname\">" + s.name + "</div><div class=\"sgoal\">" + s.goal + "</div></div></div>" +
-      (s.alerts.length ? "<div class=\"alerts\">" + s.alerts.map(function(a){ return "<span class=\"pill " + a.type + "\">⚠ " + a.text + "</span>"; }).join("") + "</div>" : "") +
+      (alerts.length ? "<div class=\"alerts\">" + alerts.map(function(a){ return "<span class=\"pill " + a.type + "\">⚠ " + escapeHtml(a.text) + "</span>"; }).join("") + "</div>" : "") +
       (adh==null ?
         "<div class=\"muted-p\" style=\"margin-top:12px;\">Sem check-ins ainda</div>" :
         "<div class=\"adherence-row\"><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div><span class=\"num\">" + Math.round(adh*100) + "%</span></div>"
@@ -2268,7 +2269,7 @@ function proStat(v, l){
   return "<div class=\"pro-stat-card\"><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></div>";
 }
 
-var PRO_TABS = [["perfil","Perfil"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
@@ -2283,6 +2284,7 @@ function renderProDetailMain(s){
 function renderProTabContent(s){
   var el = document.getElementById("proTabContent");
   if (state.proTab==="perfil") el.innerHTML = tplProPerfil(s);
+  else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
   else if (state.proTab==="flex") el.innerHTML = tplProFlex(s);
   else if (state.proTab==="evolucao") el.innerHTML = tplEvolucaoAluno(s, {editable:true});
@@ -2532,6 +2534,193 @@ function computeAdaptationSummary(s, days){
   return counts;
 }
 
+/* ===================== SINAIS DO ALUNO (leitura profissional) =====================
+   Indicadores objetivos calculados em tempo real a partir de dados já existentes
+   (checkins, weights, adaptationHistory, meals, targets) — nunca guardados no aluno.
+   Cada indicador tem um estado (atencao | positivo | insuficiente), um texto factual,
+   um período de referência explícito e o separador onde consultar a origem dos dados.
+   A app organiza a leitura; a interpretação e a decisão continuam a ser do profissional. */
+var SIGNAL_CHECKIN_LATE_DAYS = 7;      // mesmo limiar já usado no dashboard para "check-ins pendentes"
+var SIGNAL_CHECKIN_CRITICAL_DAYS = 14; // atraso considerado mais grave (pill "critical")
+var SIGNAL_RECENT_CHECKINS = 4;        // mesma janela já usada por computeAdherence
+var SIGNAL_WEIGHT_TREND_WEEKS = 3;     // período de referência da tendência de peso recente
+var SIGNAL_ADAPTATION_DAYS = 7;        // mesma janela já usada por computeAdaptationSummary
+var SIGNAL_LOW_ADHERENCE = 6;          // adesão média (0-10) abaixo disto merece atenção
+var SIGNAL_HIGH_HUNGER = 7;            // fome média (0-10) acima disto merece atenção
+var SIGNAL_LOW_ENERGY = 4;             // energia média (0-10) abaixo disto merece atenção
+var SIGNAL_MEALS_OFF_LIMIT = 3;        // refeições fora do plano na janela recente
+var SIGNAL_ADAPTATION_LIMIT = 5;       // adaptações na janela recente
+
+function signal(key, title, status, text, period, tab, severity){
+  return {key:key, title:title, status:status, text:text, period:period, tab:tab, severity: severity || "normal"};
+}
+
+function recentCheckins(s, n){
+  if (!s.checkins || !s.checkins.length) return [];
+  return s.checkins.slice(-(n || SIGNAL_RECENT_CHECKINS));
+}
+
+function signalCheckin(s){
+  if (!s.checkins || !s.checkins.length){
+    return signal("checkin", "Check-in", "insuficiente", "Sem check-ins registados.", "Desde sempre", "checkins");
+  }
+  var days = computeLastCheckinDaysAgo(s);
+  if (days >= SIGNAL_CHECKIN_LATE_DAYS){
+    return signal("checkin", "Check-in", "atencao", "Check-in em atraso há " + days + " dias.",
+      "Desde o último check-in", "checkins", days >= SIGNAL_CHECKIN_CRITICAL_DAYS ? "high" : "normal");
+  }
+  return signal("checkin", "Check-in", "positivo", "Último check-in " + daysAgoLabel(days) + ".", "Desde o último check-in", "checkins");
+}
+
+function computeRecentWeightChange(weights, weeks){
+  weeks = weeks || SIGNAL_WEIGHT_TREND_WEEKS;
+  if (!weights || weights.length < 2) return null;
+  var sorted = weights.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
+  var last = sorted[sorted.length-1];
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - weeks*7);
+  if (new Date(last.date+"T00:00:00") < cutoff) return null; // sem registos de peso dentro da janela
+  var before = sorted.filter(function(w){ return new Date(w.date+"T00:00:00") <= cutoff; });
+  var first = before.length ? before[before.length-1] : sorted[0];
+  if (first === last) return null; // só há um ponto disponível — nada para comparar
+  return { diff: last.w - first.w, from: first.date, to: last.date };
+}
+
+function signalWeight(s){
+  var change = computeRecentWeightChange(s.weights, SIGNAL_WEIGHT_TREND_WEEKS);
+  if (change == null){
+    return signal("peso", "Peso", "insuficiente", "Sem dados suficientes para avaliar a tendência.",
+      "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+  }
+  var diffStr = (change.diff>=0?"+":"") + change.diff.toFixed(1).replace(".", ",");
+  var goalImpliesChange = /perda|ganho/i.test(s.goal || "");
+  var stalled = goalImpliesChange && Math.abs(change.diff) < 0.3;
+  return signal("peso", "Peso", stalled ? "atencao" : "positivo",
+    "Peso: " + diffStr + " kg nas últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas.",
+    "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+}
+
+function signalAdherence(s){
+  var recent = recentCheckins(s);
+  if (!recent.length){
+    return signal("adesao", "Adesão", "insuficiente", "Sem check-ins suficientes para calcular a adesão.",
+      "Últimos " + SIGNAL_RECENT_CHECKINS + " check-ins", "checkins");
+  }
+  var avg = recent.reduce(function(a,c){ return a + c.adherence; }, 0) / recent.length;
+  return signal("adesao", "Adesão", avg < SIGNAL_LOW_ADHERENCE ? "atencao" : "positivo",
+    "Adesão média: " + avg.toFixed(1).replace(".", ",") + "/10 nos últimos " + recent.length + " check-ins.",
+    "Últimos " + recent.length + " check-ins", "checkins");
+}
+
+function signalHungerEnergy(s){
+  var recent = recentCheckins(s);
+  if (!recent.length){
+    return signal("fome_energia", "Fome e energia", "insuficiente", "Sem check-ins suficientes para avaliar fome e energia.",
+      "Últimos " + SIGNAL_RECENT_CHECKINS + " check-ins", "checkins");
+  }
+  var avgHunger = recent.reduce(function(a,c){ return a + c.hunger; }, 0) / recent.length;
+  var avgEnergy = recent.reduce(function(a,c){ return a + c.energy; }, 0) / recent.length;
+  var attention = avgHunger > SIGNAL_HIGH_HUNGER || avgEnergy < SIGNAL_LOW_ENERGY;
+  return signal("fome_energia", "Fome e energia", attention ? "atencao" : "positivo",
+    "Fome média: " + avgHunger.toFixed(1).replace(".",",") + "/10 · Energia média: " + avgEnergy.toFixed(1).replace(".",",") + "/10 nos últimos " + recent.length + " check-ins.",
+    "Últimos " + recent.length + " check-ins", "checkins");
+}
+
+function signalTreinos(s){
+  var recent = recentCheckins(s, 1);
+  var planned = s.trainingsPerWeek || 0;
+  if (!recent.length || !planned){
+    return signal("treinos", "Treinos", "insuficiente",
+      planned ? "Sem check-ins suficientes para comparar treinos." : "Sem treinos planeados definidos.",
+      "Último check-in", "checkins");
+  }
+  var last = recent[0];
+  var done = last.workouts || 0;
+  return signal("treinos", "Treinos", done < planned ? "atencao" : "positivo",
+    "Treinos: " + done + " de " + planned + " previstos no último check-in.",
+    "Último check-in (" + fmtDatePt(last.date) + ")", "checkins");
+}
+
+function signalMealsOff(s){
+  var recent = recentCheckins(s);
+  if (!recent.length){
+    return signal("refeicoes_fora_plano", "Refeições fora do plano", "insuficiente",
+      "Sem check-ins suficientes para avaliar refeições fora do plano.",
+      "Últimos " + SIGNAL_RECENT_CHECKINS + " check-ins", "checkins");
+  }
+  var total = recent.reduce(function(a,c){ return a + (c.mealsOff||0); }, 0);
+  return signal("refeicoes_fora_plano", "Refeições fora do plano", total > SIGNAL_MEALS_OFF_LIMIT ? "atencao" : "positivo",
+    total + " refeições fora do plano nos últimos " + recent.length + " check-ins.",
+    "Últimos " + recent.length + " check-ins", "checkins");
+}
+
+function signalAdaptacoes(s){
+  var summary = computeAdaptationSummary(s, SIGNAL_ADAPTATION_DAYS);
+  var total = Object.keys(summary).reduce(function(a,k){ return a + summary[k]; }, 0);
+  return signal("adaptacoes", "Padrões de adaptação", total >= SIGNAL_ADAPTATION_LIMIT ? "atencao" : "positivo",
+    total > 0 ? (total + " refeições adaptadas nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias.") : ("Sem adaptações registadas nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias."),
+    "Últimos " + SIGNAL_ADAPTATION_DAYS + " dias", "historico");
+}
+
+function signalPlanoAtivo(s){
+  if (!s.meals || !s.meals.length){
+    return signal("plano_ativo", "Plano ativo", "atencao", "Sem refeições definidas no plano.", "Estado atual do plano", "plano", "high");
+  }
+  if (!s.targets || !(s.targets.kcal > 0)){
+    return signal("plano_ativo", "Plano ativo", "atencao", "Sem alvo de calorias definido.", "Estado atual do plano", "plano", "high");
+  }
+  return signal("plano_ativo", "Plano ativo", "positivo", "Plano ativo com " + s.meals.length + " refeições definidas.", "Estado atual do plano", "plano");
+}
+
+function computeStudentSignals(s){
+  return [
+    signalCheckin(s),
+    signalPlanoAtivo(s),
+    signalAdherence(s),
+    signalWeight(s),
+    signalHungerEnergy(s),
+    signalTreinos(s),
+    signalMealsOff(s),
+    signalAdaptacoes(s)
+  ];
+}
+
+function computeDashboardAlerts(s){
+  var computed = computeStudentSignals(s).filter(function(sig){ return sig.status === "atencao"; }).map(function(sig){
+    return { type: sig.severity === "high" ? "critical" : "warn", text: sig.text };
+  });
+  return (s.alerts || []).concat(computed);
+}
+
+function signalPillClass(sig){
+  if (sig.status === "atencao") return sig.severity === "high" ? "critical" : "warn";
+  if (sig.status === "positivo") return "good";
+  return "";
+}
+function signalStatusLabel(status){
+  if (status === "atencao") return "Atenção";
+  if (status === "positivo") return "Informação positiva";
+  return "Dados insuficientes";
+}
+
+function tplProLeitura(s){
+  var signals = computeStudentSignals(s);
+  var html = "<div class=\"eyebrow\" style=\"margin-bottom:4px;\">Leitura do aluno</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Indicadores objetivos calculados a partir dos dados já registados — a interpretação e a decisão são sempre tuas.</p>";
+  html += signals.map(function(sig){
+    var tabLabel = (PRO_TABS.find(function(t){ return t[0] === sig.tab; }) || [null, sig.tab])[1];
+    return "<div class=\"history-row\" style=\"align-items:flex-start; cursor:pointer;\" data-goto-tab=\"" + sig.tab + "\">" +
+      "<div>" +
+        "<div class=\"hlabel\">" + escapeHtml(sig.title) + "</div>" +
+        "<div class=\"muted-p\" style=\"margin-top:2px;\">" + escapeHtml(sig.text) + "</div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.72rem; margin-top:2px;\">" + escapeHtml(sig.period) + " · ver em " + escapeHtml(tabLabel) + "</div>" +
+      "</div>" +
+      "<span class=\"pill " + signalPillClass(sig) + "\">" + signalStatusLabel(sig.status) + "</span>" +
+    "</div>";
+  }).join("");
+  return html;
+}
+
 /* ---------- Histórico automático do plano: regista alterações feitas pelo profissional ----------
    planHistory guarda dois formatos, para não apagar os registos antigos:
    - legado (snapshot): {date, kcal, flex, label} — como já existia
@@ -2618,6 +2807,13 @@ function tplProHistorico(s){
 
 function wireProTab(s){
   var el = document.getElementById("proTabContent");
+
+  el.querySelectorAll("[data-goto-tab]").forEach(function(row){
+    row.addEventListener("click", function(){
+      state.proTab = row.getAttribute("data-goto-tab");
+      renderProShell();
+    });
+  });
 
   var saveT = el.querySelector("#saveTargets");
   if (saveT) {
