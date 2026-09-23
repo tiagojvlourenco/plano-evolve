@@ -346,7 +346,7 @@
   </div>
 
   <div class="proto-ribbon">
-    <span>Evolve Nutrition · protótipo <span class="dim">· ligado a uma base de dados real</span></span>
+    <span>Evolve Nutrition · protótipo <span class="dim" id="dbStatusLabel">· a verificar ligação...</span></span>
   </div>
 
   <div id="appLoading" class="card" style="max-width:430px; margin:60px auto; text-align:center;">
@@ -962,6 +962,8 @@ function initSupabase(){
       sbReady = true;
     }
   } catch(e){ sbReady = false; }
+  var label = document.getElementById("dbStatusLabel");
+  if (label) label.textContent = sbReady ? "· ligado a uma base de dados real" : "· modo local (sem ligação à base de dados)";
 }
 
 function studentToRow(s){
@@ -1001,7 +1003,10 @@ function rowToStudent(r){
 function persistStudent(s){
   if (!sbReady) return;
   sb.from("students").upsert(studentToRow(s)).then(function(res){
-    if (res && res.error) console.error("Supabase: falha ao guardar", s.id, res.error.message);
+    if (res && res.error){
+      console.error("Supabase: falha ao guardar", s.id, res.error.message);
+      showToast("⚠ Não foi possível guardar — verifica a tua ligação");
+    }
   });
 }
 
@@ -1045,6 +1050,7 @@ function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]
 /* ===================== STATE ===================== */
 var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil" };
 var authRole = null; // 'professional' | 'student' | null
+var currentAuthUserId = null;
 
 /* ===================== MODAL ===================== */
 var modalRoot = document.getElementById("modalRoot");
@@ -1398,7 +1404,7 @@ function tplHoje(s){
     "</div>";
   }
   var totals = consumedTotals(s);
-  var pct = Math.min(100, Math.round((totals.kcal / s.targets.kcal) * 100));
+  var pct = s.targets.kcal ? Math.min(100, Math.round((totals.kcal / s.targets.kcal) * 100)) : 0;
   var nm = getNextMeal(s);
   var html = "";
 
@@ -1714,10 +1720,31 @@ function tplAssessTable(s, editable){
   return html;
 }
 
+function resizeImageFile(file, maxWidth){
+  return new Promise(function(resolve, reject){
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      var scale = Math.min(1, maxWidth / img.width);
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(function(blob){
+        if (blob) resolve(blob); else reject(new Error("Falha ao processar imagem"));
+      }, "image/jpeg", 0.85);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Falha ao ler imagem")); };
+    img.src = url;
+  });
+}
+
 function photoGridHtml(s){
   if (!s.photos.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotografias.</p>";
   return "<div class=\"photo-grid\">" + s.photos.map(function(p){
-    return "<div class=\"photo-thumb\"><img src=\"" + p.dataUrl + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span></div>";
+    return "<div class=\"photo-thumb\"><img src=\"" + (p.url || p.dataUrl) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span></div>";
   }).join("") + "</div>";
 }
 
@@ -1747,8 +1774,8 @@ function wirePhotoCompare(s, el){
     var b = sorted[parseInt(beforeSel.value,10)];
     var a = sorted[parseInt(afterSel.value,10)];
     row.innerHTML =
-      "<div class=\"compare-item\"><img src=\"" + b.dataUrl + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
-      "<div class=\"compare-item\"><img src=\"" + a.dataUrl + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
+      "<div class=\"compare-item\"><img src=\"" + (b.url || b.dataUrl) + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
+      "<div class=\"compare-item\"><img src=\"" + (a.url || a.dataUrl) + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
   }
   beforeSel.addEventListener("change", update);
   afterSel.addEventListener("change", update);
@@ -1777,6 +1804,9 @@ function statTile(label, val){
 }
 
 function weightSvg(weights){
+  if (weights.length < 2){
+    return "<p class=\"muted-p\" style=\"text-align:center; padding:20px 0;\">Ainda não há dados suficientes para mostrar a evolução.</p>";
+  }
   var w = 380, h = 120, pad = 18;
   var vals = weights.map(function(x){ return x.w; });
   var min = Math.min.apply(null, vals) - 0.5, max = Math.max.apply(null, vals) + 0.5;
@@ -1882,13 +1912,26 @@ function wireAlunoTab(s){
   if (photoInput) photoInput.addEventListener("change", function(e){
     var file = e.target.files && e.target.files[0];
     if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function(){
-      s.photos.push({date: new Date().toISOString().slice(0,10), dataUrl: reader.result});
-      renderAlunoTab(s);
-      persistStudent(s);
-    };
-    reader.readAsDataURL(file);
+    if (sbReady && currentAuthUserId){
+      resizeImageFile(file, 1280).then(function(blob){
+        var path = currentAuthUserId + "/" + Date.now() + ".jpg";
+        return sb.storage.from("progress-photos").upload(path, blob, {contentType:"image/jpeg"});
+      }).then(function(res){
+        if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
+        var url = sb.storage.from("progress-photos").getPublicUrl(res.data.path).data.publicUrl;
+        s.photos.push({date: todayISO(), url: url});
+        renderAlunoTab(s);
+        persistStudent(s);
+      }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
+    } else {
+      var reader = new FileReader();
+      reader.onload = function(){
+        s.photos.push({date: todayISO(), dataUrl: reader.result});
+        renderAlunoTab(s);
+        persistStudent(s);
+      };
+      reader.readAsDataURL(file);
+    }
   });
   wirePhotoCompare(s, el);
 
@@ -2523,7 +2566,8 @@ function offerToSaveCredential(email, password){
 }
 
 function handleSession(session){
-  if (!session){ showAuthScreen("signin"); return; }
+  if (!session){ currentAuthUserId = null; showAuthScreen("signin"); return; }
+  currentAuthUserId = session.user.id;
   showLoading("A preparar a tua conta...");
   var email = session.user.email;
   var isProfessional = email === "tiagojvlourenco@gmail.com";
