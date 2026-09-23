@@ -1606,6 +1606,7 @@ function rangeTile(label, center){
 }
 
 function tplMealBuilder(m, idx, s){
+  ensureLiveChoiceDefaults(m, s);
   var base = foodsTotals(m.foods);
   var html = "<div class=\"macro-target-grid\" style=\"margin-bottom:12px;\">" +
     rangeTile("Proteína", base.p) + rangeTile("Hidratos", base.c) + rangeTile("Gordura", base.f) +
