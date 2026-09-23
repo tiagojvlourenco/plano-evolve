@@ -1805,10 +1805,35 @@ function resizeImageFile(file, maxWidth){
   });
 }
 
+/* ---------- URL de uma foto de progresso ----------
+   O bucket "progress-photos" é privado (protegido por RLS no Storage), por isso
+   não há um URL público fixo a guardar: photoUrl() resolve, por esta ordem,
+   um URL já assinado (_resolvedUrl, obtido antecipadamente — ver resolvePhotoUrls),
+   um URL antigo gravado antes desta migração (p.url, compatibilidade retroativa),
+   ou o fallback local em base64 (p.dataUrl, quando não há ligação ao Storage). */
+function photoUrl(p){ return p._resolvedUrl || p.url || p.dataUrl || ""; }
+
+function resolvePhotoUrls(students, expirySeconds){
+  if (!sbReady) return Promise.resolve();
+  var jobs = [];
+  (students || []).forEach(function(s){
+    (s.photos || []).forEach(function(p){
+      if (p.path && !p._resolvedUrl){
+        jobs.push(
+          sb.storage.from("progress-photos").createSignedUrl(p.path, expirySeconds || 21600).then(function(res){
+            p._resolvedUrl = (res.data && res.data.signedUrl) || null;
+          }).catch(function(){ p._resolvedUrl = null; })
+        );
+      }
+    });
+  });
+  return Promise.all(jobs);
+}
+
 function photoGridHtml(s){
   if (!s.photos.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotografias.</p>";
   return "<div class=\"photo-grid\">" + s.photos.map(function(p){
-    return "<div class=\"photo-thumb\"><img src=\"" + (p.url || p.dataUrl) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span></div>";
+    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span></div>";
   }).join("") + "</div>";
 }
 
@@ -1838,8 +1863,8 @@ function wirePhotoCompare(s, el){
     var b = sorted[parseInt(beforeSel.value,10)];
     var a = sorted[parseInt(afterSel.value,10)];
     row.innerHTML =
-      "<div class=\"compare-item\"><img src=\"" + (b.url || b.dataUrl) + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
-      "<div class=\"compare-item\"><img src=\"" + (a.url || a.dataUrl) + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
+      "<div class=\"compare-item\"><img src=\"" + photoUrl(b) + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
+      "<div class=\"compare-item\"><img src=\"" + photoUrl(a) + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
   }
   beforeSel.addEventListener("change", update);
   afterSel.addEventListener("change", update);
@@ -1979,15 +2004,21 @@ function wireAlunoTab(s){
     var file = e.target.files && e.target.files[0];
     if (!file) return;
     if (sbReady && currentAuthUserId){
+      var uploadedPath;
       resizeImageFile(file, 1280).then(function(blob){
-        var path = currentAuthUserId + "/" + Date.now() + ".jpg";
-        return sb.storage.from("progress-photos").upload(path, blob, {contentType:"image/jpeg"});
+        uploadedPath = currentAuthUserId + "/" + Date.now() + ".jpg";
+        return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
       }).then(function(res){
         if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
-        var url = sb.storage.from("progress-photos").getPublicUrl(res.data.path).data.publicUrl;
-        s.photos.push({date: todayISO(), url: url});
-        renderAlunoTab(s);
-        persistStudent(s);
+        // bucket privado: guardamos só o caminho, nunca um URL público fixo — a
+        // leitura é sempre feita depois via URL assinado (ver resolvePhotoUrls).
+        return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
+          var photo = { date: todayISO(), path: uploadedPath };
+          photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
+          s.photos.push(photo);
+          renderAlunoTab(s);
+          persistStudent(s);
+        });
       }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
     } else {
       var reader = new FileReader();
@@ -3126,43 +3157,59 @@ function offerToSaveCredential(email, password){
   } catch(e){}
 }
 
+/* ---------- Papel de profissional: nunca decidido por comparar o email no browser ----------
+   A app pergunta ao servidor "esta conta está na tabela professionals?" — essa
+   tabela só é legível pela própria conta (RLS) e só é escrita manualmente pelo
+   dono do projeto Supabase, nunca pela app. Mesmo que alguém force isProfessional
+   a true na consola do browser, todas as políticas RLS/trigger no servidor
+   continuam a verificar a MESMA tabela de forma independente — o pior que
+   acontece é a UI mostrar o ecrã errado, sem nenhum dado real a fugir. */
+function checkIsProfessional(){
+  return sb.from("professionals").select("user_id").maybeSingle().then(function(res){
+    return !!(res && res.data);
+  }).catch(function(){ return false; });
+}
+
 function handleSession(session){
   if (!session){ currentAuthUserId = null; showAuthScreen("signin"); return; }
   currentAuthUserId = session.user.id;
   showLoading("A preparar a tua conta...");
   var email = session.user.email;
-  var isProfessional = email === "tiagojvlourenco@gmail.com";
 
-  var claim = isProfessional ? Promise.resolve() :
-    sb.from("students").update({auth_user_id: session.user.id}).eq("invite_email", email).is("auth_user_id", null);
+  checkIsProfessional().then(function(isProfessional){
+    var claim = isProfessional ? Promise.resolve() :
+      sb.from("students").update({auth_user_id: session.user.id}).eq("invite_email", email).is("auth_user_id", null);
 
-  Promise.resolve(claim).then(function(){
-    return sb.from("students").select("*");
-  }).then(function(res){
-    STUDENTS = (res.data || []).map(rowToStudent);
-    document.getElementById("signOutBtn").classList.remove("hidden");
-    if (isProfessional){
-      authRole = "professional";
-      hideAllScreens();
-      document.getElementById("modeSwitch").classList.remove("hidden");
-      document.getElementById("alunoApp").classList.remove("hidden");
-      document.getElementById("proApp").classList.remove("hidden");
-      state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
-      setMode("pro");
-    } else if (STUDENTS.length){
-      authRole = "student";
-      hideAllScreens();
-      document.getElementById("modeSwitch").classList.add("hidden");
-      document.getElementById("alunoApp").classList.remove("hidden");
-      state.alunoStudentId = STUDENTS[0].id;
-      state.mode = "aluno";
-      renderAlunoShell();
-    } else {
-      authRole = null;
-      hideAllScreens();
-      document.getElementById("noStudentScreen").classList.remove("hidden");
+    return Promise.resolve(claim).then(function(){
+      return sb.from("students").select("*");
+    }).then(function(res){
+      STUDENTS = (res.data || []).map(rowToStudent);
+      return resolvePhotoUrls(STUDENTS);
+    }).then(function(){
       document.getElementById("signOutBtn").classList.remove("hidden");
-    }
+      if (isProfessional){
+        authRole = "professional";
+        hideAllScreens();
+        document.getElementById("modeSwitch").classList.remove("hidden");
+        document.getElementById("alunoApp").classList.remove("hidden");
+        document.getElementById("proApp").classList.remove("hidden");
+        state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
+        setMode("pro");
+      } else if (STUDENTS.length){
+        authRole = "student";
+        hideAllScreens();
+        document.getElementById("modeSwitch").classList.add("hidden");
+        document.getElementById("alunoApp").classList.remove("hidden");
+        state.alunoStudentId = STUDENTS[0].id;
+        state.mode = "aluno";
+        renderAlunoShell();
+      } else {
+        authRole = null;
+        hideAllScreens();
+        document.getElementById("noStudentScreen").classList.remove("hidden");
+        document.getElementById("signOutBtn").classList.remove("hidden");
+      }
+    });
   }).catch(function(err){
     showLoading("Erro ao carregar a tua conta: " + (err && err.message ? err.message : "tenta novamente."));
   });
