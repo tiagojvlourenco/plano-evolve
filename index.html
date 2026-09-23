@@ -482,6 +482,12 @@ function meal(name, time, foods){
   return {name:name, time:time, foods:foods, liveChoice:null, done:false, adapted:false, status:"planned", rescheduledTime:null};
 }
 
+/* ---------- Escape de HTML: nome/horário da refeição já podem vir de texto escrito pelo profissional ---------- */
+var HTML_ESCAPE_MAP = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
+function escapeHtml(str){
+  return String(str == null ? "" : str).replace(/[&<>"']/g, function(c){ return HTML_ESCAPE_MAP[c]; });
+}
+
 /* ---------- Estado da refeição: além de concluída/adaptada, pode ser ignorada, reagendada ou flexível ---------- */
 function mealStatusIcon(m){
   if (m.adapted) return "↻";
@@ -763,11 +769,13 @@ function unitKindFor(name){
   return db ? db.per : null; // "100g" | "unit" | "fixed" | null (alimento desconhecido)
 }
 
-function buildQtyString(name, amount, unitLabel){
+function buildQtyString(name, amount){
   var kind = unitKindFor(name);
   if (kind === "fixed") return "à vontade";
   if (kind === "unit") return Math.max(1, Math.round(amount) || 1) + " unid.";
-  if (kind === "100g") return Math.max(1, Math.round(amount) || 1) + " " + (unitLabel === "ml" ? "ml" : "g");
+  // "100g": sempre em gramas — nunca "ml", porque o parser trata 1ml=1g (só correto para água) e não há
+  // densidade fiável por alimento em FOOD_DB para converter corretamente (ex.: azeite ronda 0.92 g/ml).
+  if (kind === "100g") return Math.max(1, Math.round(amount) || 1) + " g";
   return null; // alimento não reconhecido — não deve acontecer vindo de FOOD_GROUPS, mas nunca inventa uma quantidade
 }
 
@@ -784,8 +792,8 @@ function removeMealFromPlan(s, targetMeal){
   s.meals = s.meals.filter(function(m){ return m !== targetMeal; });
 }
 
-function addFoodToMeal(targetMeal, name, group, amount, unitLabel){
-  var qty = buildQtyString(name, amount, unitLabel);
+function addFoodToMeal(targetMeal, name, group, amount){
+  var qty = buildQtyString(name, amount);
   if (qty == null) return false;
   targetMeal.foods.push(food(name, qty, group));
   return true;
@@ -1249,8 +1257,8 @@ function openMealDetail(s, idx){
     var profile = computeFlexibilityProfile(s);
     var totals = resolvedMealTotals(s, m);
     var substitutableIdx = profile.substitutionsEnabled ? m.foods.findIndex(function(f){ return f.group; }) : -1;
-    var html = "<div class=\"mtitle\">" + m.name.toUpperCase() + "</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + effectiveMealTime(m) + " · " + mealStatusLabel(m) + "</p>" +
+    var html = "<div class=\"mtitle\">" + escapeHtml(m.name.toUpperCase()) + "</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + escapeHtml(effectiveMealTime(m)) + " · " + escapeHtml(mealStatusLabel(m)) + "</p>" +
       "<div class=\"macro-target-grid\" style=\"margin-bottom:14px;\">" +
         "<div class=\"f\"><label>Calorias</label><div class=\"v num\">" + totals.kcal + " kcal</div></div>" +
         "<div class=\"f\"><label>Proteína</label><div class=\"v num\">" + totals.p + " g</div></div>" +
@@ -1361,8 +1369,8 @@ function openFoodUnavailable(s, m, fi, idx){
 
 function openReschedule(s, m, idx){
   var html = "<div class=\"mtitle\">Alterar horário</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Planeado: " + m.time + "</p>" +
-    "<div class=\"checkin-field\"><label for=\"rescheduleTime\">Novo horário</label><input type=\"time\" id=\"rescheduleTime\" value=\"" + effectiveMealTime(m) + "\"></div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Planeado: " + escapeHtml(m.time) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"rescheduleTime\">Novo horário</label><input type=\"time\" id=\"rescheduleTime\" value=\"" + escapeHtml(effectiveMealTime(m)) + "\"></div>" +
     "<button type=\"button\" class=\"btn primary\" id=\"rescheduleConfirm\" style=\"width:100%;\">Confirmar</button>";
   var sheet = openModal(html);
   sheet.querySelector("#rescheduleConfirm").addEventListener("click", function(){
@@ -1376,7 +1384,7 @@ function openReschedule(s, m, idx){
 }
 
 function openSkipMeal(s, m, idx){
-  var html = "<div class=\"mtitle\">Ignorar " + m.name + "?</div>" +
+  var html = "<div class=\"mtitle\">Ignorar " + escapeHtml(m.name) + "?</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Sem problema — o resto do teu dia continua válido. Não precisas de compensar esta refeição mais tarde.</p>" +
     "<button type=\"button\" class=\"btn primary\" id=\"skipConfirm\" style=\"width:100%; margin-bottom:8px;\">Confirmar</button>" +
     "<button type=\"button\" class=\"btn\" id=\"skipCancel\" style=\"width:100%;\">Cancelar</button>";
@@ -1482,7 +1490,7 @@ function tplHoje(s){
       "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Sem problema — vamos continuar a partir daqui.</p>" +
       (remaining.length ?
         "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Restante do dia</div>" +
-        remaining.map(function(m){ return "<div class=\"checkin-history-row\"><span>" + m.name + "</span><span class=\"num\">" + effectiveMealTime(m) + "</span></div>"; }).join("")
+        remaining.map(function(m){ return "<div class=\"checkin-history-row\"><span>" + escapeHtml(m.name) + "</span><span class=\"num\">" + escapeHtml(effectiveMealTime(m)) + "</span></div>"; }).join("")
         : "<p class=\"muted-p\">Já não há mais refeições previstas para hoje.</p>") +
     "</div>";
   }
@@ -1494,7 +1502,7 @@ function tplHoje(s){
       var icon = mealStatusIcon(m);
       return "<div class=\"meal-row\" data-midx=\"" + idx + "\" style=\"cursor:pointer;\">" +
         "<div class=\"check-circle" + (m.done?" done":"") + (m.adapted?" adapted":"") + "\" data-circle=\"" + idx + "\">" + icon + "</div>" +
-        "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + effectiveMealTime(m) + mealRowSuffix(m) + "</div></div>" +
+        "<div class=\"info\"><div class=\"name\">" + escapeHtml(m.name) + "</div><div class=\"time\">" + escapeHtml(effectiveMealTime(m)) + escapeHtml(mealRowSuffix(m)) + "</div></div>" +
         "<div class=\"kcal\">" + mt.kcal + " kcal</div>" +
       "</div>";
     }).join("") +
@@ -1506,9 +1514,9 @@ function tplHoje(s){
     var nmIdx = s.meals.indexOf(nm.meal);
     var nmHasGroupFood = nm.meal.foods.some(function(f){ return f.group; });
     html += "<div class=\"next-meal-card\">" +
-      "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + nm.meal.time + "</div>" +
-      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + nm.meal.name + "</div>" +
-      "<div class=\"foods\">" + nm.meal.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(", ") + "</div>" +
+      "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + escapeHtml(nm.meal.time) + "</div>" +
+      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + escapeHtml(nm.meal.name) + "</div>" +
+      "<div class=\"foods\">" + nm.meal.foods.map(function(f){ return escapeHtml(f.name) + " (" + escapeHtml(f.qty) + ")"; }).join(", ") + "</div>" +
       "<div class=\"foods\" style=\"margin-top:2px;\">" + mt2.kcal + " kcal · P " + mt2.p + "g · H " + mt2.c + "g · G " + mt2.f + "g</div>" +
       "<div style=\"display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;\">" +
         "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\" data-midx=\"" + nmIdx + "\">Ver refeição</button>" +
@@ -1586,7 +1594,7 @@ function tplPlano(s){
   s.meals.forEach(function(m, idx){
     var totals = resolvedMealTotals(s, m);
     html += "<div class=\"card plano-meal-card\">" +
-      "<div class=\"plano-meal-head\"><span class=\"mname\">" + m.name + "</span><span class=\"mtime\">" + m.time + "</span></div>";
+      "<div class=\"plano-meal-head\"><span class=\"mname\">" + escapeHtml(m.name) + "</span><span class=\"mtime\">" + escapeHtml(m.time) + "</span></div>";
     if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s);
     else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
     else html += tplMealChoice(m, idx, s);
@@ -2351,9 +2359,9 @@ function tplPlanoMealEditor(m, midx){
   var html = "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px;\">" +
     "<div class=\"onb-row\" style=\"align-items:end; margin-bottom:8px;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Nome da refeição</label>" +
-        "<input type=\"text\" class=\"pm-name\" data-midx=\"" + midx + "\" value=\"" + m.name + "\"></div>" +
+        "<input type=\"text\" class=\"pm-name\" data-midx=\"" + midx + "\" value=\"" + escapeHtml(m.name) + "\"></div>" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Horário</label>" +
-        "<input type=\"time\" class=\"pm-time\" data-midx=\"" + midx + "\" value=\"" + m.time + "\"></div>" +
+        "<input type=\"time\" class=\"pm-time\" data-midx=\"" + midx + "\" value=\"" + escapeHtml(m.time) + "\"></div>" +
     "</div>" +
     "<button type=\"button\" class=\"btn btn-sm\" data-del-meal=\"" + midx + "\" style=\"margin-bottom:10px;\">🗑 Remover refeição</button>";
 
@@ -2362,8 +2370,8 @@ function tplPlanoMealEditor(m, midx){
   }
   html += m.foods.map(function(f, fidx){
     return "<div class=\"food-item\">" +
-      "<span class=\"fname\">" + f.name + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + groupLabel(f.group) + ")</span>" : "") + "</span>" +
-      "<span><span class=\"fqty\">" + f.qty + "</span>" +
+      "<span class=\"fname\">" + escapeHtml(f.name) + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + escapeHtml(groupLabel(f.group)) + ")</span>" : "") + "</span>" +
+      "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" +
         "<button type=\"button\" class=\"assess-del\" data-del-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:8px;\" aria-label=\"Remover alimento\">✕</button>" +
       "</span>" +
     "</div>";
@@ -2409,10 +2417,7 @@ function tplAddFoodQty(name){
   if (kind === "unit"){
     return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"1\">";
   }
-  return "<label>Quantidade</label><div style=\"display:flex; gap:6px;\">" +
-    "<input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"100\" style=\"flex:1;\">" +
-    "<select class=\"af-qty-unit\" style=\"width:78px;\"><option value=\"g\">g</option><option value=\"ml\">ml</option></select>" +
-  "</div>";
+  return "<label>Quantidade (g)</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"100\">";
 }
 
 function renderTargetWarning(el){
@@ -2659,11 +2664,9 @@ function wireProTab(s){
       if (!name){ showToast("⚠ Escolhe um alimento"); return; }
       var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
       var numInput = qtyWrap.querySelector(".af-qty-num");
-      var unitSel = qtyWrap.querySelector(".af-qty-unit");
       var amount = numInput ? parseFloat(numInput.value) : 1;
       if (numInput && !(amount > 0)){ showToast("⚠ A quantidade tem de ser superior a 0"); return; }
-      var unitLabel = unitSel ? unitSel.value : null;
-      var ok = addFoodToMeal(m, name, group, amount, unitLabel);
+      var ok = addFoodToMeal(m, name, group, amount);
       if (!ok){ showToast("⚠ Este alimento não é reconhecido — escolhe outro"); return; }
       renderProTabContent(s);
       persistStudent(s);
