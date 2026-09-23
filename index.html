@@ -1118,7 +1118,7 @@ function openSubstitution(f, onConfirm, s){
       "<button type=\"button\" class=\"btn\" id=\"cancelSub\" style=\"width:100%;\">Cancelar</button>";
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
     sheet.querySelector(".mclose button").addEventListener("click", closeModal);
-    sheet.querySelector("#confirmSub").addEventListener("click", function(){ onConfirm(chosen); closeModal(); });
+    sheet.querySelector("#confirmSub").addEventListener("click", function(){ onConfirm(chosen); });
     sheet.querySelector("#cancelSub").addEventListener("click", renderList);
   }
 
@@ -1189,6 +1189,7 @@ function openLowTime(s){
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Refeição adaptada");
+    closeModal();
   }, s);
 }
 
@@ -1246,10 +1247,10 @@ function openMealDetail(s, idx){
     if (subBtn) subBtn.addEventListener("click", function(){
       openSubstitution(m.foods[substitutableIdx], function(chosen){
         applySubstitution(s, m, substitutableIdx, chosen);
-        render();
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
+        openMealDetail(s, idx);
       }, s);
     });
     var adaptBtn = sheet.querySelector("#mdAdapt");
@@ -1856,6 +1857,7 @@ function wireAlunoTab(s){
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
+      closeModal();
     }, s);
   });
   var nmAdapt = el.querySelector("#nmAdapt");
@@ -1887,6 +1889,7 @@ function wireAlunoTab(s){
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
+        closeModal();
       }, s);
     });
   });
