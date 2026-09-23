@@ -2061,6 +2061,7 @@ function openOnboardingForm(){
     "<div class=\"onb-section-title\">Dados pessoais</div>" +
     "<div class=\"onb-field\"><label>Nome</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
     "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
+    "<p class=\"muted-p\" id=\"obError\" style=\"color:var(--critical); display:none; margin:-6px 0 10px;\"></p>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Idade</label><input type=\"number\" id=\"obAge\" value=\"30\"></div>" +
       "<div class=\"onb-field\"><label>Sexo</label><select id=\"obSex\"><option>Feminino</option><option>Masculino</option></select></div>" +
@@ -2105,9 +2106,22 @@ function openOnboardingForm(){
 
   var sheet = openModal(html, {centered:true});
   sheet.querySelector("#submitOnboarding").addEventListener("click", function(){
+    var errEl = sheet.querySelector("#obError");
+    errEl.style.display = "none";
     var name = sheet.querySelector("#obName").value.trim();
-    if (!name){ sheet.querySelector("#obName").focus(); return; }
+    if (!name){
+      errEl.textContent = "Indica o nome do aluno.";
+      errEl.style.display = "block";
+      sheet.querySelector("#obName").focus();
+      return;
+    }
     var inviteEmail = sheet.querySelector("#obEmail").value.trim().toLowerCase();
+    if (!inviteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)){
+      errEl.textContent = "Indica um email válido — é com ele que o aluno vai criar a conta. Sem email, o aluno nunca vai conseguir associar-se a este perfil.";
+      errEl.style.display = "block";
+      sheet.querySelector("#obEmail").focus();
+      return;
+    }
 
     var profile = {
       name:name,
