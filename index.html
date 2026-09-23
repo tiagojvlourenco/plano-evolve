@@ -2544,6 +2544,13 @@ function wireProTab(s){
       var idx = parseInt(btn.getAttribute("data-idx"),10);
       var target = sorted[idx];
       s.assessments = s.assessments.filter(function(a){ return a!==target; });
+      // a avaliação também pode ter criado uma entrada em weights (mesma data e peso) — reverter os dois juntos
+      var weightEntry = s.weights.find(function(w){ return w.date === target.date && w.w === target.weight; });
+      if (weightEntry) s.weights = s.weights.filter(function(w){ return w !== weightEntry; });
+      if (s.weights.length){
+        var latest = s.weights.slice().sort(function(a,b){ return a.date<b.date?-1:1; })[s.weights.length-1];
+        s.weightCurrent = latest.w;
+      }
       renderProTabContent(s);
       persistStudent(s);
     });
