@@ -242,6 +242,7 @@
     .pro-shell{flex-direction:column; gap:14px;}
     .pro-sidebar{
       width:100%; flex-direction:row; overflow-x:auto; position:static; align-items:center;
+      min-height:auto;
     }
     .pro-sidebar-divider{width:1px; height:24px; margin:0 4px;}
     .pro-sidebar-student{padding:4px 10px; white-space:nowrap;}
@@ -269,7 +270,7 @@
 
   textarea.notes-area{width:100%; min-height:160px; border:1px solid var(--line-strong); border-radius:11px; padding:12px 14px; background:var(--bg); font-size:0.9rem; line-height:1.5; resize:vertical;}
 
-  .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px;}
+  .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
   .evolve-mark{height:26px; width:auto; color:var(--ink); flex-shrink:0;}
   .section-gap{margin-top:22px;}
   .muted-p{font-size:0.85rem; color:var(--muted); line-height:1.5;}
