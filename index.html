@@ -784,8 +784,10 @@ function sortMealsByTime(s){
 }
 
 function addMealToPlan(s){
-  s.meals.push(meal("Nova refeição", "12:00", []));
+  var m = meal("Nova refeição", "12:00", []);
+  s.meals.push(m);
   sortMealsByTime(s);
+  return m;
 }
 
 function removeMealFromPlan(s, targetMeal){
@@ -2530,6 +2532,61 @@ function computeAdaptationSummary(s, days){
   return counts;
 }
 
+/* ---------- Histórico automático do plano: regista alterações feitas pelo profissional ----------
+   planHistory guarda dois formatos, para não apagar os registos antigos:
+   - legado (snapshot): {date, kcal, flex, label} — como já existia
+   - evento (novo): {date, time, timestamp, type, summary, before, after}
+   Só é preenchido a partir de ações explícitas do profissional (nunca a partir de renders). */
+function logPlanEvent(s, type, summary, before, after){
+  if (before !== undefined && after !== undefined && before === after) return; // sem alteração real: não duplica
+  if (!s.planHistory) s.planHistory = [];
+  var now = new Date();
+  s.planHistory.push({
+    date: todayISO(),
+    time: String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0"),
+    timestamp: now.toISOString(),
+    type: type,
+    summary: summary,
+    before: before,
+    after: after
+  });
+}
+
+function logMealAdded(s, m){
+  logPlanEvent(s, "refeicao_criada", "Refeição adicionada: " + m.name + " — " + m.time, null, m.name + " — " + m.time);
+}
+function logMealRemoved(s, label){
+  logPlanEvent(s, "refeicao_removida", "Refeição removida: " + label, label, null);
+}
+function logMealRenamed(s, oldName, newName){
+  logPlanEvent(s, "refeicao_nome", "Nome alterado: " + oldName + " → " + newName, oldName, newName);
+}
+function logMealRescheduled(s, mealName, oldTime, newTime){
+  logPlanEvent(s, "refeicao_horario", "Horário alterado: " + mealName + ", " + oldTime + " → " + newTime, oldTime, newTime);
+}
+function logFoodAdded(s, mealName, f){
+  logPlanEvent(s, "alimento_adicionado", "Alimento adicionado: " + f.name + ", " + f.qty + ", " + mealName, null, f.name + ", " + f.qty);
+}
+function logFoodRemoved(s, mealName, f){
+  logPlanEvent(s, "alimento_removido", "Alimento removido: " + f.name + ", " + f.qty + ", " + mealName, f.name + ", " + f.qty, null);
+}
+function logTargetsChange(s, oldTargets, newTargets){
+  var oldCarbs = oldTargets.carbs != null ? oldTargets.carbs : oldTargets.carbsMax;
+  var oldFat = oldTargets.fat != null ? oldTargets.fat : oldTargets.fatMax;
+  logPlanEvent(s, "kcal", "Calorias: " + oldTargets.kcal + " → " + newTargets.kcal + " kcal", oldTargets.kcal, newTargets.kcal);
+  logPlanEvent(s, "protein", "Proteína: " + oldTargets.protein + " → " + newTargets.protein + " g", oldTargets.protein, newTargets.protein);
+  logPlanEvent(s, "carbs", "Hidratos: " + oldCarbs + " → " + newTargets.carbs + " g", oldCarbs, newTargets.carbs);
+  logPlanEvent(s, "fat", "Gordura: " + oldFat + " → " + newTargets.fat + " g", oldFat, newTargets.fat);
+}
+function logFlexibilityChange(s, oldVal, newVal){
+  logPlanEvent(s, "flexibilidade", "Flexibilidade: " + oldVal + " → " + newVal, oldVal, newVal);
+}
+function logOverrideChange(s, key, oldChecked, newChecked){
+  var pair = FLEX_OVERRIDE_CHECKBOXES.find(function(p){ return p[0] === key; });
+  var label = pair ? pair[1] : key;
+  logPlanEvent(s, "personalizacao", "Personalização: " + label + " → " + (newChecked ? "ativada" : "desativada"), !!oldChecked, !!newChecked);
+}
+
 function tplProHistorico(s){
   var html = "";
   var summary = computeAdaptationSummary(s, 7);
@@ -2543,9 +2600,18 @@ function tplProHistorico(s){
       "<div class=\"section-gap\"></div>";
   }
   html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de alterações ao plano</div>";
-  s.planHistory.forEach(function(p){
-    html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + p.label + "</div><div class=\"hdate\">" + fmtDatePt(p.date) + "</div></div>" +
-      "<div class=\"hval\">" + p.kcal + " kcal<br><span style=\"color:var(--muted); font-size:0.75rem;\">Flexibilidade " + p.flex + "</span></div></div>";
+  var planEntries = (s.planHistory || []).slice().reverse(); // mais recentes primeiro
+  if (!planEntries.length){
+    html += "<p class=\"muted-p\">Ainda sem alterações registadas.</p>";
+  }
+  planEntries.forEach(function(p){
+    if (p.type){
+      html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + escapeHtml(p.summary) + "</div></div>" +
+        "<div class=\"hdate\">" + fmtDatePt(p.date) + (p.time ? " · " + p.time : "") + "</div></div>";
+    } else {
+      html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + escapeHtml(p.label) + "</div><div class=\"hdate\">" + fmtDatePt(p.date) + "</div></div>" +
+        "<div class=\"hval\">" + p.kcal + " kcal<br><span style=\"color:var(--muted); font-size:0.75rem;\">Flexibilidade " + p.flex + "</span></div></div>";
+    }
   });
   return html;
 }
@@ -2568,7 +2634,9 @@ function wireProTab(s){
         showToast("⚠ Verifica os alvos — as calorias têm de ser superiores a 0 e os macros não podem ser negativos");
         return;
       }
-      s.targets = { kcal: newKcal, protein: newProtein, carbs: newCarbs, fat: newFat };
+      var newTargets = { kcal: newKcal, protein: newProtein, carbs: newCarbs, fat: newFat };
+      logTargetsChange(s, s.targets, newTargets);
+      s.targets = newTargets;
       s.fromOnboarding = false;
       var banner = el.querySelector(".suggestion-banner");
       if (banner) banner.remove();
@@ -2580,7 +2648,8 @@ function wireProTab(s){
 
   var addMealBtn = el.querySelector("#addMealBtn");
   if (addMealBtn) addMealBtn.addEventListener("click", function(){
-    addMealToPlan(s);
+    var newMeal = addMealToPlan(s);
+    logMealAdded(s, newMeal);
     renderProTabContent(s);
     persistStudent(s);
     showToast("Refeição adicionada");
@@ -2593,7 +2662,9 @@ function wireProTab(s){
       var newName = input.value.trim();
       if (!newName){ input.value = m.name; return; }
       if (newName === m.name) return;
+      var oldName = m.name;
       m.name = newName;
+      logMealRenamed(s, oldName, newName);
       persistStudent(s);
     });
   });
@@ -2602,8 +2673,10 @@ function wireProTab(s){
     input.addEventListener("change", function(){
       var midx = parseInt(input.getAttribute("data-midx"),10);
       var m = s.meals[midx];
-      if (!input.value){ input.value = m.time; return; }
+      if (!input.value || input.value === m.time){ input.value = m.time; return; }
+      var oldTime = m.time;
       m.time = input.value;
+      logMealRescheduled(s, m.name, oldTime, m.time);
       renderProTabContent(s);
       persistStudent(s);
       showToast("Horário atualizado");
@@ -2615,7 +2688,9 @@ function wireProTab(s){
       var midx = parseInt(btn.getAttribute("data-del-meal"),10);
       var m = s.meals[midx];
       if (!window.confirm("Remover \"" + m.name + "\" do plano deste aluno?")) return;
+      var removedLabel = m.name + " — " + m.time;
       removeMealFromPlan(s, m);
+      logMealRemoved(s, removedLabel);
       renderProTabContent(s);
       persistStudent(s);
       showToast("Refeição removida");
@@ -2627,7 +2702,9 @@ function wireProTab(s){
       var midx = parseInt(btn.getAttribute("data-del-food"),10);
       var fidx = parseInt(btn.getAttribute("data-fidx"),10);
       var m = s.meals[midx];
-      removeFoodFromMeal(m, m.foods[fidx]);
+      var f = m.foods[fidx];
+      removeFoodFromMeal(m, f);
+      logFoodRemoved(s, m.name, f);
       renderProTabContent(s);
       persistStudent(s);
       showToast("Alimento removido");
@@ -2668,6 +2745,8 @@ function wireProTab(s){
       if (numInput && !(amount > 0)){ showToast("⚠ A quantidade tem de ser superior a 0"); return; }
       var ok = addFoodToMeal(m, name, group, amount);
       if (!ok){ showToast("⚠ Este alimento não é reconhecido — escolhe outro"); return; }
+      var added = m.foods[m.foods.length - 1];
+      logFoodAdded(s, m.name, added);
       renderProTabContent(s);
       persistStudent(s);
       showToast("Alimento adicionado");
@@ -2686,6 +2765,7 @@ function wireProTab(s){
     slider.addEventListener("change", function(){
       var note = el.querySelector("#flexNote");
       logFlexChange(s, flexStartVal, s.flexibility, note ? note.value : "");
+      logFlexibilityChange(s, flexStartVal, s.flexibility);
       flexStartVal = s.flexibility;
       persistStudent(s);
     });
@@ -2693,8 +2773,10 @@ function wireProTab(s){
   el.querySelectorAll(".preset-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       var newVal = parseInt(btn.getAttribute("data-v"),10);
+      var oldVal = s.flexibility;
       var note = el.querySelector("#flexNote");
-      logFlexChange(s, s.flexibility, newVal, note ? note.value : "");
+      logFlexChange(s, oldVal, newVal, note ? note.value : "");
+      logFlexibilityChange(s, oldVal, newVal);
       s.flexibility = newVal;
       renderProTabContent(s);
       persistStudent(s);
@@ -2703,7 +2785,10 @@ function wireProTab(s){
   el.querySelectorAll("[data-key]").forEach(function(cb){
     cb.addEventListener("change", function(){
       if (!s.flexOverrides) s.flexOverrides = {};
-      s.flexOverrides[cb.getAttribute("data-key")] = cb.checked;
+      var key = cb.getAttribute("data-key");
+      var oldVal = s.flexOverrides[key];
+      logOverrideChange(s, key, oldVal, cb.checked);
+      s.flexOverrides[key] = cb.checked;
       persistStudent(s);
     });
   });
