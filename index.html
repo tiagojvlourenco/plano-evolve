@@ -320,9 +320,9 @@
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 </style>
+
 </head>
 <body>
-
 
 <div class="app-wrap">
   <div class="brand-header">
@@ -511,7 +511,69 @@ function showToast(msg){
   }, 1800);
 }
 
-function food(name, qty, group){ return {name:name, qty:qty, group:group}; }
+function food(name, qty, group, required){ return {name:name, qty:qty, group:group, required: required!==false}; }
+
+function optionsFor(f){
+  if (f.allowedSubs && f.allowedSubs.length) return f.allowedSubs;
+  return FOOD_GROUPS[f.group] || [];
+}
+
+/* ---------- Equivalência nutricional para substituições ---------- */
+var GROUP_PRIORITY_KEY = { protein:"p", carb:"c", fat:"f" };
+var PRIORITY_LABEL = { p:"proteína", c:"hidratos", f:"gordura" };
+
+function computeEquivalentAlternative(original, altBase){
+  var priorityKey = GROUP_PRIORITY_KEY[original.group];
+  var altDb = FOOD_DB[altBase.name];
+  if (!priorityKey || !altDb) return altBase;
+
+  var originalNutri = foodNutrition(original.name, original.qty);
+  var targetVal = originalNutri[priorityKey];
+  if (!targetVal || targetVal <= 0) return altBase;
+
+  if (altDb.per === "100g"){
+    var perGram = altDb[priorityKey] / 100;
+    if (perGram <= 0) return altBase;
+    var grams = Math.max(10, Math.min(400, Math.round((targetVal/perGram)/5)*5));
+    return { name: altBase.name, qty: grams + " g" };
+  }
+  if (altDb.per === "unit"){
+    var perUnit = altDb[priorityKey];
+    if (perUnit <= 0) return altBase;
+    var units = Math.max(1, Math.round(targetVal/perUnit));
+    return { name: altBase.name, qty: units + " unid." };
+  }
+  return altBase;
+}
+
+function logSubstitution(s, meal, from, to){
+  if (!s.substitutionHistory) s.substitutionHistory = [];
+  var now = new Date();
+  s.substitutionHistory.push({
+    date: todayISO(),
+    time: String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0"),
+    meal: meal.name, from: from.name, fromQty: from.qty, to: to.name, toQty: to.qty
+  });
+}
+
+function applySubstitution(s, meal, foodIdx, chosen){
+  var f = meal.foods[foodIdx];
+  var orig = f.original || {name:f.name, qty:f.qty};
+  logSubstitution(s, meal, f, chosen);
+  meal.foods[foodIdx] = {name:chosen.name, qty:chosen.qty, group:f.group, required:f.required, original:orig};
+  meal.adapted = true;
+}
+
+function revertMeal(meal){
+  meal.foods.forEach(function(f){
+    if (f.original){ f.name = f.original.name; f.qty = f.original.qty; delete f.original; }
+  });
+  meal.adapted = false;
+}
+
+function mealHasRevertible(meal){
+  return meal.foods.some(function(f){ return f.original; });
+}
 
 /* ---------- Base de alimentos: fonte única de verdade nutricional ---------- */
 var FOOD_DB = {
@@ -551,7 +613,10 @@ var FOOD_DB = {
 function parseQtyAmount(qty){
   qty = (qty||"").trim();
   if (/vontade/i.test(qty)) return {kind:"fixed", value:1};
-  var m = qty.match(/^(\d+)\s*unid/i); if (m) return {kind:"unit", value:parseInt(m[1],10)};
+  var m = qty.match(/^([\d.]+)\s*colher(es)?\s*de\s*sopa/i); if (m) return {kind:"g", value:parseFloat(m[1])*15};
+  m = qty.match(/^([\d.]+)\s*colher(es)?\s*de\s*ch[áa]/i); if (m) return {kind:"g", value:parseFloat(m[1])*5};
+  m = qty.match(/^([\d.]+)\s*por[çc][ãa](o|es)/i); if (m) return {kind:"unit", value:parseFloat(m[1])};
+  m = qty.match(/^(\d+)\s*unid/i); if (m) return {kind:"unit", value:parseInt(m[1],10)};
   m = qty.match(/^(\d+)\s*pe[çc]a/i); if (m) return {kind:"unit", value:parseInt(m[1],10)};
   m = qty.match(/^([\d.]+)\s*g\b/i); if (m) return {kind:"g", value:parseFloat(m[1])};
   m = qty.match(/^([\d.]+)\s*ml\b/i); if (m) return {kind:"g", value:parseFloat(m[1])};
@@ -585,20 +650,37 @@ function flexTier(v){ if (v<34) return "estruturado"; if (v<67) return "equilibr
 var GROUP_LABELS = {protein:"Proteína", carb:"Hidrato", veg:"Legumes", fat:"Gordura", fruit:"Fruta"};
 function groupLabel(g){ return GROUP_LABELS[g] || g; }
 
+function ensureLiveChoiceDefaults(meal){
+  if (!meal.liveChoice) meal.liveChoice = {};
+  meal.foods.forEach(function(f){
+    if (!f.group) return;
+    if (meal.liveChoice[f.group] == null){
+      var options = optionsFor(f);
+      var di = options.findIndex(function(o){ return o.name===f.name; });
+      meal.liveChoice[f.group] = di>=0 ? di : (options.length ? 0 : -1);
+    }
+  });
+}
+
+function liveChoiceTotals(meal){
+  var groups = Object.keys(meal.liveChoice || {});
+  var chosen = groups.map(function(g){
+    var idx = meal.liveChoice[g];
+    if (idx === -1) return {kcal:0,p:0,c:0,f:0};
+    var srcFood = meal.foods.find(function(f){ return f.group===g; });
+    var opts = srcFood ? optionsFor(srcFood) : (FOOD_GROUPS[g]||[]);
+    var opt = opts[idx];
+    return opt ? foodNutrition(opt.name, opt.qty) : {kcal:0,p:0,c:0,f:0};
+  });
+  var groupless = meal.foods.filter(function(f){ return !f.group; }).map(function(f){ return foodNutrition(f.name, f.qty); });
+  return sumNutrition(chosen.concat(groupless));
+}
+
 function resolvedMealTotals(s, meal){
   var tier = flexTier(s.flexibility);
-  if (tier !== "estruturado" && meal.liveChoice){
-    var groups = Object.keys(meal.liveChoice);
-    if (groups.length){
-      var chosen = groups.map(function(g){
-        var idx = meal.liveChoice[g];
-        var opt = (FOOD_GROUPS[g]||[])[idx];
-        return opt ? foodNutrition(opt.name, opt.qty) : {kcal:0,p:0,c:0,f:0};
-      });
-      var groupless = meal.foods.filter(function(f){ return !f.group; }).map(function(f){ return foodNutrition(f.name, f.qty); });
-      var t = sumNutrition(chosen.concat(groupless));
-      return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
-    }
+  if (tier !== "estruturado" && meal.liveChoice && Object.keys(meal.liveChoice).length){
+    var t = liveChoiceTotals(meal);
+    return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
   }
   return foodsTotals(meal.foods);
 }
@@ -651,7 +733,7 @@ var STUDENTS = [
     meals:[
       meal("Pequeno-almoço","07:30",[food("Iogurte grego natural","200 g","protein"),food("Aveia","40 g","carb"),food("Mirtilos","80 g","fruit")]),
       meal("Meio da manhã","10:30",[food("Maçã","1 unid.","fruit"),food("Frutos secos","15 g","fat")]),
-      meal("Almoço","13:00",[food("Frango (peito)","150 g","protein"),food("Arroz (cozido)","120 g","carb"),food("Brócolos","à vontade","veg"),food("Azeite","10 ml","fat")]),
+      meal("Almoço","13:00",[food("Frango (peito)","150 g","protein"),food("Arroz (cozido)","120 g","carb"),food("Brócolos","à vontade","veg"),food("Azeite","10 ml","fat",false)]),
       meal("Lanche pré-treino","17:00",[food("Banana","1 unid.","fruit"),food("Ovos","2 unid.","protein")]),
       meal("Jantar","20:30",[food("Pescada","170 g","protein"),food("Batata-doce","150 g","carb"),food("Salada mista","à vontade","veg")])
     ],
@@ -871,24 +953,53 @@ function openModal(innerHtml, opts){
   return sheet;
 }
 
-function openSubstitution(f, onPick){
-  var group = f.group;
-  var options = (FOOD_GROUPS[group] || []).filter(function(o){ return o.name !== f.name; });
-  var html = "<div class=\"mtitle\">Substituir \"" + f.name + "\"</div>" +
-    "<p class=\"muted-p\" style=\"margin:4px 0 14px;\">Alternativas com equivalência nutricional aproximada, dentro do nível de flexibilidade definido.</p>";
-  html += "<div>";
-  options.forEach(function(o, idx){
-    html += "<div class=\"food-item\" data-idx=\"" + idx + "\" style=\"cursor:pointer;\"><span class=\"fname\">" + o.name + "</span><span class=\"fqty\">" + o.qty + "</span></div>";
-  });
-  html += "</div>";
-  var sheet = openModal(html);
-  sheet.querySelectorAll(".food-item").forEach(function(el){
-    el.addEventListener("click", function(){
-      var idx = parseInt(el.getAttribute("data-idx"),10);
-      onPick(options[idx]);
-      closeModal();
+function openSubstitution(f, onConfirm){
+  var priorityKey = GROUP_PRIORITY_KEY[f.group];
+  var baseOptions = optionsFor(f).filter(function(o){ return o.name !== f.name; });
+  var options = baseOptions.map(function(o){ return computeEquivalentAlternative(f, o); });
+  var sheet = openModal("");
+
+  function renderList(){
+    var html = "<div class=\"mtitle\">Substituir</div>" +
+      "<div class=\"food-item\" style=\"border-bottom:2px solid var(--line); margin-bottom:10px; padding-bottom:10px;\">" +
+        "<span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span>" +
+      "</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
+    if (!options.length){
+      html += "<p class=\"muted-p\">Sem alternativas definidas para este alimento.</p>";
+    }
+    options.forEach(function(o, idx){
+      var badge = priorityKey ? "≈ mesma " + PRIORITY_LABEL[priorityKey] : "";
+      html += "<div class=\"food-item\" data-idx=\"" + idx + "\" style=\"cursor:pointer;\">" +
+        "<span class=\"fname\">" + o.name + "</span>" +
+        "<span><span class=\"fqty\">" + o.qty + "</span>" + (badge ? "<span class=\"swap-hint\">" + badge + "</span>" : "") + "</span>" +
+      "</div>";
     });
-  });
+    sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
+    sheet.querySelector(".mclose button").addEventListener("click", closeModal);
+    sheet.querySelectorAll(".food-item[data-idx]").forEach(function(el){
+      el.addEventListener("click", function(){
+        renderConfirm(options[parseInt(el.getAttribute("data-idx"),10)]);
+      });
+    });
+  }
+
+  function renderConfirm(chosen){
+    var html = "<div class=\"mtitle\">Substituir " + f.name + " por " + chosen.name + "?</div>" +
+      "<div style=\"display:flex; align-items:center; gap:10px; margin:18px 0;\">" +
+        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--line); border-radius:10px; padding:10px;\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>" +
+        "<span style=\"color:var(--muted); font-weight:700;\">→</span>" +
+        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--accent); border-radius:10px; padding:10px;\"><span class=\"fname\">" + chosen.name + "</span><span class=\"fqty\">" + chosen.qty + "</span></div>" +
+      "</div>" +
+      "<button type=\"button\" class=\"btn primary\" id=\"confirmSub\" style=\"width:100%; margin-bottom:8px;\">Confirmar</button>" +
+      "<button type=\"button\" class=\"btn\" id=\"cancelSub\" style=\"width:100%;\">Cancelar</button>";
+    sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
+    sheet.querySelector(".mclose button").addEventListener("click", closeModal);
+    sheet.querySelector("#confirmSub").addEventListener("click", function(){ onConfirm(chosen); closeModal(); });
+    sheet.querySelector("#cancelSub").addEventListener("click", renderList);
+  }
+
+  renderList();
 }
 
 function openScenarioPicker(){
@@ -947,6 +1058,7 @@ function openMealDetail(s, idx){
         "<button type=\"button\" class=\"btn primary\" id=\"mdComplete\">" + (m.done ? "✓ Concluída — toca para desfazer" : "✓ Marcar como concluída") + "</button>" +
         (substitutableIdx>=0 ? "<button type=\"button\" class=\"btn\" id=\"mdSubstitute\">↻ Substituir alimento</button>" : "") +
         "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" +
+        (mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdRevert\">↺ Repor plano original</button>" : "") +
       "</div>";
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
     sheet.querySelector(".mclose button").addEventListener("click", closeModal);
@@ -954,10 +1066,8 @@ function openMealDetail(s, idx){
     sheet.querySelectorAll(".food-item[data-fidx]").forEach(function(el){
       el.addEventListener("click", function(){
         var fi = parseInt(el.getAttribute("data-fidx"),10);
-        var f = m.foods[fi];
-        openSubstitution(f, function(chosen){
-          m.foods[fi] = {name:chosen.name, qty:chosen.qty, group:f.group};
-          m.adapted = true;
+        openSubstitution(m.foods[fi], function(chosen){
+          applySubstitution(s, m, fi, chosen);
           render();
           renderAlunoTab(s);
           persistStudent(s);
@@ -976,10 +1086,8 @@ function openMealDetail(s, idx){
     });
     var subBtn = sheet.querySelector("#mdSubstitute");
     if (subBtn) subBtn.addEventListener("click", function(){
-      var f = m.foods[substitutableIdx];
-      openSubstitution(f, function(chosen){
-        m.foods[substitutableIdx] = {name:chosen.name, qty:chosen.qty, group:f.group};
-        m.adapted = true;
+      openSubstitution(m.foods[substitutableIdx], function(chosen){
+        applySubstitution(s, m, substitutableIdx, chosen);
         render();
         renderAlunoTab(s);
         persistStudent(s);
@@ -993,6 +1101,14 @@ function openMealDetail(s, idx){
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
+    });
+    var revertBtn = sheet.querySelector("#mdRevert");
+    if (revertBtn) revertBtn.addEventListener("click", function(){
+      revertMeal(m);
+      render();
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast("Plano original reposto");
     });
   }
 
@@ -1194,26 +1310,44 @@ function tplMealFixed(m, idx){
 }
 
 function tplMealChoice(m, idx){
-  if (!m.liveChoice) m.liveChoice = {};
+  ensureLiveChoiceDefaults(m);
   var html = "";
   m.foods.forEach(function(f){
     if (!f.group){
       html += "<div class=\"food-item\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>";
       return;
     }
-    var options = FOOD_GROUPS[f.group] || [];
-    if (m.liveChoice[f.group]==null){
-      var di = options.findIndex(function(o){ return o.name===f.name; });
-      m.liveChoice[f.group] = di>=0 ? di : 0;
-    }
-    html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + " — escolhe 1</div>";
+    var options = optionsFor(f);
+    html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + (f.required===false ? " — opcional" : " — escolhe 1") + "</div>";
     options.forEach(function(o, oi){
       var sel = m.liveChoice[f.group]===oi;
       html += "<div class=\"builder-opt" + (sel?" sel":"") + "\" data-midx=\"" + idx + "\" data-group=\"" + f.group + "\" data-oi=\"" + oi + "\"><span class=\"radio\"></span><span>" + o.name + " <span class=\"num\" style=\"color:var(--muted);\">(" + o.qty + ")</span></span></div>";
     });
+    if (f.required===false){
+      var noneSel = m.liveChoice[f.group]===-1;
+      html += "<div class=\"builder-opt" + (noneSel?" sel":"") + "\" data-midx=\"" + idx + "\" data-group=\"" + f.group + "\" data-oi=\"-1\"><span class=\"radio\"></span><span>Nenhum (opcional)</span></div>";
+    }
     html += "</div>";
   });
   return html;
+}
+
+var MACRO_FEEDBACK = {
+  p: {label:"proteína", low:"Falta proteína", high:"Tens mais proteína do que o habitual"},
+  c: {label:"hidratos", low:"Falta um pouco de hidratos", high:"Reduz ligeiramente o hidrato"},
+  f: {label:"gordura", low:"Falta um pouco de gordura", high:"Tens mais gordura do que o habitual"}
+};
+
+function builderFeedback(m){
+  var base = foodsTotals(m.foods);
+  var t = liveChoiceTotals(m);
+  var msgs = [];
+  ["p","c","f"].forEach(function(k){
+    if (!base[k] || base[k] <= 0) return;
+    if (t[k] < base[k]*0.7) msgs.push(MACRO_FEEDBACK[k].low);
+    else if (t[k] > base[k]*1.3) msgs.push(MACRO_FEEDBACK[k].high);
+  });
+  return msgs;
 }
 
 function rangeTile(label, center){
@@ -1227,6 +1361,12 @@ function tplMealBuilder(m, idx){
   var html = "<div class=\"macro-target-grid\" style=\"margin-bottom:12px;\">" +
     rangeTile("Proteína", base.p) + rangeTile("Hidratos", base.c) + rangeTile("Gordura", base.f) +
   "</div>";
+  var feedback = builderFeedback(m);
+  if (feedback.length){
+    html += "<div class=\"builder-feedback\" style=\"margin-bottom:12px;\">" +
+      feedback.map(function(msg){ return "<p class=\"muted-p\" style=\"margin:0 0 4px;\">" + msg + "</p>"; }).join("") +
+    "</div>";
+  }
   return html + tplMealChoice(m, idx);
 }
 
@@ -1440,8 +1580,7 @@ function wireAlunoTab(s){
     var fi = m.foods.findIndex(function(f){ return f.group; });
     if (fi<0) return;
     openSubstitution(m.foods[fi], function(chosen){
-      m.foods[fi] = {name:chosen.name, qty:chosen.qty, group:m.foods[fi].group};
-      m.adapted = true;
+      applySubstitution(s, m, fi, chosen);
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
@@ -1468,10 +1607,10 @@ function wireAlunoTab(s){
       var fidx = parseInt(item.getAttribute("data-fidx"),10);
       var f = s.meals[midx].foods[fidx];
       openSubstitution(f, function(chosen){
-        s.meals[midx].foods[fidx] = {name:chosen.name, qty:chosen.qty, group:f.group};
-        s.meals[midx].adapted = true;
+        applySubstitution(s, s.meals[midx], fidx, chosen);
         renderAlunoTab(s);
         persistStudent(s);
+        showToast("Refeição adaptada");
       });
     });
   });
