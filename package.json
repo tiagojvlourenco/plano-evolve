@@ -1,0 +1,7 @@
+{
+  "name": "plano-evolve-app",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-all.js"
+  }
+}
