@@ -2253,10 +2253,10 @@ function tplProPlano(s){
   }
   html += "<div class=\"eyebrow\">Alvos nutricionais</div>" +
     "<div class=\"macro-target-grid\">" +
-    "<div class=\"f\"><label>Calorias</label><input type=\"number\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
-    "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
-    "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
-    "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" id=\"tFat\" value=\"" + (t.fat!=null?t.fat:t.fatMax) + "\"></div>" +
+    "<div class=\"f\"><label>Calorias</label><input type=\"number\" min=\"0\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
+    "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" min=\"0\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
+    "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" min=\"0\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
+    "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" min=\"0\" id=\"tFat\" value=\"" + (t.fat!=null?t.fat:t.fatMax) + "\"></div>" +
     "</div>" +
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
@@ -2292,6 +2292,10 @@ function renderTargetWarning(el){
   var protein = parseFloat(el.querySelector("#tProtein").value) || 0;
   var carbs = parseFloat(el.querySelector("#tCarbs").value) || 0;
   var fat = parseFloat(el.querySelector("#tFat").value) || 0;
+  if (kcal <= 0 || protein < 0 || carbs < 0 || fat < 0){
+    box.innerHTML = "<div class=\"pill critical\" style=\"margin-top:10px;\">⚠ As calorias têm de ser superiores a 0 e os macros não podem ser negativos</div>";
+    return;
+  }
   var expected = expectedKcalFromMacros({protein:protein, carbs:carbs, fat:fat});
   var diffPct = kcal ? Math.abs(expected - kcal)/kcal : 0;
   box.innerHTML = diffPct > 0.05
@@ -2421,12 +2425,15 @@ function wireProTab(s){
       el.querySelector("#"+id).addEventListener("input", function(){ renderTargetWarning(el); });
     });
     saveT.addEventListener("click", function(){
-      s.targets = {
-        kcal: parseInt(el.querySelector("#tKcal").value,10) || s.targets.kcal,
-        protein: parseInt(el.querySelector("#tProtein").value,10) || s.targets.protein,
-        carbs: parseInt(el.querySelector("#tCarbs").value,10) || 0,
-        fat: parseInt(el.querySelector("#tFat").value,10) || 0
-      };
+      var newKcal = parseInt(el.querySelector("#tKcal").value,10);
+      var newProtein = parseInt(el.querySelector("#tProtein").value,10);
+      var newCarbs = parseInt(el.querySelector("#tCarbs").value,10);
+      var newFat = parseInt(el.querySelector("#tFat").value,10);
+      if (!(newKcal > 0) || !(newProtein >= 0) || !(newCarbs >= 0) || !(newFat >= 0)){
+        showToast("⚠ Verifica os alvos — as calorias têm de ser superiores a 0 e os macros não podem ser negativos");
+        return;
+      }
+      s.targets = { kcal: newKcal, protein: newProtein, carbs: newCarbs, fat: newFat };
       s.fromOnboarding = false;
       var banner = el.querySelector(".suggestion-banner");
       if (banner) banner.remove();
