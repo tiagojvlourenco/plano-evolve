@@ -753,6 +753,48 @@ function flexTier(v){ if (v<34) return "estruturado"; if (v<67) return "equilibr
 var GROUP_LABELS = {protein:"Proteína", carb:"Hidrato", veg:"Legumes", fat:"Gordura", fruit:"Fruta"};
 function groupLabel(g){ return GROUP_LABELS[g] || g; }
 
+/* ---------- Editor de plano (profissional): só usa alimentos/grupos/unidades já suportados pelo parser ---------- */
+function foodOptionsForGroup(group){
+  return (FOOD_GROUPS[group] || []).map(function(o){ return o.name; });
+}
+
+function unitKindFor(name){
+  var db = FOOD_DB[name];
+  return db ? db.per : null; // "100g" | "unit" | "fixed" | null (alimento desconhecido)
+}
+
+function buildQtyString(name, amount, unitLabel){
+  var kind = unitKindFor(name);
+  if (kind === "fixed") return "à vontade";
+  if (kind === "unit") return Math.max(1, Math.round(amount) || 1) + " unid.";
+  if (kind === "100g") return Math.max(1, Math.round(amount) || 1) + " " + (unitLabel === "ml" ? "ml" : "g");
+  return null; // alimento não reconhecido — não deve acontecer vindo de FOOD_GROUPS, mas nunca inventa uma quantidade
+}
+
+function sortMealsByTime(s){
+  s.meals.sort(function(a,b){ return toMinutes(a.time) - toMinutes(b.time); });
+}
+
+function addMealToPlan(s){
+  s.meals.push(meal("Nova refeição", "12:00", []));
+  sortMealsByTime(s);
+}
+
+function removeMealFromPlan(s, targetMeal){
+  s.meals = s.meals.filter(function(m){ return m !== targetMeal; });
+}
+
+function addFoodToMeal(targetMeal, name, group, amount, unitLabel){
+  var qty = buildQtyString(name, amount, unitLabel);
+  if (qty == null) return false;
+  targetMeal.foods.push(food(name, qty, group));
+  return true;
+}
+
+function removeFoodFromMeal(targetMeal, targetFood){
+  targetMeal.foods = targetMeal.foods.filter(function(f){ return f !== targetFood; });
+}
+
 function ensureLiveChoiceDefaults(meal, s){
   if (!meal.liveChoice) meal.liveChoice = {};
   meal.foods.forEach(function(f){
@@ -2282,20 +2324,17 @@ function tplProPlano(s){
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
 
+  sortMealsByTime(s);
   html += "<div class=\"section-gap eyebrow\" style=\"margin-bottom:4px;\">Refeições do plano</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Nível " + TIER_LABEL[flexTier(s.flexibility)] + " — o aluno vê: " + TIER_HINT[flexTier(s.flexibility)].toLowerCase() + "</p>";
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Nível " + TIER_LABEL[flexTier(s.flexibility)] + " — o aluno vê: " + TIER_HINT[flexTier(s.flexibility)].toLowerCase() + ". As refeições ordenam-se sempre pelo horário.</p>";
   if (!s.meals.length){
     html += "<p class=\"muted-p\">Ainda sem refeições definidas — confirma os alvos acima e começa a montar o plano deste aluno.</p>";
   }
   var mealsSum = 0;
-  s.meals.forEach(function(m){
+  s.meals.forEach(function(m, midx){
     var totals = foodsTotals(m.foods);
     mealsSum += totals.kcal;
-    html += "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:12px;\">" +
-      "<div class=\"plano-meal-head\"><span class=\"mname\">" + m.name + "</span><span class=\"mtime\">" + m.time + "</span></div>" +
-      "<div class=\"muted-p\">" + m.foods.map(function(f){ return f.name + " (" + f.qty + ")"; }).join(" · ") + "</div>" +
-      "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>" +
-    "</div>";
+    html += tplPlanoMealEditor(m, midx);
   });
   if (s.meals.length){
     var mealsDiffPct = t.kcal ? Math.abs(mealsSum - t.kcal)/t.kcal : 0;
@@ -2303,7 +2342,77 @@ function tplProPlano(s){
       (mealsDiffPct > 0.05 ? " <span class=\"pill warn\">⚠ " + Math.round(mealsDiffPct*100) + "% de diferença face ao alvo</span>" : " ✓ coerente com o alvo") +
     "</p>";
   }
+  html += "<button type=\"button\" class=\"btn primary btn-sm\" id=\"addMealBtn\" style=\"width:100%; margin-top:10px;\">+ Adicionar refeição</button>";
   return html;
+}
+
+function tplPlanoMealEditor(m, midx){
+  var totals = foodsTotals(m.foods);
+  var html = "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px;\">" +
+    "<div class=\"onb-row\" style=\"align-items:end; margin-bottom:8px;\">" +
+      "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Nome da refeição</label>" +
+        "<input type=\"text\" class=\"pm-name\" data-midx=\"" + midx + "\" value=\"" + m.name + "\"></div>" +
+      "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Horário</label>" +
+        "<input type=\"time\" class=\"pm-time\" data-midx=\"" + midx + "\" value=\"" + m.time + "\"></div>" +
+    "</div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" data-del-meal=\"" + midx + "\" style=\"margin-bottom:10px;\">🗑 Remover refeição</button>";
+
+  if (!m.foods.length){
+    html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Ainda sem alimentos nesta refeição.</p>";
+  }
+  html += m.foods.map(function(f, fidx){
+    return "<div class=\"food-item\">" +
+      "<span class=\"fname\">" + f.name + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + groupLabel(f.group) + ")</span>" : "") + "</span>" +
+      "<span><span class=\"fqty\">" + f.qty + "</span>" +
+        "<button type=\"button\" class=\"assess-del\" data-del-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:8px;\" aria-label=\"Remover alimento\">✕</button>" +
+      "</span>" +
+    "</div>";
+  }).join("");
+
+  html += tplAddFoodForm(midx);
+  html += "<div class=\"plano-meal-macros\" style=\"margin-top:10px;\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
+  html += "</div>";
+  return html;
+}
+
+var PRO_PLAN_GROUPS = ["protein","carb","veg","fat","fruit"];
+
+function tplAddFoodForm(midx){
+  var defaultGroup = PRO_PLAN_GROUPS[0];
+  var options = foodOptionsForGroup(defaultGroup);
+  var defaultFood = options[0];
+  return "<div class=\"section-gap\" style=\"margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);\">" +
+    "<div class=\"onb-row\" style=\"align-items:end;\">" +
+      "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Grupo</label>" +
+        "<select class=\"af-group\" data-midx=\"" + midx + "\">" +
+          PRO_PLAN_GROUPS.map(function(g){ return "<option value=\"" + g + "\">" + groupLabel(g) + "</option>"; }).join("") +
+        "</select></div>" +
+      "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Alimento</label>" +
+        "<select class=\"af-food\" data-midx=\"" + midx + "\">" +
+          options.map(function(name){ return "<option value=\"" + name + "\">" + name + "</option>"; }).join("") +
+        "</select></div>" +
+    "</div>" +
+    "<div class=\"onb-row\" style=\"margin-top:8px; align-items:end;\">" +
+      "<div class=\"onb-field af-qty-wrap\" data-midx=\"" + midx + "\" style=\"margin-bottom:0;\">" + tplAddFoodQty(defaultFood) + "</div>" +
+      "<div class=\"onb-field\" style=\"margin-bottom:0;\">" +
+        "<button type=\"button\" class=\"btn primary btn-sm\" data-add-food=\"" + midx + "\" style=\"width:100%;\">+ Adicionar alimento</button>" +
+      "</div>" +
+    "</div>" +
+  "</div>";
+}
+
+function tplAddFoodQty(name){
+  var kind = unitKindFor(name);
+  if (kind === "fixed"){
+    return "<label>Quantidade</label><div class=\"v\" style=\"padding:9px 0; color:var(--muted); font-size:0.85rem;\">À vontade — sem quantidade a definir</div>";
+  }
+  if (kind === "unit"){
+    return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"1\">";
+  }
+  return "<label>Quantidade</label><div style=\"display:flex; gap:6px;\">" +
+    "<input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"100\" style=\"flex:1;\">" +
+    "<select class=\"af-qty-unit\" style=\"width:78px;\"><option value=\"g\">g</option><option value=\"ml\">ml</option></select>" +
+  "</div>";
 }
 
 function renderTargetWarning(el){
@@ -2463,6 +2572,104 @@ function wireProTab(s){
       setTimeout(function(){ saveT.textContent = "Guardar alvos"; }, 1400);
     });
   }
+
+  var addMealBtn = el.querySelector("#addMealBtn");
+  if (addMealBtn) addMealBtn.addEventListener("click", function(){
+    addMealToPlan(s);
+    renderProTabContent(s);
+    persistStudent(s);
+    showToast("Refeição adicionada");
+  });
+
+  el.querySelectorAll(".pm-name").forEach(function(input){
+    input.addEventListener("blur", function(){
+      var midx = parseInt(input.getAttribute("data-midx"),10);
+      var m = s.meals[midx];
+      var newName = input.value.trim();
+      if (!newName){ input.value = m.name; return; }
+      if (newName === m.name) return;
+      m.name = newName;
+      persistStudent(s);
+    });
+  });
+
+  el.querySelectorAll(".pm-time").forEach(function(input){
+    input.addEventListener("change", function(){
+      var midx = parseInt(input.getAttribute("data-midx"),10);
+      var m = s.meals[midx];
+      if (!input.value){ input.value = m.time; return; }
+      m.time = input.value;
+      renderProTabContent(s);
+      persistStudent(s);
+      showToast("Horário atualizado");
+    });
+  });
+
+  el.querySelectorAll("[data-del-meal]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var midx = parseInt(btn.getAttribute("data-del-meal"),10);
+      var m = s.meals[midx];
+      if (!window.confirm("Remover \"" + m.name + "\" do plano deste aluno?")) return;
+      removeMealFromPlan(s, m);
+      renderProTabContent(s);
+      persistStudent(s);
+      showToast("Refeição removida");
+    });
+  });
+
+  el.querySelectorAll("[data-del-food]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var midx = parseInt(btn.getAttribute("data-del-food"),10);
+      var fidx = parseInt(btn.getAttribute("data-fidx"),10);
+      var m = s.meals[midx];
+      removeFoodFromMeal(m, m.foods[fidx]);
+      renderProTabContent(s);
+      persistStudent(s);
+      showToast("Alimento removido");
+    });
+  });
+
+  el.querySelectorAll(".af-group").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      var midx = sel.getAttribute("data-midx");
+      var foodSel = el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
+      var options = foodOptionsForGroup(sel.value);
+      foodSel.innerHTML = options.map(function(name){ return "<option value=\"" + name + "\">" + name + "</option>"; }).join("");
+      var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
+      qtyWrap.innerHTML = tplAddFoodQty(options[0]);
+    });
+  });
+
+  el.querySelectorAll(".af-food").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      var midx = sel.getAttribute("data-midx");
+      var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
+      qtyWrap.innerHTML = tplAddFoodQty(sel.value);
+    });
+  });
+
+  el.querySelectorAll("[data-add-food]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var midx = parseInt(btn.getAttribute("data-add-food"),10);
+      var m = s.meals[midx];
+      var groupSel = el.querySelector(".af-group[data-midx=\"" + midx + "\"]");
+      var foodSel = el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
+      var group = groupSel.value;
+      var name = foodSel.value;
+      if (!name){ showToast("⚠ Escolhe um alimento"); return; }
+      var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
+      var numInput = qtyWrap.querySelector(".af-qty-num");
+      var unitSel = qtyWrap.querySelector(".af-qty-unit");
+      var amount = numInput ? parseFloat(numInput.value) : 1;
+      if (numInput && !(amount > 0)){ showToast("⚠ A quantidade tem de ser superior a 0"); return; }
+      var unitLabel = unitSel ? unitSel.value : null;
+      var ok = addFoodToMeal(m, name, group, amount, unitLabel);
+      if (!ok){ showToast("⚠ Este alimento não é reconhecido — escolhe outro"); return; }
+      renderProTabContent(s);
+      persistStudent(s);
+      showToast("Alimento adicionado");
+    });
+  });
 
   var slider = el.querySelector("#flexSlider");
   if (slider) {
