@@ -1630,13 +1630,14 @@ function tplMealBuilder(m, idx, s){
 function tplCheckin(s){
   var html = "<div class=\"card\">" +
     "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Check-in semanal</div>" +
-    "<div class=\"checkin-field\"><label for=\"ciWeight\">Peso atual (kg)</label><input type=\"number\" step=\"0.1\" id=\"ciWeight\" value=\"" + s.weightCurrent + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ciWeight\">Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"ciWeight\" value=\"" + s.weightCurrent + "\"></div>" +
     rangeField("ciHunger","Fome (1-10)",5) +
     rangeField("ciEnergy","Energia (1-10)",7) +
     rangeField("ciAdherence","Adesão ao plano (1-10)",8) +
     "<div class=\"checkin-field\"><label for=\"ciWorkouts\">Treinos realizados</label><input type=\"number\" id=\"ciWorkouts\" value=\"" + s.trainingsPerWeek + "\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciMealsOff\">Refeições fora do plano</label><input type=\"number\" id=\"ciMealsOff\" value=\"0\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciNotes\">Dificuldades / observações</label><textarea id=\"ciNotes\" placeholder=\"Opcional\"></textarea></div>" +
+    "<p class=\"muted-p\" id=\"checkinError\" style=\"color:var(--critical); display:none; margin-bottom:10px;\"></p>" +
     "<button type=\"button\" class=\"btn primary\" id=\"submitCheckin\" style=\"width:100%;\">Enviar check-in</button>" +
   "</div>";
 
@@ -1701,12 +1702,13 @@ function assessDelta(curr, prev, unit){
 function tplAssessForm(s){
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
-    "<div class=\"f\"><label>Peso (kg)</label><input type=\"number\" step=\"0.1\" id=\"asWeight\"></div>" +
-    "<div class=\"f\"><label>Massa gorda (%)</label><input type=\"number\" step=\"0.1\" id=\"asBodyFat\"></div>" +
-    "<div class=\"f\"><label>Massa muscular (kg)</label><input type=\"number\" step=\"0.1\" id=\"asMuscle\"></div>" +
-    "<div class=\"f\"><label>Gordura visceral</label><input type=\"number\" step=\"1\" id=\"asVisceral\"></div>" +
-    "<div class=\"f\"><label>Água (%)</label><input type=\"number\" step=\"0.1\" id=\"asWater\"></div>" +
+    "<div class=\"f\"><label>Peso (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"asWeight\"></div>" +
+    "<div class=\"f\"><label>Massa gorda (%)</label><input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" id=\"asBodyFat\"></div>" +
+    "<div class=\"f\"><label>Massa muscular (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"asMuscle\"></div>" +
+    "<div class=\"f\"><label>Gordura visceral</label><input type=\"number\" step=\"1\" min=\"0\" id=\"asVisceral\"></div>" +
+    "<div class=\"f\"><label>Água (%)</label><input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" id=\"asWater\"></div>" +
     "<div class=\"f\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"addAssessment\" style=\"width:100%;\">Adicionar</button></div>" +
+    "<p class=\"muted-p\" id=\"assessError\" style=\"color:var(--critical); display:none; grid-column:1/-1; margin:0;\"></p>" +
   "</div>";
 }
 
@@ -1949,7 +1951,14 @@ function wireAlunoTab(s){
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
-    var w = parseFloat(el.querySelector("#ciWeight").value) || s.weightCurrent;
+    var errEl = el.querySelector("#checkinError");
+    var wRaw = parseFloat(el.querySelector("#ciWeight").value);
+    if (!isNaN(wRaw) && wRaw <= 0){
+      if (errEl){ errEl.textContent = "O peso tem de ser superior a 0."; errEl.style.display = "block"; }
+      return;
+    }
+    if (errEl) errEl.style.display = "none";
+    var w = wRaw || s.weightCurrent;
     var today = new Date().toISOString().slice(0,10);
     s.checkins.push({
       date: today, weight: w,
@@ -2495,6 +2504,7 @@ function wireProTab(s){
 
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){
+    var errEl = el.querySelector("#assessError");
     var date = el.querySelector("#asDate").value || new Date().toISOString().slice(0,10);
     var weight = parseFloat(el.querySelector("#asWeight").value);
     var bodyFat = parseFloat(el.querySelector("#asBodyFat").value);
@@ -2502,6 +2512,14 @@ function wireProTab(s){
     var visceral = parseFloat(el.querySelector("#asVisceral").value);
     var water = parseFloat(el.querySelector("#asWater").value);
     if ([weight,bodyFat,muscle,visceral,water].every(function(v){ return isNaN(v); })) return;
+    var negative = [weight,muscle,visceral].some(function(v){ return !isNaN(v) && v < 0; });
+    var outOfPercentRange = [bodyFat,water].some(function(v){ return !isNaN(v) && (v < 0 || v > 100); });
+    if (negative || outOfPercentRange){
+      errEl.textContent = "Verifica os valores — não podem ser negativos, e percentagens têm de estar entre 0 e 100.";
+      errEl.style.display = "block";
+      return;
+    }
+    if (errEl) errEl.style.display = "none";
     if (!s.assessments) s.assessments = [];
     s.assessments.push({date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0});
     if (!isNaN(weight)){ s.weightCurrent = weight; s.weights.push({date:date, w:weight}); }
