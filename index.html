@@ -478,20 +478,98 @@ var SCENARIOS = {
 };
 
 function meal(name, time, foods){
-  return {name:name, time:time, foods:foods, liveChoice:null, done:false, adapted:false};
+  return {name:name, time:time, foods:foods, liveChoice:null, done:false, adapted:false, status:"planned", rescheduledTime:null};
 }
 
-function mealStatusIcon(m){ return m.adapted ? "↻" : (m.done ? "✓" : ""); }
-function mealCountsToday(m){ return m.done || m.adapted; }
+/* ---------- Estado da refeição: além de concluída/adaptada, pode ser ignorada, reagendada ou flexível ---------- */
+function mealStatusIcon(m){
+  if (m.adapted) return "↻";
+  if (m.done) return "✓";
+  if (m.status === "skipped") return "—";
+  if (m.status === "flexible") return "◆";
+  return "";
+}
+function mealCountsToday(m){
+  if (m.done || m.adapted) return true;
+  if (m.status === "skipped") return false;
+  return m.status === "flexible";
+}
+function mealStatusLabel(m){
+  if (m.adapted) return "Refeição adaptada";
+  if (m.done) return "Refeição concluída";
+  if (m.status === "skipped") return "Refeição ignorada";
+  if (m.status === "rescheduled") return "Reagendada para " + (m.rescheduledTime || m.time);
+  if (m.status === "flexible") return "Refeição flexível";
+  return "Por fazer";
+}
+function mealRowSuffix(m){
+  if (m.adapted) return " · adaptada";
+  if (m.status === "skipped") return " · ignorada";
+  if (m.status === "rescheduled") return " · reagendada para " + (m.rescheduledTime || m.time);
+  if (m.status === "flexible") return " · flexível";
+  return "";
+}
+function effectiveMealTime(m){ return m.rescheduledTime || m.time; }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
 function ensureFreshDay(s){
   var today = todayISO();
   if (s.mealsDate !== today){
-    s.meals.forEach(function(m){ m.done=false; m.adapted=false; m.liveChoice=null; });
+    s.meals.forEach(function(m){
+      revertMeal(m);
+      m.done=false; m.adapted=false; m.liveChoice=null; m.status="planned"; m.rescheduledTime=null;
+    });
     s.mealsDate = today;
     persistStudent(s);
   }
+}
+
+function skipMeal(s, meal, reason){
+  meal.status = "skipped";
+  logAdaptation(s, meal, "refeicao_ignorada", {reason: reason || ""});
+}
+
+function rescheduleMeal(s, meal, newTime){
+  logAdaptation(s, meal, "reagendamento", {from: meal.time, to: newTime});
+  meal.rescheduledTime = newTime;
+  meal.status = "rescheduled";
+}
+
+function markFlexible(s, meal, reason){
+  meal.status = "flexible";
+  logAdaptation(s, meal, "refeicao_flexivel", {reason: reason || ""});
+}
+
+function logAdaptation(s, meal, type, details){
+  if (!s.adaptationHistory) s.adaptationHistory = [];
+  var now = new Date();
+  var entry = {
+    date: todayISO(),
+    time: String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0"),
+    timestamp: now.toISOString(),
+    meal: meal.name,
+    type: type
+  };
+  Object.keys(details || {}).forEach(function(k){ entry[k] = details[k]; });
+  s.adaptationHistory.push(entry);
+}
+
+/* ---------- Camada de decisão: que ações fazem sentido para esta refeição, dado o perfil de flexibilidade ---------- */
+function getAvailableActions(s, m){
+  var profile = computeFlexibilityProfile(s);
+  var actions = [{action:"complete", enabled:true}];
+  if (profile.substitutionsEnabled && m.foods.some(function(f){ return f.group; })) actions.push({action:"substitute", enabled:true});
+  if (profile.freeMealEnabled && !mealCountsToday(m)) actions.push({action:"adapt", enabled:true});
+  if (!m.done) actions.push({action:"reschedule", enabled:true});
+  if (!m.done && m.status !== "skipped") actions.push({action:"skip", enabled:true});
+  if (mealHasRevertible(m)) actions.push({action:"revert", enabled:true});
+  return actions;
+}
+
+function shouldNotifyForMeal(m){
+  if (m.status === "skipped") return false;
+  if (mealCountsToday(m)) return false;
+  return true;
 }
 
 function isTrainingDayToday(s){
@@ -583,6 +661,7 @@ function applySubstitution(s, meal, foodIdx, chosen){
   var f = meal.foods[foodIdx];
   var orig = f.original || {name:f.name, qty:f.qty};
   logSubstitution(s, meal, f, chosen);
+  logAdaptation(s, meal, "substituicao", {from:f.name, fromQty:f.qty, to:chosen.name, toQty:chosen.qty});
   meal.foods[foodIdx] = {name:chosen.name, qty:chosen.qty, group:f.group, required:f.required, original:orig};
   meal.adapted = true;
 }
@@ -719,9 +798,11 @@ function getNextMeal(s){
   if (!s.meals.length) return null;
   var now = new Date();
   var nowMin = now.getHours()*60 + now.getMinutes();
-  var sorted = s.meals.slice().sort(function(a,b){ return toMinutes(a.time)-toMinutes(b.time); });
+  var candidates = s.meals.filter(function(m){ return !mealCountsToday(m) && m.status !== "skipped"; });
+  if (!candidates.length) return null;
+  var sorted = candidates.slice().sort(function(a,b){ return toMinutes(effectiveMealTime(a))-toMinutes(effectiveMealTime(b)); });
   for (var i=0;i<sorted.length;i++){
-    if (toMinutes(sorted[i].time) >= nowMin) return {meal:sorted[i], tomorrow:false};
+    if (toMinutes(effectiveMealTime(sorted[i])) >= nowMin) return {meal:sorted[i], tomorrow:false};
   }
   return {meal:sorted[0], tomorrow:true};
 }
@@ -895,7 +976,8 @@ function studentToRow(s){
     meals: s.meals || [], checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
     allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
     meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
-    flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || []
+    flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || [],
+    substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || []
   };
 }
 
@@ -911,7 +993,8 @@ function rowToStudent(r){
     meals: r.meals || [], checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
     allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
-    flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || []
+    flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
+    substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || []
   };
 }
 
@@ -1035,8 +1118,16 @@ function openSubstitution(f, onConfirm, s){
   renderList();
 }
 
-function openScenarioPicker(){
-  var html = "<div class=\"mtitle\">O que vai acontecer?</div>" +
+var RESTAURANT_GUIDANCE = {
+  estruturado: "Procura uma opção próxima da estrutura da tua refeição.",
+  equilibrado: "Escolhe uma fonte de proteína + acompanhamento + legumes.",
+  flexivel: "Escolhe uma refeição que gostes e procura manter uma boa fonte de proteína e uma porção adequada de hidratos e gordura."
+};
+
+function openScenarioPicker(s){
+  var nm = getNextMeal(s);
+  var targetMeal = nm ? nm.meal : null;
+  var html = "<div class=\"mtitle\">O que mudou?</div>" +
     "<p class=\"muted-p\" style=\"margin:4px 0 4px;\">Escolhe a situação — não é um prémio nem um castigo, é só adaptar.</p>" +
     "<div class=\"scenario-grid\">" +
     Object.keys(SCENARIOS).map(function(k){ return "<button type=\"button\" class=\"scenario-btn\" data-k=\"" + k + "\">" + SCENARIOS[k].label + "</button>"; }).join("") +
@@ -1045,23 +1136,53 @@ function openScenarioPicker(){
   sheet.querySelectorAll(".scenario-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
       var k = btn.getAttribute("data-k");
-      var sc = SCENARIOS[k];
-      renderScenarioTips(sc);
+      renderScenarioTips(SCENARIOS[k], k);
     });
   });
 
-  function renderScenarioTips(sc){
+  function renderScenarioTips(sc, key){
     var extraField = sc.freeText ? "<textarea id=\"scenarioNote\" placeholder=\"Descreve a situação (opcional)\" style=\"width:100%; min-height:60px; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.88rem; margin-bottom:12px;\"></textarea>" : "";
+    var tips = sc.tips.slice();
+    if (key === "restaurante") tips = [RESTAURANT_GUIDANCE[computeFlexibilityProfile(s).preset]].concat(tips);
+    var canMarkFlexible = targetMeal && computeFlexibilityProfile(s).freeMealEnabled && !mealCountsToday(targetMeal);
     var tipsHtml = "<div class=\"eyebrow\" style=\"margin-bottom:4px;\">Hoje podes ser flexível</div>" +
       "<div class=\"mtitle\" style=\"margin-bottom:12px;\">" + sc.label + "</div>" +
       extraField +
       "<ul style=\"padding-left:18px; margin:0 0 14px;\">" +
-      sc.tips.map(function(t){ return "<li class=\"muted-p\" style=\"margin-bottom:8px;\">" + t + "</li>"; }).join("") + "</ul>" +
-      "<button type=\"button\" class=\"btn primary\" id=\"scenarioDone\" style=\"width:100%;\">Ver opções</button>";
+      tips.map(function(t){ return "<li class=\"muted-p\" style=\"margin-bottom:8px;\">" + t + "</li>"; }).join("") + "</ul>" +
+      (canMarkFlexible ?
+        "<button type=\"button\" class=\"btn primary\" id=\"scenarioDone\" style=\"width:100%; margin-bottom:8px;\">Marcar " + targetMeal.name + " como flexível</button>" +
+        "<button type=\"button\" class=\"btn\" id=\"scenarioSkip\" style=\"width:100%;\">Só ver as dicas</button>"
+        : "<button type=\"button\" class=\"btn primary\" id=\"scenarioSkip\" style=\"width:100%;\">Percebido</button>");
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + tipsHtml;
     sheet.querySelector(".mclose button").addEventListener("click", closeModal);
-    sheet.querySelector("#scenarioDone").addEventListener("click", closeModal);
+    var doneBtn = sheet.querySelector("#scenarioDone");
+    if (doneBtn) doneBtn.addEventListener("click", function(){
+      var noteEl = sheet.querySelector("#scenarioNote");
+      var note = noteEl ? noteEl.value : "";
+      markFlexible(s, targetMeal, key + (note ? (": " + note) : ""));
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast(targetMeal.name + " marcada como flexível");
+      closeModal();
+    });
+    var skipBtn = sheet.querySelector("#scenarioSkip");
+    if (skipBtn) skipBtn.addEventListener("click", closeModal);
   }
+}
+
+function openLowTime(s){
+  var nm = getNextMeal(s);
+  if (!nm){ showToast("Não há mais refeições previstas para hoje."); return; }
+  var m = nm.meal;
+  var fi = m.foods.findIndex(function(f){ return f.group; });
+  if (fi < 0){ showToast("Sem alternativas rápidas definidas para " + m.name + "."); return; }
+  openSubstitution(m.foods[fi], function(chosen){
+    applySubstitution(s, m, fi, chosen);
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast("Refeição adaptada");
+  }, s);
 }
 
 function openMealDetail(s, idx){
@@ -1070,10 +1191,9 @@ function openMealDetail(s, idx){
   function render(){
     var profile = computeFlexibilityProfile(s);
     var totals = resolvedMealTotals(s, m);
-    var statusLabel = m.adapted ? "Refeição adaptada" : (m.done ? "Refeição concluída" : "Por fazer");
     var substitutableIdx = profile.substitutionsEnabled ? m.foods.findIndex(function(f){ return f.group; }) : -1;
     var html = "<div class=\"mtitle\">" + m.name.toUpperCase() + "</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + m.time + " · " + statusLabel + "</p>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + effectiveMealTime(m) + " · " + mealStatusLabel(m) + "</p>" +
       "<div class=\"macro-target-grid\" style=\"margin-bottom:14px;\">" +
         "<div class=\"f\"><label>Calorias</label><div class=\"v num\">" + totals.kcal + " kcal</div></div>" +
         "<div class=\"f\"><label>Proteína</label><div class=\"v num\">" + totals.p + " g</div></div>" +
@@ -1085,7 +1205,7 @@ function openMealDetail(s, idx){
           var canSwap = f.group && profile.substitutionsEnabled;
           return "<div class=\"food-item\"" + (canSwap ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
             "<span class=\"fname\">" + f.name + "</span>" +
-            "<span><span class=\"fqty\">" + f.qty + "</span>" + (canSwap ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+            "<span><span class=\"fqty\">" + f.qty + "</span>" + (canSwap ? "<span class=\"swap-hint\">não tenho isto</span>" : "") + "</span>" +
           "</div>";
         }).join("") +
       "</div>" +
@@ -1093,6 +1213,8 @@ function openMealDetail(s, idx){
         "<button type=\"button\" class=\"btn primary\" id=\"mdComplete\">" + (m.done ? "✓ Concluída — toca para desfazer" : "✓ Marcar como concluída") + "</button>" +
         (substitutableIdx>=0 ? "<button type=\"button\" class=\"btn\" id=\"mdSubstitute\">↻ Substituir alimento</button>" : "") +
         (profile.freeMealEnabled ? "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" : "") +
+        (!m.done ? "<button type=\"button\" class=\"btn\" id=\"mdReschedule\">🕐 Alterar horário</button>" : "") +
+        (!m.done && m.status !== "skipped" ? "<button type=\"button\" class=\"btn\" id=\"mdSkip\">○ Não vou fazer esta refeição</button>" : "") +
         (mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdRevert\">↺ Repor plano original</button>" : "") +
       "</div>";
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
@@ -1101,13 +1223,7 @@ function openMealDetail(s, idx){
     sheet.querySelectorAll(".food-item[data-fidx]").forEach(function(el){
       el.addEventListener("click", function(){
         var fi = parseInt(el.getAttribute("data-fidx"),10);
-        openSubstitution(m.foods[fi], function(chosen){
-          applySubstitution(s, m, fi, chosen);
-          render();
-          renderAlunoTab(s);
-          persistStudent(s);
-          showToast("Refeição adaptada");
-        }, s);
+        openFoodUnavailable(s, m, fi, idx);
       });
     });
     var completeBtn = sheet.querySelector("#mdComplete");
@@ -1132,11 +1248,16 @@ function openMealDetail(s, idx){
     var adaptBtn = sheet.querySelector("#mdAdapt");
     if (adaptBtn) adaptBtn.addEventListener("click", function(){
       m.adapted = true;
+      logAdaptation(s, m, "adaptacao", {reason:"Adaptação manual"});
       render();
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
     });
+    var rescheduleBtn = sheet.querySelector("#mdReschedule");
+    if (rescheduleBtn) rescheduleBtn.addEventListener("click", function(){ openReschedule(s, m, idx); });
+    var skipBtn = sheet.querySelector("#mdSkip");
+    if (skipBtn) skipBtn.addEventListener("click", function(){ openSkipMeal(s, m, idx); });
     var revertBtn = sheet.querySelector("#mdRevert");
     if (revertBtn) revertBtn.addEventListener("click", function(){
       revertMeal(m);
@@ -1149,6 +1270,68 @@ function openMealDetail(s, idx){
 
   var sheet = openModal("");
   render();
+}
+
+function openFoodUnavailable(s, m, fi, idx){
+  var f = m.foods[fi];
+  var profile = computeFlexibilityProfile(s);
+  var html = "<div class=\"mtitle\">Não tenho " + f.name + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">O que queres fazer?</p>" +
+    "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
+      "<button type=\"button\" class=\"btn primary\" id=\"fuSubstitute\" style=\"width:100%;\">Substituir por outro alimento</button>" +
+      (profile.freeMealEnabled ? "<button type=\"button\" class=\"btn\" id=\"fuAdapt\" style=\"width:100%;\">Adaptar a refeição</button>" : "") +
+    "</div>";
+  var sheet = openModal(html);
+  sheet.querySelector("#fuSubstitute").addEventListener("click", function(){
+    openSubstitution(f, function(chosen){
+      applySubstitution(s, m, fi, chosen);
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast("Refeição adaptada");
+      openMealDetail(s, idx);
+    }, s);
+  });
+  var adaptBtn = sheet.querySelector("#fuAdapt");
+  if (adaptBtn) adaptBtn.addEventListener("click", function(){
+    m.adapted = true;
+    logAdaptation(s, m, "adaptacao", {reason:"Alimento indisponível: " + f.name});
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast("Refeição adaptada");
+    openMealDetail(s, idx);
+  });
+}
+
+function openReschedule(s, m, idx){
+  var html = "<div class=\"mtitle\">Alterar horário</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Planeado: " + m.time + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"rescheduleTime\">Novo horário</label><input type=\"time\" id=\"rescheduleTime\" value=\"" + effectiveMealTime(m) + "\"></div>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"rescheduleConfirm\" style=\"width:100%;\">Confirmar</button>";
+  var sheet = openModal(html);
+  sheet.querySelector("#rescheduleConfirm").addEventListener("click", function(){
+    var val = sheet.querySelector("#rescheduleTime").value;
+    if (val) rescheduleMeal(s, m, val);
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast("Horário atualizado");
+    openMealDetail(s, idx);
+  });
+}
+
+function openSkipMeal(s, m, idx){
+  var html = "<div class=\"mtitle\">Ignorar " + m.name + "?</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Sem problema — o resto do teu dia continua válido. Não precisas de compensar esta refeição mais tarde.</p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"skipConfirm\" style=\"width:100%; margin-bottom:8px;\">Confirmar</button>" +
+    "<button type=\"button\" class=\"btn\" id=\"skipCancel\" style=\"width:100%;\">Cancelar</button>";
+  var sheet = openModal(html);
+  sheet.querySelector("#skipConfirm").addEventListener("click", function(){
+    skipMeal(s, m);
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast(m.name + " marcada como ignorada");
+    closeModal();
+  });
+  sheet.querySelector("#skipCancel").addEventListener("click", function(){ openMealDetail(s, idx); });
 }
 
 /* ===================== ALUNO RENDER ===================== */
@@ -1234,6 +1417,19 @@ function tplHoje(s){
     "</div>" +
   "</div>";
 
+  var hasSkipped = s.meals.some(function(m){ return m.status === "skipped"; });
+  if (hasSkipped){
+    var remaining = s.meals.filter(function(m){ return m.status !== "skipped" && !mealCountsToday(m); });
+    html += "<div class=\"card\">" +
+      "<div class=\"eyebrow\" style=\"margin-bottom:4px;\">O teu dia mudou</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Sem problema — vamos continuar a partir daqui.</p>" +
+      (remaining.length ?
+        "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Restante do dia</div>" +
+        remaining.map(function(m){ return "<div class=\"checkin-history-row\"><span>" + m.name + "</span><span class=\"num\">" + effectiveMealTime(m) + "</span></div>"; }).join("")
+        : "<p class=\"muted-p\">Já não há mais refeições previstas para hoje.</p>") +
+    "</div>";
+  }
+
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Refeições de hoje</div>" +
     s.meals.map(function(m, idx){
@@ -1241,7 +1437,7 @@ function tplHoje(s){
       var icon = mealStatusIcon(m);
       return "<div class=\"meal-row\" data-midx=\"" + idx + "\" style=\"cursor:pointer;\">" +
         "<div class=\"check-circle" + (m.done?" done":"") + (m.adapted?" adapted":"") + "\" data-circle=\"" + idx + "\">" + icon + "</div>" +
-        "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + m.time + (m.adapted?" · adaptada":"") + "</div></div>" +
+        "<div class=\"info\"><div class=\"name\">" + m.name + "</div><div class=\"time\">" + effectiveMealTime(m) + mealRowSuffix(m) + "</div></div>" +
         "<div class=\"kcal\">" + mt.kcal + " kcal</div>" +
       "</div>";
     }).join("") +
@@ -1288,8 +1484,12 @@ function tplHoje(s){
     "<p class=\"muted-p\" style=\"margin-top:10px;\">A consistência ao longo do tempo importa mais do que um único dia.</p>" +
   "</div>";
 
-  if (computeFlexibilityProfile(s).restaurantAdaptation){
-    html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%;\">Hoje vai ser diferente?</button>";
+  var profileEnd = computeFlexibilityProfile(s);
+  if (profileEnd.restaurantAdaptation){
+    html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%; margin-bottom:8px;\">Hoje vai ser diferente?</button>";
+  }
+  if (profileEnd.substitutionsEnabled && nm){
+    html += "<button type=\"button\" class=\"btn\" id=\"lowTimeBtn\" style=\"width:100%;\">Tenho pouco tempo</button>";
   }
 
   return html;
@@ -1631,6 +1831,7 @@ function wireAlunoTab(s){
   if (nmAdapt) nmAdapt.addEventListener("click", function(){
     var m = s.meals[parseInt(nmAdapt.getAttribute("data-midx"),10)];
     m.adapted = true;
+    logAdaptation(s, m, "adaptacao", {reason:"Adaptação manual"});
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Refeição adaptada");
@@ -1640,7 +1841,10 @@ function wireAlunoTab(s){
   if (goBtn) goBtn.addEventListener("click", function(){ openMealDetail(s, parseInt(goBtn.getAttribute("data-midx"),10)); });
 
   var scBtn = el.querySelector("#openScenario");
-  if (scBtn) scBtn.addEventListener("click", openScenarioPicker);
+  if (scBtn) scBtn.addEventListener("click", function(){ openScenarioPicker(s); });
+
+  var lowTimeBtn = el.querySelector("#lowTimeBtn");
+  if (lowTimeBtn) lowTimeBtn.addEventListener("click", function(){ openLowTime(s); });
 
   el.querySelectorAll(".food-item[data-fidx]").forEach(function(item){
     item.addEventListener("click", function(){
@@ -1893,6 +2097,8 @@ function openOnboardingForm(){
       flexOverrides:{},
       flexHistory:[],
       blockedFoods:[],
+      substitutionHistory:[],
+      adaptationHistory:[],
       alerts:[{type:"warn", text:"Plano ainda por definir"}],
       notes:"",
       meals:[],
@@ -2097,8 +2303,38 @@ function tplProNotas(s){
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>";
 }
 
+var ADAPTATION_TYPE_LABEL = {
+  substituicao: "Substituições", adaptacao: "Refeições adaptadas",
+  refeicao_flexivel: "Refeições flexíveis", refeicao_ignorada: "Refeições ignoradas",
+  reagendamento: "Refeições reagendadas"
+};
+
+function computeAdaptationSummary(s, days){
+  days = days || 7;
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  var cutoffISO = cutoff.toISOString().slice(0,10);
+  var counts = {};
+  (s.adaptationHistory || []).forEach(function(e){
+    if (e.date < cutoffISO) return;
+    counts[e.type] = (counts[e.type] || 0) + 1;
+  });
+  return counts;
+}
+
 function tplProHistorico(s){
-  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de alterações ao plano</div>";
+  var html = "";
+  var summary = computeAdaptationSummary(s, 7);
+  var summaryKeys = Object.keys(summary);
+  if (summaryKeys.length){
+    html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adaptações — últimos 7 dias</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Indicadores para perceberes o dia a dia do aluno — não são um problema por si só.</p>" +
+      summaryKeys.map(function(k){
+        return "<div class=\"history-row\"><div class=\"hlabel\">" + (ADAPTATION_TYPE_LABEL[k] || k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
+      }).join("") +
+      "<div class=\"section-gap\"></div>";
+  }
+  html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de alterações ao plano</div>";
   s.planHistory.forEach(function(p){
     html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + p.label + "</div><div class=\"hdate\">" + fmtDatePt(p.date) + "</div></div>" +
       "<div class=\"hval\">" + p.kcal + " kcal<br><span style=\"color:var(--muted); font-size:0.75rem;\">Flexibilidade " + p.flex + "</span></div></div>";
