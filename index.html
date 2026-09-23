@@ -513,9 +513,32 @@ function showToast(msg){
 
 function food(name, qty, group, required){ return {name:name, qty:qty, group:group, required: required!==false}; }
 
-function optionsFor(f){
-  if (f.allowedSubs && f.allowedSubs.length) return f.allowedSubs;
-  return FOOD_GROUPS[f.group] || [];
+function optionsFor(f, s){
+  var base = (f.allowedSubs && f.allowedSubs.length) ? f.allowedSubs : (FOOD_GROUPS[f.group] || []);
+  var blocked = s && s.blockedFoods && s.blockedFoods.length ? s.blockedFoods.map(function(n){ return n.toLowerCase(); }) : null;
+  if (!blocked) return base;
+  return base.filter(function(o){ return blocked.indexOf(o.name.toLowerCase()) === -1; });
+}
+
+/* ---------- Perfil de flexibilidade: score é o valor principal, mas cada dimensão pode ser personalizada ---------- */
+var FLEX_PRESET_DEFAULTS = {
+  estruturado: { mealStructure:"high", foodChoice:"low", substitutionLevel:"low", mealBuilderEnabled:false, substitutionsEnabled:true, restaurantAdaptation:true, freeMealEnabled:false, macroTargetsVisible:false, calorieTargetsVisible:true },
+  equilibrado: { mealStructure:"medium", foodChoice:"medium", substitutionLevel:"medium", mealBuilderEnabled:false, substitutionsEnabled:true, restaurantAdaptation:true, freeMealEnabled:true, macroTargetsVisible:false, calorieTargetsVisible:true },
+  flexivel:    { mealStructure:"low", foodChoice:"high", substitutionLevel:"high", mealBuilderEnabled:true, substitutionsEnabled:true, restaurantAdaptation:true, freeMealEnabled:true, macroTargetsVisible:true, calorieTargetsVisible:true }
+};
+var SUBSTITUTION_LEVEL_MAX = { low:2, medium:4, high:Infinity };
+
+function computeFlexibilityProfile(s){
+  var preset = flexTier(s.flexibility);
+  var base = FLEX_PRESET_DEFAULTS[preset];
+  var overrides = s.flexOverrides || {};
+  var profile = {};
+  Object.keys(base).forEach(function(k){
+    profile[k] = overrides[k] !== undefined ? overrides[k] : base[k];
+  });
+  profile.score = s.flexibility;
+  profile.preset = preset;
+  return profile;
 }
 
 /* ---------- Equivalência nutricional para substituições ---------- */
@@ -650,25 +673,25 @@ function flexTier(v){ if (v<34) return "estruturado"; if (v<67) return "equilibr
 var GROUP_LABELS = {protein:"Proteína", carb:"Hidrato", veg:"Legumes", fat:"Gordura", fruit:"Fruta"};
 function groupLabel(g){ return GROUP_LABELS[g] || g; }
 
-function ensureLiveChoiceDefaults(meal){
+function ensureLiveChoiceDefaults(meal, s){
   if (!meal.liveChoice) meal.liveChoice = {};
   meal.foods.forEach(function(f){
     if (!f.group) return;
     if (meal.liveChoice[f.group] == null){
-      var options = optionsFor(f);
+      var options = optionsFor(f, s);
       var di = options.findIndex(function(o){ return o.name===f.name; });
       meal.liveChoice[f.group] = di>=0 ? di : (options.length ? 0 : -1);
     }
   });
 }
 
-function liveChoiceTotals(meal){
+function liveChoiceTotals(meal, s){
   var groups = Object.keys(meal.liveChoice || {});
   var chosen = groups.map(function(g){
     var idx = meal.liveChoice[g];
     if (idx === -1) return {kcal:0,p:0,c:0,f:0};
     var srcFood = meal.foods.find(function(f){ return f.group===g; });
-    var opts = srcFood ? optionsFor(srcFood) : (FOOD_GROUPS[g]||[]);
+    var opts = srcFood ? optionsFor(srcFood, s) : (FOOD_GROUPS[g]||[]);
     var opt = opts[idx];
     return opt ? foodNutrition(opt.name, opt.qty) : {kcal:0,p:0,c:0,f:0};
   });
@@ -679,7 +702,7 @@ function liveChoiceTotals(meal){
 function resolvedMealTotals(s, meal){
   var tier = flexTier(s.flexibility);
   if (tier !== "estruturado" && meal.liveChoice && Object.keys(meal.liveChoice).length){
-    var t = liveChoiceTotals(meal);
+    var t = liveChoiceTotals(meal, s);
     return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
   }
   return foodsTotals(meal.foods);
@@ -728,6 +751,9 @@ var STUDENTS = [
     work:"Escritório (sentada)", weekendNote:"Janta fora ~1x por fim de semana",
     targets:{kcal:1700, protein:131, carbs:177, fat:52},
     flexibility:65,
+    flexOverrides:{},
+    flexHistory:[{date:"2026-08-11", from:30, to:50, note:"Boa adesão nas primeiras semanas — aumentar autonomia."},{date:"2026-09-01", from:50, to:65, note:"Continua consistente, pode escolher mais dentro do plano."}],
+    blockedFoods:["Atum (natural)"],
     alerts:[{type:"warn", text:"Adesão abaixo de 85% esta semana"}],
     notes:"Prefere treinar ao final do dia. Sensível a lactose — evitar leite gordo, iogurte grego normalmente tolerado bem.",
     meals:[
@@ -868,7 +894,8 @@ function studentToRow(s){
     targets: s.targets || {}, flexibility: s.flexibility, alerts: s.alerts || [], notes: s.notes || "",
     meals: s.meals || [], checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
     allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
-    meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null
+    meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
+    flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || []
   };
 }
 
@@ -883,7 +910,8 @@ function rowToStudent(r){
     targets: r.targets || {}, flexibility: r.flexibility, alerts: r.alerts || [], notes: r.notes || "",
     meals: r.meals || [], checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
     allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
-    mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null
+    mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
+    flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || []
   };
 }
 
@@ -953,9 +981,14 @@ function openModal(innerHtml, opts){
   return sheet;
 }
 
-function openSubstitution(f, onConfirm){
+function openSubstitution(f, onConfirm, s){
   var priorityKey = GROUP_PRIORITY_KEY[f.group];
-  var baseOptions = optionsFor(f).filter(function(o){ return o.name !== f.name; });
+  var usingManualList = !!(f.allowedSubs && f.allowedSubs.length);
+  var baseOptions = optionsFor(f, s).filter(function(o){ return o.name !== f.name; });
+  if (!usingManualList && s){
+    var max = SUBSTITUTION_LEVEL_MAX[computeFlexibilityProfile(s).substitutionLevel];
+    if (isFinite(max)) baseOptions = baseOptions.slice(0, max);
+  }
   var options = baseOptions.map(function(o){ return computeEquivalentAlternative(f, o); });
   var sheet = openModal("");
 
@@ -1035,9 +1068,10 @@ function openMealDetail(s, idx){
   var m = s.meals[idx];
 
   function render(){
+    var profile = computeFlexibilityProfile(s);
     var totals = resolvedMealTotals(s, m);
     var statusLabel = m.adapted ? "Refeição adaptada" : (m.done ? "Refeição concluída" : "Por fazer");
-    var substitutableIdx = m.foods.findIndex(function(f){ return f.group; });
+    var substitutableIdx = profile.substitutionsEnabled ? m.foods.findIndex(function(f){ return f.group; }) : -1;
     var html = "<div class=\"mtitle\">" + m.name.toUpperCase() + "</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + m.time + " · " + statusLabel + "</p>" +
       "<div class=\"macro-target-grid\" style=\"margin-bottom:14px;\">" +
@@ -1048,16 +1082,17 @@ function openMealDetail(s, idx){
       "</div>" +
       "<div style=\"border-top:1px solid var(--line); padding-top:8px; margin-bottom:16px;\">" +
         m.foods.map(function(f, fi){
-          return "<div class=\"food-item\"" + (f.group ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
+          var canSwap = f.group && profile.substitutionsEnabled;
+          return "<div class=\"food-item\"" + (canSwap ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
             "<span class=\"fname\">" + f.name + "</span>" +
-            "<span><span class=\"fqty\">" + f.qty + "</span>" + (f.group ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+            "<span><span class=\"fqty\">" + f.qty + "</span>" + (canSwap ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
           "</div>";
         }).join("") +
       "</div>" +
       "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
         "<button type=\"button\" class=\"btn primary\" id=\"mdComplete\">" + (m.done ? "✓ Concluída — toca para desfazer" : "✓ Marcar como concluída") + "</button>" +
         (substitutableIdx>=0 ? "<button type=\"button\" class=\"btn\" id=\"mdSubstitute\">↻ Substituir alimento</button>" : "") +
-        "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" +
+        (profile.freeMealEnabled ? "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" : "") +
         (mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdRevert\">↺ Repor plano original</button>" : "") +
       "</div>";
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
@@ -1072,7 +1107,7 @@ function openMealDetail(s, idx){
           renderAlunoTab(s);
           persistStudent(s);
           showToast("Refeição adaptada");
-        });
+        }, s);
       });
     });
     var completeBtn = sheet.querySelector("#mdComplete");
@@ -1092,7 +1127,7 @@ function openMealDetail(s, idx){
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
-      });
+      }, s);
     });
     var adaptBtn = sheet.querySelector("#mdAdapt");
     if (adaptBtn) adaptBtn.addEventListener("click", function(){
@@ -1214,8 +1249,9 @@ function tplHoje(s){
 
   if (nm){
     var mt2 = resolvedMealTotals(s, nm.meal);
-    var tier0 = flexTier(s.flexibility);
+    var profileNm = computeFlexibilityProfile(s);
     var nmIdx = s.meals.indexOf(nm.meal);
+    var nmHasGroupFood = nm.meal.foods.some(function(f){ return f.group; });
     html += "<div class=\"next-meal-card\">" +
       "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + nm.meal.time + "</div>" +
       "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + nm.meal.name + "</div>" +
@@ -1223,8 +1259,8 @@ function tplHoje(s){
       "<div class=\"foods\" style=\"margin-top:2px;\">" + mt2.kcal + " kcal · P " + mt2.p + "g · H " + mt2.c + "g · G " + mt2.f + "g</div>" +
       "<div style=\"display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;\">" +
         "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\" data-midx=\"" + nmIdx + "\">Ver refeição</button>" +
-        (tier0 !== "estruturado" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmSubstitute\" data-midx=\"" + nmIdx + "\">Substituir</button>" : "") +
-        (tier0 !== "estruturado" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmAdapt\" data-midx=\"" + nmIdx + "\">Adaptar</button>" : "") +
+        (profileNm.substitutionsEnabled && nmHasGroupFood ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmSubstitute\" data-midx=\"" + nmIdx + "\">Substituir</button>" : "") +
+        (profileNm.freeMealEnabled ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmAdapt\" data-midx=\"" + nmIdx + "\">Adaptar</button>" : "") +
       "</div>" +
     "</div>";
   }
@@ -1252,7 +1288,9 @@ function tplHoje(s){
     "<p class=\"muted-p\" style=\"margin-top:10px;\">A consistência ao longo do tempo importa mais do que um único dia.</p>" +
   "</div>";
 
-  html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%;\">Hoje vai ser diferente?</button>";
+  if (computeFlexibilityProfile(s).restaurantAdaptation){
+    html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%;\">Hoje vai ser diferente?</button>";
+  }
 
   return html;
 }
@@ -1284,6 +1322,7 @@ function tplPlano(s){
       "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional ainda não construiu o teu plano alimentar.</p></div>";
   }
   var tier = flexTier(s.flexibility);
+  var profile = computeFlexibilityProfile(s);
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:2px;\">Plano de hoje</div>";
   html += "<h2 style=\"font-size:1.15rem; margin-bottom:4px;\">Nível: " + TIER_LABEL[tier] + "</h2>";
   html += "<p class=\"muted-p\" style=\"margin-bottom:12px;\">" + TIER_HINT[tier] + "</p>";
@@ -1291,33 +1330,35 @@ function tplPlano(s){
     var totals = resolvedMealTotals(s, m);
     html += "<div class=\"card plano-meal-card\">" +
       "<div class=\"plano-meal-head\"><span class=\"mname\">" + m.name + "</span><span class=\"mtime\">" + m.time + "</span></div>";
-    if (tier === "estruturado") html += tplMealFixed(m, idx);
-    else if (tier === "equilibrado") html += tplMealChoice(m, idx);
-    else html += tplMealBuilder(m, idx);
+    if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s);
+    else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
+    else html += tplMealChoice(m, idx, s);
     html += "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
     html += "</div>";
   });
   return html;
 }
 
-function tplMealFixed(m, idx){
+function tplMealFixed(m, idx, s){
+  var canSwap = !s || computeFlexibilityProfile(s).substitutionsEnabled;
   return "<div>" + m.foods.map(function(f, fi){
-    return "<div class=\"food-item\" data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\">" +
+    var swappable = f.group && canSwap;
+    return "<div class=\"food-item\"" + (swappable ? " data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\"" : "") + ">" +
       "<span class=\"fname\">" + f.name + "</span>" +
-      "<span><span class=\"fqty\">" + f.qty + "</span>" + (f.group ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+      "<span><span class=\"fqty\">" + f.qty + "</span>" + (swappable ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
     "</div>";
   }).join("") + "</div>";
 }
 
-function tplMealChoice(m, idx){
-  ensureLiveChoiceDefaults(m);
+function tplMealChoice(m, idx, s){
+  ensureLiveChoiceDefaults(m, s);
   var html = "";
   m.foods.forEach(function(f){
     if (!f.group){
       html += "<div class=\"food-item\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>";
       return;
     }
-    var options = optionsFor(f);
+    var options = optionsFor(f, s);
     html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + (f.required===false ? " — opcional" : " — escolhe 1") + "</div>";
     options.forEach(function(o, oi){
       var sel = m.liveChoice[f.group]===oi;
@@ -1338,9 +1379,9 @@ var MACRO_FEEDBACK = {
   f: {label:"gordura", low:"Falta um pouco de gordura", high:"Tens mais gordura do que o habitual"}
 };
 
-function builderFeedback(m){
+function builderFeedback(m, s){
   var base = foodsTotals(m.foods);
-  var t = liveChoiceTotals(m);
+  var t = liveChoiceTotals(m, s);
   var msgs = [];
   ["p","c","f"].forEach(function(k){
     if (!base[k] || base[k] <= 0) return;
@@ -1356,18 +1397,18 @@ function rangeTile(label, center){
   return "<div class=\"f\"><label>" + label + "</label><div class=\"v num\">" + lo + "–" + hi + " g</div></div>";
 }
 
-function tplMealBuilder(m, idx){
+function tplMealBuilder(m, idx, s){
   var base = foodsTotals(m.foods);
   var html = "<div class=\"macro-target-grid\" style=\"margin-bottom:12px;\">" +
     rangeTile("Proteína", base.p) + rangeTile("Hidratos", base.c) + rangeTile("Gordura", base.f) +
   "</div>";
-  var feedback = builderFeedback(m);
+  var feedback = builderFeedback(m, s);
   if (feedback.length){
     html += "<div class=\"builder-feedback\" style=\"margin-bottom:12px;\">" +
       feedback.map(function(msg){ return "<p class=\"muted-p\" style=\"margin:0 0 4px;\">" + msg + "</p>"; }).join("") +
     "</div>";
   }
-  return html + tplMealChoice(m, idx);
+  return html + tplMealChoice(m, idx, s);
 }
 
 function tplCheckin(s){
@@ -1584,7 +1625,7 @@ function wireAlunoTab(s){
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
-    });
+    }, s);
   });
   var nmAdapt = el.querySelector("#nmAdapt");
   if (nmAdapt) nmAdapt.addEventListener("click", function(){
@@ -1601,7 +1642,7 @@ function wireAlunoTab(s){
   var scBtn = el.querySelector("#openScenario");
   if (scBtn) scBtn.addEventListener("click", openScenarioPicker);
 
-  el.querySelectorAll(".food-item").forEach(function(item){
+  el.querySelectorAll(".food-item[data-fidx]").forEach(function(item){
     item.addEventListener("click", function(){
       var midx = parseInt(item.getAttribute("data-midx"),10);
       var fidx = parseInt(item.getAttribute("data-fidx"),10);
@@ -1611,7 +1652,7 @@ function wireAlunoTab(s){
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
-      });
+      }, s);
     });
   });
 
@@ -1849,6 +1890,9 @@ function openOnboardingForm(){
       work:profile.work||"—", weekendNote:profile.weekendNote||"—",
       targets:{kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat},
       flexibility:50,
+      flexOverrides:{},
+      flexHistory:[],
+      blockedFoods:[],
       alerts:[{type:"warn", text:"Plano ainda por definir"}],
       notes:"",
       meals:[],
@@ -1980,7 +2024,15 @@ function renderTargetWarning(el){
     : "<div class=\"pill good\" style=\"margin-top:10px;\">✓ Macros coerentes com o alvo (~" + expected + " kcal)</div>";
 }
 
+var FLEX_OVERRIDE_CHECKBOXES = [
+  ["mealBuilderEnabled", "Permitir construtor de refeições"],
+  ["substitutionsEnabled", "Permitir substituições"],
+  ["freeMealEnabled", "Permitir refeições flexíveis"],
+  ["restaurantAdaptation", "Permitir adaptação em restaurantes"]
+];
+
 function tplProFlex(s){
+  var profile = computeFlexibilityProfile(s);
   var html = "<div class=\"eyebrow\">Nível de flexibilidade alimentar</div>" +
     "<div style=\"display:flex; gap:8px; margin:12px 0;\">" +
       presetBtn("Estruturado",25) + presetBtn("Equilibrado",50) + presetBtn("Flexível",85) +
@@ -1988,12 +2040,43 @@ function tplProFlex(s){
     "<div style=\"display:flex; justify-content:space-between; margin-bottom:6px;\"><span class=\"muted-p\">0 · Extremamente estruturado</span><span class=\"muted-p\">100 · Extremamente flexível</span></div>" +
     "<input type=\"range\" min=\"0\" max=\"100\" id=\"flexSlider\" value=\"" + s.flexibility + "\">" +
     "<div style=\"text-align:center; margin-top:10px;\"><span style=\"font-family:var(--display); font-weight:800; font-size:1.4rem;\" id=\"flexValLabel\">" + s.flexibility + "</span> <span class=\"muted-p\">/ 100 — <span id=\"flexZoneLabel\">" + flexZoneLabel(s.flexibility) + "</span></span></div>" +
-    "<p class=\"muted-p\" style=\"margin-top:14px;\">Este valor controla quanta liberdade " + s.name.split(" ")[0] + " tem para escolher alimentos dentro do plano — muda em tempo real na vista de Aluno.</p>";
+    "<p class=\"muted-p\" style=\"margin-top:14px;\">Este valor controla quanta liberdade " + s.name.split(" ")[0] + " tem para escolher alimentos dentro do plano — muda em tempo real na vista de Aluno.</p>" +
+    "<div class=\"checkin-field\" style=\"margin-top:14px;\"><label for=\"flexNote\">Nota sobre esta alteração (opcional)</label><textarea id=\"flexNote\" placeholder=\"Ex.: Aluno demonstra boa autonomia na escolha dos alimentos.\"></textarea></div>";
+
+  html += "<div class=\"section-gap\">" +
+    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Personalizar</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Estas opções têm prioridade sobre o valor de flexibilidade — dois alunos com o mesmo nível podem ter regras diferentes.</p>" +
+    FLEX_OVERRIDE_CHECKBOXES.map(function(pair){
+      var key = pair[0], label = pair[1];
+      return "<div style=\"display:flex; align-items:center; gap:8px; margin-bottom:8px;\">" +
+        "<input type=\"checkbox\" id=\"ov_" + key + "\" data-key=\"" + key + "\"" + (profile[key] ? " checked" : "") + ">" +
+        "<label for=\"ov_" + key + "\" style=\"font-size:0.85rem;\">" + label + "</label>" +
+      "</div>";
+    }).join("") +
+  "</div>";
+
+  if (s.flexHistory && s.flexHistory.length){
+    html += "<div class=\"section-gap\">" +
+      "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de flexibilidade</div>" +
+      s.flexHistory.slice().reverse().map(function(h){
+        return "<div class=\"history-row\"><div><div class=\"hlabel\">" + h.from + " → " + h.to + "</div>" +
+          (h.note ? "<div class=\"muted-p\">" + h.note + "</div>" : "") + "</div>" +
+          "<div class=\"hdate\">" + fmtDatePt(h.date) + "</div></div>";
+      }).join("") +
+    "</div>";
+  }
+
   return html;
 }
 
 function presetBtn(label, val){
   return "<button type=\"button\" class=\"btn btn-sm preset-btn\" data-v=\"" + val + "\">" + label + "</button>";
+}
+
+function logFlexChange(s, from, to, note){
+  if (from === to) return;
+  if (!s.flexHistory) s.flexHistory = [];
+  s.flexHistory.push({date: todayISO(), from: from, to: to, note: note || ""});
 }
 
 function tplProCheckins(s){
@@ -2050,17 +2133,34 @@ function wireProTab(s){
 
   var slider = el.querySelector("#flexSlider");
   if (slider) {
+    var flexStartVal = s.flexibility;
+    slider.addEventListener("pointerdown", function(){ flexStartVal = s.flexibility; });
     slider.addEventListener("input", function(){
       s.flexibility = parseInt(slider.value,10);
       el.querySelector("#flexValLabel").textContent = s.flexibility;
       el.querySelector("#flexZoneLabel").textContent = flexZoneLabel(s.flexibility);
     });
-    slider.addEventListener("change", function(){ persistStudent(s); });
+    slider.addEventListener("change", function(){
+      var note = el.querySelector("#flexNote");
+      logFlexChange(s, flexStartVal, s.flexibility, note ? note.value : "");
+      flexStartVal = s.flexibility;
+      persistStudent(s);
+    });
   }
   el.querySelectorAll(".preset-btn").forEach(function(btn){
     btn.addEventListener("click", function(){
-      s.flexibility = parseInt(btn.getAttribute("data-v"),10);
+      var newVal = parseInt(btn.getAttribute("data-v"),10);
+      var note = el.querySelector("#flexNote");
+      logFlexChange(s, s.flexibility, newVal, note ? note.value : "");
+      s.flexibility = newVal;
       renderProTabContent(s);
+      persistStudent(s);
+    });
+  });
+  el.querySelectorAll("[data-key]").forEach(function(cb){
+    cb.addEventListener("change", function(){
+      if (!s.flexOverrides) s.flexOverrides = {};
+      s.flexOverrides[cb.getAttribute("data-key")] = cb.checked;
       persistStudent(s);
     });
   });
