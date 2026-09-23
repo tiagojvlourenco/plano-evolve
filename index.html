@@ -1071,7 +1071,7 @@ function openModal(innerHtml, opts){
   return sheet;
 }
 
-function openSubstitution(f, onConfirm, s){
+function openSubstitution(f, onConfirm, s, meal){
   var priorityKey = GROUP_PRIORITY_KEY[f.group];
   var usingManualList = !!(f.allowedSubs && f.allowedSubs.length);
   var baseOptions = optionsFor(f, s).filter(function(o){ return o.name !== f.name; });
@@ -1089,7 +1089,8 @@ function openSubstitution(f, onConfirm, s){
       "</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
     if (!options.length){
-      html += "<p class=\"muted-p\">Sem alternativas definidas para este alimento.</p>";
+      html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Não encontrei uma substituição definida para este alimento.</p>" +
+        "<button type=\"button\" class=\"btn\" id=\"askProfessional\" style=\"width:100%;\">Perguntar ao profissional</button>";
     }
     options.forEach(function(o, idx){
       var badge = priorityKey ? "≈ mesma " + PRIORITY_LABEL[priorityKey] : "";
@@ -1104,6 +1105,12 @@ function openSubstitution(f, onConfirm, s){
       el.addEventListener("click", function(){
         renderConfirm(options[parseInt(el.getAttribute("data-idx"),10)]);
       });
+    });
+    var askBtn = sheet.querySelector("#askProfessional");
+    if (askBtn) askBtn.addEventListener("click", function(){
+      if (s && meal) logAdaptation(s, meal, "pedido_profissional", {food: f.name});
+      showToast("O teu profissional vai ver este pedido");
+      closeModal();
     });
   }
 
@@ -1190,7 +1197,7 @@ function openLowTime(s){
     persistStudent(s);
     showToast("Refeição adaptada");
     closeModal();
-  }, s);
+  }, s, m);
 }
 
 function openMealDetail(s, idx){
@@ -1251,7 +1258,7 @@ function openMealDetail(s, idx){
         persistStudent(s);
         showToast("Refeição adaptada");
         openMealDetail(s, idx);
-      }, s);
+      }, s, m);
     });
     var adaptBtn = sheet.querySelector("#mdAdapt");
     if (adaptBtn) adaptBtn.addEventListener("click", function(){
@@ -1297,7 +1304,7 @@ function openFoodUnavailable(s, m, fi, idx){
       persistStudent(s);
       showToast("Refeição adaptada");
       openMealDetail(s, idx);
-    }, s);
+    }, s, m);
   });
   var adaptBtn = sheet.querySelector("#fuAdapt");
   if (adaptBtn) adaptBtn.addEventListener("click", function(){
@@ -1859,7 +1866,7 @@ function wireAlunoTab(s){
       persistStudent(s);
       showToast("Refeição adaptada");
       closeModal();
-    }, s);
+    }, s, m);
   });
   var nmAdapt = el.querySelector("#nmAdapt");
   if (nmAdapt) nmAdapt.addEventListener("click", function(){
@@ -1891,7 +1898,7 @@ function wireAlunoTab(s){
         persistStudent(s);
         showToast("Refeição adaptada");
         closeModal();
-      }, s);
+      }, s, s.meals[midx]);
     });
   });
 
@@ -2354,7 +2361,7 @@ function tplProNotas(s){
 var ADAPTATION_TYPE_LABEL = {
   substituicao: "Substituições", adaptacao: "Refeições adaptadas",
   refeicao_flexivel: "Refeições flexíveis", refeicao_ignorada: "Refeições ignoradas",
-  reagendamento: "Refeições reagendadas"
+  reagendamento: "Refeições reagendadas", pedido_profissional: "Pedidos de ajuda ao profissional"
 };
 
 function computeAdaptationSummary(s, days){
