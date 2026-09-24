@@ -519,14 +519,86 @@ function mealRowSuffix(m){
 function effectiveMealTime(m){ return m.rescheduledTime || m.time; }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
+/* ===================== Plano vs. execução diária =====================
+   s.meals é a ESTRUTURA do plano (nome, horário, alimentos, quantidades) — só o
+   profissional a escreve. O que o aluno faz no dia a dia (concluir, adaptar,
+   ignorar, reagendar, escolher dentro do construtor, substituir um alimento)
+   nunca é gravado ali: fica em s.mealDailyState, um objeto separado indexado por
+   refeição (mealKey = nome+horário, a mesma identidade que o resto da app já usa
+   para uma refeição) e associado à data a que pertence.
+   resolveMealsForToday() combina os dois só para leitura/renderização, devolvendo
+   objetos com a mesma forma que o resto do código já espera (done/adapted/status/
+   rescheduledTime/liveChoice/foods já com substituições aplicadas) — nada aqui
+   muta s.meals. commitMealView() faz o caminho inverso: depois de uma função como
+   applySubstitution/skipMeal/etc. mutar uma dessas vistas, grava o resultado de
+   volta em mealDailyState. */
+function mealKey(m){ return m.name + "@" + m.time; }
+
+function emptyDailyStateEntry(){
+  return {done:false, adapted:false, status:"planned", rescheduledTime:null, liveChoice:null, substitutions:{}};
+}
+
+function ensureFreshDailyState(s){
+  var today = todayISO();
+  if (!s.mealDailyState || s.mealDailyState.date !== today){
+    s.mealDailyState = {date: today, entries: {}};
+  }
+  return s.mealDailyState;
+}
+
+function getDailyStateEntry(s, m){
+  var state = ensureFreshDailyState(s);
+  var key = mealKey(m);
+  if (!state.entries[key]) state.entries[key] = emptyDailyStateEntry();
+  return state.entries[key];
+}
+
+function resolveMealsForToday(s){
+  var state = ensureFreshDailyState(s);
+  return (s.meals || []).map(function(m){
+    var entry = state.entries[mealKey(m)] || emptyDailyStateEntry();
+    var foods = m.foods.map(function(f, fi){
+      var sub = entry.substitutions[fi];
+      if (!sub) return f;
+      return {name: sub.name, qty: sub.qty, group: f.group, required: f.required, original: {name: f.name, qty: f.qty}};
+    });
+    return {
+      name: m.name, time: m.time, foods: foods,
+      done: entry.done, adapted: entry.adapted, status: entry.status,
+      rescheduledTime: entry.rescheduledTime, liveChoice: entry.liveChoice
+    };
+  });
+}
+
+function commitMealView(s, mv){
+  var entry = getDailyStateEntry(s, mv);
+  entry.done = mv.done;
+  entry.adapted = mv.adapted;
+  entry.status = mv.status;
+  entry.rescheduledTime = mv.rescheduledTime;
+  entry.liveChoice = mv.liveChoice;
+  var subs = {};
+  mv.foods.forEach(function(f, fi){ if (f.original) subs[fi] = {name: f.name, qty: f.qty}; });
+  entry.substitutions = subs;
+}
+
+// Um "student" com .meals já resolvido para hoje — para tudo o que só LÊ
+// (tplHoje, tplPlano, getNextMeal, consumedTotals...). Nunca usar para escrever.
+function studentView(s){
+  var view = Object.assign({}, s);
+  view.meals = resolveMealsForToday(s);
+  return view;
+}
+
+function getNextMealView(s){
+  return getNextMeal(studentView(s));
+}
+
 function ensureFreshDay(s){
   var today = todayISO();
   if (s.mealsDate !== today){
-    s.meals.forEach(function(m){
-      revertMeal(m);
-      m.done=false; m.adapted=false; m.liveChoice=null; m.status="planned"; m.rescheduledTime=null;
-    });
     s.mealsDate = today;
+    s.mealDailyState = {date: today, entries: {}};
     persistStudent(s);
   }
 }
@@ -1019,6 +1091,45 @@ function initSupabase(){
   if (label) label.textContent = sbReady ? "· ligado a uma base de dados real" : "· modo local (sem ligação à base de dados)";
 }
 
+// meals guarda só estrutura (nome/horário/alimentos) — nunca estado do dia nem
+// substituições aplicadas pelo aluno, mesmo que por algum motivo estejam
+// presentes em memória no momento de gravar.
+function stripMealState(m){
+  return {
+    name: m.name, time: m.time,
+    foods: (m.foods || []).map(function(f){
+      var base = f.original || f; // se f vem de uma vista com substituição aplicada, o valor estrutural é o original
+      return {name: base.name, qty: base.qty, group: f.group, required: f.required};
+    })
+  };
+}
+
+// Compatibilidade com dados de antes desta migração: nessa altura, o estado do
+// dia (done/adapted/status/liveChoice/substituições) vinha embutido dentro de
+// "meals". Se ainda não existir meal_daily_state para hoje mas "meals" trouxer
+// esses campos residuais, aproveita-os uma vez para não apagar o dia do aluno.
+function migrateLegacyMealState(rawMeals){
+  var entries = {};
+  var any = false;
+  (rawMeals || []).forEach(function(m){
+    var hasState = m.done || m.adapted || (m.status && m.status !== "planned") || m.rescheduledTime || m.liveChoice ||
+      (m.foods || []).some(function(f){ return f.original; });
+    if (!hasState) return;
+    any = true;
+    var entry = emptyDailyStateEntry();
+    entry.done = !!m.done;
+    entry.adapted = !!m.adapted;
+    entry.status = m.status || "planned";
+    entry.rescheduledTime = m.rescheduledTime || null;
+    entry.liveChoice = m.liveChoice || null;
+    (m.foods || []).forEach(function(f, fi){
+      if (f.original) entry.substitutions[fi] = {name: f.name, qty: f.qty};
+    });
+    entries[mealKey(m)] = entry;
+  });
+  return any ? {date: todayISO(), entries: entries} : null;
+}
+
 function studentToRow(s){
   return {
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
@@ -1028,11 +1139,12 @@ function studentToRow(s){
     likes: s.likes || [], dislikes: s.dislikes || [], avoid: s.avoid || [], allergies: s.allergies || [],
     meals_preferred: s.mealsPreferred, budget: s.budget, cook_time: s.cookTime, work: s.work, weekend_note: s.weekendNote,
     targets: s.targets || {}, flexibility: s.flexibility, alerts: s.alerts || [], notes: s.notes || "",
-    meals: s.meals || [], checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
+    meals: (s.meals || []).map(stripMealState), checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
     allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
     meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
     flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || [],
-    substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || []
+    substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || [],
+    meal_daily_state: s.mealDailyState || null
   };
 }
 
@@ -1045,11 +1157,12 @@ function rowToStudent(r){
     likes: r.likes || [], dislikes: r.dislikes || [], avoid: r.avoid || [], allergies: r.allergies || [],
     mealsPreferred: r.meals_preferred, budget: r.budget, cookTime: r.cook_time, work: r.work, weekendNote: r.weekend_note,
     targets: r.targets || {}, flexibility: r.flexibility, alerts: r.alerts || [], notes: r.notes || "",
-    meals: r.meals || [], checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
+    meals: (r.meals || []).map(stripMealState), checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
     allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
     flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
-    substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || []
+    substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || [],
+    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals)
   };
 }
 
@@ -1191,7 +1304,7 @@ var RESTAURANT_GUIDANCE = {
 };
 
 function openScenarioPicker(s){
-  var nm = getNextMeal(s);
+  var nm = getNextMealView(s);
   var targetMeal = nm ? nm.meal : null;
   var html = "<div class=\"mtitle\">O que mudou?</div>" +
     "<p class=\"muted-p\" style=\"margin:4px 0 4px;\">Escolhe a situação — não é um prémio nem um castigo, é só adaptar.</p>" +
@@ -1227,6 +1340,7 @@ function openScenarioPicker(s){
       var noteEl = sheet.querySelector("#scenarioNote");
       var note = noteEl ? noteEl.value : "";
       markFlexible(s, targetMeal, key + (note ? (": " + note) : ""));
+      commitMealView(s, targetMeal);
       renderAlunoTab(s);
       persistStudent(s);
       showToast(targetMeal.name + " marcada como flexível");
@@ -1238,13 +1352,14 @@ function openScenarioPicker(s){
 }
 
 function openLowTime(s){
-  var nm = getNextMeal(s);
+  var nm = getNextMealView(s);
   if (!nm){ showToast("Não há mais refeições previstas para hoje."); return; }
   var m = nm.meal;
   var fi = m.foods.findIndex(function(f){ return f.group; });
   if (fi < 0){ showToast("Sem alternativas rápidas definidas para " + m.name + "."); return; }
   openSubstitution(m.foods[fi], function(chosen){
     applySubstitution(s, m, fi, chosen);
+    commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Refeição adaptada");
@@ -1253,7 +1368,7 @@ function openLowTime(s){
 }
 
 function openMealDetail(s, idx){
-  var m = s.meals[idx];
+  var m = resolveMealsForToday(s)[idx];
 
   function render(){
     var profile = computeFlexibilityProfile(s);
@@ -1297,6 +1412,7 @@ function openMealDetail(s, idx){
     if (completeBtn) completeBtn.addEventListener("click", function(){
       m.done = !m.done;
       var wasCompleted = m.done;
+      commitMealView(s, m);
       render();
       renderAlunoTab(s);
       persistStudent(s);
@@ -1306,6 +1422,7 @@ function openMealDetail(s, idx){
     if (subBtn) subBtn.addEventListener("click", function(){
       openSubstitution(m.foods[substitutableIdx], function(chosen){
         applySubstitution(s, m, substitutableIdx, chosen);
+        commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
@@ -1316,6 +1433,7 @@ function openMealDetail(s, idx){
     if (adaptBtn) adaptBtn.addEventListener("click", function(){
       m.adapted = true;
       logAdaptation(s, m, "adaptacao", {reason:"Adaptação manual"});
+      commitMealView(s, m);
       render();
       renderAlunoTab(s);
       persistStudent(s);
@@ -1328,6 +1446,7 @@ function openMealDetail(s, idx){
     var revertBtn = sheet.querySelector("#mdRevert");
     if (revertBtn) revertBtn.addEventListener("click", function(){
       revertMeal(m);
+      commitMealView(s, m);
       render();
       renderAlunoTab(s);
       persistStudent(s);
@@ -1352,6 +1471,7 @@ function openFoodUnavailable(s, m, fi, idx){
   sheet.querySelector("#fuSubstitute").addEventListener("click", function(){
     openSubstitution(f, function(chosen){
       applySubstitution(s, m, fi, chosen);
+      commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
@@ -1362,6 +1482,7 @@ function openFoodUnavailable(s, m, fi, idx){
   if (adaptBtn) adaptBtn.addEventListener("click", function(){
     m.adapted = true;
     logAdaptation(s, m, "adaptacao", {reason:"Alimento indisponível: " + f.name});
+    commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Refeição adaptada");
@@ -1378,6 +1499,7 @@ function openReschedule(s, m, idx){
   sheet.querySelector("#rescheduleConfirm").addEventListener("click", function(){
     var val = sheet.querySelector("#rescheduleTime").value;
     if (val) rescheduleMeal(s, m, val);
+    commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Horário atualizado");
@@ -1393,6 +1515,7 @@ function openSkipMeal(s, m, idx){
   var sheet = openModal(html);
   sheet.querySelector("#skipConfirm").addEventListener("click", function(){
     skipMeal(s, m);
+    commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
     showToast(m.name + " marcada como ignorada");
@@ -1449,11 +1572,12 @@ function renderAlunoShell(){
 
 function renderAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
-  if (state.alunoTab==="hoje") el.innerHTML = tplHoje(s);
-  else if (state.alunoTab==="plano") el.innerHTML = tplPlano(s);
-  else if (state.alunoTab==="checkin") el.innerHTML = tplCheckin(s);
-  else el.innerHTML = tplEvolucaoAluno(s, {editable:false});
-  wireAlunoTab(s);
+  var sv = studentView(s); // leitura: meals já combinado com o estado do dia
+  if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
+  else if (state.alunoTab==="plano") el.innerHTML = tplPlano(sv);
+  else if (state.alunoTab==="checkin") el.innerHTML = tplCheckin(sv);
+  else el.innerHTML = tplEvolucaoAluno(sv, {editable:false});
+  wireAlunoTab(s); // escrita: sempre sobre o student real, nunca sobre a vista
 }
 
 function tplHoje(s){
@@ -1926,8 +2050,9 @@ function wireAlunoTab(s){
     c.addEventListener("click", function(e){
       e.stopPropagation();
       var idx = parseInt(c.getAttribute("data-circle"),10);
-      var m = s.meals[idx];
+      var m = resolveMealsForToday(s)[idx];
       m.done = !m.done;
+      commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
       if (m.done) showToast("✓ " + m.name + " concluído");
@@ -1936,11 +2061,12 @@ function wireAlunoTab(s){
 
   var nmSub = el.querySelector("#nmSubstitute");
   if (nmSub) nmSub.addEventListener("click", function(){
-    var m = s.meals[parseInt(nmSub.getAttribute("data-midx"),10)];
+    var m = resolveMealsForToday(s)[parseInt(nmSub.getAttribute("data-midx"),10)];
     var fi = m.foods.findIndex(function(f){ return f.group; });
     if (fi<0) return;
     openSubstitution(m.foods[fi], function(chosen){
       applySubstitution(s, m, fi, chosen);
+      commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
       showToast("Refeição adaptada");
@@ -1949,9 +2075,10 @@ function wireAlunoTab(s){
   });
   var nmAdapt = el.querySelector("#nmAdapt");
   if (nmAdapt) nmAdapt.addEventListener("click", function(){
-    var m = s.meals[parseInt(nmAdapt.getAttribute("data-midx"),10)];
+    var m = resolveMealsForToday(s)[parseInt(nmAdapt.getAttribute("data-midx"),10)];
     m.adapted = true;
     logAdaptation(s, m, "adaptacao", {reason:"Adaptação manual"});
+    commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
     showToast("Refeição adaptada");
@@ -1970,14 +2097,16 @@ function wireAlunoTab(s){
     item.addEventListener("click", function(){
       var midx = parseInt(item.getAttribute("data-midx"),10);
       var fidx = parseInt(item.getAttribute("data-fidx"),10);
-      var f = s.meals[midx].foods[fidx];
+      var m = resolveMealsForToday(s)[midx];
+      var f = m.foods[fidx];
       openSubstitution(f, function(chosen){
-        applySubstitution(s, s.meals[midx], fidx, chosen);
+        applySubstitution(s, m, fidx, chosen);
+        commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);
         showToast("Refeição adaptada");
         closeModal();
-      }, s, s.meals[midx]);
+      }, s, m);
     });
   });
 
@@ -1986,9 +2115,10 @@ function wireAlunoTab(s){
       var midx = parseInt(opt.getAttribute("data-midx"),10);
       var group = opt.getAttribute("data-group");
       var oi = parseInt(opt.getAttribute("data-oi"),10);
-      var m = s.meals[midx];
+      var m = resolveMealsForToday(s)[midx];
       if (!m.liveChoice) m.liveChoice = {};
       m.liveChoice[group] = oi;
+      commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
     });

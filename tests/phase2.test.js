@@ -79,12 +79,15 @@ check.check("FLUXO 8: nenhum texto culpabilizador nos tips", JSON.stringify(SCEN
 })();
 
 // FLUXO 10: novo dia reinicia estados
+// (o estado do dia vive em mealDailyState, não em s.meals — marcar done/adapted
+// simula o que o aluno faria: resolver a vista de hoje, mutá-la, comitar)
 (function(){
   var sofia = findStudent("sofia");
-  sofia.meals.forEach(function(m){ m.done = true; m.adapted = true; });
+  resolveMealsForToday(sofia).forEach(function(m){ m.done = true; m.adapted = true; commitMealView(sofia, m); });
   sofia.mealsDate = "2000-01-01"; // dia antigo
+  sofia.mealDailyState.date = "2000-01-01"; // simula que o estado marcado acima pertence a esse dia antigo
   ensureFreshDay(sofia);
-  var allReset = sofia.meals.every(function(m){ return !m.done && !m.adapted; });
+  var allReset = resolveMealsForToday(sofia).every(function(m){ return !m.done && !m.adapted; });
   check.check("FLUXO 10: novo dia reinicia done/adapted de todas as refeições", allReset === true);
   check.check("FLUXO 10: mealsDate atualizada para hoje", sofia.mealsDate === todayISO());
 })();

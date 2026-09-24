@@ -218,16 +218,21 @@ function freshMeal(){
   check.check("SEG: revertMeal repõe o alimento original", m.foods[0].name === originalName);
 })();
 
-// dailyPlanOverride: uma substituição de hoje não sobrevive à mudança de dia (ensureFreshDay reverte)
+// dailyPlanOverride: uma substituição de hoje nunca toca em s.meals (estrutura do
+// plano) e não sobrevive à mudança de dia (ensureFreshDay reinicia o estado diário)
 (function(){
   var s = freshStudent();
   s.meals = [freshMeal()];
   var originalName = s.meals[0].foods[0].name;
-  applySubstitution(s, s.meals[0], 0, {name:"Peru (fatiado)", qty:"150 g"});
+  var view = resolveMealsForToday(s)[0];
+  applySubstitution(s, view, 0, {name:"Peru (fatiado)", qty:"150 g"});
+  commitMealView(s, view);
+  check.check("SEG: a substituição nunca é gravada na estrutura do plano (meals)", s.meals[0].foods[0].name === originalName);
+  check.check("SEG: a substituição fica visível na vista combinada de hoje", resolveMealsForToday(s)[0].foods[0].name === "Peru (fatiado)");
   s.mealsDate = "2000-01-01";
   ensureFreshDay(s);
-  check.check("SEG: no dia seguinte, o alimento substituído volta ao plano original", s.meals[0].foods[0].name === originalName);
-  check.check("SEG: no dia seguinte, o estado de adaptação é reposto", s.meals[0].adapted === false && s.meals[0].status === "planned");
+  check.check("SEG: no dia seguinte, a vista volta a mostrar o alimento original", resolveMealsForToday(s)[0].foods[0].name === originalName);
+  check.check("SEG: no dia seguinte, o estado de adaptação é reposto", resolveMealsForToday(s)[0].adapted === false && resolveMealsForToday(s)[0].status === "planned");
 })();
 
 // Aluno não consegue alterar regras do profissional (não existe API aluno-facing para isso)

@@ -1,5 +1,5 @@
 -- EVOLVE NUTRITION — verificação manual das políticas (Fase 7)
--- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0004.
+-- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0005.
 -- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
 
 -- 1. As políticas esperadas existem?
@@ -28,9 +28,10 @@ from professionals p join auth.users u on u.id = p.user_id;
 -- 4. Colunas em falta ficaram mesmo criadas?
 select column_name from information_schema.columns
 where table_name = 'students'
-  and column_name in ('flex_overrides','flex_history','blocked_foods','substitution_history','adaptation_history')
+  and column_name in ('flex_overrides','flex_history','blocked_foods','substitution_history','adaptation_history','meal_daily_state')
 order by column_name;
--- Esperado: as 5 colunas listadas.
+-- Esperado: as 6 colunas listadas (as 5 da auditoria inicial + meal_daily_state,
+-- a coluna que separa a execução diária do aluno da estrutura do plano em "meals").
 
 -- 5. Políticas de Storage do bucket de fotos existem?
 select policyname, cmd
@@ -73,3 +74,17 @@ select id, public from storage.buckets where id = 'progress-photos';
 --    de nenhum aluno. Depois de login, a app deve mostrar o ecrã "sem aluno
 --    associado" — e na consola, "await sb.from('students').select('*')"
 --    deve devolver uma lista vazia.
+--
+-- E. Plano (meals) é rejeitado, execução diária (meal_daily_state) é aceite:
+--    Ainda com sessão de Aluno A, na consola:
+--         await sb.from("students").update({meals: []}).eq("id","<id do próprio aluno>")
+--       Esperado: erro "Só o profissional pode alterar estes dados do plano."
+--       — meals já não está na allowlist, mesmo dentro da própria linha.
+--         await sb.from("students").update({meal_daily_state: {date:"2099-01-01", entries:{}}}).eq("id","<id do próprio aluno>")
+--       Esperado: sucesso (0 ou mais linhas, sem erro) — esta é a coluna que o
+--       aluno usa no dia a dia (concluir, adaptar, ignorar, reagendar, escolhas
+--       do construtor, substituições dentro das opções permitidas).
+--       Na app, confirma visualmente: marcar uma refeição como concluída e
+--       recarregar a página mantém o estado; o profissional continua a poder
+--       editar nome/horário/alimentos/quantidades das refeições sem qualquer
+--       erro (a política dele nunca passa pelo trigger de colunas).

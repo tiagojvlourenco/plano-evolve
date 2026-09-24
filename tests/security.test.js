@@ -70,25 +70,6 @@ var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8"
   check.check("6. Política de reclamar convite existe", /"student claims invited row"/.test(sql));
   check.check("6. Trigger de permissões por coluna existe", /trg_enforce_student_column_permissions/.test(sql));
   check.check("6. A função do trigger usa uma allowlist, não uma lista de bloqueios crescente", /allowed_keys/.test(sql));
-
-  // Extrai o bloco COMPLETO do array (multi-linha, "allowed_keys text[] := array[ ... ];")
-  // em vez de só a primeira linha — senão os campos listados nunca seriam encontrados.
-  var allowlistMatch = sql.match(/allowed_keys[\s\S]*?array\[([\s\S]*?)\]/);
-  var allowlistBlock = allowlistMatch ? allowlistMatch[1] : "";
-  check.check("6. Consegue extrair o bloco da allowlist do SQL para validar o conteúdo", allowlistBlock.length > 0);
-
-  // A allowlist tem de conter exatamente os campos que o aluno legitimamente escreve
-  // (confirmado a ler o código: check-in escreve weights/weightCurrent, ações do dia
-  // a dia escrevem meals/adaptationHistory/substitutionHistory, upload escreve photos)
-  ["meals", "meals_date", "checkins", "weights", "weight_current", "substitution_history", "adaptation_history", "photos"].forEach(function(col){
-    check.check("6. Allowlist inclui '" + col + "' (o aluno precisa de o poder escrever)", allowlistBlock.indexOf("'" + col + "'") >= 0);
-  });
-
-  // Campos claramente reservados ao profissional NÃO podem estar na allowlist
-  ["targets", "flexibility", "notes", "plan_history", "alerts", "flex_overrides", "flex_history", "blocked_foods", "name"].forEach(function(col){
-    check.check("6. Allowlist NÃO inclui '" + col + "' (é reservado ao profissional)", allowlistBlock.indexOf("'" + col + "'") === -1);
-  });
-
   check.check("6. Bloqueia a troca de dono de uma linha já associada", /auth_user_id is not null and old\.auth_user_id is distinct from new\.auth_user_id/.test(sql));
   check.check("6. Políticas de Storage do bucket de fotos existem", /"aluno envia as suas fotos"/.test(sql) && /"aluno lê as suas fotos"/.test(sql) && /"profissional lê fotos dos alunos"/.test(sql));
   check.check("6. Restringe upload/leitura de fotos à pasta do próprio utilizador", /storage\.foldername\(name\)\)\[1\] = auth\.uid\(\)::text/.test(sql));
@@ -99,6 +80,35 @@ var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8"
   var sql = fs.readFileSync(sqlPath, "utf8");
   ["flex_overrides", "flex_history", "blocked_foods", "substitution_history", "adaptation_history"].forEach(function(col){
     check.check("7. Migração cria a coluna em falta '" + col + "'", new RegExp("add column if not exists " + col).test(sql));
+  });
+})();
+
+// ---- 7b. meal_daily_state: "meals" sai da allowlist do aluno, a nova coluna entra ----
+// (esta é a correção que separa plano de execução diária — a allowlist FINAL,
+// depois de 0005 recriar a função do trigger, é a que importa validar aqui)
+(function(){
+  var sqlPath = path.join(__dirname, "..", "supabase", "migrations", "0005_meal_daily_state.sql");
+  var sql = fs.readFileSync(sqlPath, "utf8");
+
+  check.check("7b. Cria a coluna meal_daily_state", /add column if not exists meal_daily_state/.test(sql));
+  check.check("7b. Recria a função do trigger de colunas", /create or replace function enforce_student_column_permissions/.test(sql));
+
+  var allowlistMatch = sql.match(/allowed_keys[\s\S]*?array\[([\s\S]*?)\]/);
+  var allowlistBlock = allowlistMatch ? allowlistMatch[1] : "";
+  check.check("7b. Consegue extrair o bloco da allowlist final", allowlistBlock.length > 0);
+
+  // "'meals'" com aspas nas duas pontas não dá match em "'meals_date'" nem em
+  // "'meal_daily_state'" — são substrings distintas, por isso este teste é seguro.
+  check.check("7b. Allowlist final NÃO inclui 'meals' (estrutura do plano, só o profissional)", allowlistBlock.indexOf("'meals'") === -1);
+  check.check("7b. Allowlist final inclui 'meal_daily_state' (execução diária do aluno)", allowlistBlock.indexOf("'meal_daily_state'") >= 0);
+
+  // Confirma que as restantes colunas do dia a dia continuam permitidas, e que
+  // os campos reservados ao profissional continuam de fora.
+  ["meal_daily_state", "meals_date", "checkins", "weights", "weight_current", "substitution_history", "adaptation_history", "photos"].forEach(function(col){
+    check.check("7b. Allowlist inclui '" + col + "'", allowlistBlock.indexOf("'" + col + "'") >= 0);
+  });
+  ["targets", "flexibility", "notes", "plan_history", "alerts", "flex_overrides", "flex_history", "blocked_foods", "name"].forEach(function(col){
+    check.check("7b. Allowlist NÃO inclui '" + col + "'", allowlistBlock.indexOf("'" + col + "'") === -1);
   });
 })();
 
