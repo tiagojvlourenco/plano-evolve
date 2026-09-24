@@ -1,5 +1,5 @@
 -- EVOLVE NUTRITION — verificação manual das políticas (Fase 7)
--- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0005.
+-- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0006.
 -- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
 
 -- 1. As políticas esperadas existem?
@@ -46,6 +46,13 @@ select id, public from storage.buckets where id = 'progress-photos';
 -- confirma/cria em Storage > progress-photos > Settings no painel — este é o
 -- único passo que não é garantido só por SQL em todos os projetos.
 
+-- 7. A função de verificação "append-only" existe?
+select routine_name from information_schema.routines
+where routine_name = 'jsonb_array_is_append_only';
+-- Esperado: 1 linha. Protege substitution_history/adaptation_history contra
+-- reescrita — o aluno só pode acrescentar eventos, nunca alterar/remover os
+-- que já lá estavam (ver bloco F mais abaixo para o teste funcional).
+
 -- ===================== Testes funcionais (fazer com 2 contas reais) =====================
 -- Estes não são queries SQL — são passos manuais na app, porque head de duas
 -- sessões de browser autenticadas com utilizadores diferentes para teres
@@ -88,3 +95,17 @@ select id, public from storage.buckets where id = 'progress-photos';
 --       recarregar a página mantém o estado; o profissional continua a poder
 --       editar nome/horário/alimentos/quantidades das refeições sem qualquer
 --       erro (a política dele nunca passa pelo trigger de colunas).
+--
+-- F. O aluno pode acrescentar ao histórico de adaptações, mas não reescrevê-lo:
+--    Ainda com sessão de Aluno A, na consola, lê primeiro o histórico atual:
+--         var { data } = await sb.from("students").select("adaptation_history").eq("id","<id do próprio aluno>").single()
+--       Depois tenta apagar tudo:
+--         await sb.from("students").update({adaptation_history: []}).eq("id","<id do próprio aluno>")
+--       Esperado: erro "Não é permitido alterar ou remover histórico de
+--       adaptações já registado." (a não ser que data.adaptation_history já
+--       estivesse vazio — nesse caso usa a app para gerar um evento primeiro,
+--       ex.: ignora uma refeição, e repete o teste).
+--       Depois tenta ACRESCENTAR um evento a seguir aos existentes:
+--         await sb.from("students").update({adaptation_history: data.adaptation_history.concat([{date:"2099-01-01", type:"teste"}])}).eq("id","<id do próprio aluno>")
+--       Esperado: sucesso — acrescentar ao fim é permitido.
+--       Repete o mesmo raciocínio para substitution_history se quiseres.

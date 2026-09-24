@@ -85,12 +85,16 @@ var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8"
 
 // ---- 7b. meal_daily_state: "meals" sai da allowlist do aluno, a nova coluna entra ----
 // (esta é a correção que separa plano de execução diária — a allowlist FINAL,
-// depois de 0005 recriar a função do trigger, é a que importa validar aqui)
+// depois de 0006 recriar a função do trigger pela última vez, é a que importa
+// validar aqui; a allowlist em si não muda entre 0005 e 0006, só 0006 é que
+// acrescenta a validação de append-only sobre ela)
 (function(){
-  var sqlPath = path.join(__dirname, "..", "supabase", "migrations", "0005_meal_daily_state.sql");
+  var columnSql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0005_meal_daily_state.sql"), "utf8");
+  check.check("7b. Cria a coluna meal_daily_state", /add column if not exists meal_daily_state/.test(columnSql));
+
+  var sqlPath = path.join(__dirname, "..", "supabase", "migrations", "0006_append_only_history.sql");
   var sql = fs.readFileSync(sqlPath, "utf8");
 
-  check.check("7b. Cria a coluna meal_daily_state", /add column if not exists meal_daily_state/.test(sql));
   check.check("7b. Recria a função do trigger de colunas", /create or replace function enforce_student_column_permissions/.test(sql));
 
   var allowlistMatch = sql.match(/allowed_keys[\s\S]*?array\[([\s\S]*?)\]/);
@@ -120,6 +124,45 @@ var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8"
   check.check("8. Verifica que o trigger está ativo", /pg_trigger/.test(verify));
   check.check("8. Inclui o passo manual de aluno A vs aluno B", /Aluno A não vê nem altera dados do Aluno B/.test(verify));
   check.check("8. Inclui o passo manual de conta sem aluno associado", /Conta sem aluno associado não acede a nada/.test(verify));
+  check.check("8. Inclui o passo manual de histórico append-only", /pode acrescentar ao histórico de adaptações, mas não reescrevê-lo/.test(verify));
+})();
+
+// ---- 9. substitution_history/adaptation_history: o aluno só pode acrescentar, nunca reescrever ----
+// (os eventos ficam nestas colunas cumulativas — não em meal_daily_state, que
+// reinicia todos os dias e perderia o histórico de "últimos N dias" que os
+// indicadores da Leitura profissional e o separador Histórico precisam de somar;
+// a segurança vem de restringir COMO a coluna pode mudar, não de a mover)
+(function(){
+  var sqlPath = path.join(__dirname, "..", "supabase", "migrations", "0006_append_only_history.sql");
+  var sql = fs.readFileSync(sqlPath, "utf8");
+
+  check.check("9. Define a função de verificação append-only", /create or replace function jsonb_array_is_append_only/.test(sql));
+  check.check("9. O trigger aplica a verificação a substitution_history", /jsonb_array_is_append_only\(old\.substitution_history, new\.substitution_history\)/.test(sql));
+  check.check("9. O trigger aplica a verificação a adaptation_history", /jsonb_array_is_append_only\(old\.adaptation_history, new\.adaptation_history\)/.test(sql));
+  check.check("9. Recria o trigger para ligar a versão nova da função", /drop trigger if exists trg_enforce_student_column_permissions/.test(sql));
+})();
+
+// ---- 10. jsonb_array_is_append_only: a lógica em si, testada em JS puro ----
+// (não corre contra Postgres real, mas a mesma regra — comprimento igual ou
+// maior, e todas as posições antigas inalteradas — replicada aqui apanha um
+// erro de raciocínio antes de chegar a produção)
+function jsAppendOnly(oldArr, newArr){
+  if (!Array.isArray(newArr)) return false;
+  oldArr = oldArr || [];
+  if (newArr.length < oldArr.length) return false;
+  for (var i = 0; i < oldArr.length; i++){
+    if (JSON.stringify(newArr[i]) !== JSON.stringify(oldArr[i])) return false;
+  }
+  return true;
+}
+(function(){
+  var original = [{type:"substituicao", date:"2026-09-01"}, {type:"refeicao_ignorada", date:"2026-09-02"}];
+  check.check("10. Acrescentar ao fim é append-only", jsAppendOnly(original, original.concat([{type:"adaptacao", date:"2026-09-03"}])) === true);
+  check.check("10. Array igual (sem alteração) é append-only", jsAppendOnly(original, original.slice()) === true);
+  check.check("10. Esvaziar o array não é append-only", jsAppendOnly(original, []) === false);
+  check.check("10. Remover a última entrada não é append-only", jsAppendOnly(original, original.slice(0,1)) === false);
+  check.check("10. Alterar uma entrada existente não é append-only", jsAppendOnly(original, [original[0], {type:"editado", date:"2026-09-02"}]) === false);
+  check.check("10. Reordenar entradas existentes não é append-only", jsAppendOnly(original, [original[1], original[0]]) === false);
 })();
 
 check.summarize();
