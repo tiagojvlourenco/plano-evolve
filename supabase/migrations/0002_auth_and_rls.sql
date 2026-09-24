@@ -1,5 +1,7 @@
 -- EVOLVE NUTRITION — adicionar autenticação
--- Corre isto no SQL Editor do Supabase (depois do schema inicial já correres)
+-- Corre isto no SQL Editor do Supabase (depois do schema inicial já correres).
+-- Seguro voltar a correr (idempotente) — cada "create policy" tem um "drop
+-- policy if exists" correspondente antes.
 
 -- 1. Novas colunas para ligar cada aluno à sua conta de login
 alter table students add column if not exists invite_email text;
@@ -11,16 +13,19 @@ create unique index if not exists students_auth_user_id_idx on students(auth_use
 drop policy if exists "prototype open access" on students;
 
 -- O profissional (o teu email) vê e edita tudo
+drop policy if exists "professional full access" on students;
 create policy "professional full access" on students
   for all
   using (auth.jwt() ->> 'email' = 'tiagojvlourenco@gmail.com')
   with check (auth.jwt() ->> 'email' = 'tiagojvlourenco@gmail.com');
 
 -- Um aluno autenticado só vê/edita a sua própria linha
+drop policy if exists "student reads own row" on students;
 create policy "student reads own row" on students
   for select
   using (auth_user_id = auth.uid());
 
+drop policy if exists "student updates own row" on students;
 create policy "student updates own row" on students
   for update
   using (auth_user_id = auth.uid())
@@ -29,6 +34,7 @@ create policy "student updates own row" on students
 -- Um aluno novo (convidado) pode "reclamar" a linha criada para ele,
 -- desde que o email da conta que acabou de criar corresponda ao email do convite.
 -- Isto só funciona uma vez (auth_user_id começa a null e fica preenchido depois).
+drop policy if exists "student claims invited row" on students;
 create policy "student claims invited row" on students
   for update
   using (auth_user_id is null and invite_email = auth.jwt() ->> 'email')
