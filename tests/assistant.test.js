@@ -241,4 +241,84 @@ function structureSnapshot(s){
   check.check("22. Profissional gere tudo em help_requests", /"professional manages help requests"/.test(sql));
 })();
 
+// ---- Auditoria: o que optionsFor() efetivamente filtra (pedido explícito de correção) ----
+
+// 23. optionsFor() SÓ filtra blockedFoods — allergies/avoid/dislikes NÃO são lidos
+(function(){
+  var f = food("Frango (peito)","150 g","protein");
+  var withoutRestrictions = optionsFor(f, freshStudent());
+  var withAllergiesAndAvoid = optionsFor(f, freshStudent({allergies:["Sensibilidade à lactose"], avoid:["Marisco"], dislikes:["Peixe azul"]}));
+  check.check("23. allergies/avoid/dislikes não alteram as opções devolvidas (comportamento real, não assumido)",
+    JSON.stringify(withoutRestrictions) === JSON.stringify(withAllergiesAndAvoid));
+
+  var withBlocked = optionsFor(f, freshStudent({blockedFoods:["Peru (fatiado)"]}));
+  check.check("23. Só blockedFoods reduz de facto as opções", withBlocked.length < withoutRestrictions.length);
+})();
+
+// 24. hasUnmappedDietaryRisk(): deteta risco não mapeado sem tentar adivinhar QUAL alimento evitar
+(function(){
+  check.check("24. Sem allergies nem avoid -> sem risco assinalado", hasUnmappedDietaryRisk(freshStudent()) === false);
+  check.check("24. Com allergies preenchidas -> risco assinalado", hasUnmappedDietaryRisk(freshStudent({allergies:["Sensibilidade à lactose"]})) === true);
+  check.check("24. Com avoid preenchido -> risco assinalado", hasUnmappedDietaryRisk(freshStudent({avoid:["Marisco"]})) === true);
+  check.check("24. Arrays vazios -> sem risco (não é 'tem o campo', é 'tem conteúdo')", hasUnmappedDietaryRisk(freshStudent({allergies:[], avoid:[]})) === false);
+  check.check("24. Sem s (undefined) não rebenta", hasUnmappedDietaryRisk(undefined) === false);
+})();
+
+// 25. openSubstitution avisa explicitamente quando há risco não mapeado, em vez de
+// dar a entender que já filtrou por alergias/restrições (regra: nunca afirmar o que não faz)
+(function(){
+  var subFn = appSource.slice(appSource.indexOf("function openSubstitution"), appSource.indexOf("function renderConfirm"));
+  check.check("25. openSubstitution consulta hasUnmappedDietaryRisk antes de mostrar as alternativas", subFn.indexOf("hasUnmappedDietaryRisk(s)") >= 0);
+  check.check("25. Mostra um aviso explícito ao aluno (não fica em silêncio)", /alergias ou restrições/.test(subFn));
+})();
+
+// ---- RLS de help_requests / help_request_notes: os 5 critérios exatos pedidos ----
+
+// 26. Critério 1: aluno só cria/lê os PRÓPRIOS pedidos (via students.auth_user_id)
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var insertPolicy = sql.slice(sql.indexOf('create policy "student creates own help request"'), sql.indexOf('create policy "student reads own help requests"'));
+  var selectPolicy = sql.slice(sql.indexOf('create policy "student reads own help requests"'), sql.indexOf('create policy "professional manages help requests"'));
+  check.check("26. Insert do aluno exige student_id ligado ao seu auth_user_id", /st\.auth_user_id = auth\.uid\(\)/.test(insertPolicy));
+  check.check("26. Select do aluno exige o mesmo", /st\.auth_user_id = auth\.uid\(\)/.test(selectPolicy));
+})();
+
+// 27. Critério 2: NENHUMA política de update/delete para o aluno em help_requests
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var helpRequestsSection = sql.slice(sql.indexOf("create table if not exists help_requests"), sql.indexOf("create table if not exists help_request_notes"));
+  var studentPolicies = helpRequestsSection.match(/create policy "student[^"]*"[^;]*;/gs) || [];
+  check.check("27. Existem exatamente 2 políticas do aluno em help_requests (criar + ler)", studentPolicies.length === 2);
+  check.check("27. Nenhuma delas é 'for update'", studentPolicies.every(function(p){ return !/for\s+update/i.test(p); }));
+  check.check("27. Nenhuma delas é 'for delete'", studentPolicies.every(function(p){ return !/for\s+delete/i.test(p); }));
+})();
+
+// 28. Critério 3: ZERO políticas do aluno em help_request_notes (leitura/escrita/alteração/remoção)
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var notesSection = sql.slice(sql.indexOf("create table if not exists help_request_notes"));
+  var allPolicies = notesSection.match(/create policy "[^"]*"/g) || [];
+  check.check("28. help_request_notes tem exatamente 1 política no total", allPolicies.length === 1);
+  check.check("28. Essa única política é do profissional, não do aluno", allPolicies[0].indexOf("professional") >= 0);
+})();
+
+// 29. Critério 4: profissional gere tudo (select+insert+update+delete = "for all") nas duas tabelas
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var proRequests = sql.slice(sql.indexOf('"professional manages help requests"'), sql.indexOf("comment on table help_requests"));
+  var proNotes = sql.slice(sql.indexOf('"professional manages help request notes"'));
+  check.check("29. Profissional tem 'for all' em help_requests (não só select)", /for all/.test(proRequests));
+  check.check("29. Profissional tem 'for all' em help_request_notes (não só select)", /for all/.test(proNotes));
+})();
+
+// 30. Critério 5: a condição do aluno nunca permitiria ver dados de outro aluno
+// (a subquery compara sempre contra o auth.uid() de QUEM PEDE, nunca contra um valor fixo)
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var helpRequestsSection = sql.slice(sql.indexOf("create table if not exists help_requests"), sql.indexOf("create table if not exists help_request_notes"));
+  var studentPolicies = helpRequestsSection.match(/create policy "student[^"]*"[\s\S]*?;/g) || [];
+  check.check("30. As duas políticas do aluno usam auth.uid() (identidade de quem pede), nunca um id fixo",
+    studentPolicies.length === 2 && studentPolicies.every(function(p){ return /auth\.uid\(\)/.test(p) && !/auth\.uid\(\)\s*=\s*'/.test(p); }));
+})();
+
 check.summarize();

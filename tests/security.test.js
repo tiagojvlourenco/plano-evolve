@@ -185,4 +185,62 @@ function jsAppendOnly(oldArr, newArr){
   check.check("11. A função concede execução a 'authenticated'", /grant execute on function claim_student_row\(\) to authenticated/.test(sql08));
 })();
 
+// ---- 12. help_requests / help_request_notes: contrato exato pedido na auditoria de correção ----
+// (5 critérios: aluno só cria/lê os próprios pedidos; aluno nunca altera/apaga;
+// aluno nunca vê notas privadas; profissional gere tudo; ninguém vê dados de outro aluno)
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0009_help_requests.sql"), "utf8");
+  var helpRequestsSection = sql.slice(sql.indexOf("create table if not exists help_requests"), sql.indexOf("create table if not exists help_request_notes"));
+  var notesSection = sql.slice(sql.indexOf("create table if not exists help_request_notes"));
+
+  check.check("12. RLS ativo em help_requests", /alter table help_requests enable row level security/.test(sql));
+  check.check("12. RLS ativo em help_request_notes", /alter table help_request_notes enable row level security/.test(sql));
+
+  // Critério 1: exatamente 2 políticas do aluno em help_requests (insert + select), nenhuma outra
+  var studentPoliciesInRequests = helpRequestsSection.match(/create policy "student[^"]*"/g) || [];
+  check.check("12. Exatamente 2 políticas do aluno em help_requests", studentPoliciesInRequests.length === 2);
+  check.check("12. Inclui a política de criar o próprio pedido", helpRequestsSection.indexOf('"student creates own help request"') >= 0);
+  check.check("12. Inclui a política de ler os próprios pedidos", helpRequestsSection.indexOf('"student reads own help requests"') >= 0);
+
+  // Critério 2: nenhuma política de update/delete para o aluno em help_requests
+  var allRequestPolicyBlocks = helpRequestsSection.match(/create policy "[^"]*"[\s\S]*?;/g) || [];
+  var studentBlocks = allRequestPolicyBlocks.filter(function(p){ return p.indexOf('"student') >= 0; });
+  check.check("12. Nenhuma política do aluno em help_requests é 'for update'", studentBlocks.every(function(p){ return !/for\s+update/i.test(p); }));
+  check.check("12. Nenhuma política do aluno em help_requests é 'for delete'", studentBlocks.every(function(p){ return !/for\s+delete/i.test(p); }));
+
+  // Critério 3: zero políticas do aluno em help_request_notes — apenas 1 política no total, do profissional
+  var allNotePolicies = notesSection.match(/create policy "[^"]*"/g) || [];
+  check.check("12. help_request_notes tem exatamente 1 política (mais nenhuma, nem para o aluno)", allNotePolicies.length === 1);
+  check.check("12. Essa política única é do profissional", allNotePolicies.length === 1 && allNotePolicies[0].indexOf("professional") >= 0);
+
+  // Critério 4: profissional tem "for all" (select+insert+update+delete) nas duas tabelas
+  check.check("12. Profissional gere help_requests com 'for all'", /create policy "professional manages help requests"[\s\S]*?for all/.test(sql));
+  check.check("12. Profissional gere help_request_notes com 'for all'", /create policy "professional manages help request notes"[\s\S]*?for all/.test(sql));
+
+  // Critério 5: a condição do aluno usa sempre auth.uid() dinâmico, nunca um valor fixo
+  check.check("12. Política de insert do aluno compara com auth.uid() (não um id fixo)",
+    /"student creates own help request"[\s\S]*?st\.auth_user_id = auth\.uid\(\)/.test(sql));
+  check.check("12. Política de select do aluno compara com auth.uid() (não um id fixo)",
+    /"student reads own help requests"[\s\S]*?st\.auth_user_id = auth\.uid\(\)/.test(sql));
+
+  // Documentação: as tabelas explicam o próprio modelo de acesso via comment on table
+  check.check("12. help_requests tem 'comment on table' a documentar o modelo de acesso", /comment on table help_requests is/.test(sql));
+  check.check("12. help_request_notes tem 'comment on table' a documentar o isolamento total do aluno", /comment on table help_request_notes is/.test(sql));
+
+  // A migração assume-se explicitamente como não validada/aplicada, para não ser confundida com as da Fase 7
+  check.check("12. A migração assinala explicitamente que ainda não foi aplicada/validada", /AINDA NÃO APLICADA/.test(sql));
+})();
+
+// ---- 13. verify_security.sql cobre os 5 critérios com queries e testes funcionais (bloco G) ----
+(function(){
+  var verifyPath = path.join(__dirname, "..", "supabase", "verify_security.sql");
+  var sql = fs.readFileSync(verifyPath, "utf8");
+  check.check("13. Lista as políticas de help_requests/help_request_notes", /help_requests.*help_request_notes|help_request_notes.*help_requests/s.test(sql) || (sql.indexOf("help_requests") >= 0 && sql.indexOf("help_request_notes") >= 0));
+  check.check("13. Tem um bloco de testes funcionais G para help_requests", /\bG1\b/.test(sql) && /\bG[0-9]\b/.test(sql));
+  check.check("13. Testa explicitamente que o aluno A não vê pedidos do aluno B", /G2/.test(sql));
+  check.check("13. Testa explicitamente que o aluno não altera/apaga o próprio pedido", /G4/.test(sql));
+  check.check("13. Testa explicitamente que o aluno nunca acede a help_request_notes", /G5/.test(sql));
+  check.check("13. Testa o fluxo do profissional (nota + marcar como tratado)", /G6/.test(sql));
+})();
+
 check.summarize();

@@ -708,11 +708,30 @@ function showToast(msg){
 
 function food(name, qty, group, required){ return {name:name, qty:qty, group:group, required: required!==false}; }
 
+/* ---------- Auditoria (Fase 8): o que optionsFor() efetivamente filtra ----------
+   Só blockedFoods — a lista concreta que o profissional define, comparada por
+   nome exato (case-insensitive) contra a FOOD_DB. allergies/avoid/dislikes NÃO
+   são lidos aqui nem em nenhuma outra função de seleção de alternativas
+   (computeEquivalentAlternative só calcula quantidade equivalente). São campos
+   de texto livre do perfil, só mostrados ao profissional em tplProPerfil —
+   nunca convertidos automaticamente em bloqueios. Fazer essa conversão sem um
+   mapeamento estruturado seria uma inferência não auditável sobre saúde, que a
+   Fase 8 explicitamente proíbe. Ver hasUnmappedDietaryRisk() e o aviso em
+   openSubstitution() para como isto é comunicado ao aluno em vez de escondido. */
 function optionsFor(f, s){
   var base = (f.allowedSubs && f.allowedSubs.length) ? f.allowedSubs : (FOOD_GROUPS[f.group] || []);
   var blocked = s && s.blockedFoods && s.blockedFoods.length ? s.blockedFoods.map(function(n){ return n.toLowerCase(); }) : null;
   if (!blocked) return base;
   return base.filter(function(o){ return blocked.indexOf(o.name.toLowerCase()) === -1; });
+}
+
+// true quando o aluno tem alergias/restrições registadas em texto livre que
+// optionsFor() não consegue traduzir em bloqueios concretos. Não tenta
+// adivinhar QUAIS alimentos evitar — só sinaliza que existe um risco não
+// coberto, para o assistente avisar em vez de ficar em silêncio (silêncio
+// seria lido como "já filtrei isto por ti", o que seria falso).
+function hasUnmappedDietaryRisk(s){
+  return !!(s && ((s.allergies && s.allergies.length) || (s.avoid && s.avoid.length)));
 }
 
 /* ---------- Perfil de flexibilidade: score é o valor principal, mas cada dimensão pode ser personalizada ---------- */
@@ -1290,6 +1309,13 @@ function openSubstitution(f, onConfirm, s, meal){
       "<div class=\"food-item\" style=\"border-bottom:2px solid var(--line); margin-bottom:10px; padding-bottom:10px;\">" +
         "<span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span>" +
       "</div>" +
+      // Estas alternativas só excluem os alimentos bloqueados pelo profissional
+      // (blockedFoods) — nunca alergias/restrições em texto livre, porque não há
+      // forma auditável de as traduzir automaticamente em alimentos concretos.
+      // Avisamos em vez de ficar em silêncio (ver hasUnmappedDietaryRisk()).
+      (s && hasUnmappedDietaryRisk(s) ?
+        "<div class=\"pill warn\" style=\"margin-bottom:10px; display:inline-flex;\">⚠ Tens alergias ou restrições registadas — confirma sempre com o teu profissional antes de trocar</div>"
+        : "") +
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
     if (!options.length){
       html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Não encontrei uma substituição definida para este alimento.</p>" +
@@ -1412,9 +1438,12 @@ function openLowTime(s){
    dúvida sobre o plano" são novos de facto. Nunca escreve em s.meals/targets/
    flexibility: tudo passa pelas mesmas funções que já só tocam em
    mealDailyState, ou cria um pedido de ajuda (fora do controlo do aluno
-   depois de criado). Sem alimentos bloqueados nem alergias como alternativa,
-   porque reaproveita sempre optionsFor()/computeEquivalentAlternative(), que
-   já filtram isso. */
+   depois de criado). Nunca sugere um alimento bloqueado pelo profissional
+   (optionsFor() filtra blockedFoods) — mas atenção: optionsFor() NÃO filtra
+   alergias/avoid/dislikes (são texto livre, sem mapeamento seguro para
+   alimentos concretos), por isso openSubstitution() avisa explicitamente o
+   aluno quando hasUnmappedDietaryRisk(s) é verdadeiro, em vez de dar a
+   entender que essas restrições já foram tidas em conta. */
 var ASSISTANT_SITUATIONS = [
   {key:"sem_alimento", label:"Não tenho este alimento"},
   {key:"pouco_tempo", label:"Tenho pouco tempo"},

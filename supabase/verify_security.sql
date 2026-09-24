@@ -1,11 +1,15 @@
--- EVOLVE NUTRITION — verificação manual das políticas (Fase 7)
--- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0008.
--- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
+-- EVOLVE NUTRITION — verificação manual das políticas (Fases 7 e 8)
+-- Corre as queries 1-8 e os testes A-F DEPOIS de aplicares 0001-0008 — já
+-- foram validados com dados reais (conta de profissional real + conta de
+-- aluno criada via convite) em 2026-09-24. Ficam aqui para poderes repetir a
+-- validação sempre que quiseres, ex. depois de uma alteração às políticas ou
+-- ao trigger.
 --
--- Os testes funcionais A-F abaixo já foram validados com dados reais (conta
--- de profissional real + conta de aluno criada via convite) em 2026-09-24.
--- Ficam aqui para poderes repetir a validação sempre que quiseres, ex. depois
--- de uma alteração às políticas ou ao trigger.
+-- As queries 9-10 e o bloco de testes G são da Fase 8 (help_requests /
+-- help_request_notes) — só correm depois de 0009_help_requests.sql, que
+-- AINDA NÃO FOI APLICADA nem validada com dados reais. Não publiques nada
+-- desta fase antes de correr o bloco G com sucesso.
+-- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
 
 -- 1. As políticas esperadas existem?
 select schemaname, tablename, policyname, cmd
@@ -70,6 +74,31 @@ where routine_name = 'claim_student_row';
 -- específica não se mostrou fiável (ver nota histórica no fim do ficheiro);
 -- a app usa sb.rpc("claim_student_row") em vez disso.
 
+-- 9. Políticas de help_requests / help_request_notes existem, com o desenho certo?
+-- (Fase 8 — AINDA NÃO APLICADA. Corre isto só depois de 0009_help_requests.sql.)
+select schemaname, tablename, policyname, cmd
+from pg_policies
+where tablename in ('help_requests', 'help_request_notes')
+order by tablename, policyname;
+-- Esperado: "help_requests" tem 3 políticas (professional manages help
+-- requests / student creates own help request / student reads own help
+-- requests) — nenhuma de update/delete para o aluno. "help_request_notes"
+-- tem EXATAMENTE 1 política (professional manages help request notes) — se
+-- aparecer qualquer política com "student" no nome aqui, é uma regressão
+-- grave: o aluno passaria a poder tocar em notas privadas.
+
+-- 10. Confirma explicitamente que o aluno não tem NENHUMA política de
+-- update/delete em help_requests, nem NENHUMA política (de qualquer tipo)
+-- em help_request_notes.
+select tablename, cmd, count(*)
+from pg_policies
+where tablename in ('help_requests','help_request_notes')
+  and policyname ilike '%student%'
+group by tablename, cmd;
+-- Esperado: só duas linhas — help_requests / INSERT / 1 (a de criar) e
+-- help_requests / SELECT / 1 (a de ler). NUNCA deve aparecer help_requests
+-- com cmd UPDATE ou DELETE, nem NENHUMA linha para help_request_notes.
+
 -- ===================== Testes funcionais (fazer com 2 contas reais) =====================
 -- Estes não são queries SQL — são passos manuais na app, porque head de duas
 -- sessões de browser autenticadas com utilizadores diferentes para teres
@@ -126,6 +155,52 @@ where routine_name = 'claim_student_row';
 --         await sb.from("students").update({adaptation_history: data.adaptation_history.concat([{date:"2099-01-01", type:"teste"}])}).eq("id","<id do próprio aluno>")
 --       Esperado: sucesso — acrescentar ao fim é permitido.
 --       Repete o mesmo raciocínio para substitution_history se quiseres.
+--
+-- G. Pedidos de ajuda (Fase 8 — AINDA NÃO APLICADA/VALIDADA):
+--    Precisas de duas contas de aluno (A e B) e a conta de profissional.
+--
+--    G1. Aluno A cria e lê o próprio pedido:
+--        Sessão de Aluno A, na consola:
+--          await sb.from("help_requests").insert({student_id:"<id do próprio aluno>", situation:"duvida", note:"teste"})
+--        Esperado: sucesso.
+--          await sb.from("help_requests").select("*").eq("student_id","<id do próprio aluno>")
+--        Esperado: vem o pedido que acabou de criar.
+--
+--    G2. Aluno A NUNCA vê pedidos do Aluno B:
+--        Ainda como Aluno A:
+--          await sb.from("help_requests").select("*").eq("student_id","<id do aluno B>")
+--        Esperado: lista vazia (mesmo que B tenha pedidos reais).
+--
+--    G3. Aluno A não consegue criar um pedido em nome do Aluno B:
+--          await sb.from("help_requests").insert({student_id:"<id do aluno B>", situation:"duvida"})
+--        Esperado: 0 linhas inseridas / erro de RLS.
+--
+--    G4. Aluno A não altera nem apaga o próprio pedido depois de criado:
+--        Usa o "id" devolvido pelo insert de G1:
+--          await sb.from("help_requests").update({status:"tratado"}).eq("id","<id do pedido>")
+--        Esperado: 0 linhas afetadas (sem policy de update para o aluno).
+--          await sb.from("help_requests").delete().eq("id","<id do pedido>")
+--        Esperado: 0 linhas afetadas.
+--
+--    G5. Aluno A NUNCA lê nem escreve notas privadas — nem sequer as do
+--        próprio pedido:
+--          await sb.from("help_request_notes").select("*").eq("request_id","<id do pedido>")
+--        Esperado: lista vazia (não é erro — é RLS a agir como se a tabela
+--        estivesse sempre vazia para ele).
+--          await sb.from("help_request_notes").insert({request_id:"<id do pedido>", professional_note:"tentativa"})
+--        Esperado: erro de RLS / 0 linhas inseridas.
+--
+--    G6. Profissional lê o pedido, cria uma nota privada e marca como tratado:
+--        Sessão de profissional:
+--          await sb.from("help_requests").select("*, help_request_notes(*)").eq("student_id","<id do aluno A>")
+--        Esperado: vem o pedido de G1.
+--          await sb.from("help_request_notes").upsert({request_id:"<id do pedido>", professional_note:"Respondido por telefone."})
+--        Esperado: sucesso.
+--          await sb.from("help_requests").update({status:"tratado"}).eq("id","<id do pedido>")
+--        Esperado: sucesso.
+--        Confirma também na app: separador "Pedidos" do aluno A mostra o
+--        pedido como "Tratado" com a nota visível — e que a MESMA nota nunca
+--        aparece em lado nenhum da experiência de Aluno.
 --
 -- ===================== Nota histórica: reclamar o convite =====================
 -- Ao validar o fluxo D (conta nova, sem aluno associado) com uma conta de
