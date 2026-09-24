@@ -264,12 +264,20 @@ function structureSnapshot(s){
   check.check("24. Sem s (undefined) não rebenta", hasUnmappedDietaryRisk(undefined) === false);
 })();
 
-// 25. openSubstitution avisa explicitamente quando há risco não mapeado, em vez de
-// dar a entender que já filtrou por alergias/restrições (regra: nunca afirmar o que não faz)
+// 25. openSubstitution BLOQUEIA totalmente as alternativas quando há risco não
+// mapeado — já não é só um aviso, a lista de alimentos nem chega a ser mostrada
+// (correção sobre a versão anterior, que só avisava e continuava a sugerir)
 (function(){
-  var subFn = appSource.slice(appSource.indexOf("function openSubstitution"), appSource.indexOf("function renderConfirm"));
-  check.check("25. openSubstitution consulta hasUnmappedDietaryRisk antes de mostrar as alternativas", subFn.indexOf("hasUnmappedDietaryRisk(s)") >= 0);
-  check.check("25. Mostra um aviso explícito ao aluno (não fica em silêncio)", /alergias ou restrições/.test(subFn));
+  var src = appSource;
+  var fnStart = src.indexOf("function openSubstitution");
+  var fnEnd = src.indexOf("function renderConfirm");
+  var subFn = src.slice(fnStart, fnEnd);
+  var guardIdx = subFn.indexOf("hasUnmappedDietaryRisk(s)");
+  var returnIdx = subFn.indexOf("return sheet;");
+  var renderListDefIdx = subFn.indexOf("function renderList");
+  check.check("25. openSubstitution consulta hasUnmappedDietaryRisk logo no início", guardIdx >= 0 && guardIdx < renderListDefIdx);
+  check.check("25. Sai da função (return) antes de definir/chamar renderList — nunca chega a montar a lista", returnIdx >= 0 && returnIdx < renderListDefIdx);
+  check.check("25. Usa a mensagem de segurança única (não inventa outro texto)", subFn.indexOf("renderDietRiskBlocked(sheet, s, meal,") >= 0);
 })();
 
 // ---- RLS de help_requests / help_request_notes: os 5 critérios exatos pedidos ----
@@ -319,6 +327,77 @@ function structureSnapshot(s){
   var studentPolicies = helpRequestsSection.match(/create policy "student[^"]*"[\s\S]*?;/g) || [];
   check.check("30. As duas políticas do aluno usam auth.uid() (identidade de quem pede), nunca um id fixo",
     studentPolicies.length === 2 && studentPolicies.every(function(p){ return /auth\.uid\(\)/.test(p) && !/auth\.uid\(\)\s*=\s*'/.test(p); }));
+})();
+
+// ---- Modo de segurança (correção): BLOQUEAR sugestões de alimentos, não só avisar ----
+// Pedido explícito: enquanto houver allergies/avoid não mapeados, nenhum aluno
+// pode receber alternativas, substituições automáticas, construtor de
+// refeições ou dicas de restaurante — em nenhum nível de flexibilidade.
+
+// 31. As 3 situações que recomendam alimentos ficam bloqueadas com allergies OU avoid,
+// em qualquer nível de flexibilidade (o bloqueio não depende do perfil estruturado/equilibrado/flexível)
+(function(){
+  [20, 50, 80].forEach(function(flex){
+    var sWithAllergies = freshStudent({flexibility: flex, allergies:["Sensibilidade à lactose"]});
+    var sWithAvoid = freshStudent({flexibility: flex, avoid:["Marisco"]});
+    ["sem_alimento","pouco_tempo","fora"].forEach(function(key){
+      check.check("31. flex=" + flex + " '" + key + "' bloqueado com allergies", decideAssistantAction(sWithAllergies, key).action === "diet_risk_blocked");
+      check.check("31. flex=" + flex + " '" + key + "' bloqueado com avoid", decideAssistantAction(sWithAvoid, key).action === "diet_risk_blocked");
+    });
+  });
+})();
+
+// 32. blockedFoods sozinho (sem allergies/avoid) é uma restrição MAPEADA pelo profissional
+// para alimentos concretos — continua a permitir alternativas seguras, não é bloqueada
+(function(){
+  var s = freshStudent({blockedFoods:["Peru (fatiado)"]});
+  check.check("32. 'sem_alimento' continua 'pick_food' só com blockedFoods", decideAssistantAction(s, "sem_alimento").action === "pick_food");
+  check.check("32. 'pouco_tempo' continua 'low_time' só com blockedFoods", decideAssistantAction(s, "pouco_tempo").action === "low_time");
+  check.check("32. 'fora' continua 'scenario_picker' só com blockedFoods", decideAssistantAction(s, "fora").action === "scenario_picker");
+})();
+
+// 33. "trocar" nunca é bloqueado na íntegra — só o sub-fluxo de substituir um alimento
+// o é (via openSubstitution); "Adaptar a refeição toda" não recomenda nenhum alimento
+(function(){
+  var s = freshStudent({allergies:["Sensibilidade à lactose"]});
+  check.check("33. 'trocar' continua 'swap_meal' mesmo com risco não mapeado", decideAssistantAction(s, "trocar").action === "swap_meal");
+})();
+
+// 34. handleAssistantSituation encaminha 'diet_risk_blocked' para o ecrã de segurança
+(function(){
+  var flat = appSource.replace(/\s+/g, " ");
+  check.check("34. Existe o routing 'diet_risk_blocked' -> openAssistantDietRiskBlocked",
+    /decision\.action === "diet_risk_blocked"\) return openAssistantDietRiskBlocked/.test(flat));
+})();
+
+// 35. openAssistantDietRiskBlocked reaproveita a MESMA função de bloqueio usada em
+// openSubstitution — garante que a mensagem nunca diverge entre pontos da app
+(function(){
+  var fnSrc = appSource.slice(appSource.indexOf("function openAssistantDietRiskBlocked"), appSource.indexOf("function openAssistantPickFood"));
+  check.check("35. openAssistantDietRiskBlocked chama renderDietRiskBlocked", fnSrc.indexOf("renderDietRiskBlocked(") >= 0);
+})();
+
+// 36. Construtor de refeições (tplMealChoice/tplMealBuilder): são funções puras (sem DOM),
+// testáveis diretamente — confirmam que NENHUMA opção fica clicável quando há risco
+(function(){
+  var groupedMeal = meal("Almoço","13:00",[
+    food("Frango (peito)","150 g","protein"),
+    food("Arroz (cozido)","120 g","carb")
+  ]);
+
+  var sRisk = freshStudent({allergies:["Sensibilidade à lactose"]});
+  var htmlLocked = tplMealChoice(groupedMeal, 0, sRisk);
+  check.check("36. Com allergies, tplMealChoice não mostra nenhuma opção clicável (sem builder-opt)", htmlLocked.indexOf("builder-opt") === -1);
+  check.check("36. Mostra a mensagem de segurança para cada grupo bloqueado (2 alimentos com grupo)", htmlLocked.split(DIET_RISK_SAFE_MESSAGE).length - 1 === 2);
+  check.check("36. tplMealBuilder (usa tplMealChoice por dentro) também fica bloqueado", tplMealBuilder(groupedMeal, 0, sRisk).indexOf("builder-opt") === -1);
+
+  var sSafe = freshStudent();
+  var htmlOpen = tplMealChoice(groupedMeal, 0, sSafe);
+  check.check("36. Sem allergies/avoid, as opções continuam clicáveis (sem regressão)", htmlOpen.indexOf("builder-opt") >= 0);
+
+  var sBlockedOnly = freshStudent({blockedFoods:["Peru (fatiado)"]});
+  var htmlBlockedOnly = tplMealChoice(groupedMeal, 0, sBlockedOnly);
+  check.check("36. Só com blockedFoods (restrição mapeada), o construtor continua a mostrar alternativas seguras", htmlBlockedOnly.indexOf("builder-opt") >= 0);
 })();
 
 check.summarize();

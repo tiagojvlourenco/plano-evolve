@@ -716,8 +716,9 @@ function food(name, qty, group, required){ return {name:name, qty:qty, group:gro
    de texto livre do perfil, só mostrados ao profissional em tplProPerfil —
    nunca convertidos automaticamente em bloqueios. Fazer essa conversão sem um
    mapeamento estruturado seria uma inferência não auditável sobre saúde, que a
-   Fase 8 explicitamente proíbe. Ver hasUnmappedDietaryRisk() e o aviso em
-   openSubstitution() para como isto é comunicado ao aluno em vez de escondido. */
+   Fase 8 explicitamente proíbe. blockedFoods continua obrigatório para todos
+   os alunos, mapeados ou não — é a única lista com garantia de segurança. Ver
+   hasUnmappedDietaryRisk() para a diferença entre os dois casos. */
 function optionsFor(f, s){
   var base = (f.allowedSubs && f.allowedSubs.length) ? f.allowedSubs : (FOOD_GROUPS[f.group] || []);
   var blocked = s && s.blockedFoods && s.blockedFoods.length ? s.blockedFoods.map(function(n){ return n.toLowerCase(); }) : null;
@@ -727,11 +728,42 @@ function optionsFor(f, s){
 
 // true quando o aluno tem alergias/restrições registadas em texto livre que
 // optionsFor() não consegue traduzir em bloqueios concretos. Não tenta
-// adivinhar QUAIS alimentos evitar — só sinaliza que existe um risco não
-// coberto, para o assistente avisar em vez de ficar em silêncio (silêncio
-// seria lido como "já filtrei isto por ti", o que seria falso).
+// adivinhar QUAIS alimentos evitar — sinaliza que existe um risco não coberto.
+// Diferença fundamental entre os dois tipos de restrição:
+//   - blockedFoods (mapeado pelo profissional para alimentos concretos):
+//     permite alternativas seguras — optionsFor() filtra-os sempre, para
+//     todos os alunos, com ou sem risco não mapeado.
+//   - allergies/avoid (texto livre, sem mapeamento): BLOQUEIA recomendações
+//     de alimentos até o profissional os mapear para blockedFoods. Nenhuma
+//     função de sugestão de alimentos pode mostrar alternativas enquanto
+//     isto for verdadeiro — ver DIET_RISK_SAFE_MESSAGE e renderDietRiskBlocked().
 function hasUnmappedDietaryRisk(s){
   return !!(s && ((s.allergies && s.allergies.length) || (s.avoid && s.avoid.length)));
+}
+
+// Mensagem exata mostrada sempre que uma sugestão de alimentos é bloqueada por
+// hasUnmappedDietaryRisk(s) — mantida como constante única para garantir que o
+// texto é sempre igual em todos os pontos onde isto acontece.
+var DIET_RISK_SAFE_MESSAGE = "Tens restrições registadas. Para garantir uma alternativa segura, pede ajuda ao teu profissional.";
+
+// Renderiza, dentro de um sheet de modal já aberto, o ecrã de segurança que
+// substitui QUALQUER sugestão de alimentos quando hasUnmappedDietaryRisk(s) é
+// verdadeiro. Não lista alternativas, não mostra o construtor de refeições,
+// não dá dicas de restaurante — só a mensagem e a única ação permitida que
+// pode envolver comida: pedir ajuda ao profissional (que não é uma sugestão,
+// é um pedido). Consultar o plano e reagendar continuam disponíveis fora
+// deste ecrã, por não recomendarem nenhum alimento.
+function renderDietRiskBlocked(sheet, s, meal, situation, note){
+  var html = "<div class=\"mtitle\">Restrição registada</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + escapeHtml(DIET_RISK_SAFE_MESSAGE) + "</p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"askProRisk\" style=\"width:100%;\">Pedir ajuda ao profissional</button>";
+  sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
+  sheet.querySelector(".mclose button").addEventListener("click", closeModal);
+  sheet.querySelector("#askProRisk").addEventListener("click", function(){
+    createHelpRequest(s, meal, situation, note || "Aluno tem alergias/restrições registadas — pedido de alternativa segura.");
+    showToast("O teu profissional vai ver este pedido");
+    closeModal();
+  });
 }
 
 /* ---------- Perfil de flexibilidade: score é o valor principal, mas cada dimensão pode ser personalizada ---------- */
@@ -1294,6 +1326,19 @@ function openModal(innerHtml, opts){
 }
 
 function openSubstitution(f, onConfirm, s, meal){
+  var sheet = openModal("");
+
+  // Trava central: nenhuma sugestão de alimento sai daqui (nem a lista de
+  // alternativas nem o "não encontrei substituição, pergunta ao profissional")
+  // enquanto houver alergias/restrições em texto livre não mapeadas. Todas as
+  // chamadas a openSubstitution em toda a app (detalhe da refeição, plano,
+  // "não tenho isto", pouco tempo, trocar refeição) passam por aqui, por isso
+  // basta esta verificação para cobrir todas elas.
+  if (s && hasUnmappedDietaryRisk(s)){
+    renderDietRiskBlocked(sheet, s, meal, "sem_alimento", "Pedido de alternativa segura para " + f.name + ".");
+    return sheet;
+  }
+
   var priorityKey = GROUP_PRIORITY_KEY[f.group];
   var usingManualList = !!(f.allowedSubs && f.allowedSubs.length);
   var baseOptions = optionsFor(f, s).filter(function(o){ return o.name !== f.name; });
@@ -1302,20 +1347,12 @@ function openSubstitution(f, onConfirm, s, meal){
     if (isFinite(max)) baseOptions = baseOptions.slice(0, max);
   }
   var options = baseOptions.map(function(o){ return computeEquivalentAlternative(f, o); });
-  var sheet = openModal("");
 
   function renderList(){
     var html = "<div class=\"mtitle\">Substituir</div>" +
       "<div class=\"food-item\" style=\"border-bottom:2px solid var(--line); margin-bottom:10px; padding-bottom:10px;\">" +
         "<span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span>" +
       "</div>" +
-      // Estas alternativas só excluem os alimentos bloqueados pelo profissional
-      // (blockedFoods) — nunca alergias/restrições em texto livre, porque não há
-      // forma auditável de as traduzir automaticamente em alimentos concretos.
-      // Avisamos em vez de ficar em silêncio (ver hasUnmappedDietaryRisk()).
-      (s && hasUnmappedDietaryRisk(s) ?
-        "<div class=\"pill warn\" style=\"margin-bottom:10px; display:inline-flex;\">⚠ Tens alergias ou restrições registadas — confirma sempre com o teu profissional antes de trocar</div>"
-        : "") +
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
     if (!options.length){
       html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Não encontrei uma substituição definida para este alimento.</p>" +
@@ -1439,11 +1476,19 @@ function openLowTime(s){
    flexibility: tudo passa pelas mesmas funções que já só tocam em
    mealDailyState, ou cria um pedido de ajuda (fora do controlo do aluno
    depois de criado). Nunca sugere um alimento bloqueado pelo profissional
-   (optionsFor() filtra blockedFoods) — mas atenção: optionsFor() NÃO filtra
-   alergias/avoid/dislikes (são texto livre, sem mapeamento seguro para
-   alimentos concretos), por isso openSubstitution() avisa explicitamente o
-   aluno quando hasUnmappedDietaryRisk(s) é verdadeiro, em vez de dar a
-   entender que essas restrições já foram tidas em conta. */
+   (optionsFor() filtra blockedFoods, sempre, para todos os alunos).
+
+   Modo de segurança para alergias/restrições não mapeadas: optionsFor() NÃO
+   filtra allergies/avoid/dislikes (são texto livre, sem mapeamento seguro
+   para alimentos concretos) — por isso, enquanto hasUnmappedDietaryRisk(s)
+   for verdadeiro, "Não tenho este alimento" e "Tenho pouco tempo" nunca
+   chegam a mostrar alternativas (ver o "diet_risk_blocked" abaixo e a trava
+   em openSubstitution()), e "Vou comer fora" não mostra as dicas de
+   restaurante. Em vez disso mostram DIET_RISK_SAFE_MESSAGE e só permitem
+   pedir ajuda ao profissional — nunca uma sugestão de alimento. "Quero trocar
+   uma refeição" continua disponível porque "Adaptar a refeição toda" não
+   recomenda nenhum alimento concreto; só o seu sub-fluxo "Substituir um
+   alimento" é bloqueado, pela mesma trava central em openSubstitution(). */
 var ASSISTANT_SITUATIONS = [
   {key:"sem_alimento", label:"Não tenho este alimento"},
   {key:"pouco_tempo", label:"Tenho pouco tempo"},
@@ -1475,9 +1520,21 @@ function openAssistant(s){
    para um aluno estruturado como equilibrado ou flexível: a diferença de
    perfil já é tratada dentro de cada função reaproveitada (optionsFor,
    computeFlexibilityProfile, etc.), não aqui. */
+// Situações do menu do assistente que recomendariam um alimento concreto (ou
+// dicas de escolha alimentar, no caso de "fora") — as únicas que o modo de
+// segurança de hasUnmappedDietaryRisk() precisa de interceptar aqui. "trocar"
+// fica de fora desta lista de propósito: "Adaptar a refeição toda" não
+// recomenda nenhum alimento, só o sub-fluxo "Substituir um alimento" o faz, e
+// esse já é bloqueado pela trava central em openSubstitution().
+var ASSISTANT_FOOD_SUGGESTING_SITUATIONS = {sem_alimento:true, pouco_tempo:true, fora:true};
+
 function decideAssistantAction(s, key){
   var meals = resolveMealsForToday(s);
   var nm = getNextMeal({meals: meals});
+
+  if (ASSISTANT_FOOD_SUGGESTING_SITUATIONS[key] && hasUnmappedDietaryRisk(s)){
+    return {action:"diet_risk_blocked", meal: nm ? nm.meal : null, situation:key};
+  }
 
   if (key === "sem_alimento"){
     if (!nm) return {action:"no_meal", situation:key};
@@ -1511,6 +1568,7 @@ function handleAssistantSituation(s, key){
   function findIdx(mv){ return meals.findIndex(function(x){ return mealKey(x) === mealKey(mv); }); }
 
   if (decision.action === "no_meal") return openAssistantNoMeal(s, decision.situation);
+  if (decision.action === "diet_risk_blocked") return openAssistantDietRiskBlocked(s, decision.meal, decision.situation);
   if (decision.action === "ask_professional") return openAssistantAskProfessional(s, decision.meal, decision.situation, decision.note);
   if (decision.action === "pick_food") return openAssistantPickFood(s, decision.meal, decision.swappable);
   if (decision.action === "low_time") return openLowTime(s);
@@ -1531,6 +1589,15 @@ function openAssistantNoMeal(s, situation){
     showToast("O teu profissional vai ver este pedido");
     closeModal();
   });
+}
+
+// Ecrã do assistente para "sem_alimento"/"pouco_tempo"/"fora" quando
+// hasUnmappedDietaryRisk(s) é verdadeiro — reaproveita renderDietRiskBlocked()
+// para mostrar sempre a mesma mensagem e a mesma única ação (pedir ajuda),
+// nunca uma sugestão de alimento.
+function openAssistantDietRiskBlocked(s, meal, situation){
+  var sheet = openModal("");
+  renderDietRiskBlocked(sheet, s, meal, situation, "Aluno tem alergias/restrições registadas — pedido de alternativa segura.");
 }
 
 function openAssistantPickFood(s, m, swappable){
@@ -1983,10 +2050,21 @@ function tplMealFixed(m, idx, s){
 
 function tplMealChoice(m, idx, s){
   ensureLiveChoiceDefaults(m, s);
+  // Modo de segurança: com alergias/restrições em texto livre não mapeadas,
+  // o construtor de refeições não pode oferecer escolha entre alimentos do
+  // grupo — mostra o grupo de forma bloqueada, sem opções clicáveis, em vez
+  // de recomendar alternativas potencialmente incompatíveis (ver
+  // hasUnmappedDietaryRisk() e DIET_RISK_SAFE_MESSAGE).
+  var locked = hasUnmappedDietaryRisk(s);
   var html = "";
   m.foods.forEach(function(f){
     if (!f.group){
       html += "<div class=\"food-item\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>";
+      return;
+    }
+    if (locked){
+      html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + "</div>" +
+        "<p class=\"muted-p\" style=\"margin:0 0 8px;\">" + escapeHtml(DIET_RISK_SAFE_MESSAGE) + "</p></div>";
       return;
     }
     var options = optionsFor(f, s);
