@@ -3310,8 +3310,12 @@ function handleSession(session){
   var email = session.user.email;
 
   checkIsProfessional().then(function(isProfessional){
-    var claim = isProfessional ? Promise.resolve() :
-      sb.from("students").update({auth_user_id: session.user.id}).eq("invite_email", email).is("auth_user_id", null);
+    // Reclamar o convite passa por uma função no servidor (claim_student_row),
+    // não por um UPDATE direto: confirmámos que um UPDATE direto na tabela,
+    // mesmo com a política RLS correta e a condição validada como verdadeira,
+    // não afetava a linha de forma fiável via PostgREST. A função corre com
+    // privilégios elevados e faz a mesma validação internamente.
+    var claim = isProfessional ? Promise.resolve() : sb.rpc("claim_student_row");
 
     return Promise.resolve(claim).then(function(){
       return sb.from("students").select("*");

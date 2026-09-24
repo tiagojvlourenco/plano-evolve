@@ -165,4 +165,24 @@ function jsAppendOnly(oldArr, newArr){
   check.check("10. Reordenar entradas existentes não é append-only", jsAppendOnly(original, [original[1], original[0]]) === false);
 })();
 
+// ---- 11. Reclamar o convite: por função no servidor, não por UPDATE direto ----
+// Validado contra a base de dados real (conta de aluno de teste, via convite):
+// um UPDATE direto na tabela, mesmo com a política corrigida para usar
+// auth.email() e a condição confirmada como verdadeira por uma função de
+// diagnóstico, continuava a afetar 0 linhas via PostgREST — causa exata não
+// isolada nessa sessão de diagnóstico. claim_student_row() (SECURITY DEFINER)
+// resolveu de forma fiável e foi confirmado a funcionar com uma conta real.
+(function(){
+  check.check("11. O código já não faz UPDATE direto para reclamar o convite", /\.eq\("invite_email", email\)\.is\("auth_user_id", null\)/.test(appSource) === false);
+  check.check("11. O código chama a função claim_student_row via RPC", /sb\.rpc\("claim_student_row"\)/.test(appSource));
+
+  var sql07 = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0007_fix_claim_policy.sql"), "utf8");
+  check.check("11. 0007 corrige a política para usar auth.email()", /invite_email = auth\.email\(\)/.test(sql07));
+
+  var sql08 = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0008_claim_via_function.sql"), "utf8");
+  check.check("11. 0008 cria a função claim_student_row", /create or replace function claim_student_row/.test(sql08));
+  check.check("11. A função é SECURITY DEFINER", /security definer/.test(sql08));
+  check.check("11. A função concede execução a 'authenticated'", /grant execute on function claim_student_row\(\) to authenticated/.test(sql08));
+})();
+
 check.summarize();

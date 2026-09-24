@@ -1,6 +1,11 @@
 -- EVOLVE NUTRITION — verificação manual das políticas (Fase 7)
--- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0006.
+-- Corre isto no SQL Editor do Supabase DEPOIS de aplicares 0001-0008.
 -- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
+--
+-- Os testes funcionais A-F abaixo já foram validados com dados reais (conta
+-- de profissional real + conta de aluno criada via convite) em 2026-09-24.
+-- Ficam aqui para poderes repetir a validação sempre que quiseres, ex. depois
+-- de uma alteração às políticas ou ao trigger.
 
 -- 1. As políticas esperadas existem?
 select schemaname, tablename, policyname, cmd
@@ -52,6 +57,18 @@ where routine_name = 'jsonb_array_is_append_only';
 -- Esperado: 1 linha. Protege substitution_history/adaptation_history contra
 -- reescrita — o aluno só pode acrescentar eventos, nunca alterar/remover os
 -- que já lá estavam (ver bloco F mais abaixo para o teste funcional).
+
+-- 8. A função de reclamar o convite existe e está acessível ao aluno?
+select routine_name, security_type
+from information_schema.routines
+where routine_name = 'claim_student_row';
+select grantee, privilege_type
+from information_schema.role_routine_grants
+where routine_name = 'claim_student_row';
+-- Esperado: 1 linha com security_type = 'DEFINER', e um grant de EXECUTE
+-- para "authenticated". Um UPDATE direto na tabela para esta operação
+-- específica não se mostrou fiável (ver nota histórica no fim do ficheiro);
+-- a app usa sb.rpc("claim_student_row") em vez disso.
 
 -- ===================== Testes funcionais (fazer com 2 contas reais) =====================
 -- Estes não são queries SQL — são passos manuais na app, porque head de duas
@@ -109,3 +126,17 @@ where routine_name = 'jsonb_array_is_append_only';
 --         await sb.from("students").update({adaptation_history: data.adaptation_history.concat([{date:"2099-01-01", type:"teste"}])}).eq("id","<id do próprio aluno>")
 --       Esperado: sucesso — acrescentar ao fim é permitido.
 --       Repete o mesmo raciocínio para substitution_history se quiseres.
+--
+-- ===================== Nota histórica: reclamar o convite =====================
+-- Ao validar o fluxo D (conta nova, sem aluno associado) com uma conta de
+-- aluno real criada via convite, um UPDATE direto na tabela para associar
+-- auth_user_id (a política "student claims invited row", mesmo corrigida
+-- para usar auth.email() e com a condição confirmada como verdadeira por uma
+-- função de diagnóstico) continuava a afetar 0 linhas quando feito via
+-- PostgREST. Não foi isolada a causa exata dessa discrepância nesta sessão.
+-- A solução foi mover essa operação específica para uma função
+-- (claim_student_row, SECURITY DEFINER — ver 0008_claim_via_function.sql),
+-- que foi confirmada a funcionar com essa mesma conta real. A app já usa
+-- sb.rpc("claim_student_row") em vez de um UPDATE direto (ver handleSession
+-- em evolve-nutrition.html). A política "student claims invited row" continua
+-- a existir (não faz mal manter), mas deixou de ser o caminho usado pela app.
