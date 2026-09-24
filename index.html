@@ -2816,10 +2816,13 @@ function signalMealsOff(s){
 }
 
 function signalAdaptacoes(s){
+  // Estas contagens vêm de ações que o próprio aluno registou (substituir,
+  // ignorar, reagendar, marcar flexível) — são um autorrelato, não uma
+  // auditoria: útil para perceber o dia a dia, não uma verdade inquestionável.
   var summary = computeAdaptationSummary(s, SIGNAL_ADAPTATION_DAYS);
   var total = Object.keys(summary).reduce(function(a,k){ return a + summary[k]; }, 0);
   return signal("adaptacoes", "Padrões de adaptação", total >= SIGNAL_ADAPTATION_LIMIT ? "atencao" : "positivo",
-    total > 0 ? (total + " refeições adaptadas nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias.") : ("Sem adaptações registadas nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias."),
+    total > 0 ? (total + " ações de adaptação registadas pelo aluno nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias.") : ("Sem ações de adaptação registadas pelo aluno nos últimos " + SIGNAL_ADAPTATION_DAYS + " dias."),
     "Últimos " + SIGNAL_ADAPTATION_DAYS + " dias", "historico");
 }
 
@@ -2943,7 +2946,7 @@ function tplProHistorico(s){
   var summaryKeys = Object.keys(summary);
   if (summaryKeys.length){
     html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adaptações — últimos 7 dias</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Indicadores para perceberes o dia a dia do aluno — não são um problema por si só.</p>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Ações que o próprio aluno registou (substituir, ignorar, reagendar, marcar flexível) — um autorrelato para perceberes o dia a dia, não uma auditoria nem um problema por si só.</p>" +
       summaryKeys.map(function(k){
         return "<div class=\"history-row\"><div class=\"hlabel\">" + (ADAPTATION_TYPE_LABEL[k] || k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
       }).join("") +

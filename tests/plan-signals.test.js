@@ -168,11 +168,15 @@ function freshStudent(overrides){
   check.check("22. Dentro do limiar -> positivo", signalMealsOff(s3).status === "positivo");
 })();
 
-// ---- signalAdaptacoes (exemplo exato do pedido) ----
+// ---- signalAdaptacoes ----
+// O texto deixa explícito que são ações que o próprio aluno registou
+// (autorrelato), não uma auditoria — pedido explícito do utilizador depois de
+// ver o painel: "apresenta adaptações como ações registadas pelo aluno, não
+// como dados invioláveis".
 (function(){
   var s = freshStudent({adaptationHistory:[]});
   var sig = signalAdaptacoes(s);
-  check.check("23. Sem adaptações -> texto factual, não é 'atencao'", sig.text === "Sem adaptações registadas nos últimos 7 dias." && sig.status === "positivo");
+  check.check("23. Sem adaptações -> texto factual, não é 'atencao'", sig.text === "Sem ações de adaptação registadas pelo aluno nos últimos 7 dias." && sig.status === "positivo");
 
   var s2 = freshStudent({adaptationHistory:[
     {date:isoDaysAgo(1), type:"substituicao"},
@@ -183,7 +187,7 @@ function freshStudent(overrides){
     {date:isoDaysAgo(40), type:"substituicao"} // fora da janela de 7 dias
   ]});
   var sig2 = signalAdaptacoes(s2);
-  check.check("24. Formato exato do exemplo do pedido (só conta os últimos 7 dias)", sig2.text === "5 refeições adaptadas nos últimos 7 dias.");
+  check.check("24. Texto deixa claro que é autorrelato do aluno (só conta os últimos 7 dias)", sig2.text === "5 ações de adaptação registadas pelo aluno nos últimos 7 dias.");
   check.check("24. >= limiar (5) -> atencao", sig2.status === "atencao");
 })();
 
