@@ -626,11 +626,49 @@ function logAdaptation(s, meal, type, details){
     date: todayISO(),
     time: String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0"),
     timestamp: now.toISOString(),
-    meal: meal.name,
+    meal: meal ? meal.name : null,
     type: type
   };
   Object.keys(details || {}).forEach(function(k){ entry[k] = details[k]; });
   s.adaptationHistory.push(entry);
+}
+
+/* ---------- Pedidos de ajuda ao profissional (Assistente Alimentar Guiado) ----------
+   Ao contrário do resto do estado do aluno, os pedidos não vivem em s.<campo> +
+   persistStudent(s) — ficam em tabelas próprias (help_requests / help_request_notes)
+   com a sua própria RLS, precisamente para que a nota privada do profissional
+   nunca seja lida pelo aluno (impossível de garantir só com colunas dentro de
+   students, já que a política de leitura do aluno dá acesso à linha inteira).
+   Continuam a alimentar adaptationHistory (tipo "pedido_profissional"), para que
+   os indicadores da Leitura profissional e o resumo do Histórico não percam
+   nada — só o detalhe rico (texto livre, estado, nota) é que vive à parte. */
+function createHelpRequest(s, meal, situation, note){
+  logAdaptation(s, meal, "pedido_profissional", {situation: situation, note: note || ""});
+  persistStudent(s);
+  if (!sbReady) return Promise.resolve({success:false, offline:true});
+  return sb.from("help_requests").insert({
+    student_id: s.id,
+    situation: situation,
+    meal_name: meal ? meal.name : null,
+    note: note || null
+  });
+}
+
+function loadHelpRequests(studentId){
+  if (!sbReady) return Promise.resolve([]);
+  return sb.from("help_requests")
+    .select("*, help_request_notes(professional_note)")
+    .eq("student_id", studentId)
+    .order("created_at", {ascending:false})
+    .then(function(res){ return res.data || []; });
+}
+
+function markHelpRequestHandled(requestId){
+  return sb.from("help_requests").update({status:"tratado"}).eq("id", requestId);
+}
+
+function saveHelpRequestNote(requestId, professionalNote){
+  return sb.from("help_request_notes").upsert({request_id: requestId, professional_note: professionalNote});
 }
 
 /* ---------- Camada de decisão: que ações fazem sentido para esta refeição, dado o perfil de flexibilidade ---------- */
@@ -1273,7 +1311,7 @@ function openSubstitution(f, onConfirm, s, meal){
     });
     var askBtn = sheet.querySelector("#askProfessional");
     if (askBtn) askBtn.addEventListener("click", function(){
-      if (s && meal) logAdaptation(s, meal, "pedido_profissional", {food: f.name});
+      if (s) createHelpRequest(s, meal, "sem_alimento", "Sem substituição disponível para " + f.name + ".");
       showToast("O teu profissional vai ver este pedido");
       closeModal();
     });
@@ -1365,6 +1403,185 @@ function openLowTime(s){
     showToast("Refeição adaptada");
     closeModal();
   }, s, m);
+}
+
+/* ===================== Assistente Alimentar Guiado =====================
+   Um menu de situações reais que encaminha para os fluxos que já existem
+   (substituição, adaptar, ignorar, reagendar, "hoje vai ser diferente") em
+   vez de duplicar essa lógica — só "Já comi algo diferente" e "Tenho outra
+   dúvida sobre o plano" são novos de facto. Nunca escreve em s.meals/targets/
+   flexibility: tudo passa pelas mesmas funções que já só tocam em
+   mealDailyState, ou cria um pedido de ajuda (fora do controlo do aluno
+   depois de criado). Sem alimentos bloqueados nem alergias como alternativa,
+   porque reaproveita sempre optionsFor()/computeEquivalentAlternative(), que
+   já filtram isso. */
+var ASSISTANT_SITUATIONS = [
+  {key:"sem_alimento", label:"Não tenho este alimento"},
+  {key:"pouco_tempo", label:"Tenho pouco tempo"},
+  {key:"fora", label:"Vou comer fora"},
+  {key:"horario", label:"Alterei o horário"},
+  {key:"saltei", label:"Saltei uma refeição"},
+  {key:"diferente", label:"Já comi algo diferente"},
+  {key:"trocar", label:"Quero trocar uma refeição"},
+  {key:"duvida", label:"Tenho outra dúvida sobre o plano"}
+];
+
+function openAssistant(s){
+  var html = "<div class=\"mtitle\">Precisas de ajuda com a alimentação?</div>" +
+    "<p class=\"muted-p\" style=\"margin:4px 0 14px;\">Escolhe a situação que descreve melhor o que se passa.</p>" +
+    "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
+    ASSISTANT_SITUATIONS.map(function(sit){
+      return "<button type=\"button\" class=\"btn assistant-situation\" data-k=\"" + sit.key + "\" style=\"width:100%; text-align:left;\">" + escapeHtml(sit.label) + "</button>";
+    }).join("") +
+    "</div>";
+  var sheet = openModal(html);
+  sheet.querySelectorAll(".assistant-situation").forEach(function(btn){
+    btn.addEventListener("click", function(){ handleAssistantSituation(s, btn.getAttribute("data-k")); });
+  });
+}
+
+/* Decide o que fazer para cada situação, sem tocar em DOM/modais — é o que
+   se testa diretamente. handleAssistantSituation só interpreta a decisão e
+   abre o ecrã correspondente. Mantém a mesma lista de situações usável tanto
+   para um aluno estruturado como equilibrado ou flexível: a diferença de
+   perfil já é tratada dentro de cada função reaproveitada (optionsFor,
+   computeFlexibilityProfile, etc.), não aqui. */
+function decideAssistantAction(s, key){
+  var meals = resolveMealsForToday(s);
+  var nm = getNextMeal({meals: meals});
+
+  if (key === "sem_alimento"){
+    if (!nm) return {action:"no_meal", situation:key};
+    var m = nm.meal;
+    var swappable = m.foods.filter(function(f){ return f.group; });
+    if (!swappable.length) return {action:"ask_professional", meal:m, situation:key, note:"Nenhum alimento substituível em " + m.name + "."};
+    return {action:"pick_food", meal:m, swappable:swappable};
+  }
+  if (key === "pouco_tempo") return {action:"low_time"};
+  if (key === "fora") return {action:"scenario_picker"};
+  if (key === "horario"){
+    if (!nm) return {action:"no_meal", situation:key};
+    return {action:"reschedule", meal:nm.meal};
+  }
+  if (key === "saltei"){
+    if (!nm) return {action:"no_meal", situation:key};
+    return {action:"skip", meal:nm.meal};
+  }
+  if (key === "diferente") return {action:"different", meal: nm ? nm.meal : null};
+  if (key === "trocar"){
+    if (!nm) return {action:"no_meal", situation:key};
+    return {action:"swap_meal", meal:nm.meal};
+  }
+  if (key === "duvida") return {action:"ask_professional", meal: nm ? nm.meal : null, situation:key, note:""};
+  return {action:"unknown"};
+}
+
+function handleAssistantSituation(s, key){
+  var decision = decideAssistantAction(s, key);
+  var meals = resolveMealsForToday(s);
+  function findIdx(mv){ return meals.findIndex(function(x){ return mealKey(x) === mealKey(mv); }); }
+
+  if (decision.action === "no_meal") return openAssistantNoMeal(s, decision.situation);
+  if (decision.action === "ask_professional") return openAssistantAskProfessional(s, decision.meal, decision.situation, decision.note);
+  if (decision.action === "pick_food") return openAssistantPickFood(s, decision.meal, decision.swappable);
+  if (decision.action === "low_time") return openLowTime(s);
+  if (decision.action === "scenario_picker") return openScenarioPicker(s);
+  if (decision.action === "reschedule") return openReschedule(s, decision.meal, findIdx(decision.meal));
+  if (decision.action === "skip") return openSkipMeal(s, decision.meal, findIdx(decision.meal));
+  if (decision.action === "different") return openAssistantDifferent(s, decision.meal);
+  if (decision.action === "swap_meal") return openAssistantSwapMeal(s, decision.meal);
+}
+
+function openAssistantNoMeal(s, situation){
+  var html = "<div class=\"mtitle\">Sem refeições previstas</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Não há mais refeições previstas para hoje. Se precisares mesmo de ajuda, pede ao teu profissional.</p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"askPro\" style=\"width:100%;\">Pedir ajuda ao profissional</button>";
+  var sheet = openModal(html);
+  sheet.querySelector("#askPro").addEventListener("click", function(){
+    createHelpRequest(s, null, situation, "Sem refeições previstas para hoje.");
+    showToast("O teu profissional vai ver este pedido");
+    closeModal();
+  });
+}
+
+function openAssistantPickFood(s, m, swappable){
+  var html = "<div class=\"mtitle\">Qual alimento não tens?</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + escapeHtml(m.name) + "</p>" +
+    swappable.map(function(f, i){
+      return "<div class=\"food-item\" data-i=\"" + i + "\" style=\"cursor:pointer;\"><span class=\"fname\">" + escapeHtml(f.name) + "</span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span></div>";
+    }).join("");
+  var sheet = openModal(html);
+  sheet.querySelectorAll(".food-item[data-i]").forEach(function(el){
+    el.addEventListener("click", function(){
+      var f = swappable[parseInt(el.getAttribute("data-i"),10)];
+      var fi = m.foods.indexOf(f);
+      openSubstitution(f, function(chosen){
+        applySubstitution(s, m, fi, chosen);
+        commitMealView(s, m);
+        renderAlunoTab(s);
+        persistStudent(s);
+        showToast("Refeição adaptada");
+        closeModal();
+      }, s, m);
+    });
+  });
+}
+
+function openAssistantAskProfessional(s, meal, situation, prefilledNote){
+  var html = "<div class=\"mtitle\">Pedir ajuda ao profissional</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + (meal ? "Sobre: " + escapeHtml(meal.name) : "Descreve a tua dúvida.") + "</p>" +
+    "<textarea id=\"helpNote\" placeholder=\"Descreve a situação (opcional)\" style=\"width:100%; min-height:80px; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.88rem; margin-bottom:12px;\">" + escapeHtml(prefilledNote || "") + "</textarea>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"sendHelp\" style=\"width:100%;\">Enviar pedido</button>";
+  var sheet = openModal(html);
+  sheet.querySelector("#sendHelp").addEventListener("click", function(){
+    var note = sheet.querySelector("#helpNote").value;
+    createHelpRequest(s, meal, situation, note);
+    showToast("O teu profissional vai ver este pedido");
+    closeModal();
+  });
+}
+
+function openAssistantDifferent(s, meal){
+  var canMarkFlexible = !!(meal && computeFlexibilityProfile(s).freeMealEnabled && !mealCountsToday(meal));
+  var html = "<div class=\"mtitle\">Já comeste algo diferente?</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Sem problema — um momento diferente não desfaz o teu progresso. Retoma o plano com naturalidade na próxima refeição.</p>" +
+    (canMarkFlexible ?
+      "<button type=\"button\" class=\"btn primary\" id=\"markFlex\" style=\"width:100%; margin-bottom:8px;\">Marcar " + escapeHtml(meal.name) + " como flexível</button>" +
+      "<button type=\"button\" class=\"btn\" id=\"gotIt\" style=\"width:100%;\">Percebido</button>"
+      : "<button type=\"button\" class=\"btn primary\" id=\"gotIt\" style=\"width:100%;\">Percebido</button>");
+  var sheet = openModal(html);
+  var flexBtn = sheet.querySelector("#markFlex");
+  if (flexBtn) flexBtn.addEventListener("click", function(){
+    markFlexible(s, meal, "diferente");
+    commitMealView(s, meal);
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast(meal.name + " marcada como flexível");
+    closeModal();
+  });
+  sheet.querySelector("#gotIt").addEventListener("click", closeModal);
+}
+
+function openAssistantSwapMeal(s, meal){
+  var hasSwappableFood = meal.foods.some(function(f){ return f.group; });
+  var html = "<div class=\"mtitle\">Trocar " + escapeHtml(meal.name) + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">O que preferes fazer?</p>" +
+    (hasSwappableFood ? "<button type=\"button\" class=\"btn primary\" id=\"swapFood\" style=\"width:100%; margin-bottom:8px;\">Substituir um alimento</button>" : "") +
+    "<button type=\"button\" class=\"btn\" id=\"swapAdapt\" style=\"width:100%;\">Adaptar a refeição toda</button>";
+  var sheet = openModal(html);
+  var swapFoodBtn = sheet.querySelector("#swapFood");
+  if (swapFoodBtn) swapFoodBtn.addEventListener("click", function(){
+    openAssistantPickFood(s, meal, meal.foods.filter(function(f){ return f.group; }));
+  });
+  sheet.querySelector("#swapAdapt").addEventListener("click", function(){
+    meal.adapted = true;
+    logAdaptation(s, meal, "adaptacao", {reason:"Troca de refeição"});
+    commitMealView(s, meal);
+    renderAlunoTab(s);
+    persistStudent(s);
+    showToast("Refeição adaptada");
+    closeModal();
+  });
 }
 
 function openMealDetail(s, idx){
@@ -1675,13 +1892,7 @@ function tplHoje(s){
     "<p class=\"muted-p\" style=\"margin-top:10px;\">A consistência ao longo do tempo importa mais do que um único dia.</p>" +
   "</div>";
 
-  var profileEnd = computeFlexibilityProfile(s);
-  if (profileEnd.restaurantAdaptation){
-    html += "<button type=\"button\" class=\"btn\" id=\"openScenario\" style=\"width:100%; margin-bottom:8px;\">Hoje vai ser diferente?</button>";
-  }
-  if (profileEnd.substitutionsEnabled && nm){
-    html += "<button type=\"button\" class=\"btn\" id=\"lowTimeBtn\" style=\"width:100%;\">Tenho pouco tempo</button>";
-  }
+  html += "<button type=\"button\" class=\"btn primary\" id=\"openAssistant\" style=\"width:100%;\">Precisas de ajuda com a alimentação?</button>";
 
   return html;
 }
@@ -2087,11 +2298,8 @@ function wireAlunoTab(s){
   var goBtn = el.querySelector("#goToMeal");
   if (goBtn) goBtn.addEventListener("click", function(){ openMealDetail(s, parseInt(goBtn.getAttribute("data-midx"),10)); });
 
-  var scBtn = el.querySelector("#openScenario");
-  if (scBtn) scBtn.addEventListener("click", function(){ openScenarioPicker(s); });
-
-  var lowTimeBtn = el.querySelector("#lowTimeBtn");
-  if (lowTimeBtn) lowTimeBtn.addEventListener("click", function(){ openLowTime(s); });
+  var assistantBtn = el.querySelector("#openAssistant");
+  if (assistantBtn) assistantBtn.addEventListener("click", function(){ openAssistant(s); });
 
   el.querySelectorAll(".food-item[data-fidx]").forEach(function(item){
     item.addEventListener("click", function(){
@@ -2430,7 +2638,7 @@ function proStat(v, l){
   return "<div class=\"pro-stat-card\"><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></div>";
 }
 
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
@@ -2444,6 +2652,15 @@ function renderProDetailMain(s){
 
 function renderProTabContent(s){
   var el = document.getElementById("proTabContent");
+  if (state.proTab==="pedidos"){
+    el.innerHTML = "<p class=\"muted-p\">A carregar pedidos...</p>";
+    loadHelpRequests(s.id).then(function(reqs){
+      if (state.proTab !== "pedidos") return; // o profissional já mudou de separador
+      el.innerHTML = tplProPedidos(s, reqs);
+      wireProPedidos(s, reqs);
+    });
+    return;
+  }
   if (state.proTab==="perfil") el.innerHTML = tplProPerfil(s);
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
@@ -2674,6 +2891,63 @@ function tplProNotas(s){
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Visíveis apenas para a equipa Evolve — o aluno não tem acesso.</p>" +
     "<textarea class=\"notes-area\" id=\"proNotes\">" + s.notes + "</textarea>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>";
+}
+
+var HELP_SITUATION_LABEL = {};
+ASSISTANT_SITUATIONS.forEach(function(sit){ HELP_SITUATION_LABEL[sit.key] = sit.label; });
+
+function tplProPedidos(s, reqs){
+  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pedidos de ajuda</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Situações que " + escapeHtml(s.name.split(" ")[0]) + " assinalou através do assistente — a resposta e a decisão são sempre tuas. A nota abaixo de cada pedido é privada, o aluno nunca a vê.</p>";
+  if (!reqs.length){
+    html += "<p class=\"muted-p\">Ainda sem pedidos de ajuda.</p>";
+    return html;
+  }
+  html += reqs.map(function(r){
+    var noteObj = Array.isArray(r.help_request_notes) ? r.help_request_notes[0] : r.help_request_notes;
+    var existingNote = (noteObj && noteObj.professional_note) || "";
+    var isHandled = r.status === "tratado";
+    return "<div class=\"card\" style=\"margin-bottom:10px;\">" +
+      "<div style=\"display:flex; justify-content:space-between; align-items:flex-start; gap:8px;\">" +
+        "<div>" +
+          "<div class=\"hlabel\">" + escapeHtml(HELP_SITUATION_LABEL[r.situation] || r.situation) + "</div>" +
+          (r.meal_name ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">Refeição: " + escapeHtml(r.meal_name) + "</div>" : "") +
+          "<div class=\"muted-p\" style=\"font-size:0.72rem; margin-top:2px;\">" + fmtDatePt(r.created_at.slice(0,10)) + " · " + r.created_at.slice(11,16) + "</div>" +
+        "</div>" +
+        "<span class=\"pill " + (isHandled ? "good" : "warn") + "\">" + (isHandled ? "Tratado" : "Pendente") + "</span>" +
+      "</div>" +
+      (r.note ? "<p class=\"muted-p\" style=\"margin-top:8px;\">" + escapeHtml(r.note) + "</p>" : "") +
+      "<div style=\"margin-top:10px;\">" +
+        "<label style=\"font-size:0.78rem; color:var(--muted);\">Nota privada (só a equipa vê)</label>" +
+        "<textarea class=\"pedido-nota\" data-id=\"" + r.id + "\" style=\"width:100%; min-height:50px; border:1px solid var(--line-strong); border-radius:10px; padding:8px 10px; background:var(--bg); font-size:0.85rem; margin-top:4px;\">" + escapeHtml(existingNote) + "</textarea>" +
+      "</div>" +
+      "<div style=\"display:flex; gap:8px; margin-top:8px;\">" +
+        "<button type=\"button\" class=\"btn btn-sm pedido-save\" data-id=\"" + r.id + "\">Guardar nota</button>" +
+        (!isHandled ? "<button type=\"button\" class=\"btn primary btn-sm pedido-tratado\" data-id=\"" + r.id + "\">Marcar como tratado</button>" : "") +
+      "</div>" +
+    "</div>";
+  }).join("");
+  return html;
+}
+
+function wireProPedidos(s, reqs){
+  var el = document.getElementById("proTabContent");
+  el.querySelectorAll(".pedido-save").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-id");
+      var note = el.querySelector(".pedido-nota[data-id=\"" + id + "\"]").value;
+      saveHelpRequestNote(id, note).then(function(){ showToast("Nota guardada"); });
+    });
+  });
+  el.querySelectorAll(".pedido-tratado").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-id");
+      markHelpRequestHandled(id).then(function(){
+        showToast("Pedido marcado como tratado");
+        renderProTabContent(s);
+      });
+    });
+  });
 }
 
 var ADAPTATION_TYPE_LABEL = {
