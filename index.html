@@ -295,6 +295,7 @@
   .photo-thumb{position:relative; border-radius:10px; overflow:hidden; aspect-ratio:3/4; background:var(--surface-2); border:1px solid var(--line);}
   .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
   .photo-thumb .pdate{position:absolute; bottom:4px; left:4px; font-size:0.6rem; background:rgba(0,0,0,0.65); color:#fff; padding:2px 6px; border-radius:6px; font-family:var(--mono);}
+  .photo-thumb .photo-remove{position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(0,0,0,0.65); color:#fff; font-size:0.7rem; cursor:pointer; line-height:1;}
 
   .mini-select{border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:9px; padding:8px 10px; font-size:0.82rem; font-family:var(--sans);}
   .compare-row{display:flex; gap:10px;}
@@ -364,22 +365,46 @@
           <label for="authEmail">Email</label>
           <input type="email" id="authEmail" name="email" autocomplete="username" required>
         </div>
-        <div class="checkin-field">
+        <div class="checkin-field" id="authPasswordField">
           <label for="authPassword">Password</label>
           <input type="password" id="authPassword" name="password" autocomplete="current-password" minlength="6" required>
         </div>
-        <p class="muted-p" id="authError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>
+        <p class="muted-p" id="authError" style="display:none; margin-bottom:10px;"></p>
         <button type="submit" class="btn primary" id="authSubmit" style="width:100%;">Entrar</button>
       </form>
       <p class="muted-p" style="margin-top:14px; text-align:center;">
         <a href="#" id="authToggle" class="linklike">Ainda não tens conta? Criar conta</a>
       </p>
+      <p class="muted-p" style="margin-top:8px; text-align:center;" id="authForgotWrap">
+        <a href="#" id="authForgot" class="linklike">Esqueci-me da password</a>
+      </p>
     </div>
   </div>
 
+  <div id="recoveryScreen" class="hidden" style="max-width:380px; margin:40px auto;">
+    <div class="card">
+      <div class="eyebrow" style="margin-bottom:4px;">Nova password</div>
+      <p class="muted-p" style="margin-bottom:16px;">Confirmaste o link de recuperação — escolhe uma password nova para a tua conta.</p>
+      <form id="recoveryForm">
+        <div class="checkin-field">
+          <label for="recoveryPassword">Nova password</label>
+          <input type="password" id="recoveryPassword" name="password" autocomplete="new-password" minlength="6" required>
+        </div>
+        <p class="muted-p" id="recoveryError" style="display:none; margin-bottom:10px;"></p>
+        <button type="submit" class="btn primary" id="recoverySubmit" style="width:100%;">Guardar nova password</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="connectionErrorScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Sem ligação</div>
+    <p class="muted-p">Não foi possível ligar ao servidor. Verifica a tua ligação à internet.</p>
+    <button type="button" class="btn primary" id="connectionRetry" style="margin-top:14px;">Tentar novamente</button>
+  </div>
+
   <div id="noStudentScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
-    <div class="eyebrow" style="margin-bottom:8px;">Conta sem plano associado</div>
-    <p class="muted-p">A tua conta ainda não está associada a nenhum aluno. Pede ao teu profissional Evolve para te convidar com este email.</p>
+    <div class="eyebrow" style="margin-bottom:8px;">Conta sem aluno associado</div>
+    <p class="muted-p">A tua conta ainda não está associada a nenhum aluno. Se achas que isto é um erro, confirma com o teu profissional Evolve que este é o email exato para o qual foste convidado — ou pede um novo convite.</p>
     <button type="button" class="btn" id="noStudentSignOut" style="margin-top:14px;">Sair</button>
   </div>
 
@@ -1037,7 +1062,7 @@ function computeAdherence(s){
 
 var STUDENTS = [
   {
-    id:"maria", initials:"MS", name:"Maria Silva", age:32, sex:"Feminino", height:165,
+    id:"maria", isDemo:true, initials:"MS", name:"Maria Silva", age:32, sex:"Feminino", height:165,
     weightInitial:74.0, weightCurrent:68.0, weightGoal:64,
     goal:"Perda de gordura", trainingsPerWeek:4, trainingDays:[1,2,4,5], trainingType:"Musculação + cardio leve", trainingTime:"19:00",
     wakeTime:"07:00", sleepTime:"23:30",
@@ -1083,7 +1108,7 @@ var STUDENTS = [
     lastCheckinDaysAgo:7
   },
   {
-    id:"rui", initials:"RC", name:"Rui Costa", age:26, sex:"Masculino", height:180,
+    id:"rui", isDemo:true, initials:"RC", name:"Rui Costa", age:26, sex:"Masculino", height:180,
     weightInitial:71.0, weightCurrent:74.5, weightGoal:80,
     goal:"Ganho de massa muscular", trainingsPerWeek:5, trainingDays:[1,2,3,4,5], trainingType:"Musculação (hipertrofia)", trainingTime:"07:00",
     wakeTime:"06:00", sleepTime:"23:00",
@@ -1121,7 +1146,7 @@ var STUDENTS = [
     lastCheckinDaysAgo:12
   },
   {
-    id:"sofia", initials:"SM", name:"Sofia Martins", age:29, sex:"Feminino", height:170,
+    id:"sofia", isDemo:true, initials:"SM", name:"Sofia Martins", age:29, sex:"Feminino", height:170,
     weightInitial:63.0, weightCurrent:63.2, weightGoal:63,
     goal:"Manutenção / recomposição", trainingsPerWeek:3, trainingDays:[1,3,5], trainingType:"Treino funcional", trainingTime:"18:30",
     wakeTime:"07:30", sleepTime:"23:45",
@@ -1219,6 +1244,17 @@ function migrateLegacyMealState(rawMeals){
   return any ? {date: todayISO(), entries: entries} : null;
 }
 
+// _resolvedUrl é um URL assinado TEMPORÁRIO (expira ao fim de horas — ver
+// resolvePhotoUrls) calculado em memória a cada sessão; nunca deve ser
+// escrito na base de dados, só o "path" é permanente. Sem este strip, uma
+// gravação qualquer feita depois de resolvePhotoUrls() ter corrido gravava
+// esse URL já expirado na coluna photos (Fase 9 — bug encontrado na auditoria).
+function stripPhotoState(p){
+  var c = Object.assign({}, p);
+  delete c._resolvedUrl;
+  return c;
+}
+
 function studentToRow(s){
   return {
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
@@ -1229,11 +1265,11 @@ function studentToRow(s){
     meals_preferred: s.mealsPreferred, budget: s.budget, cook_time: s.cookTime, work: s.work, weekend_note: s.weekendNote,
     targets: s.targets || {}, flexibility: s.flexibility, alerts: s.alerts || [], notes: s.notes || "",
     meals: (s.meals || []).map(stripMealState), checkins: s.checkins || [], weights: s.weights || [], assessments: s.assessments || [],
-    allow_photos: !!s.allowPhotos, photos: s.photos || [], plan_history: s.planHistory || [],
+    allow_photos: !!s.allowPhotos, photos: (s.photos || []).map(stripPhotoState), plan_history: s.planHistory || [],
     meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
     flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || [],
     substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || [],
-    meal_daily_state: s.mealDailyState || null
+    meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo
   };
 }
 
@@ -1251,7 +1287,7 @@ function rowToStudent(r){
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
     flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
     substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || [],
-    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals)
+    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo
   };
 }
 
@@ -1303,7 +1339,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil" };
+var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", showDemoStudents:false };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -2272,11 +2308,46 @@ function resolvePhotoUrls(students, expirySeconds){
   return Promise.all(jobs);
 }
 
+// data-path identifica a foto a remover (removePhoto() apaga do Storage e do
+// registo do aluno). Uma foto só sem "path" (fallback dataUrl do modo local)
+// não tem nada para remover no Storage — nesse caso o botão só tira do array.
 function photoGridHtml(s){
   if (!s.photos.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotografias.</p>";
-  return "<div class=\"photo-grid\">" + s.photos.map(function(p){
-    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span></div>";
+  return "<div class=\"photo-grid\">" + s.photos.map(function(p, i){
+    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span>" +
+      "<button type=\"button\" class=\"photo-remove\" data-idx=\"" + i + "\" title=\"Remover fotografia\" aria-label=\"Remover fotografia\">✕</button></div>";
   }).join("") + "</div>";
+}
+
+// Remove uma foto de progresso: apaga o objeto no Storage (se tiver path —
+// bucket privado, exige a política de delete do aluno/profissional) e só
+// depois tira do array e grava. Pedido explícito da Fase 9: o aluno deve
+// poder pedir a remoção de uma fotografia, com as permissões corretas.
+function removePhoto(s, idx, onDone){
+  var photo = s.photos[idx];
+  if (!photo) return;
+  var afterRemove = function(){
+    s.photos.splice(idx, 1);
+    persistStudent(s);
+    if (onDone) onDone();
+  };
+  if (photo.path && sbReady){
+    sb.storage.from("progress-photos").remove([photo.path]).then(function(res){
+      if (res.error){ showToast("⚠ Não foi possível remover a fotografia"); return; }
+      afterRemove();
+    }).catch(function(){ showToast("⚠ Não foi possível remover a fotografia"); });
+  } else {
+    afterRemove();
+  }
+}
+
+function wirePhotoRemove(s, el, onDone){
+  el.querySelectorAll(".photo-remove").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if (!window.confirm("Remover esta fotografia? Não é possível desfazer.")) return;
+      removePhoto(s, parseInt(btn.getAttribute("data-idx"), 10), onDone);
+    });
+  });
 }
 
 function tplPhotoCompare(s){
@@ -2476,6 +2547,7 @@ function wireAlunoTab(s){
     }
   });
   wirePhotoCompare(s, el);
+  wirePhotoRemove(s, el, function(){ renderAlunoTab(s); });
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
@@ -2531,30 +2603,41 @@ function renderProShell(){
 
 function daysAgoLabel(n){ if (n===0) return "hoje"; if (n===1) return "há 1 dia"; return "há " + n + " dias"; }
 
+// Alunos de demonstração (is_demo) ficam fora da operação diária por
+// omissão — o profissional só os vê se pedir explicitamente (Fase 9). Isto é
+// só um filtro de visualização: RLS/acesso nunca dependem de is_demo, e o
+// profissional continua a poder abrir o perfil de um aluno de demo pelo id.
+function visibleStudentsForDashboard(){
+  return state.showDemoStudents ? STUDENTS : STUDENTS.filter(function(s){ return !s.isDemo; });
+}
+
 function renderProDashboardMain(){
   var main = document.getElementById("proMain");
-  var activeCount = STUDENTS.length;
-  var pendingCheckins = STUDENTS.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
-  var alertCount = STUDENTS.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
+  var visible = visibleStudentsForDashboard();
+  var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
+  var activeCount = visible.length;
+  var pendingCheckins = visible.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
+  var alertCount = visible.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
-    proStat(STUDENTS.length, "Total de alunos") +
+    proStat(visible.length, "Total de alunos") +
     proStat(activeCount, "Alunos ativos") +
     proStat(pendingCheckins, "Check-ins pendentes") +
     proStat(alertCount, "Alertas") +
   "</div>";
 
-  html += "<div style=\"display:flex; justify-content:flex-end; margin-bottom:14px;\">" +
+  html += "<div style=\"display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;\">" +
+    (demoCount ? "<button type=\"button\" class=\"btn btn-sm\" id=\"toggleDemo\">" + (state.showDemoStudents ? "Ocultar contas de demonstração" : "Mostrar contas de demonstração (" + demoCount + ")") + "</button>" : "<span></span>") +
     "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\">+ Convidar aluno</button>" +
   "</div>";
 
   html += "<div class=\"student-list\">";
-  STUDENTS.forEach(function(s){
+  visible.forEach(function(s){
     var adh = computeAdherence(s);
     var alerts = computeDashboardAlerts(s);
     html += "<div class=\"card student-card\" data-id=\"" + s.id + "\">" +
       "<div class=\"student-card-top\"><div class=\"avatar\">" + s.initials + "</div>" +
-        "<div><div class=\"sname\">" + s.name + "</div><div class=\"sgoal\">" + s.goal + "</div></div></div>" +
+        "<div><div class=\"sname\">" + s.name + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + s.goal + "</div></div></div>" +
       (alerts.length ? "<div class=\"alerts\">" + alerts.map(function(a){ return "<span class=\"pill " + a.type + "\">⚠ " + escapeHtml(a.text) + "</span>"; }).join("") + "</div>" : "") +
       (adh==null ?
         "<div class=\"muted-p\" style=\"margin-top:12px;\">Sem check-ins ainda</div>" :
@@ -2570,6 +2653,11 @@ function renderProDashboardMain(){
     c.addEventListener("click", function(){ state.proSelectedId = c.getAttribute("data-id"); state.proTab="perfil"; renderProShell(); });
   });
   document.getElementById("btnInvite").addEventListener("click", openInviteModal);
+  var toggleDemoBtn = document.getElementById("toggleDemo");
+  if (toggleDemoBtn) toggleDemoBtn.addEventListener("click", function(){
+    state.showDemoStudents = !state.showDemoStudents;
+    renderProDashboardMain();
+  });
 }
 
 /* ---------- Convite / questionário inicial ---------- */
@@ -3549,6 +3637,7 @@ function wireProTab(s){
     persistStudent(s);
   });
   wirePhotoCompare(s, el);
+  wirePhotoRemove(s, el, function(){ renderProTabContent(s); });
 
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){
@@ -3613,7 +3702,7 @@ document.querySelectorAll("#modeSwitch button").forEach(function(b){
 
 /* ===================== AUTENTICAÇÃO ===================== */
 var authFormMode = "signin";
-var SCREEN_IDS = ["appLoading","authScreen","noStudentScreen","alunoApp","proApp"];
+var SCREEN_IDS = ["appLoading","authScreen","recoveryScreen","connectionErrorScreen","noStudentScreen","alunoApp","proApp"];
 
 function hideAllScreens(){
   SCREEN_IDS.forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
@@ -3625,10 +3714,16 @@ function showLoading(text){
   document.getElementById("appLoadingText").textContent = text || "A carregar...";
 }
 
+// Terceiro modo, além de "signin"/"signup": "recover" pede o email e envia o
+// link de recuperação (sb.auth.resetPasswordForEmail) — não troca a password
+// aqui, isso só acontece no ecrã "recoveryScreen", depois de o aluno confirmar
+// o link recebido por email (ver o evento PASSWORD_RECOVERY em boot()).
 function setAuthMode(mode){
   authFormMode = mode;
   var pw = document.getElementById("authPassword");
+  var pwField = document.getElementById("authPasswordField");
   var errEl = document.getElementById("authError");
+  var forgotWrap = document.getElementById("authForgotWrap");
   errEl.style.display = "none";
   errEl.style.color = "var(--critical)";
   if (mode === "signup"){
@@ -3636,12 +3731,29 @@ function setAuthMode(mode){
     document.getElementById("authSubtitle").textContent = "Usa o email para o qual foste convidado (ou o teu, se és o profissional).";
     document.getElementById("authSubmit").textContent = "Criar conta";
     document.getElementById("authToggle").textContent = "Já tens conta? Entrar";
+    document.getElementById("authToggle").style.display = "";
+    forgotWrap.style.display = "none";
+    pwField.style.display = "";
+    pw.required = true;
     pw.setAttribute("autocomplete","new-password");
+  } else if (mode === "recover"){
+    document.getElementById("authTitle").textContent = "Recuperar password";
+    document.getElementById("authSubtitle").textContent = "Escreve o teu email — enviamos-te um link para criares uma password nova.";
+    document.getElementById("authSubmit").textContent = "Enviar link";
+    document.getElementById("authToggle").textContent = "Voltar a entrar";
+    document.getElementById("authToggle").style.display = "";
+    forgotWrap.style.display = "none";
+    pwField.style.display = "none";
+    pw.required = false;
   } else {
     document.getElementById("authTitle").textContent = "Entrar";
     document.getElementById("authSubtitle").textContent = "Acede à tua conta Evolve.";
     document.getElementById("authSubmit").textContent = "Entrar";
     document.getElementById("authToggle").textContent = "Ainda não tens conta? Criar conta";
+    document.getElementById("authToggle").style.display = "";
+    forgotWrap.style.display = "";
+    pwField.style.display = "";
+    pw.required = true;
     pw.setAttribute("autocomplete","current-password");
   }
 }
@@ -3659,6 +3771,8 @@ function translateAuthError(msg){
   if (/invalid login credentials/i.test(msg)) return "Email ou password incorretos.";
   if (/password should be/i.test(msg)) return "A password deve ter pelo menos 6 caracteres.";
   if (/email not confirmed/i.test(msg)) return "Confirma o teu email antes de entrares (verifica a caixa de entrada).";
+  if (/for security purposes|only request this/i.test(msg)) return "Já pediste isto há pouco tempo — espera um pouco antes de tentar de novo.";
+  if (/failed to fetch|network/i.test(msg)) return "Não foi possível ligar — verifica a tua ligação e tenta novamente.";
   return msg;
 }
 
@@ -3735,7 +3849,13 @@ function handleSession(session){
 
 document.getElementById("authToggle").addEventListener("click", function(e){
   e.preventDefault();
-  setAuthMode(authFormMode === "signin" ? "signup" : "signin");
+  if (authFormMode === "recover") setAuthMode("signin");
+  else setAuthMode(authFormMode === "signin" ? "signup" : "signin");
+});
+
+document.getElementById("authForgot").addEventListener("click", function(e){
+  e.preventDefault();
+  setAuthMode("recover");
 });
 
 document.getElementById("authForm").addEventListener("submit", function(e){
@@ -3746,6 +3866,29 @@ document.getElementById("authForm").addEventListener("submit", function(e){
   errEl.style.display = "none";
   var submitBtn = document.getElementById("authSubmit");
   submitBtn.disabled = true;
+
+  if (authFormMode === "recover"){
+    sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname }).then(function(res){
+      submitBtn.disabled = false;
+      // Nunca confirmamos aqui se o email existe ou não (evita revelar quais
+      // emails têm conta) — a mensagem é sempre a mesma, exceto para erros de
+      // ligação/limite de pedidos, que não revelam nada sobre contas.
+      if (res.error && /failed to fetch|network/i.test(res.error.message)){
+        errEl.style.color = "var(--critical)";
+        errEl.textContent = translateAuthError(res.error.message);
+      } else {
+        errEl.style.color = "var(--accent-strong)";
+        errEl.textContent = "Se existir uma conta com este email, foi enviado um link para criares uma password nova.";
+      }
+      errEl.style.display = "block";
+    }).catch(function(){
+      submitBtn.disabled = false;
+      errEl.style.color = "var(--critical)";
+      errEl.textContent = "Não foi possível ligar — tenta novamente.";
+      errEl.style.display = "block";
+    });
+    return;
+  }
 
   var action = authFormMode === "signup"
     ? sb.auth.signUp({ email: email, password: password })
@@ -3775,12 +3918,46 @@ document.getElementById("authForm").addEventListener("submit", function(e){
   });
 });
 
+document.getElementById("recoveryForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var password = document.getElementById("recoveryPassword").value;
+  var errEl = document.getElementById("recoveryError");
+  errEl.style.display = "none";
+  var submitBtn = document.getElementById("recoverySubmit");
+  submitBtn.disabled = true;
+  sb.auth.updateUser({ password: password }).then(function(res){
+    submitBtn.disabled = false;
+    if (res.error){
+      errEl.style.color = "var(--critical)";
+      errEl.textContent = translateAuthError(res.error.message);
+      errEl.style.display = "block";
+      return;
+    }
+    showToast("Password atualizada");
+    sb.auth.getSession().then(function(sessRes){ handleSession(sessRes.data && sessRes.data.session); });
+  }).catch(function(){
+    submitBtn.disabled = false;
+    errEl.style.color = "var(--critical)";
+    errEl.textContent = "Não foi possível ligar — tenta novamente.";
+    errEl.style.display = "block";
+  });
+});
+
 function doSignOut(){
   sb.auth.signOut().then(function(){ authRole = null; showAuthScreen("signin"); });
 }
 document.getElementById("signOutBtn").addEventListener("click", doSignOut);
 document.getElementById("noStudentSignOut").addEventListener("click", doSignOut);
+document.getElementById("connectionRetry").addEventListener("click", function(){ boot(); });
 
+// Verifica sessão e liga-se aos eventos de auth. Um evento PASSWORD_RECOVERY
+// chega quando o aluno clica no link do email de recuperação — nesse momento
+// a Supabase já lhe deu uma sessão temporária só para trocar a password (ver
+// recoveryScreen acima), por isso nunca o mandamos para o ecrã de login normal
+// nesse caso, mesmo que handleSession() também possa correr em paralelo.
+// Falha de rede aqui é distinta de "sem sessão": mostra connectionErrorScreen
+// em vez de cair silenciosamente no ecrã de login, que pareceria uma sessão
+// perdida em vez de uma falha de ligação.
 function boot(){
   initSupabase();
   if (!sbReady){
@@ -3795,10 +3972,15 @@ function boot(){
   sb.auth.getSession().then(function(res){
     handleSession(res.data && res.data.session);
   }).catch(function(){
-    showAuthScreen("signin");
+    hideAllScreens();
+    document.getElementById("connectionErrorScreen").classList.remove("hidden");
   });
   sb.auth.onAuthStateChange(function(event){
     if (event === "SIGNED_OUT") showAuthScreen("signin");
+    if (event === "PASSWORD_RECOVERY"){
+      hideAllScreens();
+      document.getElementById("recoveryScreen").classList.remove("hidden");
+    }
   });
 }
 

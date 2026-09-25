@@ -228,7 +228,7 @@ function jsAppendOnly(oldArr, newArr){
   check.check("12. help_request_notes tem 'comment on table' a documentar o isolamento total do aluno", /comment on table help_request_notes is/.test(sql));
 
   // A migração assume-se explicitamente como não validada/aplicada, para não ser confundida com as da Fase 7
-  check.check("12. A migração assinala explicitamente que ainda não foi aplicada/validada", /AINDA NÃO APLICADA/.test(sql));
+  check.check("12. A migração documenta que foi aplicada e validada com contas reais (Fase 9)", /APLICADA e validada/.test(sql));
 })();
 
 // ---- 13. verify_security.sql cobre os 5 critérios com queries e testes funcionais (bloco G) ----

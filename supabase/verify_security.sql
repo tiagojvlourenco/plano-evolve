@@ -6,9 +6,10 @@
 -- ao trigger.
 --
 -- As queries 9-10 e o bloco de testes G são da Fase 8 (help_requests /
--- help_request_notes) — só correm depois de 0009_help_requests.sql, que
--- AINDA NÃO FOI APLICADA nem validada com dados reais. Não publiques nada
--- desta fase antes de correr o bloco G com sucesso.
+-- help_request_notes) — 0009_help_requests.sql já foi APLICADA e validada em
+-- 2026-09-25, com duas contas de aluno reais e uma de profissional (os 6
+-- testes do bloco G passaram). Ficam aqui para repetires a validação sempre
+-- que quiseres.
 -- Cada bloco tem uma pergunta e o resultado esperado. Não altera dados.
 
 -- 1. As políticas esperadas existem?
@@ -202,6 +203,31 @@ group by tablename, cmd;
 --        pedido como "Tratado" com a nota visível — e que a MESMA nota nunca
 --        aparece em lado nenhum da experiência de Aluno.
 --
+-- 11. Flag is_demo existe e os alunos de demonstração/teste estão marcados?
+-- (Fase 9 — AINDA NÃO APLICADA. Corre isto só depois de 0010_demo_flag.sql.)
+select id, name, is_demo from students order by id;
+-- Esperado: maria/rui/sofia/tiago com is_demo = true; qualquer aluno real
+-- (convidado depois desta migração) com is_demo = false.
+
+-- 12. As políticas de remoção de fotografias existem?
+-- (Fase 9 — AINDA NÃO APLICADA. Corre isto só depois de 0011_photo_deletion.sql.)
+select policyname, cmd
+from pg_policies
+where schemaname = 'storage' and tablename = 'objects'
+  and policyname in ('aluno remove as suas fotos', 'profissional remove fotos dos alunos');
+-- Esperado: as 2 políticas, ambas com cmd = DELETE.
+
+-- ===================== Teste funcional H: remoção de fotografias (Fase 9) =====================
+-- AINDA NÃO APLICADA/VALIDADA — precisa de 0011_photo_deletion.sql aplicada.
+-- Sessão de um aluno real com allowPhotos ativo:
+--   H1. Faz upload de uma fotografia pela app (separador Evolução).
+--   H2. Na consola: var { data } = await sb.storage.from("progress-photos").list(sb.auth.getUser() then .data.user.id)
+--       Esperado: aparece o ficheiro que acabaste de enviar.
+--   H3. Na app, toca no "✕" sobre a fotografia e confirma a remoção.
+--   H4. Repete o list() do passo H2 — Esperado: o ficheiro já não aparece.
+--   H5. Confirma que students.photos (SQL Editor, select photos from students
+--       where id = '<id do aluno>') já não tem essa entrada.
+
 -- ===================== Nota histórica: reclamar o convite =====================
 -- Ao validar o fluxo D (conta nova, sem aluno associado) com uma conta de
 -- aluno real criada via convite, um UPDATE direto na tabela para associar

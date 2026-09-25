@@ -1,6 +1,8 @@
 -- EVOLVE NUTRITION — Fase 8: Assistente Alimentar Guiado, pedidos de ajuda
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0008 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais — ver nota no fim do ficheiro.
+-- APLICADA e validada com duas contas de aluno reais e uma de profissional em
+-- 2026-09-25 (bloco G de verify_security.sql, os 6 testes passaram) — ver
+-- nota no fim do ficheiro.
 --
 -- Decisão de arquitetura: ao contrário do resto da app (que guarda quase tudo
 -- em colunas JSONB dentro de "students"), os pedidos de ajuda ficam em
@@ -107,10 +109,9 @@ comment on table help_request_notes is
   'Notas privadas sobre um pedido de ajuda. NENHUMA política para o aluno — RLS bloqueia por omissão em todas as operações. Só o profissional (tabela professionals) tem acesso.';
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção nem validada com uma conta de aluno
--- real. A Fase 7 mostrou que uma condição logicamente correta (confirmada até
--- por uma função de diagnóstico) pode ainda assim falhar de forma inesperada
--- via PostgREST num UPDATE direto (ver 0008_claim_via_function.sql) — por
--- isso esta migração só deve ser aplicada e depois validada com os testes
--- funcionais de supabase/verify_security.sql (bloco G), com uma conta de
--- aluno e uma de profissional reais, antes de qualquer publicação.
+-- APLICADA e validada em produção em 2026-09-25: os 6 testes funcionais do
+-- bloco G de supabase/verify_security.sql (criar/ler próprio pedido,
+-- isolamento entre alunos, bloqueio de update/delete pelo aluno, notas
+-- privadas invisíveis ao aluno, gestão pelo profissional) passaram com duas
+-- contas de aluno reais e uma de profissional real. Os dados de teste
+-- gerados durante essa validação foram removidos depois.
