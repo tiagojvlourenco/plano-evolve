@@ -1316,7 +1316,10 @@ function studentToRow(s){
     meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo, active: s.active !== false,
     meals_at_work_ease: s.mealsAtWorkEase || null, uses_supplements: !!s.usesSupplements, supplements: s.supplements || [],
     daily_eating_description: s.dailyEatingDescription || null, overeating_meals_per_week: s.overeatingMealsPerWeek != null ? s.overeatingMealsPerWeek : null,
-    hardest_food_to_resist: s.hardestFoodToResist || null, water_intake: s.waterIntake || null
+    hardest_food_to_resist: s.hardestFoodToResist || null, water_intake: s.waterIntake || null,
+    medical_conditions: s.medicalConditions || null, current_medication: s.currentMedication || null,
+    physical_limitations: s.physicalLimitations || null, medical_notes: s.medicalNotes || null,
+    weight_log_photos: (s.weightLogPhotos || []).map(stripPhotoState)
   };
 }
 
@@ -1338,7 +1341,10 @@ function rowToStudent(r){
     mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo, active: r.active !== false,
     mealsAtWorkEase: r.meals_at_work_ease || null, usesSupplements: !!r.uses_supplements, supplements: r.supplements || [],
     dailyEatingDescription: r.daily_eating_description || null, overeatingMealsPerWeek: r.overeating_meals_per_week != null ? r.overeating_meals_per_week : null,
-    hardestFoodToResist: r.hardest_food_to_resist || null, waterIntake: r.water_intake || null
+    hardestFoodToResist: r.hardest_food_to_resist || null, waterIntake: r.water_intake || null,
+    medicalConditions: r.medical_conditions || null, currentMedication: r.current_medication || null,
+    physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
+    weightLogPhotos: r.weight_log_photos || []
   };
 }
 
@@ -2293,6 +2299,8 @@ function tplEvolucaoAluno(s, opts){
 
   html += tplPhotosSection(s, opts);
 
+  if (opts.editable) html += tplWeightLogPhotosSection(s);
+
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adesão por semana</div>" +
     s.checkins.map(function(c){ return "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.adherence + "/10</span></div>"; }).join("") +
   "</div>";
@@ -2372,7 +2380,7 @@ function resolvePhotoUrls(students, expirySeconds){
   if (!sbReady) return Promise.resolve();
   var jobs = [];
   (students || []).forEach(function(s){
-    (s.photos || []).forEach(function(p){
+    (s.photos || []).concat(s.weightLogPhotos || []).forEach(function(p){
       if (p.path && !p._resolvedUrl){
         jobs.push(
           sb.storage.from("progress-photos").createSignedUrl(p.path, expirySeconds || 21600).then(function(res){
@@ -2434,6 +2442,55 @@ function wirePhotoRemove(s, el, onDone){
     btn.addEventListener("click", function(){
       if (!window.confirm("Remover esta fotografia? Não é possível desfazer.")) return;
       removePhoto(s, parseInt(btn.getAttribute("data-idx"), 10), onDone);
+    });
+  });
+}
+
+// Fotos de pesagem (prints da balança/app) que o profissional carrega para
+// referência própria — nunca visíveis ao aluno. Servem para pedir à Claude,
+// no chat, que leia os valores e os adicione por data (fluxo manual, não
+// OCR automático dentro da app — ver decisão explícita do profissional).
+function tplWeightLogPhotosSection(s){
+  return "<div class=\"card\"><div class=\"eyebrow\">Fotos de pesagem (referência)</div>" +
+    "<p class=\"muted-p\" style=\"margin:6px 0 10px;\">Carrega aqui prints da balança ou da app — depois envia-os à Claude no chat para ler os valores e adicioná-los por data. Não são visíveis para o aluno.</p>" +
+    weightLogPhotoGridHtml(s) +
+    "<label class=\"btn-file\">Carregar foto de pesagem<input type=\"file\" accept=\"image/*\" id=\"weightLogUpload\" style=\"display:none;\"></label>" +
+  "</div>";
+}
+
+function weightLogPhotoGridHtml(s){
+  var list = s.weightLogPhotos || [];
+  if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotos de pesagem carregadas.</p>";
+  return "<div class=\"photo-grid\">" + list.map(function(p, i){
+    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de pesagem de " + fmtDatePt(p.date) + "\">" +
+      "<span class=\"pdate\">" + fmtDatePt(p.date) + "</span>" +
+      "<button type=\"button\" class=\"weightlog-photo-remove\" data-idx=\"" + i + "\" title=\"Remover foto\" aria-label=\"Remover foto\">✕</button></div>";
+  }).join("") + "</div>";
+}
+
+function removeWeightLogPhoto(s, idx, onDone){
+  var photo = (s.weightLogPhotos||[])[idx];
+  if (!photo) return;
+  var afterRemove = function(){
+    s.weightLogPhotos.splice(idx, 1);
+    persistStudent(s);
+    if (onDone) onDone();
+  };
+  if (photo.path && sbReady){
+    sb.storage.from("progress-photos").remove([photo.path]).then(function(res){
+      if (res.error){ showToast("⚠ Não foi possível remover a foto"); return; }
+      afterRemove();
+    }).catch(function(){ showToast("⚠ Não foi possível remover a foto"); });
+  } else {
+    afterRemove();
+  }
+}
+
+function wireWeightLogPhotoRemove(s, el, onDone){
+  el.querySelectorAll(".weightlog-photo-remove").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if (!window.confirm("Remover esta foto de pesagem?")) return;
+      removeWeightLogPhoto(s, parseInt(btn.getAttribute("data-idx"), 10), onDone);
     });
   });
 }
@@ -3152,6 +3209,7 @@ function openOnboardingForm(){
       assessments:[],
       allowPhotos:false,
       photos:[],
+      weightLogPhotos:[],
       planHistory:[],
       lastCheckinDaysAgo:0,
       fromOnboarding:true,
@@ -3174,7 +3232,7 @@ function proStat(v, l, key){
   return "<" + tag + " class=\"pro-stat-card" + (key ? " pro-stat-card-clickable" : "") + (active ? " active" : "") + "\"" + (key ? " data-stat-key=\"" + key + "\"" : "") + "><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></" + closeTag + ">";
 }
 
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Plano"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
@@ -3200,7 +3258,6 @@ function renderProTabContent(s){
   if (state.proTab==="perfil") el.innerHTML = tplProPerfil(s);
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
-  else if (state.proTab==="flex") el.innerHTML = tplProFlex(s);
   else if (state.proTab==="evolucao") el.innerHTML = tplEvolucaoAluno(s, {editable:true});
   else if (state.proTab==="checkins") el.innerHTML = tplProCheckins(s);
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
@@ -3253,6 +3310,29 @@ function tplProPerfil(s){
       fRow("Fins de semana", s.weekendNote) +
     "</div>");
   }
+
+  html += perfilSection("Dados médicos", false,
+    "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
+      "<textarea id=\"medConditions\" placeholder=\"Ex.: hipertensão, diabetes tipo 2...\">" + escapeHtml(s.medicalConditions || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medCurrent\">Medicação atual</label>" +
+      "<textarea id=\"medCurrent\" placeholder=\"Fármacos que o aluno toma regularmente (não inclui suplementos)\">" + escapeHtml(s.currentMedication || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medLimitations\">Lesões ou limitações físicas</label>" +
+      "<textarea id=\"medLimitations\" placeholder=\"Ex.: hérnia discal, lesão no joelho...\">" + escapeHtml(s.physicalLimitations || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medNotes\">Observações</label>" +
+      "<textarea id=\"medNotes\" placeholder=\"Qualquer outra informação relevante\">" + escapeHtml(s.medicalNotes || "") + "</textarea></div>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>");
+
+  var flexProfile = computeFlexibilityProfile(s);
+  html += perfilSection("Personalizar comportamento do plano", false,
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Estas opções controlam o que " + s.name.split(" ")[0] + " vê e pode fazer no plano — têm sempre prioridade sobre o comportamento padrão.</p>" +
+    FLEX_OVERRIDE_CHECKBOXES.map(function(pair){
+      var key = pair[0], label = pair[1];
+      return "<div style=\"display:flex; align-items:center; gap:8px; margin-bottom:8px;\">" +
+        "<input type=\"checkbox\" id=\"ov_" + key + "\" data-key=\"" + key + "\"" + (flexProfile[key] ? " checked" : "") + ">" +
+        "<label for=\"ov_" + key + "\" style=\"font-size:0.85rem;\">" + label + "</label>" +
+      "</div>";
+    }).join(""));
+
   return html;
 }
 
@@ -3389,53 +3469,6 @@ var FLEX_OVERRIDE_CHECKBOXES = [
   ["restaurantAdaptation", "Permitir adaptação em restaurantes"]
 ];
 
-function tplProFlex(s){
-  var profile = computeFlexibilityProfile(s);
-  var html = "<div class=\"eyebrow\">Nível de flexibilidade alimentar</div>" +
-    "<div style=\"display:flex; gap:8px; margin:12px 0;\">" +
-      presetBtn("Estruturado",25) + presetBtn("Equilibrado",50) + presetBtn("Flexível",85) +
-    "</div>" +
-    "<div style=\"display:flex; justify-content:space-between; margin-bottom:6px;\"><span class=\"muted-p\">0 · Extremamente estruturado</span><span class=\"muted-p\">100 · Extremamente flexível</span></div>" +
-    "<input type=\"range\" min=\"0\" max=\"100\" id=\"flexSlider\" value=\"" + s.flexibility + "\">" +
-    "<div style=\"text-align:center; margin-top:10px;\"><span style=\"font-family:var(--display); font-weight:800; font-size:1.4rem;\" id=\"flexValLabel\">" + s.flexibility + "</span> <span class=\"muted-p\">/ 100 — <span id=\"flexZoneLabel\">" + flexZoneLabel(s.flexibility) + "</span></span></div>" +
-    "<p class=\"muted-p\" style=\"margin-top:14px;\">Este valor controla quanta liberdade " + s.name.split(" ")[0] + " tem para escolher alimentos dentro do plano — muda em tempo real na vista de Aluno.</p>" +
-    "<div class=\"checkin-field\" style=\"margin-top:14px;\"><label for=\"flexNote\">Nota sobre esta alteração (opcional)</label><textarea id=\"flexNote\" placeholder=\"Ex.: Aluno demonstra boa autonomia na escolha dos alimentos.\"></textarea></div>";
-
-  html += "<div class=\"section-gap\">" +
-    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Personalizar</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Estas opções têm prioridade sobre o valor de flexibilidade — dois alunos com o mesmo nível podem ter regras diferentes.</p>" +
-    FLEX_OVERRIDE_CHECKBOXES.map(function(pair){
-      var key = pair[0], label = pair[1];
-      return "<div style=\"display:flex; align-items:center; gap:8px; margin-bottom:8px;\">" +
-        "<input type=\"checkbox\" id=\"ov_" + key + "\" data-key=\"" + key + "\"" + (profile[key] ? " checked" : "") + ">" +
-        "<label for=\"ov_" + key + "\" style=\"font-size:0.85rem;\">" + label + "</label>" +
-      "</div>";
-    }).join("") +
-  "</div>";
-
-  if (s.flexHistory && s.flexHistory.length){
-    html += "<div class=\"section-gap\">" +
-      "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de flexibilidade</div>" +
-      s.flexHistory.slice().reverse().map(function(h){
-        return "<div class=\"history-row\"><div><div class=\"hlabel\">" + h.from + " → " + h.to + "</div>" +
-          (h.note ? "<div class=\"muted-p\">" + h.note + "</div>" : "") + "</div>" +
-          "<div class=\"hdate\">" + fmtDatePt(h.date) + "</div></div>";
-      }).join("") +
-    "</div>";
-  }
-
-  return html;
-}
-
-function presetBtn(label, val){
-  return "<button type=\"button\" class=\"btn btn-sm preset-btn\" data-v=\"" + val + "\">" + label + "</button>";
-}
-
-function logFlexChange(s, from, to, note){
-  if (from === to) return;
-  if (!s.flexHistory) s.flexHistory = [];
-  s.flexHistory.push({date: todayISO(), from: from, to: to, note: note || ""});
-}
 
 function tplProCheckins(s){
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de check-ins</div>";
@@ -3767,9 +3800,6 @@ function logTargetsChange(s, oldTargets, newTargets){
   logPlanEvent(s, "carbs", "Hidratos: " + oldCarbs + " → " + newTargets.carbs + " g", oldCarbs, newTargets.carbs);
   logPlanEvent(s, "fat", "Gordura: " + oldFat + " → " + newTargets.fat + " g", oldFat, newTargets.fat);
 }
-function logFlexibilityChange(s, oldVal, newVal){
-  logPlanEvent(s, "flexibilidade", "Flexibilidade: " + oldVal + " → " + newVal, oldVal, newVal);
-}
 function logOverrideChange(s, key, oldChecked, newChecked){
   var pair = FLEX_OVERRIDE_CHECKBOXES.find(function(p){ return p[0] === key; });
   var label = pair ? pair[1] : key;
@@ -3949,35 +3979,6 @@ function wireProTab(s){
     });
   });
 
-  var slider = el.querySelector("#flexSlider");
-  if (slider) {
-    var flexStartVal = s.flexibility;
-    slider.addEventListener("pointerdown", function(){ flexStartVal = s.flexibility; });
-    slider.addEventListener("input", function(){
-      s.flexibility = parseInt(slider.value,10);
-      el.querySelector("#flexValLabel").textContent = s.flexibility;
-      el.querySelector("#flexZoneLabel").textContent = flexZoneLabel(s.flexibility);
-    });
-    slider.addEventListener("change", function(){
-      var note = el.querySelector("#flexNote");
-      logFlexChange(s, flexStartVal, s.flexibility, note ? note.value : "");
-      logFlexibilityChange(s, flexStartVal, s.flexibility);
-      flexStartVal = s.flexibility;
-      persistStudent(s);
-    });
-  }
-  el.querySelectorAll(".preset-btn").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      var newVal = parseInt(btn.getAttribute("data-v"),10);
-      var oldVal = s.flexibility;
-      var note = el.querySelector("#flexNote");
-      logFlexChange(s, oldVal, newVal, note ? note.value : "");
-      logFlexibilityChange(s, oldVal, newVal);
-      s.flexibility = newVal;
-      renderProTabContent(s);
-      persistStudent(s);
-    });
-  });
   el.querySelectorAll("[data-key]").forEach(function(cb){
     cb.addEventListener("change", function(){
       if (!s.flexOverrides) s.flexOverrides = {};
@@ -3997,6 +3998,17 @@ function wireProTab(s){
     setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
   });
 
+  var saveMed = el.querySelector("#saveMedical");
+  if (saveMed) saveMed.addEventListener("click", function(){
+    s.medicalConditions = el.querySelector("#medConditions").value.trim();
+    s.currentMedication = el.querySelector("#medCurrent").value.trim();
+    s.physicalLimitations = el.querySelector("#medLimitations").value.trim();
+    s.medicalNotes = el.querySelector("#medNotes").value.trim();
+    saveMed.textContent = "Guardado ✓";
+    persistStudent(s);
+    setTimeout(function(){ saveMed.textContent = "Guardar dados médicos"; }, 1400);
+  });
+
   var togglePhotos = el.querySelector("#togglePhotos");
   if (togglePhotos) togglePhotos.addEventListener("change", function(){
     s.allowPhotos = togglePhotos.checked;
@@ -4005,6 +4017,39 @@ function wireProTab(s){
   });
   wirePhotoCompare(s, el);
   wirePhotoRemove(s, el, function(){ renderProTabContent(s); });
+  wireWeightLogPhotoRemove(s, el, function(){ renderProTabContent(s); });
+
+  var weightLogInput = el.querySelector("#weightLogUpload");
+  if (weightLogInput) weightLogInput.addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!s.weightLogPhotos) s.weightLogPhotos = [];
+    if (sbReady && currentAuthUserId){
+      var uploadedPath;
+      resizeImageFile(file, 1280).then(function(blob){
+        uploadedPath = currentAuthUserId + "/weight-log/" + s.id + "/" + Date.now() + ".jpg";
+        return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
+      }).then(function(res){
+        if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
+        return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
+          var photo = { date: todayISO(), path: uploadedPath };
+          photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
+          s.weightLogPhotos.push(photo);
+          renderProTabContent(s);
+          persistStudent(s);
+        });
+      }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
+    } else {
+      var reader = new FileReader();
+      reader.onload = function(){
+        s.weightLogPhotos.push({date: todayISO(), dataUrl: reader.result});
+        renderProTabContent(s);
+        persistStudent(s);
+      };
+      reader.readAsDataURL(file);
+    }
+    weightLogInput.value = "";
+  });
 
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){

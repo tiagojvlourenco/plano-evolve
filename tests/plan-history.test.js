@@ -113,12 +113,9 @@ function freshStudent(){
   check.check("11. Compara hidratos com carbsMax quando não há 'carbs' direto", s.planHistory.length === 1 && s.planHistory[0].type === "carbs" && s.planHistory[0].before === 180);
 })();
 
-// 12. Alteração de flexibilidade (exemplo do pedido)
-(function(){
-  var s = freshStudent();
-  logFlexibilityChange(s, 50, 65);
-  check.check("12. Regista 'Flexibilidade' exatamente como no exemplo", s.planHistory[0].summary === "Flexibilidade: 50 → 65");
-})();
+// 12. (removido na Fase 11) logFlexibilityChange e o separador Flexibilidade
+// deixaram de existir — ver phase11.test.js para o nível fixo em
+// "Equilibrado" e o Personalizar movido para o Perfil.
 
 // 13. Alteração de personalizações de flexibilidade
 (function(){

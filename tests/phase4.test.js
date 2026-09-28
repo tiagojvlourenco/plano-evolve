@@ -72,16 +72,10 @@ function freshStudent(flex){
   check.check("13. Não existe função aluno-facing para editar flexibilidade", typeof window.alunoSetFlexibility === "undefined");
 })();
 
-// 14. Histórico de flexibilidade
-(function(){
-  var s = freshStudent(35);
-  logFlexChange(s, 35, 50, "Boa autonomia demonstrada.");
-  check.check("14. logFlexChange regista uma entrada", s.flexHistory.length === 1);
-  check.check("14. Histórico guarda from/to corretos", s.flexHistory[0].from === 35 && s.flexHistory[0].to === 50);
-  check.check("14. Histórico guarda nota opcional", s.flexHistory[0].note === "Boa autonomia demonstrada.");
-  logFlexChange(s, 50, 50, "");
-  check.check("14. Não regista mudança quando from === to", s.flexHistory.length === 1);
-})();
+// 14. (removido na Fase 11) O separador Flexibilidade e o seu histórico de
+// alterações via slider deixaram de existir — o nível fica fixo em
+// "Equilibrado" (50) para todos, ajustável só pelos overrides de
+// Personalizar (agora dentro do Perfil, ver phase11.test.js).
 
 // 15. Restrições: alimento bloqueado nunca aparece, independentemente do score (secções 16/21/26)
 (function(){

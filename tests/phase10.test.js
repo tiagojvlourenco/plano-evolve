@@ -8,7 +8,7 @@ var check = require("./check")();
 
 function freshStudent(overrides){
   var base = {
-    id:"x", flexibility:50, flexOverrides:{}, blockedFoods:[],
+    id:"x", name:"Teste Aluno", flexibility:50, flexOverrides:{}, blockedFoods:[],
     substitutionHistory:[], adaptationHistory:[], photos:[],
     targets:{kcal:2000, protein:150, carbs:200, fat:60},
     meals:[]
@@ -158,9 +158,10 @@ function freshStudent(overrides){
     overeatingMealsPerWeek:null, hardestFoodToResist:null, waterIntake:null
   });
   var html = tplProPerfil(s);
-  // Dados pessoais, Rotina de trabalho, Alimentação, Hidratação — sem
-  // "Contexto" (só aparece com weekendNote real, testado a seguir).
-  check.check("13. Usa <details> para as 4 secções sem Contexto legacy", (html.match(/<details/g) || []).length === 4);
+  // Dados pessoais, Rotina de trabalho, Alimentação, Hidratação, Dados
+  // médicos, Personalizar — sem "Contexto" (só aparece com weekendNote
+  // real, testado a seguir).
+  check.check("13. Usa <details> para as 6 secções sem Contexto legacy", (html.match(/<details/g) || []).length === 6);
   check.check("13. Só a primeira secção (Dados pessoais) começa aberta", (html.match(/<details class="perfil-section" open>/g) || []).length === 1);
   check.check("13. Mostra a data de nascimento formatada", html.indexOf(fmtDatePt("1994-03-10")) >= 0);
 })();
