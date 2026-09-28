@@ -345,7 +345,11 @@
   /* Onboarding form */
   .onb-field{margin-bottom:14px;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
-  .onb-field input, .onb-field select{width:100%; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.9rem;}
+  .onb-field input, .onb-field select, .onb-field textarea{width:100%; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.9rem; font-family:inherit;}
+  .onb-field textarea{min-height:70px; resize:vertical;}
+  .onb-checkbox-row{display:flex; flex-wrap:wrap; gap:14px; align-items:center; font-size:0.88rem;}
+  .onb-checkbox-row label{display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; text-transform:none; letter-spacing:normal; color:var(--ink);}
+  .onb-checkbox-row input[type="text"]{width:140px; border:1px solid var(--line-strong); border-radius:8px; padding:5px 8px; background:var(--bg); font-size:0.85rem;}
   .onb-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .onb-section-title{font-family:var(--display); font-weight:700; font-size:0.95rem; margin:18px 0 10px; padding-top:12px; border-top:1px solid var(--line);}
   .onb-section-title:first-of-type{border-top:none; margin-top:4px; padding-top:0;}
@@ -1309,7 +1313,10 @@ function studentToRow(s){
     meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
     flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || [],
     substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || [],
-    meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo, active: s.active !== false
+    meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo, active: s.active !== false,
+    meals_at_work_ease: s.mealsAtWorkEase || null, uses_supplements: !!s.usesSupplements, supplements: s.supplements || [],
+    daily_eating_description: s.dailyEatingDescription || null, overeating_meals_per_week: s.overeatingMealsPerWeek != null ? s.overeatingMealsPerWeek : null,
+    hardest_food_to_resist: s.hardestFoodToResist || null, water_intake: s.waterIntake || null
   };
 }
 
@@ -1328,7 +1335,10 @@ function rowToStudent(r){
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
     flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
     substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || [],
-    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo, active: r.active !== false
+    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo, active: r.active !== false,
+    mealsAtWorkEase: r.meals_at_work_ease || null, usesSupplements: !!r.uses_supplements, supplements: r.supplements || [],
+    dailyEatingDescription: r.daily_eating_description || null, overeatingMealsPerWeek: r.overeating_meals_per_week != null ? r.overeating_meals_per_week : null,
+    hardestFoodToResist: r.hardest_food_to_resist || null, waterIntake: r.water_intake || null
   };
 }
 
@@ -2964,33 +2974,39 @@ function openInviteModal(){
   sheet.querySelector("#simulateFill").addEventListener("click", openOnboardingForm);
 }
 
+// Alinhado byte a byte às secções e perguntas do questionário real
+// (Google Forms "Avaliação de Hábitos Alimentares, Rotina e Sono") — só as
+// perguntas de Objetivo/Treino/Peso ficam fora dele, porque são preenchidas
+// pelo profissional (nunca pelo aluno) e alimentam o cálculo automático de
+// sugestão de calorias/macros (computeSuggestedTargets).
+var SUPPLEMENT_OPTIONS = ["Proteína", "Creatina"];
+var WORK_MEALS_EASE_OPTIONS = ["Muito fácil", "Fácil", "Difícil", "Muito Difícil"];
+var WATER_INTAKE_OPTIONS = ["Menos de 1L", "Entre 1L e 2L", "Entre 2L e 3L", "Mais de 3L"];
+
 function openOnboardingForm(){
   var html = "<div class=\"mtitle\">Questionário inicial</div>" +
     "<p class=\"muted-p\" style=\"margin-top:4px; margin-bottom:14px;\">A preencher como se fosses o novo aluno no teu telemóvel.</p>" +
 
-    "<div class=\"onb-section-title\">Dados pessoais</div>" +
-    "<div class=\"onb-field\"><label>Nome</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
+    "<div class=\"onb-section-title\">Informações pessoais</div>" +
+    "<div class=\"onb-field\"><label>Nome completo</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
     "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
     "<p class=\"muted-p\" id=\"obError\" style=\"color:var(--critical); display:none; margin:-6px 0 10px;\"></p>" +
+    "<div class=\"onb-field\"><label>Género</label><select id=\"obSex\"><option>Masculino</option><option>Feminino</option><option>Outro</option><option>Prefiro não dizer</option></select></div>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Idade</label><input type=\"number\" min=\"0\" id=\"obAge\" value=\"30\"></div>" +
-      "<div class=\"onb-field\"><label>Sexo</label><select id=\"obSex\"><option>Feminino</option><option>Masculino</option></select></div>" +
+      "<div class=\"onb-field\"><label>Data de nascimento</label><input type=\"date\" id=\"obBirthDate\"></div>" +
     "</div>" +
-    "<div class=\"onb-field\"><label>Data de nascimento</label><input type=\"date\" id=\"obBirthDate\"></div>" +
-    "<div class=\"onb-row\">" +
-      "<div class=\"onb-field\"><label>Altura (cm)</label><input type=\"number\" min=\"0\" id=\"obHeight\" value=\"170\"></div>" +
-      "<div class=\"onb-field\"><label>Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"obWeight\" value=\"70\"></div>" +
-    "</div>" +
+    "<div class=\"onb-field\"><label>Altura (cm)</label><input type=\"number\" min=\"0\" id=\"obHeight\" value=\"170\"></div>" +
 
-    "<div class=\"onb-section-title\">Objetivo</div>" +
-    "<div class=\"onb-field\"><label>O que procuras?</label><select id=\"obGoal\">" +
+    "<div class=\"onb-section-title\">Objetivo e treino</div>" +
+    "<p class=\"muted-p\" style=\"margin-top:-6px; margin-bottom:10px;\">Esta secção preenches tu — não está no questionário do aluno, mas o plano precisa dela.</p>" +
+    "<div class=\"onb-field\"><label>Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"obWeight\" value=\"70\"></div>" +
+    "<div class=\"onb-field\"><label>O que procura?</label><select id=\"obGoal\">" +
       Object.keys(GOAL_ADJUST).map(function(g){ return "<option>" + g + "</option>"; }).join("") +
     "</select></div>" +
-
-    "<div class=\"onb-section-title\">Rotina e treino</div>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Treinos por semana</label><input type=\"number\" id=\"obTrainings\" value=\"4\" min=\"0\" max=\"7\"></div>" +
-      "<div class=\"onb-field\"><label>Horário habitual</label><input type=\"text\" id=\"obTrainTime\" placeholder=\"Ex: 19:00\"></div>" +
+      "<div class=\"onb-field\"><label>Horário habitual de treino</label><input type=\"text\" id=\"obTrainTime\" placeholder=\"Ex: 19:00\"></div>" +
     "</div>" +
     "<div class=\"onb-field\"><label>Tipo de treino</label><input type=\"text\" id=\"obTrainType\" placeholder=\"Ex: Musculação\"></div>" +
     "<div class=\"onb-row\">" +
@@ -2998,24 +3014,46 @@ function openOnboardingForm(){
       "<div class=\"onb-field\"><label>Dorme</label><input type=\"text\" id=\"obSleep\" placeholder=\"23:00\"></div>" +
     "</div>" +
 
-    "<div class=\"onb-section-title\">Preferências alimentares</div>" +
-    "<div class=\"onb-field\"><label>Nº de refeições preferido</label><input type=\"number\" id=\"obMeals\" value=\"5\" min=\"3\" max=\"6\"></div>" +
-    "<div class=\"onb-field\"><label>Alimentos preferidos</label><input type=\"text\" id=\"obLikes\" placeholder=\"separados por vírgula\"></div>" +
-    "<div class=\"onb-field\"><label>Não gosta</label><input type=\"text\" id=\"obDislikes\" placeholder=\"separados por vírgula\"></div>" +
-    "<div class=\"onb-field\"><label>Não quer consumir</label><input type=\"text\" id=\"obAvoid\" placeholder=\"separados por vírgula\"></div>" +
-    "<div class=\"onb-field\"><label>Alergias / intolerâncias</label><input type=\"text\" id=\"obAllergies\" placeholder=\"separados por vírgula\"></div>" +
-
-    "<div class=\"onb-section-title\">Contexto</div>" +
-    "<div class=\"onb-field\"><label>Trabalho / rotina</label><input type=\"text\" id=\"obWork\" placeholder=\"Ex: Escritório, sentada\"></div>" +
-    "<div class=\"onb-field\"><label>Fins de semana / refeições fora</label><input type=\"text\" id=\"obWeekend\" placeholder=\"Ex: Janta fora 1x/semana\"></div>" +
-    "<div class=\"onb-row\">" +
-      "<div class=\"onb-field\"><label>Tempo para cozinhar</label><input type=\"text\" id=\"obCookTime\" placeholder=\"Ex: 20-30 min/dia\"></div>" +
-      "<div class=\"onb-field\"><label>Orçamento alimentar</label><select id=\"obBudget\"><option>Baixo</option><option selected>Médio</option><option>Alto</option></select></div>" +
+    "<div class=\"onb-section-title\">Rotina de trabalho e alimentação</div>" +
+    "<div class=\"onb-field\"><label>Horário de trabalho</label><input type=\"text\" id=\"obWork\" placeholder=\"Ex: 9h-18h, Turnos...\"></div>" +
+    "<div class=\"onb-field\"><label>Facilidade de fazer refeições no local de trabalho</label><select id=\"obMealsAtWorkEase\">" +
+      WORK_MEALS_EASE_OPTIONS.map(function(o){ return "<option>" + o + "</option>"; }).join("") +
+    "</select></div>" +
+    "<div class=\"onb-field\"><label>Utiliza algum tipo de suplemento?</label><select id=\"obUsesSupplements\"><option>Não</option><option>Sim</option></select></div>" +
+    "<div class=\"onb-field\" id=\"obSupplementsField\" style=\"display:none;\"><label>Que suplementos utiliza?</label>" +
+      "<div class=\"onb-checkbox-row\">" +
+        SUPPLEMENT_OPTIONS.map(function(o){ return "<label><input type=\"checkbox\" class=\"obSupplementOpt\" value=\"" + o + "\">" + o + "</label>"; }).join("") +
+        "<label><input type=\"checkbox\" id=\"obSupplementOther\">Outra:</label>" +
+        "<input type=\"text\" id=\"obSupplementOtherText\" placeholder=\"qual?\">" +
+      "</div>" +
     "</div>" +
+
+    "<div class=\"onb-section-title\">Horário e refeições</div>" +
+    "<div class=\"onb-field\"><label>Descreva o dia-a-dia alimentar (refeições, horários, quantidades aproximadas)</label>" +
+      "<textarea id=\"obDailyEating\" placeholder=\"Ex: 8h – Pequeno-almoço: 2 ovos, 1 fatia de pão integral e 1 copo de leite; 13h – Almoço: 1/4 prato de frango, 1/2 prato de arroz, 1/4 prato de salada e 1 fruta; etc.\"></textarea>" +
+    "</div>" +
+    "<div class=\"onb-field\"><label>Nº de refeições exageradas por semana</label><input type=\"number\" min=\"0\" id=\"obOvereating\" placeholder=\"Ex: 2\"></div>" +
+    "<div class=\"onb-field\"><label>Alimentos que nunca consome ou é alérgico/a</label><textarea id=\"obAllergies\" placeholder=\"Liste todos os alimentos que não consome por opção ou por alergia, separados por vírgula\"></textarea></div>" +
+    "<div class=\"onb-field\"><label>Alimento ou grupo de alimentos que mais lhe custa controlar ou resistir</label><textarea id=\"obHardestFood\"></textarea></div>" +
+
+    "<div class=\"onb-section-title\">Hidratação</div>" +
+    "<div class=\"onb-field\"><label>Quantidade de água ingerida em 24h</label><select id=\"obWaterIntake\">" +
+      WATER_INTAKE_OPTIONS.map(function(o){ return "<option>" + o + "</option>"; }).join("") +
+    "</select></div>" +
 
     "<button type=\"button\" class=\"btn primary\" id=\"submitOnboarding\" style=\"width:100%; margin-top:6px;\">Enviar questionário</button>";
 
   var sheet = openModal(html, {centered:true});
+
+  // "Que suplementos utiliza?" só faz sentido depois de responder "Sim" —
+  // mesma lógica condicional do questionário real do Google Forms (a secção
+  // 4 só aparece a quem respondeu Sim na secção 3).
+  var suppSelect = sheet.querySelector("#obUsesSupplements");
+  var suppField = sheet.querySelector("#obSupplementsField");
+  function syncSupplementsVisibility(){ suppField.style.display = suppSelect.value === "Sim" ? "" : "none"; }
+  suppSelect.addEventListener("change", syncSupplementsVisibility);
+  syncSupplementsVisibility();
+
   sheet.querySelector("#submitOnboarding").addEventListener("click", function(){
     var errEl = sheet.querySelector("#obError");
     errEl.style.display = "none";
@@ -3046,6 +3084,17 @@ function openOnboardingForm(){
       return;
     }
 
+    var usesSupplements = sheet.querySelector("#obUsesSupplements").value === "Sim";
+    var supplements = [];
+    if (usesSupplements){
+      sheet.querySelectorAll(".obSupplementOpt:checked").forEach(function(cb){ supplements.push(cb.value); });
+      if (sheet.querySelector("#obSupplementOther").checked){
+        var otherText = sheet.querySelector("#obSupplementOtherText").value.trim();
+        supplements.push(otherText ? "Outra: " + otherText : "Outra");
+      }
+    }
+    var overeatingRaw = sheet.querySelector("#obOvereating").value.trim();
+
     var profile = {
       name:name,
       age: ageVal,
@@ -3059,15 +3108,15 @@ function openOnboardingForm(){
       trainingType: sheet.querySelector("#obTrainType").value,
       wakeTime: sheet.querySelector("#obWake").value,
       sleepTime: sheet.querySelector("#obSleep").value,
-      mealsPreferred: Math.max(1, parseInt(sheet.querySelector("#obMeals").value,10) || 5),
-      likes: sheet.querySelector("#obLikes").value.split(",").map(function(x){return x.trim();}).filter(Boolean),
-      dislikes: sheet.querySelector("#obDislikes").value.split(",").map(function(x){return x.trim();}).filter(Boolean),
-      avoid: sheet.querySelector("#obAvoid").value.split(",").map(function(x){return x.trim();}).filter(Boolean),
-      allergies: sheet.querySelector("#obAllergies").value.split(",").map(function(x){return x.trim();}).filter(Boolean),
       work: sheet.querySelector("#obWork").value,
-      weekendNote: sheet.querySelector("#obWeekend").value,
-      cookTime: sheet.querySelector("#obCookTime").value,
-      budget: sheet.querySelector("#obBudget").value
+      mealsAtWorkEase: sheet.querySelector("#obMealsAtWorkEase").value,
+      usesSupplements: usesSupplements,
+      supplements: supplements,
+      dailyEatingDescription: sheet.querySelector("#obDailyEating").value.trim(),
+      overeatingMealsPerWeek: overeatingRaw ? Math.max(0, parseInt(overeatingRaw,10) || 0) : null,
+      allergies: sheet.querySelector("#obAllergies").value.split(/[,\n]/).map(function(x){return x.trim();}).filter(Boolean),
+      hardestFoodToResist: sheet.querySelector("#obHardestFood").value.trim(),
+      waterIntake: sheet.querySelector("#obWaterIntake").value
     };
 
     var suggested = computeSuggestedTargets(profile);
@@ -3082,9 +3131,12 @@ function openOnboardingForm(){
       weightInitial:profile.weight, weightCurrent:profile.weight, weightGoal:null,
       goal:profile.goal, trainingsPerWeek:profile.trainingsPerWeek, trainingType:profile.trainingType||"—", trainingTime:profile.trainingTime||"—",
       wakeTime:profile.wakeTime||"—", sleepTime:profile.sleepTime||"—",
-      likes:profile.likes, dislikes:profile.dislikes, avoid:profile.avoid, allergies:profile.allergies,
-      mealsPreferred:profile.mealsPreferred, budget:profile.budget, cookTime:profile.cookTime||"—",
-      work:profile.work||"—", weekendNote:profile.weekendNote||"—",
+      likes:[], dislikes:[], avoid:[], allergies:profile.allergies,
+      mealsPreferred:5, budget:"—", cookTime:"—",
+      work:profile.work||"—", weekendNote:"—",
+      mealsAtWorkEase:profile.mealsAtWorkEase, usesSupplements:profile.usesSupplements, supplements:profile.supplements,
+      dailyEatingDescription:profile.dailyEatingDescription, overeatingMealsPerWeek:profile.overeatingMealsPerWeek,
+      hardestFoodToResist:profile.hardestFoodToResist, waterIntake:profile.waterIntake,
       targets:{kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat},
       flexibility:50,
       flexOverrides:{},
@@ -3170,19 +3222,37 @@ function tplProPerfil(s){
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
   "</div>");
 
-  html += perfilSection("Preferências alimentares", false, "<div class=\"field-row\">" +
-    fRow("Nº refeições preferido", s.mealsPreferred) + fRow("Orçamento", s.budget) + fRow("Tempo p/ cozinhar", s.cookTime) +
+  // Alinhado ao questionário real (Google Forms): horário de trabalho +
+  // facilidade de fazer refeições no local de trabalho + suplementação.
+  html += perfilSection("Rotina de trabalho", false, "<div class=\"field-row\">" +
+    fRow("Horário de trabalho", s.work || "—") + fRow("Facilidade de refeições no trabalho", s.mealsAtWorkEase || "—") +
+    fRow("Utiliza suplementos?", s.usesSupplements ? "Sim" : "Não") +
+  "</div>" +
+    (s.usesSupplements && s.supplements && s.supplements.length ?
+      "<div style=\"margin-top:10px;\"><div class=\"muted-p\">Suplementos:</div><div class=\"tag-list\">" + s.supplements.map(function(x){return "<span class=\"tag\">"+escapeHtml(x)+"</span>";}).join("") + "</div></div>" : ""));
+
+  html += perfilSection("Alimentação", false, "<div class=\"field-row\">" +
+    fRow("Refeições exageradas / semana", s.overeatingMealsPerWeek != null ? s.overeatingMealsPerWeek : "—") +
+    (s.mealsPreferred ? fRow("Nº refeições preferido", s.mealsPreferred) : "") +
     "</div>" +
+    (s.dailyEatingDescription ? "<div style=\"margin-top:10px;\"><div class=\"muted-p\">Dia-a-dia alimentar:</div><p style=\"margin-top:4px; white-space:pre-wrap;\">" + escapeHtml(s.dailyEatingDescription) + "</p></div>" : "") +
+    (s.hardestFoodToResist ? "<div style=\"margin-top:10px;\"><div class=\"muted-p\">Mais custa controlar/resistir:</div><p style=\"margin-top:4px; white-space:pre-wrap;\">" + escapeHtml(s.hardestFoodToResist) + "</p></div>" : "") +
     "<div style=\"margin-top:10px;\">" +
       (s.likes.length? "<div class=\"muted-p\">Gosta de:</div><div class=\"tag-list\">" + s.likes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
       (s.dislikes.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não gosta:</div><div class=\"tag-list\">" + s.dislikes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
       (s.avoid.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não quer consumir:</div><div class=\"tag-list\">" + s.avoid.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
-      (s.allergies.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Alergias / intolerâncias:</div><div class=\"tag-list\">" + s.allergies.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
+      (s.allergies.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não consome / alérgico/a:</div><div class=\"tag-list\">" + s.allergies.map(function(x){return "<span class=\"tag\">"+escapeHtml(x)+"</span>";}).join("") + "</div>" : "") +
     "</div>");
 
-  html += perfilSection("Contexto", false, "<div class=\"field-row\">" +
-    fRow("Trabalho", s.work) + fRow("Fins de semana", s.weekendNote) +
+  html += perfilSection("Hidratação", false, "<div class=\"field-row\">" +
+    fRow("Água ingerida em 24h", s.waterIntake || "—") +
   "</div>");
+
+  if (s.weekendNote && s.weekendNote !== "—"){
+    html += perfilSection("Contexto", false, "<div class=\"field-row\">" +
+      fRow("Fins de semana", s.weekendNote) +
+    "</div>");
+  }
   return html;
 }
 
