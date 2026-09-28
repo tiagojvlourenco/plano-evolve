@@ -1,6 +1,6 @@
 -- EVOLVE NUTRITION — Fase 11: dados médicos + fotos de pesagem de referência
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0013 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais.
+-- APLICADA e validada em produção em 2026-09-28.
 --
 -- Pedido do profissional: (1) um separador "Dados médicos" no Perfil, para
 -- registar condições médicas, medicação, lesões/limitações e observações —
@@ -54,10 +54,11 @@ create policy "profissional envia fotos" on storage.objects
   );
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, confirma no SQL
--- Editor: select id, medical_conditions, current_medication,
---   physical_limitations, medical_notes, weight_log_photos from students
---   order by id; — todas as colunas devem vir a NULL / '[]' para os alunos
--- existentes. Testa depois o upload de uma foto de pesagem sintética (nunca
--- uma real) a partir da vista do profissional, confirma que aparece em
--- weight_log_photos com um "path" válido, e remove-a de seguida.
+-- APLICADA e validada em produção em 2026-09-28. Confirmado no SQL Editor
+-- que o único aluno real existente (tiago-lourenco, o próprio profissional)
+-- ficou com todas as colunas novas a NULL / '[]', como esperado — nenhum
+-- dado existente foi alterado. A política "profissional envia fotos" foi
+-- criada com sucesso. O upload/leitura de fotos de pesagem em si já tinha
+-- sido validado em modo local (sem ligação real ao Storage) antes desta
+-- aplicação — ver commit "Fase 11: dados médicos, remove Flexibilidade,
+-- fotos de pesagem de referência".
