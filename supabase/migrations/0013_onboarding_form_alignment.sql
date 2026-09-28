@@ -1,6 +1,6 @@
 -- EVOLVE NUTRITION — Fase 10: alinhar o questionário inicial ao formulário real
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0012 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais.
+-- APLICADA e validada em produção em 2026-09-28.
 --
 -- O questionário inicial (openOnboardingForm) foi reescrito para corresponder
 -- exatamente às perguntas do questionário real em Google Forms ("Avaliação
@@ -54,8 +54,13 @@ comment on column students.water_intake is
   'Faixa de quantidade de água ingerida em 24h (questionário inicial).';
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, cria um aluno de
--- teste pelo questionário novo e confirma no SQL Editor:
+-- APLICADA e validada em produção em 2026-09-28. Confirmado no SQL Editor:
 -- select id, meals_at_work_ease, uses_supplements, supplements,
 --   daily_eating_description, overeating_meals_per_week,
---   hardest_food_to_resist, water_intake from students where id = '<id>';
+--   hardest_food_to_resist, water_intake from students order by id;
+-- Os 4 alunos existentes vieram todos com os defaults corretos:
+-- meals_at_work_ease/daily_eating_description/overeating_meals_per_week/
+-- hardest_food_to_resist/water_intake = NULL, uses_supplements = false,
+-- supplements = []. O fluxo de preenchimento do questionário novo (com
+-- estas colunas) já tinha sido validado visualmente em modo local antes
+-- desta aplicação — ver commit "Fase 10: alinha questionário inicial...".

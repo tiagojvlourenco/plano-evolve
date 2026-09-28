@@ -1,6 +1,6 @@
 -- EVOLVE NUTRITION — Fase 10: estado ativo/inativo do aluno + data de nascimento
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0011 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais.
+-- APLICADA e validada em produção em 2026-09-28.
 --
 -- Dois campos novos, independentes um do outro e de is_demo:
 --
@@ -23,6 +23,7 @@ comment on column students.birth_date is
   'Data de nascimento do aluno, recolhida no questionário inicial.';
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, confirma no SQL
--- Editor: select id, name, active, birth_date from students order by id; —
--- active deve vir true para todos os alunos existentes.
+-- APLICADA e validada em produção em 2026-09-28. Confirmado no SQL Editor:
+-- select id, name, active, birth_date from students order by id; — os 4
+-- alunos existentes (maria, rui, sofia, tiago) vieram todos com active=true
+-- e birth_date=NULL, como esperado.
