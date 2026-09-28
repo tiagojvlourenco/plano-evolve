@@ -218,6 +218,25 @@
   .student-card .adherence-row .bar-track{flex:1;}
   .student-card .adherence-row .num{font-size:0.78rem; font-weight:700;}
 
+  .pro-stat-card-clickable{cursor:pointer; text-align:left; font-family:inherit;}
+  .pro-stat-card-clickable.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+
+  /* Lista simplificada de alunos por baixo dos blocos do dashboard (só nome,
+     objetivo e o interruptor ativo/inativo — sem pesagem/adesão/alertas,
+     que continuam disponíveis dentro do perfil do aluno). */
+  .student-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px;}
+  .student-row-main{display:flex; align-items:center; gap:12px; cursor:pointer; min-width:0; flex:1;}
+  .student-row-main .sname{font-weight:700; font-size:0.92rem;}
+  .student-row-main .sgoal{font-size:0.76rem; color:var(--muted);}
+
+  .switch{display:inline-block; flex-shrink:0; cursor:pointer;}
+  .switch input{position:absolute; opacity:0; width:1px; height:1px;}
+  .switch-track{display:block; width:40px; height:24px; border-radius:12px; background:var(--line-strong); transition:background .15s ease; position:relative;}
+  .switch-thumb{position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:transform .15s ease; box-shadow:0 1px 2px rgba(0,0,0,0.3);}
+  .switch input:checked + .switch-track{background:var(--accent);}
+  .switch input:checked + .switch-track .switch-thumb{transform:translateX(16px);}
+  .switch input:focus-visible + .switch-track{outline:2px solid var(--accent); outline-offset:2px;}
+
   .detail-header{display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap;}
   .detail-header .sname{font-family:var(--display); font-size:1.5rem; font-weight:800;}
 
@@ -242,7 +261,7 @@
     .pro-shell{flex-direction:column; gap:14px;}
     .pro-sidebar{
       width:100%; flex-direction:row; overflow-x:auto; position:static; align-items:center;
-      min-height:auto;
+      min-height:auto; scroll-behavior:smooth;
     }
     .pro-sidebar-divider{width:1px; height:24px; margin:0 4px;}
     .pro-sidebar-student{padding:4px 10px; white-space:nowrap;}
@@ -273,6 +292,14 @@
   .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
   .evolve-mark{height:26px; width:auto; color:var(--ink); flex-shrink:0;}
   .section-gap{margin-top:22px;}
+
+  .perfil-section{margin-top:14px; border-top:1px solid var(--line); padding-top:14px;}
+  .perfil-section:first-of-type{margin-top:0; border-top:none; padding-top:0;}
+  .perfil-section summary{cursor:pointer; list-style:none; display:flex; align-items:center; gap:6px; user-select:none;}
+  .perfil-section summary::-webkit-details-marker{display:none;}
+  .perfil-section summary::before{content:"▸"; font-size:0.7em; color:var(--muted); transition:transform .15s ease;}
+  .perfil-section[open] summary::before{transform:rotate(90deg);}
+  .perfil-section > *:not(summary){margin-top:10px;}
   .muted-p{font-size:0.85rem; color:var(--muted); line-height:1.5;}
 
   /* Body composition assessments */
@@ -286,8 +313,16 @@
   .assess-table-scroll table.assess-table{margin-top:0;}
   .assess-delta{font-size:0.68rem; color:var(--muted-2); margin-left:3px;}
   .assess-form-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:10px; margin-top:12px; align-items:end;}
+  .assess-form-grid .f{min-width:0;}
   .assess-form-grid .f label{display:block; font-size:0.65rem; color:var(--muted); text-transform:uppercase; margin-bottom:4px; font-weight:600;}
-  .assess-form-grid .f input{width:100%; border:1px solid var(--line-strong); border-radius:8px; padding:7px 8px; background:var(--bg); font-size:0.85rem;}
+  .assess-form-grid .f input{width:100%; min-width:0; box-sizing:border-box; border:1px solid var(--line-strong); border-radius:8px; padding:7px 8px; background:var(--bg); font-size:0.85rem;}
+  @media (max-width:480px){
+    /* input[type=date] no iOS não encolhe abaixo do seu conteúdo mínimo — numa
+       grelha de 3 colunas isso empurrava-o para cima do campo seguinte
+       ("peso"). Abaixo de 480px força-se a data a ocupar a linha toda. */
+    .assess-form-grid{grid-template-columns:repeat(2,1fr);}
+    .assess-form-grid .f:first-child{grid-column:1/-1;}
+  }
   .assess-del{border:none; background:transparent; color:var(--muted-2); cursor:pointer; font-size:0.85rem;}
   .assess-del:hover{color:var(--critical);}
 
@@ -298,10 +333,14 @@
   .photo-thumb .photo-remove{position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(0,0,0,0.65); color:#fff; font-size:0.7rem; cursor:pointer; line-height:1;}
 
   .mini-select{border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:9px; padding:8px 10px; font-size:0.82rem; font-family:var(--sans);}
-  .compare-row{display:flex; gap:10px;}
-  .compare-row .compare-item{flex:1; text-align:center;}
-  .compare-row img{width:100%; display:block; border-radius:12px; aspect-ratio:3/4; object-fit:cover; border:1px solid var(--line-strong);}
-  .compare-row .clabel{font-size:0.68rem; color:var(--muted); margin-top:6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.03em;}
+  /* Grelha de comparação: 2 momentos (colunas) × frente/lado/costas (linhas) */
+  .compare-grid-head, .compare-grid-row{display:grid; grid-template-columns:52px 1fr 1fr; gap:8px; align-items:center;}
+  .compare-grid-head{margin-bottom:6px;}
+  .compare-grid-head span:not(:first-child){font-size:0.72rem; font-weight:700; text-align:center; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em;}
+  .compare-grid-row{margin-bottom:8px;}
+  .compare-grid-label{font-size:0.68rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em;}
+  .compare-cell img{width:100%; display:block; border-radius:10px; aspect-ratio:3/4; object-fit:cover; border:1px solid var(--line-strong);}
+  .compare-empty{display:flex; align-items:center; justify-content:center; aspect-ratio:3/4; background:var(--surface-2); border-radius:10px; font-size:0.66rem; color:var(--muted); text-align:center;}
 
   /* Onboarding form */
   .onb-field{margin-bottom:14px;}
@@ -1258,6 +1297,7 @@ function stripPhotoState(p){
 function studentToRow(s){
   return {
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
+    birth_date: s.birthDate || null,
     weight_initial: s.weightInitial, weight_current: s.weightCurrent, weight_goal: s.weightGoal,
     goal: s.goal, trainings_per_week: s.trainingsPerWeek, training_days: s.trainingDays || [],
     training_type: s.trainingType, training_time: s.trainingTime, wake_time: s.wakeTime, sleep_time: s.sleepTime,
@@ -1269,13 +1309,14 @@ function studentToRow(s){
     meals_date: s.mealsDate || null, from_onboarding: !!s.fromOnboarding, invite_email: s.inviteEmail || null,
     flex_overrides: s.flexOverrides || {}, flex_history: s.flexHistory || [], blocked_foods: s.blockedFoods || [],
     substitution_history: s.substitutionHistory || [], adaptation_history: s.adaptationHistory || [],
-    meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo
+    meal_daily_state: s.mealDailyState || null, is_demo: !!s.isDemo, active: s.active !== false
   };
 }
 
 function rowToStudent(r){
   return {
     id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
+    birthDate: r.birth_date || null,
     weightInitial: r.weight_initial, weightCurrent: r.weight_current, weightGoal: r.weight_goal,
     goal: r.goal, trainingsPerWeek: r.trainings_per_week, trainingDays: r.training_days || [],
     trainingType: r.training_type, trainingTime: r.training_time, wakeTime: r.wake_time, sleepTime: r.sleep_time,
@@ -1287,7 +1328,7 @@ function rowToStudent(r){
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
     flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
     substitutionHistory: r.substitution_history || [], adaptationHistory: r.adaptation_history || [],
-    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo
+    mealDailyState: r.meal_daily_state || migrateLegacyMealState(r.meals), isDemo: !!r.is_demo, active: r.active !== false
   };
 }
 
@@ -1365,7 +1406,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", showDemoStudents:false };
+var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", showDemoStudents:false, dashboardListMode:null };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -2337,10 +2378,21 @@ function resolvePhotoUrls(students, expirySeconds){
 // data-path identifica a foto a remover (removePhoto() apaga do Storage e do
 // registo do aluno). Uma foto só sem "path" (fallback dataUrl do modo local)
 // não tem nada para remover no Storage — nesse caso o botão só tira do array.
+// As 3 posições fixas em que o profissional tira sempre fotografia
+// (frente/lado/costas) — usadas para etiquetar cada foto no upload e para a
+// grelha de comparação (2 momentos × 3 posições = até 6 fotos).
+var PHOTO_POSITIONS = [
+  {key:"frente", label:"Frente"},
+  {key:"lado", label:"Lado"},
+  {key:"costas", label:"Costas"}
+];
+var PHOTO_POSITION_LABEL = PHOTO_POSITIONS.reduce(function(a,p){ a[p.key]=p.label; return a; }, {});
+
 function photoGridHtml(s){
   if (!s.photos.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotografias.</p>";
   return "<div class=\"photo-grid\">" + s.photos.map(function(p, i){
-    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\"><span class=\"pdate\">" + fmtDatePt(p.date) + "</span>" +
+    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de progresso de " + fmtDatePt(p.date) + "\">" +
+      "<span class=\"pdate\">" + fmtDatePt(p.date) + (p.position ? " · " + PHOTO_POSITION_LABEL[p.position] : "") + "</span>" +
       "<button type=\"button\" class=\"photo-remove\" data-idx=\"" + i + "\" title=\"Remover fotografia\" aria-label=\"Remover fotografia\">✕</button></div>";
   }).join("") + "</div>";
 }
@@ -2376,38 +2428,186 @@ function wirePhotoRemove(s, el, onDone){
   });
 }
 
+// Datas distintas com pelo menos uma fotografia, por ordem crescente —
+// usadas para preencher os dois seletores de "momento" da comparação.
+function distinctPhotoDates(s){
+  var seen = {};
+  (s.photos||[]).forEach(function(p){ seen[p.date] = true; });
+  return Object.keys(seen).sort();
+}
+
+function findPhotoByDateAndPosition(s, date, position){
+  return (s.photos||[]).filter(function(p){ return p.date===date && p.position===position; })[0] || null;
+}
+
 function tplPhotoCompare(s){
-  if (!s.photos || s.photos.length < 2) return "";
-  var sorted = s.photos.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
-  var lastIdx = sorted.length-1;
-  var optionsBefore = sorted.map(function(p,i){ return "<option value=\"" + i + "\">" + fmtDatePt(p.date) + "</option>"; }).join("");
-  var optionsAfter = sorted.map(function(p,i){ return "<option value=\"" + i + "\"" + (i===lastIdx?" selected":"") + ">" + fmtDatePt(p.date) + "</option>"; }).join("");
-  return "<div style=\"margin-top:14px; padding-top:14px; border-top:1px solid var(--line);\">" +
-    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Comparar antes / depois</div>" +
+  var dates = distinctPhotoDates(s);
+  if (dates.length < 1) return "";
+  var lastIdx = dates.length-1;
+  var optsA = dates.map(function(d){ return "<option value=\"" + d + "\">" + fmtDatePt(d) + "</option>"; }).join("");
+  var optsB = dates.map(function(d,i){ return "<option value=\"" + d + "\"" + (i===lastIdx?" selected":"") + ">" + fmtDatePt(d) + "</option>"; }).join("");
+  return "<div class=\"photo-compare\" style=\"margin-top:14px; padding-top:14px; border-top:1px solid var(--line);\">" +
+    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Comparar evolução</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe dois momentos — mostra frente, lado e costas lado a lado, mesmo que faltem fotos nalguma posição.</p>" +
     "<div style=\"display:flex; gap:10px; margin-bottom:12px;\">" +
-      "<select class=\"mini-select\" id=\"compareBefore\" style=\"flex:1;\">" + optionsBefore + "</select>" +
-      "<select class=\"mini-select\" id=\"compareAfter\" style=\"flex:1;\">" + optionsAfter + "</select>" +
+      "<select class=\"mini-select\" id=\"compareA\" style=\"flex:1;\">" + optsA + "</select>" +
+      "<select class=\"mini-select\" id=\"compareB\" style=\"flex:1;\">" + optsB + "</select>" +
     "</div>" +
-    "<div class=\"compare-row\" id=\"compareRow\"></div>" +
+    "<div class=\"compare-grid\" id=\"compareGrid\"></div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar comparação</button>" +
+    "<p class=\"muted-p\" id=\"compareDownloadError\" style=\"color:var(--critical); display:none; margin-top:8px;\"></p>" +
   "</div>";
 }
 
+function compareGridHtml(s, dateA, dateB){
+  var html = "<div class=\"compare-grid-head\"><span></span><span>" + fmtDatePt(dateA) + "</span><span>" + fmtDatePt(dateB) + "</span></div>";
+  PHOTO_POSITIONS.forEach(function(pos){
+    var pa = findPhotoByDateAndPosition(s, dateA, pos.key);
+    var pb = findPhotoByDateAndPosition(s, dateB, pos.key);
+    html += "<div class=\"compare-grid-row\">" +
+      "<span class=\"compare-grid-label\">" + pos.label + "</span>" +
+      "<span class=\"compare-cell\">" + (pa ? "<img src=\"" + photoUrl(pa) + "\" alt=\"" + pos.label + " " + fmtDatePt(dateA) + "\">" : "<span class=\"compare-empty\">Sem foto</span>") + "</span>" +
+      "<span class=\"compare-cell\">" + (pb ? "<img src=\"" + photoUrl(pb) + "\" alt=\"" + pos.label + " " + fmtDatePt(dateB) + "\">" : "<span class=\"compare-empty\">Sem foto</span>") + "</span>" +
+    "</div>";
+  });
+  return html;
+}
+
 function wirePhotoCompare(s, el){
-  var beforeSel = el.querySelector("#compareBefore");
-  var afterSel = el.querySelector("#compareAfter");
-  var row = el.querySelector("#compareRow");
-  if (!beforeSel || !afterSel || !row) return;
-  var sorted = s.photos.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
-  function update(){
-    var b = sorted[parseInt(beforeSel.value,10)];
-    var a = sorted[parseInt(afterSel.value,10)];
-    row.innerHTML =
-      "<div class=\"compare-item\"><img src=\"" + photoUrl(b) + "\" alt=\"Antes\"><div class=\"clabel\">Antes · " + fmtDatePt(b.date) + "</div></div>" +
-      "<div class=\"compare-item\"><img src=\"" + photoUrl(a) + "\" alt=\"Depois\"><div class=\"clabel\">Depois · " + fmtDatePt(a.date) + "</div></div>";
-  }
-  beforeSel.addEventListener("change", update);
-  afterSel.addEventListener("change", update);
+  var selA = el.querySelector("#compareA");
+  var selB = el.querySelector("#compareB");
+  var grid = el.querySelector("#compareGrid");
+  if (!selA || !selB || !grid) return;
+  function update(){ grid.innerHTML = compareGridHtml(s, selA.value, selB.value); }
+  selA.addEventListener("change", update);
+  selB.addEventListener("change", update);
   update();
+  var downloadBtn = el.querySelector("#downloadCompare");
+  if (downloadBtn) downloadBtn.addEventListener("click", function(){
+    var errEl = el.querySelector("#compareDownloadError");
+    downloadBtn.disabled = true;
+    var originalText = downloadBtn.textContent;
+    downloadBtn.textContent = "A gerar imagem...";
+    downloadPhotoComparison(s, selA.value, selB.value, errEl).then(function(){
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = originalText;
+    });
+  });
+}
+
+// Busca cada foto por fetch()+blob (não por img.crossOrigin) para o canvas
+// nunca ficar "tainted" mesmo que o cabeçalho CORS do URL assinado varie —
+// uma vez que o ficheiro já chegou como blob local, desenhar no canvas nunca
+// é bloqueado por origem cruzada.
+function loadImageAsElement(url){
+  return fetch(url).then(function(res){
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.blob();
+  }).then(function(blob){
+    return new Promise(function(resolve, reject){
+      var objectUrl = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function(){ URL.revokeObjectURL(objectUrl); resolve(img); };
+      img.onerror = function(){ URL.revokeObjectURL(objectUrl); reject(new Error("Falha ao carregar imagem")); };
+      img.src = objectUrl;
+    });
+  });
+}
+
+function drawImageCover(ctx, img, x, y, w, h){
+  var iw = img.naturalWidth, ih = img.naturalHeight;
+  var scale = Math.max(w/iw, h/ih);
+  var sw = w/scale, sh = h/scale;
+  var sx = (iw-sw)/2, sy = (ih-sh)/2;
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+
+// Gera uma única imagem PNG com a grelha 2 momentos × 3 posições (até 6
+// fotos), pronta a descarregar e a enviar ao aluno. Pedido explícito: uma
+// imagem combinada, não os ficheiros separados.
+function downloadPhotoComparison(s, dateA, dateB, errEl){
+  if (errEl) errEl.style.display = "none";
+  var cellW = 280, cellH = 360, labelW = 90, gap = 14, headerH = 46, titleH = 46, pad = 24;
+  var colX = [pad+labelW, pad+labelW+cellW+gap];
+  var canvasW = pad*2 + labelW + cellW*2 + gap;
+  var canvasH = pad*2 + titleH + headerH + PHOTO_POSITIONS.length*cellH + (PHOTO_POSITIONS.length-1)*gap;
+
+  var cells = [];
+  PHOTO_POSITIONS.forEach(function(pos, ri){
+    var y = pad + titleH + headerH + ri*(cellH+gap);
+    [dateA, dateB].forEach(function(d, ci){
+      cells.push({pos:pos, x:colX[ci], y:y, photo: findPhotoByDateAndPosition(s, d, pos.key)});
+    });
+  });
+
+  var loadJobs = cells.map(function(c){
+    if (!c.photo) return Promise.resolve();
+    return loadImageAsElement(photoUrl(c.photo)).then(function(img){ c.img = img; }).catch(function(){ c.loadFailed = true; });
+  });
+
+  return Promise.all(loadJobs).then(function(){
+    var canvas = document.createElement("canvas");
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    var ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    ctx.fillStyle = "#111111";
+    ctx.font = "bold 20px -apple-system, sans-serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(s.name + " — evolução", pad, pad + 22);
+
+    ctx.font = "600 14px -apple-system, sans-serif";
+    ctx.fillStyle = "#555555";
+    ctx.textAlign = "center";
+    ctx.fillText(fmtDatePt(dateA), colX[0]+cellW/2, pad+titleH+headerH-16);
+    ctx.fillText(fmtDatePt(dateB), colX[1]+cellW/2, pad+titleH+headerH-16);
+    ctx.textAlign = "left";
+
+    ctx.font = "700 13px -apple-system, sans-serif";
+    ctx.fillStyle = "#111111";
+    ctx.textBaseline = "middle";
+    PHOTO_POSITIONS.forEach(function(pos, ri){
+      var y = pad + titleH + headerH + ri*(cellH+gap);
+      ctx.fillText(pos.label, pad, y+cellH/2);
+    });
+    ctx.textBaseline = "alphabetic";
+
+    cells.forEach(function(c){
+      if (c.img){
+        drawImageCover(ctx, c.img, c.x, c.y, cellW, cellH);
+      } else {
+        ctx.fillStyle = "#eeeeee";
+        ctx.fillRect(c.x, c.y, cellW, cellH);
+        ctx.fillStyle = "#999999";
+        ctx.font = "13px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(c.loadFailed ? "Erro ao carregar" : "Sem foto", c.x+cellW/2, c.y+cellH/2);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+      }
+    });
+
+    return new Promise(function(resolve){ canvas.toBlob(resolve, "image/png"); });
+  }).then(function(blob){
+    if (!blob) throw new Error("Não foi possível gerar a imagem.");
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "evolucao-" + s.id + "-" + dateA + "-vs-" + dateB + ".png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }).catch(function(err){
+    if (errEl){
+      errEl.textContent = "⚠ Não foi possível gerar a imagem de comparação — tenta novamente.";
+      errEl.style.display = "block";
+    }
+    console.error("Falha ao gerar comparação de fotos", err);
+  });
 }
 
 function tplPhotosSection(s, opts){
@@ -2420,7 +2620,11 @@ function tplPhotosSection(s, opts){
     html += "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional ainda não ativou fotografias de progresso para ti.</p>";
   } else {
     html += photoGridHtml(s) +
-      "<label class=\"btn-file\" style=\"margin-top:10px; display:inline-block;\">Adicionar fotografia<input type=\"file\" accept=\"image/*\" id=\"photoUpload\" style=\"display:none;\"></label>" +
+      "<div style=\"display:flex; gap:8px; margin:10px 0; flex-wrap:wrap;\">" +
+        PHOTO_POSITIONS.map(function(p){
+          return "<label class=\"btn-file\">" + p.label + "<input type=\"file\" accept=\"image/*\" class=\"photo-upload-input\" data-position=\"" + p.key + "\" style=\"display:none;\"></label>";
+        }).join("") +
+      "</div>" +
       tplPhotoCompare(s);
   }
   html += "</div>";
@@ -2541,36 +2745,39 @@ function wireAlunoTab(s){
     if (input) input.addEventListener("input", function(){ el.querySelector("#"+id+"Val").textContent = input.value; });
   });
 
-  var photoInput = el.querySelector("#photoUpload");
-  if (photoInput) photoInput.addEventListener("change", function(e){
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (sbReady && currentAuthUserId){
-      var uploadedPath;
-      resizeImageFile(file, 1280).then(function(blob){
-        uploadedPath = currentAuthUserId + "/" + Date.now() + ".jpg";
-        return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
-      }).then(function(res){
-        if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
-        // bucket privado: guardamos só o caminho, nunca um URL público fixo — a
-        // leitura é sempre feita depois via URL assinado (ver resolvePhotoUrls).
-        return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
-          var photo = { date: todayISO(), path: uploadedPath };
-          photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
-          s.photos.push(photo);
+  el.querySelectorAll(".photo-upload-input").forEach(function(photoInput){
+    photoInput.addEventListener("change", function(e){
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      var position = photoInput.getAttribute("data-position");
+      if (sbReady && currentAuthUserId){
+        var uploadedPath;
+        resizeImageFile(file, 1280).then(function(blob){
+          uploadedPath = currentAuthUserId + "/" + Date.now() + ".jpg";
+          return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
+        }).then(function(res){
+          if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
+          // bucket privado: guardamos só o caminho, nunca um URL público fixo — a
+          // leitura é sempre feita depois via URL assinado (ver resolvePhotoUrls).
+          return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
+            var photo = { date: todayISO(), path: uploadedPath, position: position };
+            photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
+            s.photos.push(photo);
+            renderAlunoTab(s);
+            persistStudent(s);
+          });
+        }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
+      } else {
+        var reader = new FileReader();
+        reader.onload = function(){
+          s.photos.push({date: todayISO(), dataUrl: reader.result, position: position});
           renderAlunoTab(s);
           persistStudent(s);
-        });
-      }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
-    } else {
-      var reader = new FileReader();
-      reader.onload = function(){
-        s.photos.push({date: todayISO(), dataUrl: reader.result});
-        renderAlunoTab(s);
-        persistStudent(s);
-      };
-      reader.readAsDataURL(file);
-    }
+        };
+        reader.readAsDataURL(file);
+      }
+      photoInput.value = "";
+    });
   });
   wirePhotoCompare(s, el);
   wirePhotoRemove(s, el, function(){ renderAlunoTab(s); });
@@ -2624,6 +2831,26 @@ function renderProShell(){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
 
+  // No telemóvel o menu lateral vira uma fila horizontal com scroll (ver
+  // @media max-width:760px em .pro-sidebar) — sem isto, um separador tocado
+  // perto da margem fica meio cortado. Centra sempre o separador ativo depois
+  // de o sidebar ser reconstruído.
+  // Adiado: chamado logo a seguir a innerHTML=..., na mesma execução síncrona,
+  // scrollIntoView() nem sempre usa a geometria final do layout recém-
+  // inserido (confirmado a falhar sem isto). Usa-se setTimeout em vez de
+  // requestAnimationFrame porque rAF fica suspenso em separadores em segundo
+  // plano (nunca dispara) — setTimeout continua fiável em ambos os casos.
+  setTimeout(function(){
+    var activeNavItem = proRoot.querySelector(".pro-sidebar .pro-nav-item.active");
+    if (activeNavItem && activeNavItem.scrollIntoView){
+      // "instant" explícito: sem isto herda-se scroll-behavior:smooth do CSS
+      // (para o scroll manual do dedo continuar suave), mas uma animação
+      // smooth iniciada por código nunca chega a progredir num separador em
+      // segundo plano — confirmado a ficar preso em scrollLeft:0 até o fim.
+      activeNavItem.scrollIntoView({inline:"center", block:"nearest", behavior:"instant"});
+    }
+  }, 0);
+
   if (selected) renderProDetailMain(selected); else renderProDashboardMain();
 }
 
@@ -2637,19 +2864,25 @@ function visibleStudentsForDashboard(){
   return state.showDemoStudents ? STUDENTS : STUDENTS.filter(function(s){ return !s.isDemo; });
 }
 
+// "Ativo" é um estado novo e independente de is_demo (demonstração): um aluno
+// real pode estar ativo ou inativo (ex. parou de treinar contigo, mas
+// mantém-se o histórico). Por omissão todos os alunos são ativos — só fica
+// inativo quem o profissional marcar explicitamente.
+function isStudentActive(s){ return s.active !== false; }
+
 function renderProDashboardMain(){
   var main = document.getElementById("proMain");
   var visible = visibleStudentsForDashboard();
   var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
-  var activeCount = visible.length;
+  var activeStudents = visible.filter(isStudentActive);
   var pendingCheckins = visible.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
   var alertCount = visible.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
-    proStat(visible.length, "Total de alunos") +
-    proStat(activeCount, "Alunos ativos") +
-    proStat(pendingCheckins, "Check-ins pendentes") +
-    proStat(alertCount, "Alertas") +
+    proStat(activeStudents.length, "Alunos ativos", "active") +
+    proStat(pendingCheckins, "Check-ins", null) +
+    proStat(alertCount, "Alertas", null) +
+    proStat(visible.length, "Total de alunos", "total") +
   "</div>";
 
   html += "<div style=\"display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;\">" +
@@ -2657,26 +2890,51 @@ function renderProDashboardMain(){
     "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\">+ Convidar aluno</button>" +
   "</div>";
 
-  html += "<div class=\"student-list\">";
-  visible.forEach(function(s){
-    var adh = computeAdherence(s);
-    var alerts = computeDashboardAlerts(s);
-    html += "<div class=\"card student-card\" data-id=\"" + s.id + "\">" +
-      "<div class=\"student-card-top\"><div class=\"avatar\">" + s.initials + "</div>" +
-        "<div><div class=\"sname\">" + s.name + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + s.goal + "</div></div></div>" +
-      (alerts.length ? "<div class=\"alerts\">" + alerts.map(function(a){ return "<span class=\"pill " + a.type + "\">⚠ " + escapeHtml(a.text) + "</span>"; }).join("") + "</div>" : "") +
-      (adh==null ?
-        "<div class=\"muted-p\" style=\"margin-top:12px;\">Sem check-ins ainda</div>" :
-        "<div class=\"adherence-row\"><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div><span class=\"num\">" + Math.round(adh*100) + "%</span></div>"
-      ) +
-      "<div class=\"muted-p\" style=\"margin-top:8px;\">Último check-in: " + daysAgoLabel(computeLastCheckinDaysAgo(s)) + "</div>" +
-    "</div>";
-  });
-  html += "</div>";
+  // A lista completa (com pesagem/adesão/alertas por aluno) só aparece a
+  // pedido, ao tocar num dos dois blocos de contagem de alunos — o dashboard
+  // por omissão mostra só os números. "Alunos ativos" mostra só quem está
+  // ativo; "Total de alunos" mostra todos (incluindo inativos, para poderes
+  // reativar alguém), sempre com o interruptor ativo/inativo.
+  if (state.dashboardListMode){
+    var listStudents = state.dashboardListMode === "active" ? activeStudents : visible;
+    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + (state.dashboardListMode === "active" ? "Alunos ativos" : "Todos os alunos") + "</div>";
+    html += "<div class=\"student-list\">";
+    listStudents.forEach(function(s){
+      html += "<div class=\"card student-row\" data-id=\"" + s.id + "\">" +
+        "<div class=\"student-row-main\" data-open=\"" + s.id + "\">" +
+          "<div class=\"avatar\">" + s.initials + "</div>" +
+          "<div><div class=\"sname\">" + s.name + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + s.goal + "</div></div>" +
+        "</div>" +
+        "<label class=\"switch\" title=\"" + (isStudentActive(s) ? "Ativo" : "Inativo") + "\">" +
+          "<input type=\"checkbox\" data-active-toggle=\"" + s.id + "\"" + (isStudentActive(s) ? " checked" : "") + ">" +
+          "<span class=\"switch-track\"><span class=\"switch-thumb\"></span></span>" +
+        "</label>" +
+      "</div>";
+    });
+    if (!listStudents.length) html += "<p class=\"muted-p\">Nenhum aluno " + (state.dashboardListMode === "active" ? "ativo" : "") + " para mostrar.</p>";
+    html += "</div>";
+  }
 
   main.innerHTML = html;
-  main.querySelectorAll(".student-card").forEach(function(c){
-    c.addEventListener("click", function(){ state.proSelectedId = c.getAttribute("data-id"); state.proTab="perfil"; renderProShell(); });
+  main.querySelectorAll("[data-open]").forEach(function(el){
+    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="perfil"; renderProShell(); });
+  });
+  main.querySelectorAll("[data-active-toggle]").forEach(function(input){
+    input.addEventListener("click", function(e){ e.stopPropagation(); });
+    input.addEventListener("change", function(){
+      var s = findStudent(input.getAttribute("data-active-toggle"));
+      if (!s) return;
+      s.active = input.checked;
+      persistStudent(s);
+      renderProDashboardMain();
+    });
+  });
+  main.querySelectorAll("[data-stat-key]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var key = btn.getAttribute("data-stat-key");
+      state.dashboardListMode = state.dashboardListMode === key ? null : key;
+      renderProDashboardMain();
+    });
   });
   document.getElementById("btnInvite").addEventListener("click", openInviteModal);
   var toggleDemoBtn = document.getElementById("toggleDemo");
@@ -2718,6 +2976,7 @@ function openOnboardingForm(){
       "<div class=\"onb-field\"><label>Idade</label><input type=\"number\" min=\"0\" id=\"obAge\" value=\"30\"></div>" +
       "<div class=\"onb-field\"><label>Sexo</label><select id=\"obSex\"><option>Feminino</option><option>Masculino</option></select></div>" +
     "</div>" +
+    "<div class=\"onb-field\"><label>Data de nascimento</label><input type=\"date\" id=\"obBirthDate\"></div>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Altura (cm)</label><input type=\"number\" min=\"0\" id=\"obHeight\" value=\"170\"></div>" +
       "<div class=\"onb-field\"><label>Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"obWeight\" value=\"70\"></div>" +
@@ -2790,6 +3049,7 @@ function openOnboardingForm(){
     var profile = {
       name:name,
       age: ageVal,
+      birthDate: sheet.querySelector("#obBirthDate").value || null,
       sex: sheet.querySelector("#obSex").value,
       height: heightVal,
       weight: weightVal,
@@ -2818,7 +3078,7 @@ function openOnboardingForm(){
     while (findStudent(id)){ id = baseId + "-" + n; n++; }
 
     var newStudent = {
-      id:id, initials:initialsOf(name), name:name, age:profile.age, sex:profile.sex, height:profile.height,
+      id:id, initials:initialsOf(name), name:name, age:profile.age, birthDate:profile.birthDate, sex:profile.sex, height:profile.height,
       weightInitial:profile.weight, weightCurrent:profile.weight, weightGoal:null,
       goal:profile.goal, trainingsPerWeek:profile.trainingsPerWeek, trainingType:profile.trainingType||"—", trainingTime:profile.trainingTime||"—",
       wakeTime:profile.wakeTime||"—", sleepTime:profile.sleepTime||"—",
@@ -2855,8 +3115,11 @@ function openOnboardingForm(){
   });
 }
 
-function proStat(v, l){
-  return "<div class=\"pro-stat-card\"><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></div>";
+function proStat(v, l, key){
+  var active = key && state.dashboardListMode === key;
+  var tag = key ? "button type=\"button\"" : "div";
+  var closeTag = key ? "button" : "div";
+  return "<" + tag + " class=\"pro-stat-card" + (key ? " pro-stat-card-clickable" : "") + (active ? " active" : "") + "\"" + (key ? " data-stat-key=\"" + key + "\"" : "") + "><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></" + closeTag + ">";
 }
 
 var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Plano"],["flex","Flexibilidade"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
@@ -2896,27 +3159,35 @@ function renderProTabContent(s){
 function fRow(label, val){ return "<div class=\"f\"><label>" + label + "</label><div class=\"v\">" + val + "</div></div>"; }
 
 function tplProPerfil(s){
-  var html = "<div class=\"eyebrow\">Dados pessoais</div><div class=\"field-row\">" +
-    fRow("Idade", s.age + " anos") + fRow("Sexo", s.sex) + fRow("Altura", s.height + " cm") +
+  // Fase 10: o perfil já não é uma lista contínua de secções — cada uma é um
+  // <details> recolhível (nativo, sem JS a mais), só "Dados pessoais" começa
+  // aberta. Pedido explícito: o profissional queixou-se de ter de percorrer
+  // tudo até baixo para encontrar uma secção específica.
+  var html = perfilSection("Dados pessoais", true, "<div class=\"field-row\">" +
+    fRow("Idade", s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex) + fRow("Altura", s.height + " cm") +
     fRow("Peso atual", s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial + " kg") + fRow("Peso objetivo", (s.weightGoal||"—") + (s.weightGoal?" kg":"")) +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
-  "</div>";
+  "</div>");
 
-  html += "<div class=\"section-gap eyebrow\">Preferências alimentares</div><div class=\"field-row\">" +
+  html += perfilSection("Preferências alimentares", false, "<div class=\"field-row\">" +
     fRow("Nº refeições preferido", s.mealsPreferred) + fRow("Orçamento", s.budget) + fRow("Tempo p/ cozinhar", s.cookTime) +
-  "</div>";
-  html += "<div style=\"margin-top:10px;\">" +
-    (s.likes.length? "<div class=\"muted-p\">Gosta de:</div><div class=\"tag-list\">" + s.likes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
-    (s.dislikes.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não gosta:</div><div class=\"tag-list\">" + s.dislikes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
-    (s.avoid.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não quer consumir:</div><div class=\"tag-list\">" + s.avoid.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
-    (s.allergies.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Alergias / intolerâncias:</div><div class=\"tag-list\">" + s.allergies.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
-  "</div>";
+    "</div>" +
+    "<div style=\"margin-top:10px;\">" +
+      (s.likes.length? "<div class=\"muted-p\">Gosta de:</div><div class=\"tag-list\">" + s.likes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
+      (s.dislikes.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não gosta:</div><div class=\"tag-list\">" + s.dislikes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
+      (s.avoid.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não quer consumir:</div><div class=\"tag-list\">" + s.avoid.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
+      (s.allergies.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Alergias / intolerâncias:</div><div class=\"tag-list\">" + s.allergies.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
+    "</div>");
 
-  html += "<div class=\"section-gap eyebrow\">Contexto</div><div class=\"field-row\">" +
+  html += perfilSection("Contexto", false, "<div class=\"field-row\">" +
     fRow("Trabalho", s.work) + fRow("Fins de semana", s.weekendNote) +
-  "</div>";
+  "</div>");
   return html;
+}
+
+function perfilSection(title, openByDefault, innerHtml){
+  return "<details class=\"perfil-section\"" + (openByDefault ? " open" : "") + "><summary class=\"eyebrow\">" + title + "</summary>" + innerHtml + "</details>";
 }
 
 function tplProPlano(s){
