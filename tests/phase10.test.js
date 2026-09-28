@@ -147,7 +147,7 @@ function freshStudent(overrides){
 
 // ---- 5. Perfil reorganizado em secções recolhíveis ----
 
-// 13. tplProPerfil usa <details> em vez de uma lista contínua, com "Dados pessoais" aberta por omissão
+// 13. tplProPerfil usa <details> em vez de uma lista contínua; todas fecham por omissão (Fase 11)
 (function(){
   var s = freshStudent({
     age:30, birthDate:"1994-03-10", sex:"Feminino", height:170, weightCurrent:65, weightInitial:70, weightGoal:60,
@@ -162,7 +162,7 @@ function freshStudent(overrides){
   // médicos, Personalizar — sem "Contexto" (só aparece com weekendNote
   // real, testado a seguir).
   check.check("13. Usa <details> para as 6 secções sem Contexto legacy", (html.match(/<details/g) || []).length === 6);
-  check.check("13. Só a primeira secção (Dados pessoais) começa aberta", (html.match(/<details class="perfil-section" open>/g) || []).length === 1);
+  check.check("13. Nenhuma secção começa aberta (Fase 11: nada à vista por omissão)", (html.match(/<details class="perfil-section" open>/g) || []) .length === 0);
   check.check("13. Mostra a data de nascimento formatada", html.indexOf(fmtDatePt("1994-03-10")) >= 0);
 })();
 

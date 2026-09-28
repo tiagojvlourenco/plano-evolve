@@ -1402,6 +1402,14 @@ var GOAL_ADJUST = {
   "Performance / melhoria do rendimento": 5
 };
 
+// Fase 11: ritmo de ganho/perda gradual quando há um peso objetivo concreto
+// (pedido explícito: "70kg -> 90kg" deve gerar um excedente moderado e
+// constante, não uma % abrupta do TDEE). 0.5 kg/semana é o ritmo confirmado
+// com o profissional; 7700 kcal/kg é a aproximação padrão usada na indústria
+// (1kg de massa corporal ≈ 7700 kcal, a mesma base da regra "3500kcal = 1lb").
+var WEIGHT_GOAL_RATE_KG_PER_WEEK = 0.5;
+var KCAL_PER_KG = 7700;
+
 function computeSuggestedTargets(p){
   var bmr = p.sex==="Masculino"
     ? (10*p.weight + 6.25*p.height - 5*p.age + 5)
@@ -1409,8 +1417,15 @@ function computeSuggestedTargets(p){
   if (!isFinite(bmr) || bmr<0) bmr = 0;
   var activity = activityFromTrainings(p.trainingsPerWeek);
   var tdee = bmr * activity;
-  var adjust = GOAL_ADJUST[p.goal] || 0;
-  var kcal = Math.max(0, Math.round(tdee * (1 + adjust/100)));
+  var kcal;
+  if (p.weightGoal && Math.abs(p.weightGoal - p.weight) >= 0.5){
+    var direction = p.weightGoal > p.weight ? 1 : -1;
+    var dailyAdjust = direction * (WEIGHT_GOAL_RATE_KG_PER_WEEK * KCAL_PER_KG) / 7;
+    kcal = Math.max(0, Math.round(tdee + dailyAdjust));
+  } else {
+    var adjust = GOAL_ADJUST[p.goal] || 0;
+    kcal = Math.max(0, Math.round(tdee * (1 + adjust/100)));
+  }
   var protein = Math.round(2.0 * p.weight);
   var fat = Math.round((kcal*0.27) / 9);
   var carbsKcal = Math.max(0, kcal - protein*4 - fat*9);
@@ -3269,15 +3284,19 @@ function fRow(label, val){ return "<div class=\"f\"><label>" + label + "</label>
 
 function tplProPerfil(s){
   // Fase 10: o perfil já não é uma lista contínua de secções — cada uma é um
-  // <details> recolhível (nativo, sem JS a mais), só "Dados pessoais" começa
-  // aberta. Pedido explícito: o profissional queixou-se de ter de percorrer
-  // tudo até baixo para encontrar uma secção específica.
-  var html = perfilSection("Dados pessoais", true, "<div class=\"field-row\">" +
+  // <details> recolhível (nativo, sem JS a mais). Fase 11: todas começam
+  // fechadas, incluindo "Dados pessoais" — pedido explícito para não ter
+  // informação sempre à vista, igual ao resto das secções.
+  var html = perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
     fRow("Idade", s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex) + fRow("Altura", s.height + " cm") +
-    fRow("Peso atual", s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial + " kg") + fRow("Peso objetivo", (s.weightGoal||"—") + (s.weightGoal?" kg":"")) +
+    fRow("Peso atual", s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial + " kg") +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
-  "</div>");
+  "</div>" +
+  "<div class=\"checkin-field\" style=\"margin-top:14px; max-width:220px;\"><label for=\"weightGoalInput\">Peso objetivo (kg)</label>" +
+    "<input type=\"number\" step=\"0.5\" min=\"0\" id=\"weightGoalInput\" value=\"" + (s.weightGoal != null ? s.weightGoal : "") + "\" placeholder=\"Ex.: 90\"></div>" +
+  "<p class=\"muted-p\" style=\"margin-top:6px;\">Ao guardar, os alvos nutricionais são recalculados com um ritmo gradual (~" + WEIGHT_GOAL_RATE_KG_PER_WEEK + " kg/semana) em vez do ajuste fixo por objetivo — revê-os depois no separador Plano.</p>" +
+  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveWeightGoal\" style=\"margin-top:8px;\">Guardar peso objetivo</button>");
 
   // Alinhado ao questionário real (Google Forms): horário de trabalho +
   // facilidade de fazer refeições no local de trabalho + suplementação.
@@ -3340,9 +3359,38 @@ function perfilSection(title, openByDefault, innerHtml){
   return "<details class=\"perfil-section\"" + (openByDefault ? " open" : "") + "><summary class=\"eyebrow\">" + title + "</summary>" + innerHtml + "</details>";
 }
 
+// Fase 11: pedido do profissional — ao reajustar o plano, poder ver/copiar
+// rapidamente o que o aluno respondeu no questionário inicial (não uma cópia
+// automática do plano de outro aluno, que seria imprecisa).
+function hasQuestionnaireAnswers(s){
+  return !!(s.dailyEatingDescription || s.hardestFoodToResist || s.overeatingMealsPerWeek != null ||
+    s.waterIntake || s.mealsAtWorkEase || (s.usesSupplements && s.supplements && s.supplements.length) ||
+    (s.allergies && s.allergies.length));
+}
+
+function questionnaireAnswersText(s){
+  var lines = ["Questionário inicial de " + s.name + ":"];
+  if (s.dailyEatingDescription) lines.push("Dia-a-dia alimentar: " + s.dailyEatingDescription);
+  if (s.overeatingMealsPerWeek != null) lines.push("Refeições exageradas/semana: " + s.overeatingMealsPerWeek);
+  if (s.hardestFoodToResist) lines.push("Mais custa controlar/resistir: " + s.hardestFoodToResist);
+  if (s.allergies && s.allergies.length) lines.push("Não consome / alérgico/a: " + s.allergies.join(", "));
+  if (s.waterIntake) lines.push("Água ingerida em 24h: " + s.waterIntake);
+  if (s.mealsAtWorkEase) lines.push("Facilidade de refeições no trabalho: " + s.mealsAtWorkEase);
+  if (s.usesSupplements && s.supplements && s.supplements.length) lines.push("Suplementos: " + s.supplements.join(", "));
+  return lines.join("\n");
+}
+
+function tplQuestionnaireCopy(s){
+  if (!hasQuestionnaireAnswers(s)) return "";
+  return "<details class=\"perfil-section\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
+    "<p class=\"muted-p\" style=\"white-space:pre-wrap; margin-top:8px;\">" + escapeHtml(questionnaireAnswersText(s)) + "</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
+  "</details>";
+}
+
 function tplProPlano(s){
   var t = s.targets;
-  var html = "";
+  var html = tplQuestionnaireCopy(s);
   if (s.fromOnboarding){
     html += "<div class=\"suggestion-banner\">🧾 Sugestão calculada a partir do questionário inicial — confirma ou ajusta antes de montares as refeições.</div>";
   }
@@ -3845,6 +3893,20 @@ function wireProTab(s){
     });
   });
 
+  var copyQ = el.querySelector("#copyQuestionnaire");
+  if (copyQ) copyQ.addEventListener("click", function(){
+    var text = questionnaireAnswersText(s);
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        showToast("✓ Respostas copiadas");
+      }).catch(function(){
+        showToast("⚠ Não foi possível copiar automaticamente");
+      });
+    } else {
+      showToast("⚠ Não foi possível copiar automaticamente");
+    }
+  });
+
   var saveT = el.querySelector("#saveTargets");
   if (saveT) {
     renderTargetWarning(el);
@@ -3996,6 +4058,29 @@ function wireProTab(s){
     saveN.textContent = "Guardado ✓";
     persistStudent(s);
     setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
+  });
+
+  var saveWG = el.querySelector("#saveWeightGoal");
+  if (saveWG) saveWG.addEventListener("click", function(){
+    var raw = el.querySelector("#weightGoalInput").value;
+    var newGoal = raw === "" ? null : parseFloat(raw);
+    if (newGoal != null && !(newGoal > 0)){
+      showToast("⚠ O peso objetivo tem de ser superior a 0");
+      return;
+    }
+    s.weightGoal = newGoal;
+    var suggested = computeSuggestedTargets({
+      sex: s.sex, weight: s.weightCurrent, height: s.height, age: s.age,
+      trainingsPerWeek: s.trainingsPerWeek, goal: s.goal, weightGoal: s.weightGoal
+    });
+    var newTargets = {kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat};
+    logTargetsChange(s, s.targets, newTargets);
+    s.targets = newTargets;
+    s.fromOnboarding = true; // reaparece o banner "confirma ou ajusta" no Plano
+    saveWG.textContent = "Guardado ✓";
+    persistStudent(s);
+    showToast("Peso objetivo guardado — alvos recalculados, revê no separador Plano");
+    setTimeout(function(){ saveWG.textContent = "Guardar peso objetivo"; }, 1400);
   });
 
   var saveMed = el.querySelector("#saveMedical");
