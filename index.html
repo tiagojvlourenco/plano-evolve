@@ -1027,9 +1027,11 @@ function addMealToPlan(s){
 // (ver tplQuestionnaireCopy).
 var PLAN_SKELETON_MEALS = [
   ["Pequeno-almoço", "07:30"],
+  ["Meio da manhã", "10:30"],
   ["Almoço", "13:00"],
   ["Lanche", "17:00"],
-  ["Jantar", "20:00"]
+  ["Jantar", "20:00"],
+  ["Ceia", "22:30"]
 ];
 
 function createPlanSkeleton(s){
@@ -3411,7 +3413,7 @@ function tplQuestionnaireCopy(s){
       "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"createPlanSkeleton\">Criar esqueleto de plano</button>" +
     "</div>" +
-    "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O esqueleto cria só a estrutura (Pequeno-almoço/Almoço/Lanche/Jantar, sem alimentos) — os alimentos ficam ao teu critério, com a resposta acima como referência.</p>" +
+    "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O esqueleto cria só a estrutura (" + PLAN_SKELETON_MEALS.map(function(p){return p[0];}).join("/") + ", sem alimentos) — os alimentos ficam ao teu critério, com a resposta acima como referência.</p>" +
   "</details>";
 }
 
@@ -3936,7 +3938,7 @@ function wireProTab(s){
 
   var skeletonBtn = el.querySelector("#createPlanSkeleton");
   if (skeletonBtn) skeletonBtn.addEventListener("click", function(){
-    if (s.meals.length && !window.confirm("Já existem refeições no plano. Adicionar mais 4 refeições vazias (Pequeno-almoço/Almoço/Lanche/Jantar)?")) return;
+    if (s.meals.length && !window.confirm("Já existem refeições no plano. Adicionar mais " + PLAN_SKELETON_MEALS.length + " refeições vazias (" + PLAN_SKELETON_MEALS.map(function(p){return p[0];}).join("/") + ")?")) return;
     var added = createPlanSkeleton(s);
     added.forEach(function(m){ logMealAdded(s, m); });
     renderProTabContent(s);

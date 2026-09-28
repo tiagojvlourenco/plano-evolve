@@ -135,14 +135,14 @@ function freshStudent(overrides){
 
 // ---- 5. "Criar esqueleto de plano" a partir do questionário — só estrutura, nunca alimentos ----
 
-// 11. createPlanSkeleton cria as 4 refeições standard, vazias, ordenadas por horário
+// 11. createPlanSkeleton cria as 6 refeições standard, vazias, ordenadas por horário
 (function(){
   var s = freshStudent({meals:[]});
   var added = createPlanSkeleton(s);
-  check.check("11. Cria exatamente 4 refeições", s.meals.length === 4 && added.length === 4);
-  check.check("11. Nomes corretos, na ordem certa (por horário)", s.meals.map(function(m){ return m.name; }).join(",") === "Pequeno-almoço,Almoço,Lanche,Jantar");
+  check.check("11. Cria exatamente 6 refeições", s.meals.length === 6 && added.length === 6);
+  check.check("11. Nomes corretos, na ordem certa (por horário)", s.meals.map(function(m){ return m.name; }).join(",") === "Pequeno-almoço,Meio da manhã,Almoço,Lanche,Jantar,Ceia");
   check.check("11. Nenhuma refeição tem alimentos (só estrutura, nunca adivinha o que a pessoa come)", s.meals.every(function(m){ return m.foods.length === 0; }));
-  check.check("11. Horários plausíveis e ordenados", s.meals.map(function(m){ return m.time; }).join(",") === "07:30,13:00,17:00,20:00");
+  check.check("11. Horários plausíveis e ordenados", s.meals.map(function(m){ return m.time; }).join(",") === "07:30,10:30,13:00,17:00,20:00,22:30");
 })();
 
 // 12. Se já houver refeições, createPlanSkeleton só acrescenta (não apaga as existentes)
@@ -150,7 +150,7 @@ function freshStudent(overrides){
   var s = freshStudent({meals:[meal("Refeição já existente", "10:00", [food("Ovos","2 unid.","protein")])]});
   createPlanSkeleton(s);
   check.check("12. Mantém a refeição existente", s.meals.some(function(m){ return m.name === "Refeição já existente"; }));
-  check.check("12. Acrescenta as 4 novas (total 5)", s.meals.length === 5);
+  check.check("12. Acrescenta as 6 novas (total 7)", s.meals.length === 7);
 })();
 
 // 13. O botão só aparece dentro do bloco do questionário (mesma condição de hasQuestionnaireAnswers)
