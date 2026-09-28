@@ -1019,6 +1019,29 @@ function addMealToPlan(s){
   return m;
 }
 
+// Fase 12: esqueleto de plano a partir do questionário — pedido do
+// profissional para "converter" a resposta do dia-a-dia alimentar num
+// ponto de partida. Decisão explícita: só a estrutura (refeições e
+// horários standard), nunca adivinhar alimentos a partir de texto livre —
+// isso fica para o profissional decidir, com a resposta do aluno à mão
+// (ver tplQuestionnaireCopy).
+var PLAN_SKELETON_MEALS = [
+  ["Pequeno-almoço", "07:30"],
+  ["Almoço", "13:00"],
+  ["Lanche", "17:00"],
+  ["Jantar", "20:00"]
+];
+
+function createPlanSkeleton(s){
+  var added = PLAN_SKELETON_MEALS.map(function(pair){
+    var m = meal(pair[0], pair[1], []);
+    s.meals.push(m);
+    return m;
+  });
+  sortMealsByTime(s);
+  return added;
+}
+
 function removeMealFromPlan(s, targetMeal){
   s.meals = s.meals.filter(function(m){ return m !== targetMeal; });
 }
@@ -3384,7 +3407,11 @@ function tplQuestionnaireCopy(s){
   if (!hasQuestionnaireAnswers(s)) return "";
   return "<details class=\"perfil-section\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
     "<p class=\"muted-p\" style=\"white-space:pre-wrap; margin-top:8px;\">" + escapeHtml(questionnaireAnswersText(s)) + "</p>" +
-    "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\">" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"createPlanSkeleton\">Criar esqueleto de plano</button>" +
+    "</div>" +
+    "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O esqueleto cria só a estrutura (Pequeno-almoço/Almoço/Lanche/Jantar, sem alimentos) — os alimentos ficam ao teu critério, com a resposta acima como referência.</p>" +
   "</details>";
 }
 
@@ -3905,6 +3932,16 @@ function wireProTab(s){
     } else {
       showToast("⚠ Não foi possível copiar automaticamente");
     }
+  });
+
+  var skeletonBtn = el.querySelector("#createPlanSkeleton");
+  if (skeletonBtn) skeletonBtn.addEventListener("click", function(){
+    if (s.meals.length && !window.confirm("Já existem refeições no plano. Adicionar mais 4 refeições vazias (Pequeno-almoço/Almoço/Lanche/Jantar)?")) return;
+    var added = createPlanSkeleton(s);
+    added.forEach(function(m){ logMealAdded(s, m); });
+    renderProTabContent(s);
+    persistStudent(s);
+    showToast("Esqueleto de plano criado — adiciona os alimentos de cada refeição");
   });
 
   var saveT = el.querySelector("#saveTargets");

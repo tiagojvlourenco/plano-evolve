@@ -133,4 +133,41 @@ function freshStudent(overrides){
   check.check("10. Tem mensagem de erro se falhar", fnSrc.indexOf("Não foi possível copiar automaticamente") >= 0);
 })();
 
+// ---- 5. "Criar esqueleto de plano" a partir do questionário — só estrutura, nunca alimentos ----
+
+// 11. createPlanSkeleton cria as 4 refeições standard, vazias, ordenadas por horário
+(function(){
+  var s = freshStudent({meals:[]});
+  var added = createPlanSkeleton(s);
+  check.check("11. Cria exatamente 4 refeições", s.meals.length === 4 && added.length === 4);
+  check.check("11. Nomes corretos, na ordem certa (por horário)", s.meals.map(function(m){ return m.name; }).join(",") === "Pequeno-almoço,Almoço,Lanche,Jantar");
+  check.check("11. Nenhuma refeição tem alimentos (só estrutura, nunca adivinha o que a pessoa come)", s.meals.every(function(m){ return m.foods.length === 0; }));
+  check.check("11. Horários plausíveis e ordenados", s.meals.map(function(m){ return m.time; }).join(",") === "07:30,13:00,17:00,20:00");
+})();
+
+// 12. Se já houver refeições, createPlanSkeleton só acrescenta (não apaga as existentes)
+(function(){
+  var s = freshStudent({meals:[meal("Refeição já existente", "10:00", [food("Ovos","2 unid.","protein")])]});
+  createPlanSkeleton(s);
+  check.check("12. Mantém a refeição existente", s.meals.some(function(m){ return m.name === "Refeição já existente"; }));
+  check.check("12. Acrescenta as 4 novas (total 5)", s.meals.length === 5);
+})();
+
+// 13. O botão só aparece dentro do bloco do questionário (mesma condição de hasQuestionnaireAnswers)
+(function(){
+  var vazio = freshStudent({targets:{kcal:2000,protein:150,carbs:200,fat:60}, meals:[]});
+  check.check("13. Sem respostas, não mostra o botão de esqueleto", tplProPlano(vazio).indexOf("createPlanSkeleton") === -1);
+
+  var comRespostas = freshStudent({targets:{kcal:2000,protein:150,carbs:200,fat:60}, meals:[], dailyEatingDescription:"Texto de teste"});
+  check.check("13. Com respostas, mostra o botão de esqueleto", tplProPlano(comRespostas).indexOf("createPlanSkeleton") >= 0);
+})();
+
+// 14. wireProTab liga o botão, regista cada refeição no histórico, e confirma antes de acrescentar a um plano já existente
+(function(){
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  check.check("14. Liga createPlanSkeleton", fnSrc.indexOf("createPlanSkeleton()") >= 0 || fnSrc.indexOf("createPlanSkeleton(s)") >= 0);
+  check.check("14. Regista cada refeição criada com logMealAdded", /createPlanSkeleton\(s\)[\s\S]{0,200}logMealAdded/.test(fnSrc));
+  check.check("14. Pede confirmação se já houver refeições no plano", /s\.meals\.length[\s\S]{0,80}window\.confirm/.test(fnSrc));
+})();
+
 check.summarize();
