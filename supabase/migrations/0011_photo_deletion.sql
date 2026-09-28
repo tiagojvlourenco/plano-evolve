@@ -1,6 +1,7 @@
 -- EVOLVE NUTRITION — Fase 9: permitir remover fotografias de progresso
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0010 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais.
+-- APLICADA e validada em produção em 2026-09-28 (teste funcional H, com uma
+-- fotografia sintética criada só para o teste — nunca uma fotografia real).
 --
 -- Encontrado na auditoria da Fase 9: existiam políticas de insert e select
 -- para "progress-photos", mas NENHUMA de delete — não havia forma de um
@@ -40,7 +41,16 @@ create policy "profissional remove fotos dos alunos" on storage.objects
 -- para não ficar um "path" morto a apontar para um ficheiro inexistente.
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, valida com uma
--- conta de aluno real: fazer upload de uma foto de teste, confirmar que
--- aparece, remover, e confirmar que sb.storage.from("progress-photos").list()
--- já não a lista e que students.photos já não tem essa entrada.
+-- APLICADA e validada em produção em 2026-09-28, com uma fotografia
+-- sintética criada só para o teste (nunca uma fotografia real): upload
+-- confirmado, remoção via storage.remove() sem erro, students.photos sem a
+-- entrada a seguir, sem resíduos deixados na base de dados nem no Storage.
+--
+-- Esta validação encontrou um bug crítico não relacionado com esta migração:
+-- persistStudent() usava upsert(), que falhava sempre que era o PRÓPRIO
+-- ALUNO a gravar (RLS rejeita o ramo ON CONFLICT DO UPDATE por não haver
+-- política de INSERT para o aluno — e não deve haver). Isto impedia
+-- qualquer aluno real de gravar seja o que for (concluir refeição, check-in,
+-- fotos, etc.), não só a remoção de fotografias. Corrigido trocando
+-- persistStudent() para update().eq("id", s.id); a criação de alunos (só o
+-- profissional) passou a usar uma função separada, insertStudent().

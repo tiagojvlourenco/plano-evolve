@@ -57,18 +57,22 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - [ ] **Authentication → Email Templates**: confirmar que os templates de "Confirm signup" e "Reset password" estão em português (ou pelo menos claros) — por omissão vêm em inglês genérico da Supabase.
 - [ ] **Authentication → Providers → Email**: confirmar que "Confirm email" está ativo (já parece estar, confirmado empiricamente nesta sessão) e decidir se queres manter a confirmação obrigatória para alunos reais.
 - [ ] **Database → Backups**: confirmar o plano/retenção aplicável (ver secção 5).
-- [ ] Aplicar `0010_demo_flag.sql` e `0011_photo_deletion.sql` (ver checklist da secção 7).
+- [x] Aplicar `0010_demo_flag.sql` e `0011_photo_deletion.sql` — aplicadas e validadas em produção em 2026-09-28.
 - [ ] Correr `supabase/manage_professionals.sql` para qualquer profissional adicional além da tua conta.
 
-## 7. Checklist operacional — antes de aplicar as migrações desta fase
+## 7. Checklist operacional — migrações desta fase
 
-- [ ] Ler o resultado desta Fase 9 e confirmar que concordas com as alterações.
-- [ ] Aplicar `0010_demo_flag.sql` no SQL Editor.
-- [ ] Aplicar `0011_photo_deletion.sql` no SQL Editor.
-- [ ] Correr as queries 11 e 12 de `verify_security.sql` (confirmar `is_demo` e as 2 novas políticas de delete).
-- [ ] Correr o teste funcional H de `verify_security.sql` com uma conta de aluno real (upload + remoção de fotografia).
-- [ ] Confirmar as 3 ações manuais de Auth da secção 6 no dashboard.
+- [x] Ler o resultado desta Fase 9 e confirmar que concordas com as alterações.
+- [x] Aplicar `0010_demo_flag.sql` no SQL Editor — aplicada em 2026-09-28 (com `disable`/`enable trigger` em torno do UPDATE, ver nota abaixo).
+- [x] Aplicar `0011_photo_deletion.sql` no SQL Editor — aplicada em 2026-09-28.
+- [x] Correr as queries 11 e 12 de `verify_security.sql` — `is_demo` confirmado em maria/rui/sofia/tiago; as 2 políticas de delete confirmadas.
+- [x] Correr o teste funcional H de `verify_security.sql` com uma conta de aluno real (Tiago) e uma fotografia sintética criada só para o teste — upload, listagem, remoção e limpeza final confirmados sem resíduos.
+- [ ] Confirmar as 3 ações manuais de Auth da secção 6 no dashboard (ainda pendente da tua parte).
 - [ ] Só depois disto, `git push` (nada foi publicado ainda nesta fase).
+
+**Achado durante a aplicação de `0010`**: correr o `UPDATE` do backfill diretamente no SQL Editor falhou com "Só o profissional pode alterar estes dados do plano." — o trigger `enforce_student_column_permissions()` usa `auth.uid()`, que no contexto de uma ligação direta do SQL Editor (sem JWT de sessão) devolve `null`; sem isso ser reconhecido como profissional, o trigger tratou a alteração como se fosse um aluno a tentar mexer numa coluna fora da allowlist. Corrigido desligando o trigger só para esse UPDATE administrativo pontual e voltando a ligá-lo de imediato (ver o SQL final em `0010_demo_flag.sql`).
+
+**Achado durante a validação do teste funcional H (mais importante que o da migração)**: `persistStudent()` usava `upsert()`, que falha sempre que é o PRÓPRIO ALUNO a gravar a sua linha (RLS rejeita o ramo `ON CONFLICT DO UPDATE` de um upsert por não haver política de `INSERT` para o aluno — e não deve haver, para impedir que crie linhas novas). **Isto impedia qualquer aluno real de gravar seja o que for** — concluir uma refeição, um check-in, uma fotografia — não só a funcionalidade desta fase. Corrigido: `persistStudent()` passou a usar `update().eq("id", s.id)`; a criação de um aluno novo (sempre pelo profissional) passou a usar uma função separada, `insertStudent()`. Validado ao vivo: um `update()` simples na linha do Tiago, que antes falhava com erro de RLS, passou a funcionar sem erro depois da correção.
 
 ## 8. Checklist de lançamento — antes do primeiro aluno real de verdade
 

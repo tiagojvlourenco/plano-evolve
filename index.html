@@ -1291,12 +1291,38 @@ function rowToStudent(r){
   };
 }
 
+// Encontrado na validação real da Fase 9: upsert() em "students" falha SEMPRE
+// que é o próprio aluno a gravar (erro RLS "new row violates row-level
+// security policy"), porque o aluno nunca teve nem deve ter uma política de
+// INSERT — só "student reads own row" (select) e "student updates own row"/
+// "student claims invited row" (update). O Postgres exige que a política de
+// INSERT passe mesmo no ramo ON CONFLICT DO UPDATE de um upsert, e como essa
+// política não existe para o aluno (de propósito: o aluno nunca deve poder
+// criar uma linha), TODO upsert feito pelo aluno era silenciosamente
+// rejeitado — isto impedia qualquer aluno real de gravar seja o que for
+// (concluir refeição, check-in, fotos, etc.). A correção é usar update(),
+// que só depende da política de UPDATE já existente. Criar um aluno novo é
+// sempre feito pelo profissional, através de insertStudent() (insert
+// explícito), nunca por aqui.
 function persistStudent(s){
   if (!sbReady) return;
-  sb.from("students").upsert(studentToRow(s)).then(function(res){
+  sb.from("students").update(studentToRow(s)).eq("id", s.id).then(function(res){
     if (res && res.error){
       console.error("Supabase: falha ao guardar", s.id, res.error.message);
       showToast("⚠ Não foi possível guardar — verifica a tua ligação");
+    }
+  });
+}
+
+// Só usado para CRIAR um aluno novo (sempre pelo profissional, coberto pela
+// política "professional full access" for all). Nunca chamar isto para
+// atualizar um aluno já existente — usa persistStudent().
+function insertStudent(s){
+  if (!sbReady) return;
+  sb.from("students").insert(studentToRow(s)).then(function(res){
+    if (res && res.error){
+      console.error("Supabase: falha ao criar aluno", s.id, res.error.message);
+      showToast("⚠ Não foi possível criar o aluno — verifica a tua ligação");
     }
   });
 }
@@ -2821,7 +2847,7 @@ function openOnboardingForm(){
     };
 
     STUDENTS.push(newStudent);
-    persistStudent(newStudent);
+    insertStudent(newStudent);
     closeModal();
     state.proSelectedId = id;
     state.proTab = "plano";

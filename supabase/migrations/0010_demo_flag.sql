@@ -18,12 +18,26 @@
 
 alter table students add column if not exists is_demo boolean not null default false;
 
+-- Encontrado ao aplicar esta migração: correr o UPDATE abaixo diretamente no
+-- SQL Editor falha com "Só o profissional pode alterar estes dados do
+-- plano." — o trigger enforce_student_column_permissions() chama auth.uid(),
+-- que no contexto de uma ligação direta do SQL Editor (sem JWT de sessão)
+-- devolve null; is_pro fica false, e como is_demo não está na allowlist do
+-- aluno, o trigger bloqueia como se fosse um aluno a tentar alterá-la. Mesma
+-- categoria de comportamento inesperado do SQL Editor já documentada em
+-- 0008_claim_via_function.sql. Solução: desligar o trigger só para este
+-- UPDATE administrativo pontual, e voltar a ligá-lo imediatamente a seguir —
+-- nunca fica desligado fora desta transação.
+alter table students disable trigger trg_enforce_student_column_permissions;
+
 -- Marca os alunos de demonstração/teste já existentes: maria/rui/sofia são
 -- dados de exemplo do protótipo; tiago é a conta usada para validar RLS com
 -- uma conta real (Fases 7-9) — nenhum destes é um aluno real. Ajusta esta
 -- lista se tiveres outros ids de demonstração — isto NUNCA apaga nem altera
 -- mais nenhum dado dos alunos marcados, só a flag is_demo.
 update students set is_demo = true where id in ('maria', 'rui', 'sofia', 'tiago');
+
+alter table students enable trigger trg_enforce_student_column_permissions;
 
 comment on column students.is_demo is
   'Aluno de demonstração/prototipagem — escondido por omissão do dashboard do profissional. Só o profissional (SQL Editor ou "for all" policy) pode alterar isto; não afeta RLS nem acesso.';
@@ -41,6 +55,7 @@ comment on column students.is_demo is
 --    precisas de ativar "Mostrar contas de demonstração" para o ver).
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, confirma no SQL
--- Editor: select id, name, is_demo from students order by id; — deve mostrar
--- maria/rui/sofia com is_demo = true e qualquer aluno real com is_demo = false.
+-- APLICADA e validada em produção em 2026-09-28: maria/rui/sofia/tiago
+-- confirmados com is_demo = true (query 11 de verify_security.sql), e o
+-- dashboard do profissional confirmado a escondê-los por omissão numa sessão
+-- real (0 alunos visíveis, botão "Mostrar contas de demonstração (4)").

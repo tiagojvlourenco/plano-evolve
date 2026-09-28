@@ -153,4 +153,37 @@ function freshStudent(overrides){
   check.check("13. Documenta o delete para remover um profissional", /delete from professionals/.test(sql));
 })();
 
+// ---- 6. Bug crítico encontrado na validação ao vivo (Fase 9): upsert() em
+// students falhava SEMPRE que o próprio aluno gravava (RLS rejeita o ramo
+// ON CONFLICT DO UPDATE porque o aluno nunca tem política de INSERT) —
+// impedia qualquer aluno real de gravar seja o que for. ----
+
+// 14. persistStudent() já não usa upsert() em students — usa update().eq("id", ...)
+(function(){
+  var fnSrc = appSource.slice(appSource.indexOf("function persistStudent"), appSource.indexOf("function insertStudent"));
+  check.check("14. persistStudent() não chama upsert()", fnSrc.indexOf(".upsert(") === -1);
+  check.check("14. persistStudent() usa update().eq(\"id\", s.id)", /\.update\(studentToRow\(s\)\)\.eq\("id",\s*s\.id\)/.test(fnSrc));
+})();
+
+// 15. insertStudent() existe, para o único caso legítimo de criar um aluno (o profissional)
+(function(){
+  check.check("15. insertStudent() existe", typeof insertStudent === "function");
+  var fnSrc = appSource.slice(appSource.indexOf("function insertStudent"), appSource.indexOf("function insertStudent") + 400);
+  check.check("15. insertStudent() usa insert(), não upsert()/update()", fnSrc.indexOf(".insert(studentToRow(s))") >= 0 && fnSrc.indexOf(".upsert(") === -1);
+})();
+
+// 16. A criação de um novo aluno (openOnboardingForm) usa insertStudent(), não persistStudent()
+(function(){
+  var pushIdx = appSource.indexOf("STUDENTS.push(newStudent)");
+  check.check("16. STUDENTS.push(newStudent) existe no código", pushIdx >= 0);
+  var afterPush = appSource.slice(pushIdx, pushIdx + 120);
+  check.check("16. É seguido de insertStudent(newStudent), não persistStudent(newStudent)", /insertStudent\(newStudent\)/.test(afterPush) && !/persistStudent\(newStudent\)/.test(afterPush));
+})();
+
+// 17. Nenhuma outra chamada a upsert() ficou esquecida em "students" (só help_request_notes, tabela diferente, deve usar upsert)
+(function(){
+  var studentsUpsertCalls = (appSource.match(/from\("students"\)\.upsert\(/g) || []).length;
+  check.check("17. Zero chamadas a students'.upsert( restantes no código", studentsUpsertCalls === 0);
+})();
+
 check.summarize();

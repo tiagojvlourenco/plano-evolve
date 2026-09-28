@@ -76,7 +76,7 @@ where routine_name = 'claim_student_row';
 -- a app usa sb.rpc("claim_student_row") em vez disso.
 
 -- 9. Políticas de help_requests / help_request_notes existem, com o desenho certo?
--- (Fase 8 — AINDA NÃO APLICADA. Corre isto só depois de 0009_help_requests.sql.)
+-- (Fase 8 — aplicada e validada em 2026-09-25.)
 select schemaname, tablename, policyname, cmd
 from pg_policies
 where tablename in ('help_requests', 'help_request_notes')
@@ -157,7 +157,7 @@ group by tablename, cmd;
 --       Esperado: sucesso — acrescentar ao fim é permitido.
 --       Repete o mesmo raciocínio para substitution_history se quiseres.
 --
--- G. Pedidos de ajuda (Fase 8 — AINDA NÃO APLICADA/VALIDADA):
+-- G. Pedidos de ajuda (Fase 8 — validado com 2 contas de aluno reais e 1 de profissional em 2026-09-25):
 --    Precisas de duas contas de aluno (A e B) e a conta de profissional.
 --
 --    G1. Aluno A cria e lê o próprio pedido:
@@ -204,13 +204,13 @@ group by tablename, cmd;
 --        aparece em lado nenhum da experiência de Aluno.
 --
 -- 11. Flag is_demo existe e os alunos de demonstração/teste estão marcados?
--- (Fase 9 — AINDA NÃO APLICADA. Corre isto só depois de 0010_demo_flag.sql.)
+-- (Fase 9 — aplicada e validada em 2026-09-28.)
 select id, name, is_demo from students order by id;
 -- Esperado: maria/rui/sofia/tiago com is_demo = true; qualquer aluno real
 -- (convidado depois desta migração) com is_demo = false.
 
 -- 12. As políticas de remoção de fotografias existem?
--- (Fase 9 — AINDA NÃO APLICADA. Corre isto só depois de 0011_photo_deletion.sql.)
+-- (Fase 9 — aplicada e validada em 2026-09-28.)
 select policyname, cmd
 from pg_policies
 where schemaname = 'storage' and tablename = 'objects'
@@ -218,7 +218,13 @@ where schemaname = 'storage' and tablename = 'objects'
 -- Esperado: as 2 políticas, ambas com cmd = DELETE.
 
 -- ===================== Teste funcional H: remoção de fotografias (Fase 9) =====================
--- AINDA NÃO APLICADA/VALIDADA — precisa de 0011_photo_deletion.sql aplicada.
+-- Validado em 2026-09-28 com a conta real do Tiago e uma fotografia
+-- sintética criada só para o teste (nunca uma fotografia real). Encontrou e
+-- levou à correção de um bug crítico não relacionado com esta migração:
+-- persistStudent() usava upsert(), que falha sempre que é o PRÓPRIO ALUNO a
+-- gravar (RLS rejeita o ramo ON CONFLICT DO UPDATE por não haver política de
+-- INSERT para o aluno) — impedia qualquer aluno real de gravar seja o que
+-- for. Corrigido para update().eq("id", s.id); ver evolve-nutrition.html.
 -- Sessão de um aluno real com allowPhotos ativo:
 --   H1. Faz upload de uma fotografia pela app (separador Evolução).
 --   H2. Na consola: var { data } = await sb.storage.from("progress-photos").list(sb.auth.getUser() then .data.user.id)
