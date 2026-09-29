@@ -4168,6 +4168,33 @@ function getFoodKeywordIndex(){
   return index;
 }
 
+// Fronteira feita à mão em vez de "\b": "\b" trata o hífen como fronteira de
+// palavra, o que faria "doce" acertar dentro de "batata-doce" (e "batata"
+// também) — aqui o hífen conta como parte da palavra, tal como a-z/à-ÿ.
+// Devolve as correspondências ordenadas pela posição em que aparecem no
+// texto (para se poder identificar "a primeira" dentro de um grupo).
+function matchFoodsInText(text, index){
+  var lower = (text || "").toLowerCase();
+  var found = [];
+  Object.keys(index).forEach(function(key){
+    var re = new RegExp("(^|[^a-zà-ÿ-])" + key + "([^a-zà-ÿ-]|$)", "i");
+    var m = re.exec(lower);
+    if (m) found.push({name: index[key], pos: m.index});
+  });
+  found.sort(function(a,b){ return a.pos - b.pos; });
+  return found;
+}
+
+// Fase 24: bug real apanhado com o texto do questionário de um aluno —
+// "150 g frango / peru / coelho" é uma escolha (um OU outro), não os três
+// a somar; da mesma forma, uma linha seguinte a começar por "ou" (ex.:
+// "ou 150 g peixe branco") é mais uma alternativa ao mesmo grupo. O
+// reconhecimento por palavra-chave, sozinho, não distingue isto de uma
+// lista de alimentos genuinamente diferentes — por isso agora processa-se
+// linha a linha: linhas com "/" (e as que se seguem a começar por "ou")
+// formam um grupo de alternativas, do qual só a PRIMEIRA correspondência
+// entra na proposta; uma linha sem "/" continua a poder ter vários
+// alimentos genuínos, como sempre.
 function draftPlanFromDailyText(text){
   var segments = splitDailyTextByMeal(text);
   var index = getFoodKeywordIndex();
@@ -4176,16 +4203,26 @@ function draftPlanFromDailyText(text){
     var mealName = pair[0], mealTime = pair[1];
     var segText = segments[mealName];
     if (!segText) return;
-    var lower = segText.toLowerCase();
     var matchedNames = [];
-    Object.keys(index).forEach(function(key){
-      var name = index[key];
-      if (matchedNames.indexOf(name) >= 0) return;
-      // Fronteira feita à mão em vez de "\b": "\b" trata o hífen como fronteira
-      // de palavra, o que faria "doce" acertar dentro de "batata-doce" (e "batata"
-      // também) — aqui o hífen conta como parte da palavra, tal como a-z/à-ÿ.
-      var re = new RegExp("(^|[^a-zà-ÿ-])" + key + "([^a-zà-ÿ-]|$)", "i");
-      if (re.test(lower)) matchedNames.push(name);
+    var rawLines = segText.split(/\n+/).map(function(l){ return l.trim(); }).filter(function(l){ return l; });
+    var groups = [];
+    rawLines.forEach(function(line){
+      var startsWithOu = /^(\*\s*)?ou\b/i.test(line);
+      if (startsWithOu && groups.length){
+        groups[groups.length - 1].push(line);
+      } else {
+        groups.push([line]);
+      }
+    });
+    groups.forEach(function(groupLines){
+      var groupText = groupLines.join(" / ");
+      var hasAlternatives = groupLines.length > 1 || groupText.indexOf("/") >= 0;
+      var found = matchFoodsInText(groupText, index).filter(function(f){ return matchedNames.indexOf(f.name) === -1; });
+      if (hasAlternatives){
+        if (found.length) matchedNames.push(found[0].name);
+      } else {
+        found.forEach(function(f){ matchedNames.push(f.name); });
+      }
     });
     var foods = matchedNames.map(function(name){
       return {name: name, qty: defaultQtyForFood(name), group: groupOfFood(name)};
