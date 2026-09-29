@@ -299,6 +299,15 @@
   .perfil-section summary::-webkit-details-marker{display:none;}
   .perfil-section summary::before{content:"▸"; font-size:0.7em; color:var(--muted); transition:transform .15s ease;}
   .perfil-section[open] summary::before{transform:rotate(90deg);}
+
+  /* Fase 18: formulário de adicionar alimento (Plano) recolhível — o
+     <summary> já tem class="btn btn-sm" (aparência de botão), só precisa
+     de perder o marcador nativo e centrar o texto para não ficar como uma
+     lista com marcador ao lado de um botão. */
+  .add-food-details{margin-top:10px;}
+  .add-food-details summary{list-style:none; text-align:center; user-select:none;}
+  .add-food-details summary::-webkit-details-marker{display:none;}
+  .add-food-details[open] summary{margin-bottom:4px;}
   .perfil-section > *:not(summary){margin-top:10px;}
   .muted-p{font-size:0.85rem; color:var(--muted); line-height:1.5;}
 
@@ -6413,7 +6422,12 @@ function tplProPlano(s){
 
 function tplPlanoMealEditor(m, midx){
   var totals = foodsTotals(m.foods);
-  var html = "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px;\">" +
+  // Fase 18: cartão próprio por refeição (fundo/contorno, como o resto da
+  // app), em vez de só uma linha fina a separar — pedido explícito: com
+  // várias refeições, era difícil perceber onde uma acaba e a outra
+  // começa. O horário e as macros no topo/fundo do cartão ajudam a
+  // identificar cada refeição sem teres de abrir nada.
+  var html = "<div class=\"plano-meal-card card\" style=\"margin-bottom:14px;\">" +
     "<div class=\"onb-row\" style=\"align-items:end; margin-bottom:8px;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Nome da refeição</label>" +
         "<select class=\"pm-name\" data-midx=\"" + midx + "\">" +
@@ -6440,7 +6454,13 @@ function tplPlanoMealEditor(m, midx){
     "</div>";
   }).join("");
 
-  html += tplAddFoodForm(midx);
+  // Fase 18: o formulário de adicionar alimento passa a recolhível — antes
+  // ficava sempre aberto em todas as refeições ao mesmo tempo (com 5-6
+  // refeições, isso empilhava 5-6 formulários completos, a maior parte
+  // inativos). <details> mantém o conteúdo no DOM mesmo fechado, por isso
+  // toda a lógica de pesquisa/wiring existente continua a funcionar sem
+  // alterações.
+  html += "<details class=\"add-food-details\"><summary class=\"btn btn-sm\">+ Adicionar alimento</summary>" + tplAddFoodForm(midx) + "</details>";
   html += "<div class=\"plano-meal-macros\" style=\"margin-top:10px;\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
   html += "</div>";
   return html;
@@ -6579,7 +6599,7 @@ function tplAddFoodForm(midx){
   var defaultGroup = PRO_PLAN_GROUPS[0];
   var options = foodOptionsForGroup(defaultGroup);
   var defaultFood = options[0];
-  return "<div class=\"section-gap\" style=\"margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);\">" +
+  return "<div style=\"margin-top:10px;\">" +
     "<div class=\"onb-row\" style=\"align-items:end;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Grupo</label>" +
         "<select class=\"af-group\" data-midx=\"" + midx + "\">" +
@@ -6593,7 +6613,7 @@ function tplAddFoodForm(midx){
     "<div class=\"onb-row\" style=\"margin-top:8px; align-items:end;\">" +
       "<div class=\"onb-field af-qty-wrap\" data-midx=\"" + midx + "\" style=\"margin-bottom:0;\">" + tplAddFoodQty(defaultFood) + "</div>" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\">" +
-        "<button type=\"button\" class=\"btn primary btn-sm\" data-add-food=\"" + midx + "\" style=\"width:100%;\">+ Adicionar alimento</button>" +
+        "<button type=\"button\" class=\"btn primary btn-sm\" data-add-food=\"" + midx + "\" style=\"width:100%;\">Adicionar</button>" +
       "</div>" +
     "</div>" +
     "<button type=\"button\" class=\"btn btn-sm\" data-new-food=\"" + midx + "\" style=\"width:100%; margin-top:8px;\">📷 Não encontro o alimento — acrescentar novo</button>" +
@@ -7184,6 +7204,14 @@ function wireProTab(s){
       renderProTabContent(s);
       persistStudent(s);
       showToast("Alimento adicionado");
+    });
+  });
+
+  el.querySelectorAll(".add-food-details").forEach(function(details){
+    details.addEventListener("toggle", function(){
+      if (!details.open) return;
+      var input = details.querySelector(".af-food");
+      if (input) input.focus();
     });
   });
 
