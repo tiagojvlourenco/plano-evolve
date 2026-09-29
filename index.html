@@ -3846,11 +3846,44 @@ function scaleFoodQty(name, qty, scale){
   return newAmount + " " + suffix;
 }
 
+// Resolve o sistema linear Ax=b por eliminação de Gauss com pivô parcial.
+// N é sempre pequeno aqui (no máximo 3 — proteína/hidratos/gordura), por
+// isso não há necessidade de nada mais sofisticado. Devolve null se o
+// sistema for singular (sem solução única — caso raro/degenerado).
+function solveLinearSystem(A, b){
+  var n = b.length;
+  var M = A.map(function(row, i){ return row.slice().concat([b[i]]); });
+  for (var col = 0; col < n; col++){
+    var maxRow = col;
+    for (var r = col + 1; r < n; r++){
+      if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
+    }
+    if (Math.abs(M[maxRow][col]) < 1e-9) return null;
+    var tmp = M[col]; M[col] = M[maxRow]; M[maxRow] = tmp;
+    for (var r2 = 0; r2 < n; r2++){
+      if (r2 === col) continue;
+      var factor = M[r2][col] / M[col][col];
+      for (var c2 = col; c2 <= n; c2++) M[r2][c2] -= factor * M[col][c2];
+    }
+  }
+  return M.map(function(row, i){ return row[n] / row[i]; });
+}
+
 // Devolve {changed, skippedMacros, untouched} — skippedMacros são macros
 // com alvo definido mas sem nenhum alimento reescalável a contribuir para
 // eles (nada para ajustar; o profissional tem de acrescentar alimentos ou
 // definir uma quantidade real, não "à vontade"). untouched conta quantos
 // alimentos ficaram de fora por serem mesmo fixos/"à vontade".
+//
+// Fase 22: a primeira versão (Fase 19) reescalava cada balde de macro por
+// aproximação iterativa (4 passagens) — na prática, com planos reais onde
+// vários alimentos contribuem significativamente para mais do que o seu
+// macro "prioritário" (ex.: um alimento de gordura com hidratos a sério),
+// isto convergia mal e podia ficar ~10% acima do alvo de calorias (caso
+// reportado: 3411 kcal vs 3089 pedidos). A contribuição de cada balde para
+// cada macro é uma função LINEAR do seu fator de escala — por isso agora
+// resolve-se o sistema de equações exatamente (proteína/hidratos/gordura,
+// até 3x3) em vez de aproximar, o que bate certo ao primeiro cálculo.
 function autoAdjustPlanQuantities(s){
   var t = s.targets || {};
   var targetFor = {
@@ -3858,6 +3891,7 @@ function autoAdjustPlanQuantities(s){
     c: t.carbs != null ? t.carbs : t.carbsMax,
     f: t.fat != null ? t.fat : t.fatMax
   };
+  var macroKeys = ["p","c","f"];
   var buckets = {p:[], c:[], f:[]};
   var untouched = 0;
   var startQty = [];
@@ -3876,29 +3910,45 @@ function autoAdjustPlanQuantities(s){
   });
   var skippedMacros = [];
   var macroGroupLabel = {p:"protein", c:"carb", f:"fat"};
-  Object.keys(buckets).forEach(function(macroKey){
+  macroKeys.forEach(function(macroKey){
     if (!buckets[macroKey].length && targetFor[macroKey] > 0) skippedMacros.push(macroGroupLabel[macroKey]);
   });
-  // Refinamento iterativo: quase todos os alimentos contribuem um pouco
-  // para os 3 macros, não só o seu "prioritário" (ex.: arroz tem sempre
-  // uma pontinha de proteína). Cada passagem calcula quanto falta a cada
-  // macro DEPOIS de contar o que os alimentos dos outros baldes já
-  // contribuem (soma total menos a contribuição do próprio balde), para
-  // convergir para o alvo do PLANO inteiro, não só do balde isolado.
-  var ADJUST_PASSES = 4;
-  for (var pass = 0; pass < ADJUST_PASSES; pass++){
-    Object.keys(buckets).forEach(function(macroKey){
-      var matching = buckets[macroKey];
-      var target = targetFor[macroKey];
-      if (!matching.length || !(target > 0)) return;
-      var bucketContribution = matching.reduce(function(sum, f){ return sum + foodNutrition(f.name, f.qty)[macroKey]; }, 0);
-      var totalContribution = allFoods.reduce(function(sum, f){ return sum + foodNutrition(f.name, f.qty)[macroKey]; }, 0);
-      var remaining = target - (totalContribution - bucketContribution);
-      if (!(bucketContribution > 0) || !(remaining > 0)) return;
-      var scale = remaining / bucketContribution;
-      matching.forEach(function(f){ f.qty = scaleFoodQty(f.name, f.qty, scale); });
+
+  // Só os baldes com alimentos reescaláveis E um alvo > 0 entram no
+  // sistema — os restantes ficam fixos na quantidade atual (tal como
+  // "à vontade"), tal como já acontecia antes desta fase.
+  var active = macroKeys.filter(function(macroKey){ return buckets[macroKey].length && targetFor[macroKey] > 0; });
+
+  if (active.length){
+    var activeSet = {};
+    active.forEach(function(k){ activeSet[k] = true; });
+    var fixedFoods = allFoods.filter(function(f){
+      var db = FOOD_DB[f.name];
+      var amt = parseQtyAmount(f.qty);
+      if (!db || db.per === "fixed" || amt.kind === "fixed") return true;
+      var macroKey = priorityMacroForFood(f.name);
+      return !macroKey || !activeSet[macroKey];
     });
+    function contributionOf(foodsList, macroKey){
+      return foodsList.reduce(function(sum, f){ return sum + foodNutrition(f.name, f.qty)[macroKey]; }, 0);
+    }
+    var A = active.map(function(rowMacro){
+      return active.map(function(colBucket){ return contributionOf(buckets[colBucket], rowMacro); });
+    });
+    var b = active.map(function(macroKey){ return targetFor[macroKey] - contributionOf(fixedFoods, macroKey); });
+    var scales = solveLinearSystem(A, b);
+    if (scales){
+      active.forEach(function(bucketKey, i){
+        var scale = scales[i];
+        // Uma escala <= 0 significa que só os alimentos fixos já
+        // ultrapassam o alvo deste macro — não há como um balde "negativo"
+        // de comida corrigir isso, por isso fica por mexer (mesma regra
+        // que já existia: nunca inventa uma redução impossível).
+        if (scale > 0) buckets[bucketKey].forEach(function(f){ f.qty = scaleFoodQty(f.name, f.qty, scale); });
+      });
+    }
   }
+
   var changed = startQty.filter(function(o){ return o.food.qty !== o.qty; }).length;
   return {changed: changed, skippedMacros: skippedMacros, untouched: untouched};
 }
