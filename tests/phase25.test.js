@@ -62,7 +62,7 @@ function freshStudent(overrides){
   check.check("5. computeSuggestedTargets continua a devolver kcal/protein/carbs/fat coerentes", t.kcal > 0 && t.protein > 0 && t.carbs >= 0 && t.fat > 0);
 })();
 
-// ---- 3. renderTargetWarning: percentagens de macros + diferença face ao metabolismo basal ----
+// ---- 3. renderTargetWarning: percentagens de macros + diferença face à manutenção ----
 // O stub de DOM partilhado (setup.js) não simula querySelector de verdade — para testar a
 // LÓGICA de renderTargetWarning (não só a wiring), monta-se aqui um "el" mínimo próprio.
 function mockTargetsEl(values){
@@ -82,23 +82,34 @@ function mockTargetsEl(values){
   check.check("6. Gordura: 60g*9kcal/2000kcal = 27%", el.els.tFatPct.textContent === "· 27%");
 })();
 
-// 7. Diferença face ao metabolismo basal: "+" quando o alvo está acima (fase de ganho)
+// 6b. computeMaintenanceKcal: BMR × nível de atividade (não o basal puro) —
+// pedido de correção depois de ver "+1451 kcal" (o basal sozinho não conta
+// o gasto do treino, por isso o "+" ficava sempre bem maior do que devia).
 (function(){
-  var el = mockTargetsEl({tKcal:2000, tProtein:150, tCarbs:200, tFat:60});
-  var s = freshStudent({sex:"Masculino", weightCurrent:80, height:180, age:30}); // BMR = 1780
-  renderTargetWarning(el, s);
-  check.check("7. 2000 kcal vs. BMR 1780 -> '+220 kcal' (fase de ganho)", el.els.tKcalDiff.textContent === "· +220 kcal vs. basal");
+  // BMR (80kg/180cm/30a, homem) = 1780; 3 treinos/semana -> activityFromTrainings = 1.375
+  // 1780 * 1.375 = 2447.5 -> arredonda a 2448
+  var s = freshStudent({sex:"Masculino", weightCurrent:80, height:180, age:30, trainingsPerWeek:3});
+  check.check("6b. Manutenção = BMR × fator de atividade (não o BMR sozinho)", computeMaintenanceKcal(s) === 2448);
+  check.check("6b. É sempre maior que o BMR puro (fator de atividade > 1)", computeMaintenanceKcal(s) > computeBMR(s));
 })();
 
-// 8. Diferença face ao metabolismo basal: "-" quando o alvo está abaixo (fase de perda)
+// 7. Diferença face à manutenção: "+" quando o alvo está acima (fase de ganho)
 (function(){
-  var el = mockTargetsEl({tKcal:1500, tProtein:150, tCarbs:120, tFat:40});
-  var s = freshStudent({sex:"Masculino", weightCurrent:80, height:180, age:30}); // BMR = 1780
+  var el = mockTargetsEl({tKcal:3000, tProtein:150, tCarbs:200, tFat:60});
+  var s = freshStudent({sex:"Masculino", weightCurrent:80, height:180, age:30, trainingsPerWeek:3}); // manutenção = 2448
   renderTargetWarning(el, s);
-  check.check("8. 1500 kcal vs. BMR 1780 -> '−280 kcal' (fase de perda)", el.els.tKcalDiff.textContent === "· −280 kcal vs. basal");
+  check.check("7. 3000 kcal vs. manutenção 2448 -> '+552 kcal' (fase de ganho)", el.els.tKcalDiff.textContent === "· +552 kcal vs. manutenção");
 })();
 
-// 9. Sem dados suficientes no perfil para calcular BMR, o campo fica vazio (nunca inventa)
+// 8. Diferença face à manutenção: "-" quando o alvo está abaixo (fase de perda)
+(function(){
+  var el = mockTargetsEl({tKcal:2000, tProtein:150, tCarbs:120, tFat:40});
+  var s = freshStudent({sex:"Masculino", weightCurrent:80, height:180, age:30, trainingsPerWeek:3}); // manutenção = 2448
+  renderTargetWarning(el, s);
+  check.check("8. 2000 kcal vs. manutenção 2448 -> '−448 kcal' (fase de perda)", el.els.tKcalDiff.textContent === "· −448 kcal vs. manutenção");
+})();
+
+// 9. Sem dados suficientes no perfil para calcular, o campo fica vazio (nunca inventa)
 (function(){
   var el = mockTargetsEl({tKcal:2000, tProtein:150, tCarbs:200, tFat:60});
   var s = freshStudent({sex:"Masculino"}); // sem altura/peso/idade

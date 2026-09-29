@@ -4707,6 +4707,18 @@ function computeBMR(sexOrProfile, weight, height, age){
   return isFinite(bmr) && bmr > 0 ? Math.round(bmr) : null;
 }
 
+// Fase 25b: pedido de correção — a diferença junto a "Calorias" deve
+// comparar com a MANUTENÇÃO (metabolismo basal × nível de atividade,
+// mesmo cálculo de activityFromTrainings já usado para sugerir alvos),
+// não com o metabolismo basal puro — o basal sozinho não conta o gasto do
+// treino nem da atividade do dia a dia, por isso dava sempre um "+" bem
+// maior do que o excedente/défice real face à manutenção.
+function computeMaintenanceKcal(s){
+  var bmr = computeBMR(s);
+  if (!bmr) return null;
+  return Math.round(bmr * activityFromTrainings(s.trainingsPerWeek || 0));
+}
+
 function computeSuggestedTargets(p){
   var bmr = computeBMR(p.sex, p.weight, p.height, p.age) || 0;
   var activity = activityFromTrainings(p.trainingsPerWeek);
@@ -7147,14 +7159,15 @@ function tplEditFoodForm(midx, fidx, f){
   "</div>";
 }
 
-// Fase 25: além do aviso de coerência já existente, mostra também — ao
-// lado de cada label — a % de calorias que cada macro representa (P/H em
-// 4 kcal/g, G em 9 kcal/g) e, junto a "Calorias", a diferença face ao
-// metabolismo basal do aluno (Mifflin-St Jeor, os mesmos dados do perfil
-// já usados para sugerir alvos no onboarding): "+500 kcal" se o alvo está
-// acima do metabolismo basal (fase de ganho), "-500 kcal" se está abaixo
-// (fase de perda). Sem dados suficientes no perfil (idade/sexo/altura/
-// peso), fica em branco em vez de inventar um valor.
+// Fase 25 (corrigido na 25b): além do aviso de coerência já existente,
+// mostra também — ao lado de cada label — a % de calorias que cada macro
+// representa (P/H em 4 kcal/g, G em 9 kcal/g) e, junto a "Calorias", a
+// diferença face à MANUTENÇÃO do aluno (metabolismo basal × nível de
+// atividade, não o basal puro — o basal sozinho não conta o gasto do
+// treino/atividade do dia, por isso dava sempre um "+" bem maior do que o
+// excedente/défice real): "+500 kcal" se o alvo está acima da manutenção
+// (fase de ganho), "-500 kcal" se está abaixo (fase de perda). Sem dados
+// suficientes no perfil (idade/sexo/altura/peso/treinos), fica em branco.
 function renderTargetWarning(el, s){
   var box = el.querySelector("#targetWarning");
   if (!box) return;
@@ -7176,8 +7189,8 @@ function renderTargetWarning(el, s){
 
   var diffEl = el.querySelector("#tKcalDiff");
   if (diffEl){
-    var bmr = s ? computeBMR(s) : null;
-    diffEl.textContent = bmr ? "· " + (kcal >= bmr ? "+" : "−") + Math.abs(Math.round(kcal - bmr)) + " kcal vs. basal" : "";
+    var maintenance = s ? computeMaintenanceKcal(s) : null;
+    diffEl.textContent = maintenance ? "· " + (kcal >= maintenance ? "+" : "−") + Math.abs(Math.round(kcal - maintenance)) + " kcal vs. manutenção" : "";
   }
 
   if (kcal <= 0 || protein < 0 || carbs < 0 || fat < 0){
