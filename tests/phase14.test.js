@@ -36,32 +36,12 @@ function freshStudent(overrides){
   check.check("1. Continua adiado com setTimeout (layout do DOM recém-inserido)", /setTimeout\(function\(\)\{[\s\S]*?container\.scrollTo/.test(fnSrc));
 })();
 
-// ---- 2. Copiar respostas do questionário: mostra sempre o texto, nunca depende só de deteção de erro ----
-
-// 2. tryBackgroundCopy tenta a API moderna e o fallback clássico, sempre em segundo plano (nunca bloqueia)
-(function(){
-  check.check("2. tryBackgroundCopy existe", typeof tryBackgroundCopy === "function");
-  check.check("2. legacyCopyFallback continua a existir (usado como fallback silencioso)", typeof legacyCopyFallback === "function");
-  check.check("2. showCopyTextModal existe (via principal, não só fallback de erro)", typeof showCopyTextModal === "function");
-  check.check("2. Funções antigas da Fase 13 foram removidas (não há duas vias em paralelo)", typeof copyTextToClipboard === "undefined" && typeof showCopyFallbackModal === "undefined");
-})();
-
-// 3. O clique em copyQuestionnaire mostra SEMPRE o modal, independentemente do resultado do clipboard
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  var block = fnSrc.slice(fnSrc.indexOf("copyQuestionnaire"), fnSrc.indexOf("copyQuestionnaire") + 300);
-  check.check("3. Chama tryBackgroundCopy(text)", block.indexOf("tryBackgroundCopy(text)") >= 0);
-  check.check("3. Chama showCopyTextModal(text) incondicionalmente (não dentro de .then/.catch)", block.indexOf("showCopyTextModal(text)") >= 0 && block.indexOf(".then(") === -1 && block.indexOf(".catch(") === -1);
-})();
-
-// 4. showCopyTextModal mostra o texto completo, já selecionado, sem alegar "não foi possível" (não sabemos se falhou)
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function showCopyTextModal"), appSource.indexOf("function showCopyTextModal") + 700);
-  check.check("4. Usa openModal", fnSrc.indexOf("openModal(") >= 0);
-  check.check("4. Textarea readonly com o texto", fnSrc.indexOf("readonly") >= 0);
-  check.check("4. Seleciona o texto automaticamente", fnSrc.indexOf("ta.select()") >= 0);
-  check.check("4. Já não afirma falha automática (não sabemos se a cópia em fundo resultou)", fnSrc.indexOf("Não foi possível copiar automaticamente") === -1);
-})();
+// ---- 2. Copiar respostas do questionário — REMOVIDO na Fase 26 ----
+// O botão e as funções tryBackgroundCopy/legacyCopyFallback/showCopyTextModal
+// (cobertos aqui até então) foram removidos a pedido explícito: o texto das
+// respostas já está sempre visível por cima, sem valor prático em copiá-lo
+// à parte. Ver phase12.test.js teste 9 para a confirmação de que o botão
+// já não aparece.
 
 // ---- 3. "Nome da refeição" passa a ser uma lista de escolha (6 opções fixas) ----
 

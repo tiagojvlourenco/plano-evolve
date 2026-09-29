@@ -122,14 +122,9 @@ function freshStudent(overrides){
   var comRespostas = freshStudent({targets:{kcal:2000,protein:150,carbs:200,fat:60}, meals:[], dailyEatingDescription:"Texto de teste"});
   var html = tplProPlano(comRespostas);
   check.check("9. Com respostas, mostra o bloco de copiar", html.indexOf("Respostas do questionário") >= 0);
-  check.check("9. Tem o botão Copiar respostas", html.indexOf("copyQuestionnaire") >= 0);
-})();
-
-// 10. wireProTab liga o botão de copiar (mecanismo exato coberto em phase14.test.js —
-// Fase 14 trocou a estratégia depois de continuar a falhar num telemóvel real)
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  check.check("10. Liga copyQuestionnaire", fnSrc.indexOf("copyQuestionnaire") >= 0);
+  // Fase 26: botão "Copiar respostas" removido a pedido explícito (o texto
+  // já está sempre visível por cima, sem valor prático em copiá-lo à parte).
+  check.check("9. Já não tem o botão 'Copiar respostas' (removido, Fase 26)", html.indexOf("copyQuestionnaire") === -1);
 })();
 
 // ---- 5. "Criar esqueleto de plano" a partir do questionário — só estrutura, nunca alimentos ----

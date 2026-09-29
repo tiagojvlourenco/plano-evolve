@@ -6794,50 +6794,6 @@ function questionnaireAnswersText(s){
   return lines.join("\n");
 }
 
-// Fase 14: a cadeia de fallback da Fase 13 (API moderna -> execCommand)
-// continuou a falhar em testes reais na PWA instalada no ecrã principal do
-// iPhone — o WKWebView standalone pode devolver "sucesso" de
-// execCommand("copy") sem copiar mesmo nada, o que é indetetável por
-// código (não há erro nenhum a apanhar). A única via 100% fiável é mostrar
-// sempre o texto já selecionado, para copiar pelo gesto nativo do
-// telemóvel (que nunca falha) — as tentativas programáticas passam a ser
-// só um extra silencioso em segundo plano, nunca a via principal.
-function legacyCopyFallback(text){
-  try {
-    var textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.top = "-1000px";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    var ok = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    return ok;
-  } catch(e){
-    return false;
-  }
-}
-
-function tryBackgroundCopy(text){
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).catch(function(){ legacyCopyFallback(text); });
-  } else {
-    legacyCopyFallback(text);
-  }
-}
-
-function showCopyTextModal(text){
-  var sheet = openModal(
-    "<div class=\"mtitle\">Copiar respostas</div>" +
-    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">O texto já está selecionado — mantém premido e escolhe \"Copiar\" (ou \"Selecionar tudo\" se a seleção se perder).</p>" +
-    "<textarea id=\"manualCopyText\" class=\"notes-area\" readonly style=\"min-height:180px;\">" + escapeHtml(text) + "</textarea>"
-  );
-  var ta = sheet.querySelector("#manualCopyText");
-  ta.focus();
-  ta.select();
-}
 
 function tplQuestionnaireCopy(s){
   if (!hasQuestionnaireAnswers(s)) return "";
@@ -6848,7 +6804,6 @@ function tplQuestionnaireCopy(s){
   return "<details class=\"perfil-section\" open style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
     "<p class=\"muted-p\" style=\"white-space:pre-wrap; margin-top:8px;\">" + escapeHtml(questionnaireAnswersText(s)) + "</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\">" +
-      "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"createPlanSkeleton\">Criar esqueleto de plano</button>" +
       (s.dailyEatingDescription ? "<button type=\"button\" class=\"btn btn-sm\" id=\"draftFromDailyText\">🍽️ Gerar plano a partir do dia-a-dia</button>" : "") +
     "</div>" +
@@ -7590,12 +7545,6 @@ function wireProTab(s){
     });
   });
 
-  var copyQ = el.querySelector("#copyQuestionnaire");
-  if (copyQ) copyQ.addEventListener("click", function(){
-    var text = questionnaireAnswersText(s);
-    tryBackgroundCopy(text);
-    showCopyTextModal(text);
-  });
 
   var skeletonBtn = el.querySelector("#createPlanSkeleton");
   if (skeletonBtn) skeletonBtn.addEventListener("click", function(){
