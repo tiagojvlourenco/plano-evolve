@@ -45,10 +45,17 @@ function freshStudent(){
 })();
 
 // 5. unitKindFor reflete o FOOD_DB real
+// Fase 23: já não há nenhum alimento per:"fixed" nos dados (pedido
+// explícito — "à vontade" deixa de existir, tudo tem uma quantidade real,
+// os 5 vegetais curados passaram a per:"100g"). O mecanismo "fixed" em si
+// continua a existir no motor (buildQtyString/unitKindFor/parseQtyAmount),
+// por isso testa-se aqui com um alimento fictício injetado no FOOD_DB.
 (function(){
   check.check("5. Frango (peito) é 100g", unitKindFor("Frango (peito)") === "100g");
   check.check("5. Ovos é unit", unitKindFor("Ovos") === "unit");
-  check.check("5. Brócolos é fixed", unitKindFor("Brócolos") === "fixed");
+  check.check("5. Brócolos já não é fixed — tem quantidade real, como qualquer outro alimento", unitKindFor("Brócolos") === "100g");
+  FOOD_DB["Teste Fixo XPTO"] = {per:"fixed", kcal:10, p:1, c:1, f:0.1};
+  check.check("5. O mecanismo 'fixed' continua a existir no motor (alimento fictício)", unitKindFor("Teste Fixo XPTO") === "fixed");
   check.check("5. Alimento desconhecido devolve null", unitKindFor("Alimento Inventado") === null);
 })();
 
@@ -57,7 +64,8 @@ function freshStudent(){
   check.check("6. 100g é sempre em gramas", buildQtyString("Frango (peito)", 150) === "150 g");
   check.check("6. Alimento líquido (Azeite, 100g) também fica em gramas, nunca ml", buildQtyString("Azeite", 15) === "15 g");
   check.check("6. unit usa sempre 'unid.'", buildQtyString("Ovos", 3) === "3 unid.");
-  check.check("6. fixed ignora amount e devolve 'à vontade'", buildQtyString("Brócolos", 999) === "à vontade");
+  check.check("6. Brócolos já tem quantidade real em gramas (não fixed)", buildQtyString("Brócolos", 150) === "150 g");
+  check.check("6. fixed (mecanismo genérico) ignora amount e devolve 'à vontade'", buildQtyString("Teste Fixo XPTO", 999) === "à vontade");
   check.check("6. alimento desconhecido devolve null (nunca inventa quantidade)", buildQtyString("Alimento Inventado", 100) === null);
   check.check("6. amount <=0 nunca produz '0 g' ou negativo", buildQtyString("Frango (peito)", 0) === "1 g");
   check.check("6. amount negativo é sempre tratado como mínimo 1", buildQtyString("Frango (peito)", -50) === "1 g");

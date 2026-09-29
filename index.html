@@ -381,10 +381,11 @@
   .suggestion-banner{display:flex; align-items:center; gap:8px; background:var(--accent-soft); color:var(--accent-strong); border-radius:10px; padding:10px 14px; font-size:0.82rem; font-weight:600; margin-bottom:14px;}
 
   .toast{
-    position:fixed; left:50%; bottom:90px; transform:translateX(-50%) translateY(20px); z-index:200;
+    position:fixed; left:50%; bottom:calc(90px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%) translateY(20px); z-index:200;
     background:var(--ink); color:var(--bg); font-weight:600; font-size:0.85rem;
-    padding:11px 20px; border-radius:999px; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5);
-    opacity:0; transition:opacity 0.25s ease, transform 0.25s ease; pointer-events:none; white-space:nowrap;
+    padding:11px 20px; border-radius:20px; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5);
+    opacity:0; transition:opacity 0.25s ease, transform 0.25s ease; pointer-events:none;
+    max-width:calc(100vw - 32px); width:max-content; white-space:normal; text-align:center; line-height:1.4;
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 </style>
@@ -1358,8 +1359,8 @@ var FOOD_GROUPS = {
     {name:"Wasabi, raiz crua", qty:"100 g"},
   ],
   veg: [
-    {name:"Brócolos", qty:"à vontade"}, {name:"Salada mista", qty:"à vontade"},
-    {name:"Cenoura", qty:"à vontade"}, {name:"Courgette", qty:"à vontade"}, {name:"Espinafres", qty:"à vontade"},
+    {name:"Brócolos", qty:"150 g"}, {name:"Salada mista", qty:"150 g"},
+    {name:"Cenoura", qty:"150 g"}, {name:"Courgette", qty:"150 g"}, {name:"Espinafres", qty:"150 g"},
     {name:"Abóbora cristalizada", qty:"100 g"},
     {name:"Abóbora crua", qty:"100 g"},
     {name:"Acelga crua", qty:"100 g"},
@@ -2151,16 +2152,23 @@ function isTrainingDayToday(s){
   return s.trainingDays.indexOf(new Date().getDay()) !== -1;
 }
 
+// Fase 23: mensagens mais compridas (ex.: listas de alimentos não
+// reconhecidos) precisam de mais tempo para se lerem — 1800ms fixos
+// chegavam para "Alimento removido" mas não para uma frase inteira. A
+// caixa também deixou de ser "nowrap": num ecrã estreito, uma mensagem
+// comprida centrada sem quebra de linha esticava para lá dos dois lados
+// do ecrã (ver .toast, agora com max-width e quebra de linha normal).
 function showToast(msg){
   var t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
   document.body.appendChild(t);
   requestAnimationFrame(function(){ t.classList.add("show"); });
+  var duration = Math.max(1800, Math.min(6000, msg.length * 60));
   setTimeout(function(){
     t.classList.remove("show");
     setTimeout(function(){ t.remove(); }, 300);
-  }, 1800);
+  }, duration);
 }
 
 function food(name, qty, group, required){ return {name:name, qty:qty, group:group, required: required!==false}; }
@@ -2367,11 +2375,17 @@ var FOOD_DB = {
   "Laranja": {per:"unit", kcal:62, p:1.2, c:15, f:0.2},
   "Mirtilos": {per:"100g", kcal:57, p:0.7, c:14, f:0.3},
   "Ovos": {per:"unit", kcal:78, p:6.3, c:0.6, f:5.3},
-  "Brócolos": {per:"fixed", kcal:53, p:3.6, c:7, f:0.6},
-  "Salada mista": {per:"fixed", kcal:25, p:1.5, c:3, f:0.2},
-  "Cenoura": {per:"fixed", kcal:30, p:0.7, c:7, f:0.1},
-  "Courgette": {per:"fixed", kcal:20, p:1.5, c:3, f:0.3},
-  "Espinafres": {per:"fixed", kcal:23, p:2.9, c:3.6, f:0.4},
+  // Fase 23: pedido explícito — "à vontade" deixa de existir, todos os
+  // alimentos passam a ter uma quantidade real (per:"100g"), tal como
+  // qualquer outro alimento da base. Valores atualizados para os reais do
+  // INSA (crus) onde existe equivalente direto; "Salada mista" não tem um
+  // prato único correspondente no INSA, mantém a estimativa já usada
+  // antes, só reinterpretada como valor por 100g em vez de nominal fixo.
+  "Brócolos": {per:"100g", kcal:32, p:3.4, c:1.5, f:0.8},
+  "Salada mista": {per:"100g", kcal:25, p:1.5, c:3, f:0.2},
+  "Cenoura": {per:"100g", kcal:25, p:0.6, c:4.4, f:0.0},
+  "Courgette": {per:"100g", kcal:19, p:1.6, c:2.0, f:0.3},
+  "Espinafres": {per:"100g", kcal:27, p:2.6, c:0.8, f:0.9},
   "Fruta": {per:"unit", kcal:80, p:0.6, c:20, f:0.3},
 
   // ===================== Fase 16: base alargada do INSA =====================
