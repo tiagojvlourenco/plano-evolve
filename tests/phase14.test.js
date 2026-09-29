@@ -48,7 +48,7 @@ function freshStudent(overrides){
 
 // 3. O clique em copyQuestionnaire mostra SEMPRE o modal, independentemente do resultado do clipboard
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   var block = fnSrc.slice(fnSrc.indexOf("copyQuestionnaire"), fnSrc.indexOf("copyQuestionnaire") + 300);
   check.check("3. Chama tryBackgroundCopy(text)", block.indexOf("tryBackgroundCopy(text)") >= 0);
   check.check("3. Chama showCopyTextModal(text) incondicionalmente (não dentro de .then/.catch)", block.indexOf("showCopyTextModal(text)") >= 0 && block.indexOf(".then(") === -1 && block.indexOf(".catch(") === -1);
@@ -85,7 +85,7 @@ function freshStudent(overrides){
 
 // 7. wireProTab liga o <select> ao evento "change" (não "blur", que não existe da mesma forma num select)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("7. Regista rename no evento change do .pm-name", /querySelectorAll\("\.pm-name"\)\.forEach\(function\(select\)\{\s*select\.addEventListener\("change"/.test(fnSrc));
   check.check("7. Continua a registar a mudança com logMealRenamed", /pm-name[\s\S]{0,400}logMealRenamed/.test(fnSrc));
 })();

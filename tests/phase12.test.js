@@ -73,7 +73,7 @@ function freshStudent(overrides){
 
 // 6. wireProTab: guardar recalcula os alvos com base no novo peso objetivo, e reativa o banner de sugestão
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("6. Liga saveWeightGoal", fnSrc.indexOf("saveWeightGoal") >= 0);
   check.check("6. Recalcula com computeSuggestedTargets", fnSrc.indexOf("computeSuggestedTargets({") >= 0);
   check.check("6. Regista a alteração com logTargetsChange", /saveWeightGoal[\s\S]{0,900}logTargetsChange/.test(fnSrc));
@@ -128,7 +128,7 @@ function freshStudent(overrides){
 // 10. wireProTab liga o botão de copiar (mecanismo exato coberto em phase14.test.js —
 // Fase 14 trocou a estratégia depois de continuar a falhar num telemóvel real)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("10. Liga copyQuestionnaire", fnSrc.indexOf("copyQuestionnaire") >= 0);
 })();
 
@@ -163,7 +163,7 @@ function freshStudent(overrides){
 
 // 14. wireProTab liga o botão, regista cada refeição no histórico, e confirma antes de acrescentar a um plano já existente
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("14. Liga createPlanSkeleton", fnSrc.indexOf("createPlanSkeleton()") >= 0 || fnSrc.indexOf("createPlanSkeleton(s)") >= 0);
   check.check("14. Regista cada refeição criada com logMealAdded", /createPlanSkeleton\(s\)[\s\S]{0,200}logMealAdded/.test(fnSrc));
   check.check("14. Pede confirmação se já houver refeições no plano", /s\.meals\.length[\s\S]{0,80}window\.confirm/.test(fnSrc));

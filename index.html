@@ -3703,6 +3703,31 @@ var FOOD_DB = {
   "Wasabi, raiz crua": {per:"100g", kcal:100, p:4.8, c:15.8, f:0.6},
 };
 
+// Fase 17: alimentos personalizados (lidos de rótulo por OCR ou escritos à
+// mão) acrescentados pelo profissional — guardados na tabela custom_foods
+// e fundidos aqui a cada arranque, para ficarem disponíveis a todos os
+// alunos seguintes, não só o que estava a ser editado quando foram criados.
+// Nunca substitui um alimento já existente (INSA ou curado) com o mesmo
+// nome — evita que um nome ambíguo escrito pelo profissional apague, por
+// engano, um valor de referência já validado.
+function mergeCustomFood(row){
+  if (!row || !row.name || FOOD_DB[row.name]) return false;
+  FOOD_DB[row.name] = {per: row.per || "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
+  var group = FOOD_GROUPS[row.food_group];
+  if (group && !group.some(function(o){ return o.name === row.name; })){
+    group.push({name: row.name, qty: "100 g"});
+  }
+  return true;
+}
+
+function loadCustomFoods(){
+  if (!sbReady) return Promise.resolve();
+  return sb.from("custom_foods").select("*").then(function(res){
+    if (res.error || !res.data) return;
+    res.data.forEach(mergeCustomFood);
+  }).catch(function(){});
+}
+
 function parseQtyAmount(qty){
   qty = (qty||"").trim();
   if (/vontade/i.test(qty)) return {kind:"fixed", value:1};
@@ -6423,6 +6448,133 @@ function tplPlanoMealEditor(m, midx){
 
 var PRO_PLAN_GROUPS = ["protein","carb","veg","fat","fruit"];
 
+// Fase 17: leitura de tabela nutricional por OCR (Tesseract.js, corre no
+// próprio browser — sem servidor, sem API paga, sem chave para esconder).
+// Carregado só quando é mesmo preciso (primeiro uso), não no arranque.
+var tesseractLoadPromise = null;
+function loadTesseractScript(){
+  if (window.Tesseract) return Promise.resolve();
+  if (tesseractLoadPromise) return tesseractLoadPromise;
+  tesseractLoadPromise = new Promise(function(resolve, reject){
+    var script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.onload = function(){ resolve(); };
+    script.onerror = function(){ tesseractLoadPromise = null; reject(new Error("Falha ao carregar o leitor de imagem")); };
+    document.head.appendChild(script);
+  });
+  return tesseractLoadPromise;
+}
+
+// Tenta extrair kcal/proteína/hidratos/gordura do texto lido por OCR de uma
+// tabela nutricional europeia. Nunca 100% fiável (por isso o ecrã seguinte
+// é sempre de revisão, nunca grava automaticamente) — procura o primeiro
+// número a seguir a cada rótulo, o que corresponde à linha principal
+// ("Lípidos", não "dos quais saturados", que só aparece depois no texto).
+function parseNutritionLabelText(text){
+  text = (text || "").replace(/,(\d)/g, ".$1");
+  function findNum(regex){
+    var m = text.match(regex);
+    return m ? parseFloat(m[1]) : null;
+  }
+  return {
+    kcal: findNum(/(\d+(?:\.\d+)?)\s*kcal/i),
+    protein: findNum(/prote[íi]nas?\D{0,15}?(\d+(?:\.\d+)?)/i),
+    carbs: findNum(/hidratos\s*(?:de\s*carbono)?\D{0,15}?(\d+(?:\.\d+)?)/i),
+    fat: findNum(/(?:l[íi]pidos|gorduras?)\D{0,15}?(\d+(?:\.\d+)?)/i)
+  };
+}
+
+var CUSTOM_FOOD_GROUP_LABELS = {protein:"Proteína", carb:"Hidratos", veg:"Vegetais", fat:"Gordura", fruit:"Fruta"};
+
+// Modal de acrescentar um alimento personalizado. Guarda em custom_foods
+// (fica disponível para todos os alunos seguintes, não só este) e funde no
+// FOOD_DB/FOOD_GROUPS em memória de imediato, para poder ser usado já
+// nesta refeição. onSaved(name) é chamado com o nome guardado.
+function openCustomFoodModal(defaultGroup, onSaved){
+  var sheet = openModal(
+    "<div class=\"mtitle\">Acrescentar alimento</div>" +
+    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Carrega uma foto da tabela nutricional do rótulo — a leitura é automática, mas revês sempre os valores antes de guardar.</p>" +
+    "<label class=\"btn-file\" style=\"display:block; text-align:center; margin-bottom:6px;\">📷 Carregar foto do rótulo<input type=\"file\" accept=\"image/*\" capture=\"environment\" id=\"cfPhoto\" style=\"display:none;\"></label>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"cfManual\" style=\"width:100%; margin-bottom:8px;\">Preencher manualmente, sem foto</button>" +
+    "<p id=\"cfStatus\" class=\"muted-p\"></p>" +
+    "<div id=\"cfForm\" style=\"display:none;\">" +
+      "<div class=\"checkin-field\"><label for=\"cfName\">Nome do alimento</label><input type=\"text\" id=\"cfName\" placeholder=\"Ex.: Barra de proteína XYZ\"></div>" +
+      "<div class=\"checkin-field\"><label for=\"cfGroup\">Grupo</label><select id=\"cfGroup\">" +
+        Object.keys(CUSTOM_FOOD_GROUP_LABELS).map(function(g){ return "<option value=\"" + g + "\"" + (g===defaultGroup?" selected":"") + ">" + CUSTOM_FOOD_GROUP_LABELS[g] + "</option>"; }).join("") +
+      "</select></div>" +
+      "<p class=\"muted-p\" style=\"margin:10px 0 6px;\">Valores por 100g — confirma que correspondem à coluna certa do rótulo:</p>" +
+      "<div class=\"field-row\">" +
+        "<div class=\"f\"><label>Calorias (kcal)</label><input type=\"number\" id=\"cfKcal\" min=\"0\"></div>" +
+        "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" id=\"cfProtein\" min=\"0\" step=\"0.1\"></div>" +
+        "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" id=\"cfCarbs\" min=\"0\" step=\"0.1\"></div>" +
+        "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" id=\"cfFat\" min=\"0\" step=\"0.1\"></div>" +
+      "</div>" +
+      "<p class=\"muted-p\" id=\"cfError\" style=\"color:var(--critical); display:none; margin:8px 0;\"></p>" +
+      "<button type=\"button\" class=\"btn primary\" id=\"cfSave\" style=\"width:100%; margin-top:10px;\">Guardar alimento</button>" +
+    "</div>"
+  );
+
+  function showForm(){ sheet.querySelector("#cfForm").style.display = "block"; }
+
+  sheet.querySelector("#cfManual").addEventListener("click", function(){
+    sheet.querySelector("#cfStatus").textContent = "";
+    showForm();
+  });
+
+  sheet.querySelector("#cfPhoto").addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var statusEl = sheet.querySelector("#cfStatus");
+    statusEl.textContent = "A carregar leitor de imagem...";
+    loadTesseractScript().then(function(){
+      statusEl.textContent = "A ler a foto — pode demorar alguns segundos...";
+      return Tesseract.recognize(file, "por");
+    }).then(function(result){
+      var parsed = parseNutritionLabelText(result.data.text);
+      statusEl.textContent = "Confirma e corrige os valores abaixo — a leitura automática nem sempre acerta tudo.";
+      showForm();
+      if (parsed.kcal != null) sheet.querySelector("#cfKcal").value = parsed.kcal;
+      if (parsed.protein != null) sheet.querySelector("#cfProtein").value = parsed.protein;
+      if (parsed.carbs != null) sheet.querySelector("#cfCarbs").value = parsed.carbs;
+      if (parsed.fat != null) sheet.querySelector("#cfFat").value = parsed.fat;
+    }).catch(function(){
+      statusEl.textContent = "⚠ Não foi possível ler a foto — preenche os valores manualmente.";
+      showForm();
+    });
+  });
+
+  sheet.querySelector("#cfSave").addEventListener("click", function(){
+    var name = sheet.querySelector("#cfName").value.trim();
+    var group = sheet.querySelector("#cfGroup").value;
+    var kcal = parseFloat(sheet.querySelector("#cfKcal").value);
+    var protein = parseFloat(sheet.querySelector("#cfProtein").value);
+    var carbs = parseFloat(sheet.querySelector("#cfCarbs").value);
+    var fat = parseFloat(sheet.querySelector("#cfFat").value);
+    var errEl = sheet.querySelector("#cfError");
+    errEl.style.display = "none";
+    if (!name){ errEl.textContent = "Escreve o nome do alimento."; errEl.style.display = "block"; return; }
+    if (FOOD_DB[name]){ errEl.textContent = "Já existe um alimento com este nome — escolhe outro nome."; errEl.style.display = "block"; return; }
+    if (!(kcal >= 0) || !(protein >= 0) || !(carbs >= 0) || !(fat >= 0)){ errEl.textContent = "Preenche todos os valores (podem ser 0, nunca negativos)."; errEl.style.display = "block"; return; }
+    var row = {name: name, kcal: Math.round(kcal), protein: protein, carbs: carbs, fat: fat, food_group: group};
+    if (sbReady){
+      sb.from("custom_foods").insert(row).select().then(function(res){
+        if (res.error){ errEl.textContent = "⚠ Não foi possível guardar — tenta novamente."; errEl.style.display = "block"; return; }
+        mergeCustomFood((res.data && res.data[0]) || row);
+        showToast("✓ Alimento guardado — já disponível para todos os alunos");
+        closeModal();
+        onSaved(name);
+      }).catch(function(){ errEl.textContent = "⚠ Não foi possível guardar — tenta novamente."; errEl.style.display = "block"; });
+    } else {
+      mergeCustomFood(row);
+      showToast("✓ Alimento guardado (modo local)");
+      closeModal();
+      onSaved(name);
+    }
+  });
+
+  return sheet;
+}
+
 function tplAddFoodForm(midx){
   var defaultGroup = PRO_PLAN_GROUPS[0];
   var options = foodOptionsForGroup(defaultGroup);
@@ -6444,6 +6596,7 @@ function tplAddFoodForm(midx){
         "<button type=\"button\" class=\"btn primary btn-sm\" data-add-food=\"" + midx + "\" style=\"width:100%;\">+ Adicionar alimento</button>" +
       "</div>" +
     "</div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" data-new-food=\"" + midx + "\" style=\"width:100%; margin-top:8px;\">📷 Não encontro o alimento — acrescentar novo</button>" +
   "</div>";
 }
 
@@ -7034,6 +7187,19 @@ function wireProTab(s){
     });
   });
 
+  el.querySelectorAll("[data-new-food]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var midx = btn.getAttribute("data-new-food");
+      var groupSel = el.querySelector(".af-group[data-midx=\"" + midx + "\"]");
+      openCustomFoodModal(groupSel ? groupSel.value : PRO_PLAN_GROUPS[0], function(name){
+        var foodInput = el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
+        if (foodInput) foodInput.value = name;
+        var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
+        if (qtyWrap) qtyWrap.innerHTML = tplAddFoodQty(name);
+      });
+    });
+  });
+
   el.querySelectorAll("[data-key]").forEach(function(cb){
     cb.addEventListener("change", function(){
       if (!s.flexOverrides) s.flexOverrides = {};
@@ -7306,7 +7472,7 @@ function handleSession(session){
       return sb.from("students").select("*");
     }).then(function(res){
       STUDENTS = (res.data || []).map(rowToStudent);
-      return resolvePhotoUrls(STUDENTS);
+      return Promise.all([resolvePhotoUrls(STUDENTS), loadCustomFoods()]);
     }).then(function(){
       document.getElementById("signOutBtn").classList.remove("hidden");
       if (isProfessional){

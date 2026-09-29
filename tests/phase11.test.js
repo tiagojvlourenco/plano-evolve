@@ -56,7 +56,7 @@ function freshStudent(overrides){
 
 // 5. wireProTab já não tem wiring de #flexSlider / .preset-btn (código morto removido)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("5. Sem referência a flexSlider no wiring", fnSrc.indexOf("flexSlider") === -1);
   check.check("5. Sem referência a preset-btn no wiring", fnSrc.indexOf("preset-btn") === -1);
   check.check("5. Continua a ligar os checkboxes [data-key] (Personalizar)", fnSrc.indexOf("[data-key]") >= 0);
@@ -78,7 +78,7 @@ function freshStudent(overrides){
 
 // 7. wireProTab liga o botão saveMedical aos 4 campos corretos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("7. Liga saveMedical", fnSrc.indexOf("saveMedical") >= 0);
   ["medConditions","medCurrent","medLimitations","medNotes"].forEach(function(id){
     check.check("7. Lê o campo " + id, fnSrc.indexOf(id) >= 0);
@@ -151,7 +151,7 @@ function freshStudent(overrides){
 
 // 13. wireProTab liga o upload à pasta do profissional (não do aluno) e inclui o id do aluno no caminho
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   check.check("13. Liga o input weightLogUpload", fnSrc.indexOf("weightLogUpload") >= 0);
   check.check("13. Caminho de upload inclui '/weight-log/' + s.id", fnSrc.indexOf("/weight-log/\" + s.id") >= 0);
   check.check("13. Usa currentAuthUserId (pasta do profissional) como raiz", /currentAuthUserId \+ "\/weight-log\//.test(fnSrc));
