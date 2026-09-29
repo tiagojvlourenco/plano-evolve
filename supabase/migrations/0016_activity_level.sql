@@ -19,4 +19,7 @@ comment on column students.activity_level is
   'Nível de atividade física fora do treino (Sedentário/Levemente ativo/Moderadamente ativo/Muito ativo), usado para calcular a manutenção/TDEE com mais precisão do que só o nº de treinos. NULL = usa o nº de treinos como aproximação (comportamento anterior, sem quebrar alunos já existentes).';
 
 -- ===================== Estado desta migração =====================
--- NÃO APLICADA — por aplicar quando o profissional confirmar.
+-- APLICADA e validada em produção em 2026-09-29. Confirmado no SQL Editor:
+-- select id, name, trainings_per_week, activity_level from students order
+-- by id; -> o único aluno real (tiago-lourenco) veio com activity_level =
+-- NULL e trainings_per_week inalterado, como esperado.
