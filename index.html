@@ -4092,21 +4092,71 @@ function draftPlanFromDailyText(text){
   return draft;
 }
 
+// Fase 20b: pedido explícito depois de usar a Fase 20 com dados reais — (1)
+// dar para tirar um alimento mal reconhecido ANTES de aplicar (em vez de só
+// poder corrigir depois, já no plano real) e (2) avisar quando uma palavra
+// do texto parece ser um alimento mas não está na nossa base, em vez de a
+// ignorar silenciosamente. A lista de palavras a ignorar (DAILY_TEXT_STOPWORDS)
+// cobre artigos/preposições, verbos comuns neste contexto e confeções — nunca
+// vai ser perfeita (é heurística sobre texto livre em português), por isso é
+// sempre rotulada como "também mencionado", não como facto.
+var DAILY_TEXT_STOPWORDS = {
+  "a":1,"o":1,"as":1,"os":1,"um":1,"uma":1,"uns":1,"umas":1,"de":1,"do":1,"da":1,"dos":1,"das":1,
+  "em":1,"no":1,"na":1,"nos":1,"nas":1,"com":1,"sem":1,"e":1,"ou":1,"mas":1,"para":1,"por":1,
+  "que":1,"ao":1,"à":1,"às":1,"aos":1,"mais":1,"menos":1,"muito":1,"muita":1,"muitos":1,"muitas":1,
+  "pouco":1,"pouca":1,"poucos":1,"poucas":1,
+  "como":1,"comi":1,"comer":1,"comendo":1,"costumo":1,"costuma":1,"normalmente":1,"geralmente":1,
+  "tenho":1,"tomo":1,"bebo":1,"faço":1,"vou":1,"gosto":1,"prefiro":1,"tento":1,"acabo":1,"acaba":1,
+  "dia":1,"dias":1,"semana":1,"semanas":1,"vez":1,"vezes":1,"hoje":1,"sempre":1,"depois":1,"antes":1,"durante":1,
+  "grelhado":1,"grelhada":1,"grelhados":1,"grelhadas":1,"cozido":1,"cozida":1,"cozidos":1,"cozidas":1,
+  "assado":1,"assada":1,"assados":1,"assadas":1,"frito":1,"frita":1,"fritos":1,"fritas":1,"cru":1,"crua":1,
+  "pequeno":1,"almoço":1,"almoco":1,"manhã":1,"manha":1,"meio":1,"lanche":1,"jantar":1,"ceia":1,"tarde":1,"noite":1,
+  // formas com hífen: o tokenizador junta "pequeno-almoço" num só token (o
+  // mesmo padrão que mantém "batata-doce" inteiro), por isso precisa da sua
+  // própria entrada — as palavras separadas acima não chegam para o cobrir.
+  "pequeno-almoço":1,"pequeno-almoco":1,"meio-da-manhã":1,"meio-da-manha":1
+};
+
+// Palavras do segmento que PARECEM alimento (não são conetores/verbos/confeção
+// comuns) mas não corresponderam a nada reconhecido — recalculado a cada
+// render a partir dos alimentos atuais do rascunho, para que remover um pill
+// errado "devolva" a palavra correspondente à lista de não-reconhecidos.
+function extractUnmatchedWords(segText, matchedNames, index){
+  var words = (segText || "").toLowerCase().match(/[a-zà-ÿ]+(?:-[a-zà-ÿ]+)*/g) || [];
+  var matchedNamesLower = matchedNames.map(function(n){ return n.toLowerCase(); });
+  var seen = {};
+  var out = [];
+  words.forEach(function(w){
+    if (w.length < 4 || DAILY_TEXT_STOPWORDS[w] || seen[w]) return;
+    if (index[w]) return; // é uma chave conhecida — já teria virado um alimento reconhecido
+    if (matchedNamesLower.some(function(n){ return n.indexOf(w) >= 0; })) return; // faz parte do nome de um alimento já reconhecido
+    seen[w] = true;
+    out.push(w);
+  });
+  return out;
+}
+
 function renderDailyPlanDraft(draft){
   var totalFoods = draft.reduce(function(sum,d){ return sum + d.foods.length; }, 0);
   if (!draft.length){
     return "<p class=\"muted-p\" style=\"margin-top:8px;\">Não encontrei nenhuma refeição identificável no texto (pequeno-almoço/meio da manhã/almoço/lanche/jantar/ceia) — tenta reescrever com essas palavras, ou monta o plano manualmente com o texto acima como referência.</p>";
   }
+  var index = getFoodKeywordIndex();
   var html = "<div class=\"card\" style=\"padding:12px; margin-top:8px;\">" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Proposta a partir do texto do dia-a-dia — revê com atenção antes de aplicar, o reconhecimento de texto livre nunca é perfeito:</p>";
-  draft.forEach(function(d){
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Proposta a partir do texto do dia-a-dia — revê com atenção antes de aplicar, o reconhecimento de texto livre nunca é perfeito. Tira (×) o que não fizer sentido.</p>";
+  draft.forEach(function(d, mi){
+    var matchedNames = d.foods.map(function(f){ return f.name; });
+    var unmatchedWords = extractUnmatchedWords(d.sourceText, matchedNames, index);
     html += "<div style=\"margin-bottom:10px;\">" +
       "<div style=\"font-weight:600; font-size:0.85rem;\">" + escapeHtml(d.mealName) + " <span class=\"muted-p\" style=\"font-weight:400;\">· " + d.mealTime + "</span></div>" +
       (d.foods.length ?
-        "<div style=\"display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;\">" + d.foods.map(function(f){
-          return "<span class=\"pill\">" + escapeHtml(f.name) + " · " + escapeHtml(f.qty) + "</span>";
+        "<div style=\"display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;\">" + d.foods.map(function(f, fi){
+          return "<span class=\"pill\">" + escapeHtml(f.name) + " · " + escapeHtml(f.qty) +
+            " <button type=\"button\" data-remove-draft-food=\"" + mi + "\" data-food-idx=\"" + fi + "\" aria-label=\"Remover " + escapeHtml(f.name) + "\" style=\"background:none; border:none; color:inherit; cursor:pointer; padding:0 0 0 6px; font-size:0.95em; line-height:1;\">×</button></span>";
         }).join("") + "</div>" :
         "<p class=\"muted-p\" style=\"font-size:0.8rem; margin-top:4px;\">Nenhum alimento reconhecido nesta refeição — acrescenta manualmente.</p>") +
+      (unmatchedWords.length ?
+        "<p style=\"font-size:0.76rem; margin-top:6px; color:var(--warn);\">⚠ Também mencionado, mas não está na nossa base: <strong>" + unmatchedWords.map(function(w){ return escapeHtml(w); }).join(", ") + "</strong> — acrescenta manualmente se for relevante.</p>" : "") +
     "</div>";
   });
   html += totalFoods ?
@@ -7319,31 +7369,45 @@ function wireProTab(s){
   if (draftBtn) draftBtn.addEventListener("click", function(){
     var draft = draftPlanFromDailyText(s.dailyEatingDescription);
     var resultEl = el.querySelector("#dailyPlanDraftResult");
-    resultEl.innerHTML = renderDailyPlanDraft(draft);
-    var applyBtn = resultEl.querySelector("#applyDailyPlanDraft");
-    if (applyBtn) applyBtn.addEventListener("click", function(){
-      var createdMeals = 0, addedFoods = 0;
-      draft.forEach(function(d){
-        if (!d.foods.length) return;
-        var targetMeal = s.meals.find(function(m){ return m.name === d.mealName; });
-        if (!targetMeal){
-          targetMeal = meal(d.mealName, d.mealTime, []);
-          s.meals.push(targetMeal);
-          logMealAdded(s, targetMeal);
-          createdMeals++;
-        }
-        d.foods.forEach(function(f){
-          if (targetMeal.foods.some(function(existing){ return existing.name === f.name; })) return;
-          targetMeal.foods.push(food(f.name, f.qty, f.group));
-          addedFoods++;
+
+    function renderAndWireDraft(){
+      resultEl.innerHTML = renderDailyPlanDraft(draft);
+      // Fase 20b: cada pill tem um × para tirar um alimento mal reconhecido
+      // ANTES de aplicar ao plano, em vez de só dar para corrigir depois.
+      resultEl.querySelectorAll("[data-remove-draft-food]").forEach(function(btn){
+        btn.addEventListener("click", function(){
+          var mi = parseInt(btn.getAttribute("data-remove-draft-food"), 10);
+          var fi = parseInt(btn.getAttribute("data-food-idx"), 10);
+          draft[mi].foods.splice(fi, 1);
+          renderAndWireDraft();
         });
       });
-      sortMealsByTime(s);
-      if (addedFoods > 0) logPlanEvent(s, "plano_gerado_texto", "Plano gerado a partir do dia-a-dia alimentar (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)", null, null);
-      renderProTabContent(s);
-      persistStudent(s);
-      showToast(addedFoods > 0 ? "✓ Plano gerado: " + createdMeals + " refeições novas, " + addedFoods + " alimentos — revê e ajusta" : "Nada para aplicar — nenhum alimento novo reconhecido");
-    });
+      var applyBtn = resultEl.querySelector("#applyDailyPlanDraft");
+      if (applyBtn) applyBtn.addEventListener("click", function(){
+        var createdMeals = 0, addedFoods = 0;
+        draft.forEach(function(d){
+          if (!d.foods.length) return;
+          var targetMeal = s.meals.find(function(m){ return m.name === d.mealName; });
+          if (!targetMeal){
+            targetMeal = meal(d.mealName, d.mealTime, []);
+            s.meals.push(targetMeal);
+            logMealAdded(s, targetMeal);
+            createdMeals++;
+          }
+          d.foods.forEach(function(f){
+            if (targetMeal.foods.some(function(existing){ return existing.name === f.name; })) return;
+            targetMeal.foods.push(food(f.name, f.qty, f.group));
+            addedFoods++;
+          });
+        });
+        sortMealsByTime(s);
+        if (addedFoods > 0) logPlanEvent(s, "plano_gerado_texto", "Plano gerado a partir do dia-a-dia alimentar (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)", null, null);
+        renderProTabContent(s);
+        persistStudent(s);
+        showToast(addedFoods > 0 ? "✓ Plano gerado: " + createdMeals + " refeições novas, " + addedFoods + " alimentos — revê e ajusta" : "Nada para aplicar — nenhum alimento novo reconhecido");
+      });
+    }
+    renderAndWireDraft();
   });
 
   var saveT = el.querySelector("#saveTargets");

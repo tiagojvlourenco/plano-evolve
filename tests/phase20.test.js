@@ -146,7 +146,7 @@ function freshStudent(overrides){
 // 15. wireProTab tem a lógica de wiring esperada (existência das ligações certas)
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 1600);
+  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 2600);
   check.check("15. Chama draftPlanFromDailyText(s.dailyEatingDescription)", block.indexOf("draftPlanFromDailyText(s.dailyEatingDescription)") >= 0);
   check.check("15. Preenche #dailyPlanDraftResult com renderDailyPlanDraft", block.indexOf("renderDailyPlanDraft(draft)") >= 0);
   check.check("15. Ao aplicar, regista no histórico com logPlanEvent", block.indexOf('logPlanEvent(s, "plano_gerado_texto"') >= 0);
@@ -193,6 +193,62 @@ function freshStudent(overrides){
     });
   });
   check.check("17. Não duplica um alimento já presente na refeição", addedFoods === 0 && s.meals[0].foods.length === 1);
+})();
+
+// ---- 8. Fase 20b: avisar sobre palavras que parecem alimento mas não estão na base ----
+
+// 18. Uma palavra desconhecida (não é conetor/verbo/confeção comum) fica marcada como não reconhecida
+(function(){
+  var index = getFoodKeywordIndex();
+  var unmatched = extractUnmatchedWords("almoço como frango com azeitonas e passas", ["Frango (peito)"], index);
+  check.check("18. 'azeitonas' fica por reconhecer (não está na base)", unmatched.indexOf("azeitonas") >= 0);
+  check.check("18. 'passas' fica por reconhecer (não está na base)", unmatched.indexOf("passas") >= 0);
+  check.check("18. 'frango' não aparece (já está reconhecido)", unmatched.indexOf("frango") === -1);
+})();
+
+// 19. Conetores, verbos comuns e palavras de confeção nunca aparecem como "não reconhecidos"
+(function(){
+  var index = getFoodKeywordIndex();
+  var unmatched = extractUnmatchedWords("como sempre frango grelhado com muito pouco azeite", ["Frango (peito)","Azeite"], index);
+  check.check("19. Não sinaliza verbos/conetores comuns", unmatched.indexOf("como") === -1 && unmatched.indexOf("sempre") === -1 && unmatched.indexOf("muito") === -1);
+  check.check("19. Não sinaliza palavras de confeção", unmatched.indexOf("grelhado") === -1);
+})();
+
+// 20b. A própria palavra do marcador de refeição (ex.: "pequeno-almoço") nunca é sinalizada como não reconhecida
+(function(){
+  var draft = draftPlanFromDailyText("Ao pequeno-almoço como ovos.");
+  var html = renderDailyPlanDraft(draft);
+  check.check("20b. 'pequeno-almoço' não aparece como aviso de não reconhecido", html.indexOf("Também mencionado") === -1);
+})();
+
+// 20. Palavras curtas (menos de 4 letras) nunca são sinalizadas — reduz falsos positivos
+(function(){
+  var index = getFoodKeywordIndex();
+  var unmatched = extractUnmatchedWords("bebo chá e como um ovo", [], index);
+  check.check("20. Palavra com 3 letras ('chá') não é sinalizada", unmatched.indexOf("chá") === -1);
+})();
+
+// 21. renderDailyPlanDraft mostra o aviso de "também mencionado" quando há palavras por reconhecer
+(function(){
+  var draft = draftPlanFromDailyText("Ao almoço como frango com azeitonas.");
+  var html = renderDailyPlanDraft(draft);
+  check.check("21. Mostra o aviso com a palavra não reconhecida", html.indexOf("azeitonas") >= 0 && html.toLowerCase().indexOf("não está na nossa base") >= 0);
+})();
+
+// 22. Cada pill de alimento tem um botão de remover (×) com os índices certos
+(function(){
+  var draft = draftPlanFromDailyText("Ao almoço como frango com arroz.");
+  var html = renderDailyPlanDraft(draft);
+  check.check("22. Cada pill tem data-remove-draft-food e data-food-idx", /data-remove-draft-food="0"[^>]*data-food-idx="0"/.test(html) && /data-remove-draft-food="0"[^>]*data-food-idx="1"/.test(html));
+})();
+
+// 23. wireProTab liga o botão de remover a tirar o alimento do draft e voltar a renderizar (sem aplicar nada ao plano)
+(function(){
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 2600);
+  check.check("23. Liga [data-remove-draft-food] a um clique", block.indexOf('querySelectorAll("[data-remove-draft-food]")') >= 0);
+  check.check("23. Remove o alimento do draft com splice, sem mexer em s.meals", block.indexOf("draft[mi].foods.splice(fi, 1)") >= 0);
+  check.check("23. Volta a renderizar o rascunho depois de remover (renderAndWireDraft)", block.indexOf("renderAndWireDraft()") >= 0);
 })();
 
 check.summarize();
