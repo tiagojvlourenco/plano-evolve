@@ -3462,7 +3462,11 @@ function showCopyTextModal(text){
 
 function tplQuestionnaireCopy(s){
   if (!hasQuestionnaireAnswers(s)) return "";
-  return "<details class=\"perfil-section\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
+  // Fase 15: ao contrário das secções do Perfil (informação passiva, por
+  // isso todas fechadas), este bloco é diretamente acionável mesmo quando
+  // se está a montar o plano — fechado por omissão tornava-o fácil de nem
+  // reparar que existia. Começa aberto.
+  return "<details class=\"perfil-section\" open style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
     "<p class=\"muted-p\" style=\"white-space:pre-wrap; margin-top:8px;\">" + escapeHtml(questionnaireAnswersText(s)) + "</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\">" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
