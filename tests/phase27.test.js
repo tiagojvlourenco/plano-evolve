@@ -106,7 +106,7 @@ function freshStudent(overrides){
 (function(){
   var html = tplProPerfil(freshStudent({activityLevel:"Sedentário"}));
   check.check("10. Tem o select editável activityLevelInput", html.indexOf('id="activityLevelInput"') >= 0);
-  check.check("10. A opção atual vem pré-selecionada", /<option selected>Sedentário<\/option>/.test(html));
+  check.check("10. A opção atual vem pré-selecionada", /<option value="Sedentário" selected>/.test(html));
   check.check("10. Tem o botão de guardar", html.indexOf('id="saveActivityLevel"') >= 0);
 })();
 
