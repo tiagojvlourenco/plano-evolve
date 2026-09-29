@@ -129,12 +129,15 @@ function freshStudent(){
   check.check("13. null/undefined nunca rebentam, tratados como string vazia", escapeHtml(null) === "" && escapeHtml(undefined) === "");
 })();
 
-// 14. Um nome de refeição com HTML/aspas embutido nunca quebra o value="" do editor do profissional
+// 14. Um nome de refeição com HTML/aspas embutido nunca injeta markup no editor do profissional
+// (Fase 14: "Nome da refeição" passou de <input value="..."> a <select><option>,
+// mas a proteção continua válida — o nome vai sempre por escapeHtml() para
+// dentro do texto do <option>, nunca teria sido seguro como atributo cru).
 (function(){
   var m = meal('Almoço <img src=x onerror=alert(1)> "teste"', "13:00", []);
   var html = tplPlanoMealEditor(m, 0);
   check.check("14. O HTML gerado não contém a tag <img> em bruto", html.indexOf("<img src=x") === -1);
-  check.check("14. As aspas do nome não escapam do atributo value", html.indexOf('value="Almoço &lt;img') >= 0);
+  check.check("14. O nome escapado aparece dentro do <option>, nunca em bruto", html.indexOf("Almoço &lt;img src=x onerror=alert(1)&gt; &quot;teste&quot;") >= 0);
 })();
 
 check.summarize();

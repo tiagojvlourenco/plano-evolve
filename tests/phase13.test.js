@@ -31,37 +31,11 @@ function freshStudent(overrides){
   check.check("1. .onb-field input define a cor do texto (color:var(--ink))", rule.indexOf("color:var(--ink)") >= 0);
 })();
 
-// ---- 2. Copiar respostas do questionário: cadeia de fallback robusta (PWA standalone no iOS falhou) ----
-
-// 2. copyTextToClipboard existe e tenta a API moderna, com fallback para execCommand
-(function(){
-  check.check("2. copyTextToClipboard existe", typeof copyTextToClipboard === "function");
-  check.check("2. legacyCopyFallback existe (execCommand clássico)", typeof legacyCopyFallback === "function");
-  check.check("2. showCopyFallbackModal existe (último recurso: copiar à mão)", typeof showCopyFallbackModal === "function");
-})();
-
-// 3. legacyCopyFallback cria e remove sempre a textarea temporária, mesmo se execCommand não existir
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function legacyCopyFallback"), appSource.indexOf("function legacyCopyFallback") + 700);
-  check.check("3. Usa uma textarea temporária fora do ecrã", fnSrc.indexOf("position = \"fixed\"") >= 0);
-  check.check("3. Remove sempre a textarea (não deixa lixo no DOM)", fnSrc.indexOf("document.body.removeChild(textarea)") >= 0);
-  check.check("3. Está protegido por try/catch (nunca rebenta a app)", /try\s*\{[\s\S]*catch/.test(fnSrc));
-})();
-
-// 4. showCopyFallbackModal mostra o texto completo, pronto a selecionar
-(function(){
-  var texto = "Questionário inicial de Ana:\nDia-a-dia alimentar: como fora ao almoço.";
-  var fnSrc = appSource.slice(appSource.indexOf("function showCopyFallbackModal"), appSource.indexOf("function showCopyFallbackModal") + 700);
-  check.check("4. Usa openModal para mostrar o texto", fnSrc.indexOf("openModal(") >= 0);
-  check.check("4. Textarea é readonly (só para copiar, não editar)", fnSrc.indexOf("readonly") >= 0);
-  check.check("4. Seleciona o texto automaticamente (pronto a copiar)", fnSrc.indexOf("ta.select()") >= 0);
-})();
-
-// 5. wireProTab: se copyTextToClipboard falhar, mostra sempre o modal (nunca fica sem opção)
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
-  check.check("5. .catch() do copyQuestionnaire chama showCopyFallbackModal", /copyTextToClipboard\(text\)[\s\S]{0,200}showCopyFallbackModal\(text\)/.test(fnSrc));
-})();
+// ---- 2. Copiar respostas do questionário ----
+// (Fase 13 tentava clipboard.writeText -> execCommand -> só mostrava o modal
+// SE ambos falhassem; continuou a falhar num telemóvel real porque
+// execCommand pode devolver sucesso sem copiar nada de verdade, no WKWebView
+// standalone. Fase 14 muda a estratégia — ver phase14.test.js.)
 
 // ---- 3. Ordem do Perfil: Dados médicos passa a ser a 2ª secção ----
 

@@ -2946,18 +2946,25 @@ function renderProShell(){
   // perto da margem fica meio cortado. Centra sempre o separador ativo depois
   // de o sidebar ser reconstruído.
   // Adiado: chamado logo a seguir a innerHTML=..., na mesma execução síncrona,
-  // scrollIntoView() nem sempre usa a geometria final do layout recém-
-  // inserido (confirmado a falhar sem isto). Usa-se setTimeout em vez de
-  // requestAnimationFrame porque rAF fica suspenso em separadores em segundo
-  // plano (nunca dispara) — setTimeout continua fiável em ambos os casos.
+  // a geometria do layout recém-inserido ainda não está pronta (confirmado a
+  // falhar sem isto). setTimeout em vez de requestAnimationFrame porque rAF
+  // fica suspenso em separadores em segundo plano (nunca dispara).
+  //
+  // Fase 14: scrollIntoView({inline:"center"}) foi trocado por
+  // container.scrollTo() — confirmado num telemóvel real que scrollIntoView
+  // deslocava a PÁGINA inteira (não só este menu) ao tentar "ajudar" a
+  // centrar o elemento, cortando o resto do ecrã. scrollTo() chamado no
+  // próprio contentor nunca escapa a ele (ao contrário de scrollIntoView).
+  // Continua a precisar de behavior:"instant" explícito — confirmado que
+  // mesmo a atribuição direta a .scrollLeft herda scroll-behavior:smooth do
+  // CSS neste motor de browser, o que reintroduziria o problema original
+  // (animação smooth iniciada por código nunca progride em segundo plano).
   setTimeout(function(){
-    var activeNavItem = proRoot.querySelector(".pro-sidebar .pro-nav-item.active");
-    if (activeNavItem && activeNavItem.scrollIntoView){
-      // "instant" explícito: sem isto herda-se scroll-behavior:smooth do CSS
-      // (para o scroll manual do dedo continuar suave), mas uma animação
-      // smooth iniciada por código nunca chega a progredir num separador em
-      // segundo plano — confirmado a ficar preso em scrollLeft:0 até o fim.
-      activeNavItem.scrollIntoView({inline:"center", block:"nearest", behavior:"instant"});
+    var container = proRoot.querySelector(".pro-sidebar");
+    var activeNavItem = container && container.querySelector(".pro-nav-item.active");
+    if (container && activeNavItem){
+      var targetCenter = activeNavItem.offsetLeft + activeNavItem.offsetWidth / 2;
+      container.scrollTo({left: targetCenter - container.clientWidth / 2, behavior: "instant"});
     }
   }, 0);
 
@@ -3408,12 +3415,14 @@ function questionnaireAnswersText(s){
   return lines.join("\n");
 }
 
-// Fase 13: navigator.clipboard.writeText sozinho falhou em testes reais
-// (PWA instalada no ecrã principal do iPhone — WKWebView standalone tem
-// restrições próprias ao Clipboard API que não existem no Safari normal).
-// Por isso há uma cadeia de fallback: API moderna -> execCommand("copy")
-// clássico -> modal com o texto selecionado, para nunca ficar sem forma
-// nenhuma de copiar.
+// Fase 14: a cadeia de fallback da Fase 13 (API moderna -> execCommand)
+// continuou a falhar em testes reais na PWA instalada no ecrã principal do
+// iPhone — o WKWebView standalone pode devolver "sucesso" de
+// execCommand("copy") sem copiar mesmo nada, o que é indetetável por
+// código (não há erro nenhum a apanhar). A única via 100% fiável é mostrar
+// sempre o texto já selecionado, para copiar pelo gesto nativo do
+// telemóvel (que nunca falha) — as tentativas programáticas passam a ser
+// só um extra silencioso em segundo plano, nunca a via principal.
 function legacyCopyFallback(text){
   try {
     var textarea = document.createElement("textarea");
@@ -3432,22 +3441,18 @@ function legacyCopyFallback(text){
   }
 }
 
-function copyTextToClipboard(text){
-  return new Promise(function(resolve, reject){
-    if (navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(resolve).catch(function(){
-        legacyCopyFallback(text) ? resolve() : reject();
-      });
-    } else {
-      legacyCopyFallback(text) ? resolve() : reject();
-    }
-  });
+function tryBackgroundCopy(text){
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).catch(function(){ legacyCopyFallback(text); });
+  } else {
+    legacyCopyFallback(text);
+  }
 }
 
-function showCopyFallbackModal(text){
+function showCopyTextModal(text){
   var sheet = openModal(
     "<div class=\"mtitle\">Copiar respostas</div>" +
-    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Não foi possível copiar automaticamente. Mantém premido o texto abaixo e escolhe \"Copiar\".</p>" +
+    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">O texto já está selecionado — mantém premido e escolhe \"Copiar\" (ou \"Selecionar tudo\" se a seleção se perder).</p>" +
     "<textarea id=\"manualCopyText\" class=\"notes-area\" readonly style=\"min-height:180px;\">" + escapeHtml(text) + "</textarea>"
   );
   var ta = sheet.querySelector("#manualCopyText");
@@ -3510,7 +3515,13 @@ function tplPlanoMealEditor(m, midx){
   var html = "<div class=\"plano-meal-card\" style=\"border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:14px;\">" +
     "<div class=\"onb-row\" style=\"align-items:end; margin-bottom:8px;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Nome da refeição</label>" +
-        "<input type=\"text\" class=\"pm-name\" data-midx=\"" + midx + "\" value=\"" + escapeHtml(m.name) + "\"></div>" +
+        "<select class=\"pm-name\" data-midx=\"" + midx + "\">" +
+          PLAN_SKELETON_MEALS.map(function(pair){
+            return "<option" + (m.name === pair[0] ? " selected" : "") + ">" + escapeHtml(pair[0]) + "</option>";
+          }).join("") +
+          (PLAN_SKELETON_MEALS.some(function(pair){ return pair[0] === m.name; }) ? "" :
+            "<option selected>" + escapeHtml(m.name) + "</option>") +
+        "</select></div>" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Horário</label>" +
         "<input type=\"time\" class=\"pm-time\" data-midx=\"" + midx + "\" value=\"" + escapeHtml(m.time) + "\"></div>" +
     "</div>" +
@@ -3975,11 +3986,8 @@ function wireProTab(s){
   var copyQ = el.querySelector("#copyQuestionnaire");
   if (copyQ) copyQ.addEventListener("click", function(){
     var text = questionnaireAnswersText(s);
-    copyTextToClipboard(text).then(function(){
-      showToast("✓ Respostas copiadas");
-    }).catch(function(){
-      showCopyFallbackModal(text);
-    });
+    tryBackgroundCopy(text);
+    showCopyTextModal(text);
   });
 
   var skeletonBtn = el.querySelector("#createPlanSkeleton");
@@ -4028,12 +4036,11 @@ function wireProTab(s){
     showToast("Refeição adicionada");
   });
 
-  el.querySelectorAll(".pm-name").forEach(function(input){
-    input.addEventListener("blur", function(){
-      var midx = parseInt(input.getAttribute("data-midx"),10);
+  el.querySelectorAll(".pm-name").forEach(function(select){
+    select.addEventListener("change", function(){
+      var midx = parseInt(select.getAttribute("data-midx"),10);
       var m = s.meals[midx];
-      var newName = input.value.trim();
-      if (!newName){ input.value = m.name; return; }
+      var newName = select.value;
       if (newName === m.name) return;
       var oldName = m.name;
       m.name = newName;

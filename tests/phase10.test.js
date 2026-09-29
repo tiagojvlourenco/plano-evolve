@@ -126,14 +126,14 @@ function freshStudent(overrides){
 // ---- 3. Auto-centrar separador ao clicar (menu do profissional em telemóvel) ----
 
 // 11. O separador ativo é centrado depois de renderProShell() reconstruir o menu
+// Fase 14: scrollIntoView({inline:"center"}) foi trocado por container.scrollTo() —
+// confirmado num telemóvel real que também deslocava a página inteira, não só
+// o menu, ao tentar "ajudar" a centrar o elemento (ver phase14.test.js).
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 3000);
-  check.check("11. Chama scrollIntoView no separador ativo", fnSrc.indexOf(".scrollIntoView(") >= 0);
-  // Encontrado a validar ao vivo: sem behavior:"instant" explícito, herda
-  // scroll-behavior:smooth do CSS e uma animação smooth nunca progride num
-  // separador do browser em segundo plano — ficava sempre em scrollLeft:0.
-  check.check("11. Força behavior:\"instant\" explicitamente (não confia no smooth por omissão)", /behavior:\s*"instant"/.test(fnSrc));
-  check.check("11. Está adiado (setTimeout) para correr depois do layout do DOM recém-inserido", /setTimeout\(function\(\)\{[\s\S]*?scrollIntoView/.test(fnSrc));
+  check.check("11. Calcula o centro do separador ativo manualmente (não usa scrollIntoView)", fnSrc.indexOf("targetCenter") >= 0 && fnSrc.indexOf(".scrollIntoView(") === -1);
+  check.check("11. Usa scrollTo() no contentor (nunca escapa a ele)", /container\.scrollTo\(\{/.test(fnSrc));
+  check.check("11. Está adiado (setTimeout) para correr depois do layout do DOM recém-inserido", /setTimeout\(function\(\)\{[\s\S]*?scrollTo/.test(fnSrc));
 })();
 
 // ---- 4. Bug de layout no telemóvel: data sobreposta ao peso (Composição corporal) ----
