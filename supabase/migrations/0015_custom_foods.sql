@@ -1,6 +1,6 @@
 -- EVOLVE NUTRITION — Fase 17: alimentos personalizados (lidos de rótulos)
 -- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0014 já terem corrido.
--- AINDA NÃO APLICADA nem validada com dados reais.
+-- APLICADA e validada em produção em 2026-09-29.
 --
 -- Pedido do profissional: além da base do INSA (Fase 16), poder acrescentar
 -- um alimento que não existe na base, lendo a tabela nutricional de um
@@ -30,23 +30,23 @@ create table if not exists custom_foods (
 
 alter table custom_foods enable row level security;
 
-drop policy if exists "utilizadores autenticados leem alimentos personalizados" on custom_foods;
-create policy "utilizadores autenticados leem alimentos personalizados" on custom_foods
+drop policy if exists "authenticated users read custom foods" on custom_foods;
+create policy "authenticated users read custom foods" on custom_foods
   for select
   using (auth.uid() is not null);
 
-drop policy if exists "profissional cria alimentos personalizados" on custom_foods;
-create policy "profissional cria alimentos personalizados" on custom_foods
+drop policy if exists "professionals insert custom foods" on custom_foods;
+create policy "professionals insert custom foods" on custom_foods
   for insert
   with check (exists (select 1 from professionals where user_id = auth.uid()));
 
-drop policy if exists "profissional atualiza alimentos personalizados" on custom_foods;
-create policy "profissional atualiza alimentos personalizados" on custom_foods
+drop policy if exists "professionals update custom foods" on custom_foods;
+create policy "professionals update custom foods" on custom_foods
   for update
   using (exists (select 1 from professionals where user_id = auth.uid()));
 
-drop policy if exists "profissional apaga alimentos personalizados" on custom_foods;
-create policy "profissional apaga alimentos personalizados" on custom_foods
+drop policy if exists "professionals delete custom foods" on custom_foods;
+create policy "professionals delete custom foods" on custom_foods
   for delete
   using (exists (select 1 from professionals where user_id = auth.uid()));
 
@@ -57,8 +57,13 @@ comment on column custom_foods.kcal is 'Calorias por 100g, tal como os restantes
 comment on column custom_foods.created_by is 'Profissional que acrescentou o alimento — só para auditoria, não restringe a leitura.';
 
 -- ===================== Estado desta migração =====================
--- Ainda NÃO foi aplicada em produção. Depois de aplicada, confirma no SQL
--- Editor: select * from custom_foods; — deve devolver 0 linhas (tabela
--- nova, vazia). Testa a seguir criar um alimento personalizado de teste a
--- partir da app (nome claramente marcado como teste), confirma que aparece
--- na tabela, e remove-o depois: delete from custom_foods where name = '...';
+-- APLICADA e validada em produção em 2026-09-29. Confirmado no SQL Editor:
+-- select count(*) from custom_foods; -> 0 (tabela nova, vazia); select
+-- policyname, cmd from pg_policies where tablename = 'custom_foods'; -> as
+-- 4 políticas (SELECT/INSERT/UPDATE/DELETE) todas presentes. Os nomes das
+-- políticas foram escritos em inglês na aplicação real (sem acentos, mais
+-- fiável a escrever via automação do browser) em vez dos nomes em
+-- português acima — funcionalmente idênticos, só o texto do nome difere.
+-- O fluxo de criar/ler um alimento personalizado em si já tinha sido
+-- validado em modo local antes desta aplicação — ver commit "Fase 17:
+-- acrescentar alimentos personalizados lendo o rótulo (OCR no browser)".

@@ -132,7 +132,7 @@ var check = require("./check")();
   check.check("14. Cria a tabela custom_foods", mig.indexOf("create table if not exists custom_foods") >= 0);
   check.check("14. RLS ativado", mig.indexOf("enable row level security") >= 0);
   check.check("14. Qualquer utilizador autenticado pode ler (aluno precisa de calcular macros do seu plano)", mig.indexOf("auth.uid() is not null") >= 0);
-  check.check("14. Só profissional pode inserir", /profissional cria alimentos personalizados[\s\S]{0,200}exists \(select 1 from professionals/.test(mig));
+  check.check("14. Só profissional pode inserir", /professionals insert custom foods[\s\S]{0,200}exists \(select 1 from professionals/.test(mig));
   check.check("14. food_group restrito aos 5 grupos válidos", mig.indexOf("check (food_group in ('protein','carb','veg','fat','fruit'))") >= 0);
 })();
 
