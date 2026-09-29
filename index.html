@@ -4588,7 +4588,7 @@ function studentToRow(s){
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
     birth_date: s.birthDate || null,
     weight_initial: s.weightInitial, weight_current: s.weightCurrent, weight_goal: s.weightGoal,
-    goal: s.goal, trainings_per_week: s.trainingsPerWeek, training_days: s.trainingDays || [],
+    goal: s.goal, trainings_per_week: s.trainingsPerWeek, training_days: s.trainingDays || [], activity_level: s.activityLevel || null,
     training_type: s.trainingType, training_time: s.trainingTime, wake_time: s.wakeTime, sleep_time: s.sleepTime,
     likes: s.likes || [], dislikes: s.dislikes || [], avoid: s.avoid || [], allergies: s.allergies || [],
     meals_preferred: s.mealsPreferred, budget: s.budget, cook_time: s.cookTime, work: s.work, weekend_note: s.weekendNote,
@@ -4613,7 +4613,7 @@ function rowToStudent(r){
     id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
     birthDate: r.birth_date || null,
     weightInitial: r.weight_initial, weightCurrent: r.weight_current, weightGoal: r.weight_goal,
-    goal: r.goal, trainingsPerWeek: r.trainings_per_week, trainingDays: r.training_days || [],
+    goal: r.goal, trainingsPerWeek: r.trainings_per_week, trainingDays: r.training_days || [], activityLevel: r.activity_level || null,
     trainingType: r.training_type, trainingTime: r.training_time, wakeTime: r.wake_time, sleepTime: r.sleep_time,
     likes: r.likes || [], dislikes: r.dislikes || [], avoid: r.avoid || [], allergies: r.allergies || [],
     mealsPreferred: r.meals_preferred, budget: r.budget, cookTime: r.cook_time, work: r.work, weekendNote: r.weekend_note,
@@ -4679,6 +4679,27 @@ function activityFromTrainings(n){
   return 1.725;
 }
 
+// Fase 27: pedido explícito — o nº de treinos de musculação/semana é uma
+// aproximação fraca do nível de atividade real (alguém pode treinar pouco
+// mas ter um trabalho fisicamente exigente, ou o contrário). Passa a haver
+// uma pergunta direta no questionário ("Sedentário"/"Levemente ativo"/
+// "Moderadamente ativo"/"Muito ativo", os mesmos 4 níveis e fatores da
+// literatura de TDEE) — quando o profissional a preenche, usa-se essa
+// resposta; para alunos antigos sem este campo, mantém-se o fallback pelo
+// nº de treinos, sem quebrar nada do que já existia.
+var ACTIVITY_LEVEL_FACTORS = {
+  "Sedentário": 1.2,
+  "Levemente ativo": 1.375,
+  "Moderadamente ativo": 1.55,
+  "Muito ativo": 1.725
+};
+var ACTIVITY_LEVEL_OPTIONS = Object.keys(ACTIVITY_LEVEL_FACTORS);
+
+function activityFactor(p){
+  if (p && p.activityLevel && ACTIVITY_LEVEL_FACTORS[p.activityLevel] != null) return ACTIVITY_LEVEL_FACTORS[p.activityLevel];
+  return activityFromTrainings((p && p.trainingsPerWeek) || 0);
+}
+
 var GOAL_ADJUST = {
   "Perda de gordura": -20,
   "Ganho de massa muscular": 15,
@@ -4716,12 +4737,12 @@ function computeBMR(sexOrProfile, weight, height, age){
 function computeMaintenanceKcal(s){
   var bmr = computeBMR(s);
   if (!bmr) return null;
-  return Math.round(bmr * activityFromTrainings(s.trainingsPerWeek || 0));
+  return Math.round(bmr * activityFactor(s));
 }
 
 function computeSuggestedTargets(p){
   var bmr = computeBMR(p.sex, p.weight, p.height, p.age) || 0;
-  var activity = activityFromTrainings(p.trainingsPerWeek);
+  var activity = activityFactor(p);
   var tdee = bmr * activity;
   var kcal;
   if (p.weightGoal && Math.abs(p.weightGoal - p.weight) >= 0.5){
@@ -6492,6 +6513,10 @@ function openOnboardingForm(){
       "<div class=\"onb-field\"><label>Horário habitual de treino</label><input type=\"text\" id=\"obTrainTime\" placeholder=\"Ex: 19:00\"></div>" +
     "</div>" +
     "<div class=\"onb-field\"><label>Tipo de treino</label><input type=\"text\" id=\"obTrainType\" placeholder=\"Ex: Musculação\"></div>" +
+    "<div class=\"onb-field\"><label>Nível de atividade física fora do treino</label><select id=\"obActivityLevel\">" +
+      "<option value=\"\">— usa o nº de treinos como aproximação —</option>" +
+      ACTIVITY_LEVEL_OPTIONS.map(function(o){ return "<option>" + o + "</option>"; }).join("") +
+    "</select></div>" +
     "<div class=\"onb-row\">" +
       "<div class=\"onb-field\"><label>Acorda</label><input type=\"text\" id=\"obWake\" placeholder=\"07:00\"></div>" +
       "<div class=\"onb-field\"><label>Dorme</label><input type=\"text\" id=\"obSleep\" placeholder=\"23:00\"></div>" +
@@ -6589,6 +6614,7 @@ function openOnboardingForm(){
       trainingsPerWeek: Math.max(0, parseInt(sheet.querySelector("#obTrainings").value,10) || 0),
       trainingTime: sheet.querySelector("#obTrainTime").value,
       trainingType: sheet.querySelector("#obTrainType").value,
+      activityLevel: sheet.querySelector("#obActivityLevel").value || null,
       wakeTime: sheet.querySelector("#obWake").value,
       sleepTime: sheet.querySelector("#obSleep").value,
       work: sheet.querySelector("#obWork").value,
@@ -6613,6 +6639,7 @@ function openOnboardingForm(){
       id:id, initials:initialsOf(name), name:name, age:profile.age, birthDate:profile.birthDate, sex:profile.sex, height:profile.height,
       weightInitial:profile.weight, weightCurrent:profile.weight, weightGoal:null,
       goal:profile.goal, trainingsPerWeek:profile.trainingsPerWeek, trainingType:profile.trainingType||"—", trainingTime:profile.trainingTime||"—",
+      activityLevel:profile.activityLevel,
       wakeTime:profile.wakeTime||"—", sleepTime:profile.sleepTime||"—",
       likes:[], dislikes:[], avoid:[], allergies:profile.allergies,
       mealsPreferred:5, budget:"—", cookTime:"—",
@@ -6706,11 +6733,19 @@ function tplProPerfil(s){
     fRow("Peso atual", s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial + " kg") +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
+    fRow("Nível de atividade", s.activityLevel || "— (a usar treinos/semana como aproximação)") +
   "</div>" +
   "<div class=\"checkin-field\" style=\"margin-top:14px; max-width:220px;\"><label for=\"weightGoalInput\">Peso objetivo (kg)</label>" +
     "<input type=\"number\" step=\"0.5\" min=\"0\" id=\"weightGoalInput\" value=\"" + (s.weightGoal != null ? s.weightGoal : "") + "\" placeholder=\"Ex.: 90\"></div>" +
   "<p class=\"muted-p\" style=\"margin-top:6px;\">Ao guardar, os alvos nutricionais são recalculados com um ritmo gradual (~" + WEIGHT_GOAL_RATE_KG_PER_WEEK + " kg/semana) em vez do ajuste fixo por objetivo — revê-os depois no separador Plano.</p>" +
-  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveWeightGoal\" style=\"margin-top:8px;\">Guardar peso objetivo</button>");
+  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveWeightGoal\" style=\"margin-top:8px;\">Guardar peso objetivo</button>" +
+  "<div class=\"checkin-field\" style=\"margin-top:14px; max-width:260px;\"><label for=\"activityLevelInput\">Nível de atividade física fora do treino</label>" +
+    "<select id=\"activityLevelInput\">" +
+      "<option value=\"\"" + (!s.activityLevel ? " selected" : "") + ">— usa o nº de treinos como aproximação —</option>" +
+      ACTIVITY_LEVEL_OPTIONS.map(function(o){ return "<option" + (s.activityLevel===o?" selected":"") + ">" + o + "</option>"; }).join("") +
+    "</select></div>" +
+  "<p class=\"muted-p\" style=\"margin-top:6px;\">Usado para calcular a manutenção (separador Nutrição) e sugerir alvos — mais preciso do que só o nº de treinos.</p>" +
+  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveActivityLevel\" style=\"margin-top:8px;\">Guardar nível de atividade</button>");
 
   html += perfilSection("Dados médicos", false,
     "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
@@ -7933,7 +7968,7 @@ function wireProTab(s){
     s.weightGoal = newGoal;
     var suggested = computeSuggestedTargets({
       sex: s.sex, weight: s.weightCurrent, height: s.height, age: s.age,
-      trainingsPerWeek: s.trainingsPerWeek, goal: s.goal, weightGoal: s.weightGoal
+      trainingsPerWeek: s.trainingsPerWeek, activityLevel: s.activityLevel, goal: s.goal, weightGoal: s.weightGoal
     });
     var newTargets = {kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat};
     logTargetsChange(s, s.targets, newTargets);
@@ -7943,6 +7978,20 @@ function wireProTab(s){
     persistStudent(s);
     showToast("Peso objetivo guardado — alvos recalculados, revê no separador Plano");
     setTimeout(function(){ saveWG.textContent = "Guardar peso objetivo"; }, 1400);
+  });
+
+  // Fase 27: nível de atividade física — mais preciso do que o nº de treinos
+  // sozinho para calcular a manutenção/TDEE. Só grava o valor; não força um
+  // recálculo automático dos alvos (o profissional decide quando ajustar,
+  // tal como já acontece para o resto do perfil).
+  var saveAL = el.querySelector("#saveActivityLevel");
+  if (saveAL) saveAL.addEventListener("click", function(){
+    var raw = el.querySelector("#activityLevelInput").value;
+    s.activityLevel = raw || null;
+    saveAL.textContent = "Guardado ✓";
+    persistStudent(s);
+    showToast("Nível de atividade guardado");
+    setTimeout(function(){ saveAL.textContent = "Guardar nível de atividade"; }, 1400);
   });
 
   var saveMed = el.querySelector("#saveMedical");
