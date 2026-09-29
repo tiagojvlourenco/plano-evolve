@@ -3772,6 +3772,99 @@ function foodsTotals(foods){
   return { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) };
 }
 
+// Fase 19: ajuste automático de quantidades aos alvos nutricionais.
+// Pedido explícito: TODOS os alimentos contam, incluindo vegetais e fruta
+// — não só os grupos "protein/carb/fat". Por isso o critério não é o
+// f.group do alimento no plano, é o que cada alimento REALMENTE contribui
+// mais (proteína, hidratos ou gordura, por calorias) — a mesma lógica já
+// usada para classificar a base do INSA por grupo (Fase 16). Um vegetal
+// com hidratos reais definidos (não "à vontade") entra na reescala de
+// hidratos, tal como qualquer alimento do grupo "carb".
+// Só fica de fora um alimento que não tem número nenhum para reescalar:
+// per:"fixed" na base (ex.: brócolos "à vontade" por definição) ou com a
+// quantidade atual escrita como "à vontade".
+function priorityMacroForFood(name){
+  var db = FOOD_DB[name];
+  if (!db) return null;
+  var calP = db.p * 4, calC = db.c * 4, calF = db.f * 9;
+  var best = Math.max(calP, calC, calF);
+  if (best <= 0) return null;
+  if (best === calF) return "f";
+  if (best === calP) return "p";
+  return "c";
+}
+
+function scaleFoodQty(name, qty, scale){
+  var db = FOOD_DB[name];
+  var amt = parseQtyAmount(qty);
+  if (!db || db.per === "fixed" || amt.kind === "fixed") return qty;
+  if (db.per === "unit" || amt.kind === "unit"){
+    var newUnits = Math.max(1, Math.round(amt.value * scale));
+    return newUnits + " unid.";
+  }
+  var unitMatch = qty.match(/([\d.]+)\s*(g|ml)\b/i);
+  var suffix = unitMatch ? unitMatch[2] : "g";
+  var newAmount = Math.max(5, Math.round((amt.value * scale) / 5) * 5);
+  return newAmount + " " + suffix;
+}
+
+// Devolve {changed, skippedMacros, untouched} — skippedMacros são macros
+// com alvo definido mas sem nenhum alimento reescalável a contribuir para
+// eles (nada para ajustar; o profissional tem de acrescentar alimentos ou
+// definir uma quantidade real, não "à vontade"). untouched conta quantos
+// alimentos ficaram de fora por serem mesmo fixos/"à vontade".
+function autoAdjustPlanQuantities(s){
+  var t = s.targets || {};
+  var targetFor = {
+    p: t.protein,
+    c: t.carbs != null ? t.carbs : t.carbsMax,
+    f: t.fat != null ? t.fat : t.fatMax
+  };
+  var buckets = {p:[], c:[], f:[]};
+  var untouched = 0;
+  var startQty = [];
+  var allFoods = [];
+  s.meals.forEach(function(m){
+    m.foods.forEach(function(f){
+      allFoods.push(f);
+      var db = FOOD_DB[f.name];
+      var amt = parseQtyAmount(f.qty);
+      if (!db || db.per === "fixed" || amt.kind === "fixed"){ untouched++; return; }
+      var macroKey = priorityMacroForFood(f.name);
+      if (!macroKey) return;
+      buckets[macroKey].push(f);
+      startQty.push({food: f, qty: f.qty});
+    });
+  });
+  var skippedMacros = [];
+  var macroGroupLabel = {p:"protein", c:"carb", f:"fat"};
+  Object.keys(buckets).forEach(function(macroKey){
+    if (!buckets[macroKey].length && targetFor[macroKey] > 0) skippedMacros.push(macroGroupLabel[macroKey]);
+  });
+  // Refinamento iterativo: quase todos os alimentos contribuem um pouco
+  // para os 3 macros, não só o seu "prioritário" (ex.: arroz tem sempre
+  // uma pontinha de proteína). Cada passagem calcula quanto falta a cada
+  // macro DEPOIS de contar o que os alimentos dos outros baldes já
+  // contribuem (soma total menos a contribuição do próprio balde), para
+  // convergir para o alvo do PLANO inteiro, não só do balde isolado.
+  var ADJUST_PASSES = 4;
+  for (var pass = 0; pass < ADJUST_PASSES; pass++){
+    Object.keys(buckets).forEach(function(macroKey){
+      var matching = buckets[macroKey];
+      var target = targetFor[macroKey];
+      if (!matching.length || !(target > 0)) return;
+      var bucketContribution = matching.reduce(function(sum, f){ return sum + foodNutrition(f.name, f.qty)[macroKey]; }, 0);
+      var totalContribution = allFoods.reduce(function(sum, f){ return sum + foodNutrition(f.name, f.qty)[macroKey]; }, 0);
+      var remaining = target - (totalContribution - bucketContribution);
+      if (!(bucketContribution > 0) || !(remaining > 0)) return;
+      var scale = remaining / bucketContribution;
+      matching.forEach(function(f){ f.qty = scaleFoodQty(f.name, f.qty, scale); });
+    });
+  }
+  var changed = startQty.filter(function(o){ return o.food.qty !== o.qty; }).length;
+  return {changed: changed, skippedMacros: skippedMacros, untouched: untouched};
+}
+
 /* ---------- Flexibilidade: deriva a apresentação da refeição, não é só visual ---------- */
 function flexTier(v){ if (v<34) return "estruturado"; if (v<67) return "equilibrado"; return "flexivel"; }
 var GROUP_LABELS = {protein:"Proteína", carb:"Hidrato", veg:"Legumes", fat:"Gordura", fruit:"Fruta"};
@@ -6417,6 +6510,10 @@ function tplProPlano(s){
     "</p>";
   }
   html += "<button type=\"button\" class=\"btn primary btn-sm\" id=\"addMealBtn\" style=\"width:100%; margin-top:10px;\">+ Adicionar refeição</button>";
+  if (s.meals.length){
+    html += "<button type=\"button\" class=\"btn btn-sm\" id=\"autoAdjustBtn\" style=\"width:100%; margin-top:8px;\">⚖️ Ajustar quantidades aos alvos</button>" +
+      "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">Reescala as quantidades de todos os alimentos (mantendo as proporções entre eles) para a soma do dia bater certo com os alvos acima — inclui vegetais e fruta, só não mexe em alimentos marcados como \"à vontade\".</p>";
+  }
   return html;
 }
 
@@ -7083,6 +7180,24 @@ function wireProTab(s){
     renderProTabContent(s);
     persistStudent(s);
     showToast("Refeição adicionada");
+  });
+
+  var autoAdjustBtn = el.querySelector("#autoAdjustBtn");
+  if (autoAdjustBtn) autoAdjustBtn.addEventListener("click", function(){
+    if (!window.confirm("Isto vai reescalar as quantidades de todos os alimentos do plano (inclui vegetais e fruta) para bater certo com os alvos definidos acima — mantém as proporções entre alimentos. Alimentos \"à vontade\" não são alterados. Continuar?")) return;
+    var result = autoAdjustPlanQuantities(s);
+    if (result.changed > 0){
+      logPlanEvent(s, "ajuste_quantidades", "Quantidades ajustadas automaticamente aos alvos (" + result.changed + " alimentos)", null, null);
+      renderProTabContent(s);
+      persistStudent(s);
+    }
+    if (result.changed === 0 && !result.skippedMacros.length){
+      showToast("Nada para ajustar — já bate certo ou são todos alimentos \"à vontade\"");
+    } else if (result.skippedMacros.length){
+      showToast("Ajustados " + result.changed + " alimentos — falta acrescentar alimentos de " + result.skippedMacros.map(groupLabel).join(", ") + " para bater certo com esse alvo");
+    } else {
+      showToast("✓ " + result.changed + " alimentos ajustados aos alvos");
+    }
   });
 
   el.querySelectorAll(".pm-name").forEach(function(select){
