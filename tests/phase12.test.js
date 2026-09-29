@@ -125,12 +125,16 @@ function freshStudent(overrides){
   check.check("9. Tem o botão Copiar respostas", html.indexOf("copyQuestionnaire") >= 0);
 })();
 
-// 10. wireProTab liga o botão de copiar ao clipboard, com fallback de erro
+// 10. wireProTab liga o botão de copiar, com cadeia de fallback (API moderna -> execCommand -> modal manual)
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 12000);
   check.check("10. Liga copyQuestionnaire", fnSrc.indexOf("copyQuestionnaire") >= 0);
-  check.check("10. Usa navigator.clipboard.writeText", fnSrc.indexOf("navigator.clipboard.writeText") >= 0);
-  check.check("10. Tem mensagem de erro se falhar", fnSrc.indexOf("Não foi possível copiar automaticamente") >= 0);
+  check.check("10. Usa copyTextToClipboard (cadeia de fallback)", fnSrc.indexOf("copyTextToClipboard(text)") >= 0);
+  check.check("10. Se falhar, mostra o modal manual (nunca fica sem forma de copiar)", fnSrc.indexOf("showCopyFallbackModal(text)") >= 0);
+
+  check.check("10. copyTextToClipboard tenta a API moderna primeiro", appSource.indexOf("navigator.clipboard.writeText") >= 0);
+  check.check("10. Tem fallback execCommand(\"copy\")", appSource.indexOf('document.execCommand("copy")') >= 0);
+  check.check("10. Modal manual seleciona o texto para copiar à mão", appSource.indexOf("ta.select()") >= 0);
 })();
 
 // ---- 5. "Criar esqueleto de plano" a partir do questionário — só estrutura, nunca alimentos ----

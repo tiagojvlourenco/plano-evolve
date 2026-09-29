@@ -345,7 +345,10 @@
   /* Onboarding form */
   .onb-field{margin-bottom:14px;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
-  .onb-field input, .onb-field select, .onb-field textarea{width:100%; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.9rem; font-family:inherit;}
+  .onb-field input, .onb-field select, .onb-field textarea{
+    width:100%; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.9rem; font-family:inherit; color:var(--ink);
+    -webkit-appearance:none; appearance:none;
+  }
   .onb-field textarea{min-height:70px; resize:vertical;}
   .onb-checkbox-row{display:flex; flex-wrap:wrap; gap:14px; align-items:center; font-size:0.88rem;}
   .onb-checkbox-row label{display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; text-transform:none; letter-spacing:normal; color:var(--ink);}
@@ -3323,6 +3326,17 @@ function tplProPerfil(s){
   "<p class=\"muted-p\" style=\"margin-top:6px;\">Ao guardar, os alvos nutricionais são recalculados com um ritmo gradual (~" + WEIGHT_GOAL_RATE_KG_PER_WEEK + " kg/semana) em vez do ajuste fixo por objetivo — revê-os depois no separador Plano.</p>" +
   "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveWeightGoal\" style=\"margin-top:8px;\">Guardar peso objetivo</button>");
 
+  html += perfilSection("Dados médicos", false,
+    "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
+      "<textarea id=\"medConditions\" placeholder=\"Ex.: hipertensão, diabetes tipo 2...\">" + escapeHtml(s.medicalConditions || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medCurrent\">Medicação atual</label>" +
+      "<textarea id=\"medCurrent\" placeholder=\"Fármacos que o aluno toma regularmente (não inclui suplementos)\">" + escapeHtml(s.currentMedication || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medLimitations\">Lesões ou limitações físicas</label>" +
+      "<textarea id=\"medLimitations\" placeholder=\"Ex.: hérnia discal, lesão no joelho...\">" + escapeHtml(s.physicalLimitations || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"medNotes\">Observações</label>" +
+      "<textarea id=\"medNotes\" placeholder=\"Qualquer outra informação relevante\">" + escapeHtml(s.medicalNotes || "") + "</textarea></div>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>");
+
   // Alinhado ao questionário real (Google Forms): horário de trabalho +
   // facilidade de fazer refeições no local de trabalho + suplementação.
   html += perfilSection("Rotina de trabalho", false, "<div class=\"field-row\">" +
@@ -3354,17 +3368,6 @@ function tplProPerfil(s){
       fRow("Fins de semana", s.weekendNote) +
     "</div>");
   }
-
-  html += perfilSection("Dados médicos", false,
-    "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
-      "<textarea id=\"medConditions\" placeholder=\"Ex.: hipertensão, diabetes tipo 2...\">" + escapeHtml(s.medicalConditions || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medCurrent\">Medicação atual</label>" +
-      "<textarea id=\"medCurrent\" placeholder=\"Fármacos que o aluno toma regularmente (não inclui suplementos)\">" + escapeHtml(s.currentMedication || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medLimitations\">Lesões ou limitações físicas</label>" +
-      "<textarea id=\"medLimitations\" placeholder=\"Ex.: hérnia discal, lesão no joelho...\">" + escapeHtml(s.physicalLimitations || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medNotes\">Observações</label>" +
-      "<textarea id=\"medNotes\" placeholder=\"Qualquer outra informação relevante\">" + escapeHtml(s.medicalNotes || "") + "</textarea></div>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>");
 
   var flexProfile = computeFlexibilityProfile(s);
   html += perfilSection("Personalizar comportamento do plano", false,
@@ -3403,6 +3406,53 @@ function questionnaireAnswersText(s){
   if (s.mealsAtWorkEase) lines.push("Facilidade de refeições no trabalho: " + s.mealsAtWorkEase);
   if (s.usesSupplements && s.supplements && s.supplements.length) lines.push("Suplementos: " + s.supplements.join(", "));
   return lines.join("\n");
+}
+
+// Fase 13: navigator.clipboard.writeText sozinho falhou em testes reais
+// (PWA instalada no ecrã principal do iPhone — WKWebView standalone tem
+// restrições próprias ao Clipboard API que não existem no Safari normal).
+// Por isso há uma cadeia de fallback: API moderna -> execCommand("copy")
+// clássico -> modal com o texto selecionado, para nunca ficar sem forma
+// nenhuma de copiar.
+function legacyCopyFallback(text){
+  try {
+    var textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.top = "-1000px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
+  } catch(e){
+    return false;
+  }
+}
+
+function copyTextToClipboard(text){
+  return new Promise(function(resolve, reject){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(resolve).catch(function(){
+        legacyCopyFallback(text) ? resolve() : reject();
+      });
+    } else {
+      legacyCopyFallback(text) ? resolve() : reject();
+    }
+  });
+}
+
+function showCopyFallbackModal(text){
+  var sheet = openModal(
+    "<div class=\"mtitle\">Copiar respostas</div>" +
+    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Não foi possível copiar automaticamente. Mantém premido o texto abaixo e escolhe \"Copiar\".</p>" +
+    "<textarea id=\"manualCopyText\" class=\"notes-area\" readonly style=\"min-height:180px;\">" + escapeHtml(text) + "</textarea>"
+  );
+  var ta = sheet.querySelector("#manualCopyText");
+  ta.focus();
+  ta.select();
 }
 
 function tplQuestionnaireCopy(s){
@@ -3925,15 +3975,11 @@ function wireProTab(s){
   var copyQ = el.querySelector("#copyQuestionnaire");
   if (copyQ) copyQ.addEventListener("click", function(){
     var text = questionnaireAnswersText(s);
-    if (navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(function(){
-        showToast("✓ Respostas copiadas");
-      }).catch(function(){
-        showToast("⚠ Não foi possível copiar automaticamente");
-      });
-    } else {
-      showToast("⚠ Não foi possível copiar automaticamente");
-    }
+    copyTextToClipboard(text).then(function(){
+      showToast("✓ Respostas copiadas");
+    }).catch(function(){
+      showCopyFallbackModal(text);
+    });
   });
 
   var skeletonBtn = el.querySelector("#createPlanSkeleton");
