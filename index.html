@@ -3952,6 +3952,171 @@ function removeMealFromPlan(s, targetMeal){
   s.meals = s.meals.filter(function(m){ return m !== targetMeal; });
 }
 
+// Fase 20: pedido para ir mais além do esqueleto (Fase 12) — tentar
+// reconhecer, no próprio texto do "dia-a-dia alimentar" do questionário,
+// que refeições e que alimentos (da nossa base) a pessoa já descreveu, e
+// propor isso como plano de partida. Mantém a mesma cautela das Fases
+// 12/17 com texto livre: nunca inventa um alimento fora da base (só
+// reconhece o que já existe em FOOD_DB/FOOD_GROUPS por palavra-chave), usa
+// sempre a quantidade-padrão já definida para esse alimento (nunca tenta
+// ler gramagens do texto), e nunca aplica nada ao plano sem o profissional
+// rever a proposta e confirmar — ver draftPlanFromDailyText/renderDailyPlanDraft.
+var DAILY_TEXT_MEAL_MARKERS = [
+  {key:"Pequeno-almoço", re:/pequeno[\s-]?almo[çc]o/i},
+  {key:"Meio da manhã", re:/meio[\s-]da[\s-]manh[ãa]/i},
+  {key:"Almoço", re:/\balmo[çc]o\b/i},
+  {key:"Lanche", re:/\blanche\b/i},
+  {key:"Jantar", re:/\bjantar\b/i},
+  {key:"Ceia", re:/\bceia\b/i}
+];
+
+function splitDailyTextByMeal(text){
+  text = text || "";
+  var claimed = [];
+  function overlapsClaimed(idx, len){
+    return claimed.some(function(r){ return idx < r[1] && (idx + len) > r[0]; });
+  }
+  var matches = [];
+  DAILY_TEXT_MEAL_MARKERS.forEach(function(marker){
+    // "Pequeno-almoço" é processado primeiro na lista acima e reserva o seu
+    // troço do texto — sem isto, "\balmoço\b" também acertaria dentro de
+    // "pequeno-almoço" (há fronteira de palavra a seguir ao hífen).
+    var re = new RegExp(marker.re.source, "gi");
+    var m;
+    while ((m = re.exec(text))){
+      if (!overlapsClaimed(m.index, m[0].length)){
+        matches.push({key: marker.key, index: m.index});
+        claimed.push([m.index, m.index + m[0].length]);
+      }
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+  });
+  matches.sort(function(a,b){ return a.index - b.index; });
+  var segments = {};
+  for (var i=0;i<matches.length;i++){
+    var start = matches[i].index;
+    var end = i+1 < matches.length ? matches[i+1].index : text.length;
+    var segText = text.slice(start, end);
+    segments[matches[i].key] = (segments[matches[i].key] ? segments[matches[i].key] + " " : "") + segText;
+  }
+  return segments;
+}
+
+function defaultQtyForFood(name){
+  for (var g in FOOD_GROUPS){
+    var found = FOOD_GROUPS[g].find(function(o){ return o.name === name; });
+    if (found) return found.qty;
+  }
+  var db = FOOD_DB[name];
+  if (db && db.per === "unit") return "1 unid.";
+  if (db && db.per === "fixed") return "à vontade";
+  return "100 g";
+}
+
+function groupOfFood(name){
+  for (var g in FOOD_GROUPS){
+    if (FOOD_GROUPS[g].some(function(o){ return o.name === name; })) return g;
+  }
+  return "protein";
+}
+
+// Os nomes curados originais (anteriores à Fase 16/INSA) — mais simples e
+// mais prováveis de corresponder ao que alguém escreve em texto livre
+// ("arroz", "frango"). Ganham SEMPRE a chave de palavra, nunca perdem para
+// uma variante do INSA: nem a ordem de grupo nem "o nome mais curto" chegam
+// sozinhos (ex.: "Arroz doce" é mais curto que "Arroz (cozido)" mas é um
+// prato completamente diferente).
+var CURATED_FOOD_NAMES = [
+  "Frango (peito)","Peru (fatiado)","Pescada","Atum (natural)","Ovos","Tofu","Iogurte grego natural",
+  "Arroz (cozido)","Massa (cozida)","Batata","Batata-doce","Pão integral","Couscous (cozido)","Aveia",
+  "Brócolos","Salada mista","Cenoura","Courgette","Espinafres",
+  "Azeite","Abacate","Frutos secos","Manteiga de amendoim",
+  "Maçã","Banana","Mirtilos","Laranja"
+];
+
+var _foodKeywordIndexCache = null;
+function getFoodKeywordIndex(){
+  if (_foodKeywordIndexCache) return _foodKeywordIndexCache;
+  var index = {};
+  function keyOf(name){
+    var beforeQualifier = name.split(/[,(]/)[0].trim();
+    var firstWord = (beforeQualifier.split(/\s+/)[0] || "").toLowerCase();
+    // Mantém o hífen (ex.: "batata-doce") — sem isto, "\bdoce\b" também
+    // acertava dentro de "batata-doce" (o hífen conta como fronteira de
+    // palavra), e a chave de "Batata-doce" nunca conseguia corresponder ao
+    // texto, que continua a ter o hífen.
+    return firstWord.replace(/[^a-zà-ÿ-]/gi, "");
+  }
+  CURATED_FOOD_NAMES.forEach(function(name){
+    var key = keyOf(name);
+    if (key.length >= 3) index[key] = name;
+  });
+  var curatedKeySet = {};
+  Object.keys(index).forEach(function(k){ curatedKeySet[k] = true; });
+  // Segunda passagem, só para preencher chaves que nenhum curado ocupa —
+  // aqui sim, entre variantes do INSA, o nome mais curto tende a ser o mais
+  // genérico/comum.
+  Object.keys(FOOD_DB).forEach(function(name){
+    var key = keyOf(name);
+    if (key.length < 3 || curatedKeySet[key]) return;
+    if (!index[key] || name.length < index[key].length) index[key] = name;
+  });
+  _foodKeywordIndexCache = index;
+  return index;
+}
+
+function draftPlanFromDailyText(text){
+  var segments = splitDailyTextByMeal(text);
+  var index = getFoodKeywordIndex();
+  var draft = [];
+  PLAN_SKELETON_MEALS.forEach(function(pair){
+    var mealName = pair[0], mealTime = pair[1];
+    var segText = segments[mealName];
+    if (!segText) return;
+    var lower = segText.toLowerCase();
+    var matchedNames = [];
+    Object.keys(index).forEach(function(key){
+      var name = index[key];
+      if (matchedNames.indexOf(name) >= 0) return;
+      // Fronteira feita à mão em vez de "\b": "\b" trata o hífen como fronteira
+      // de palavra, o que faria "doce" acertar dentro de "batata-doce" (e "batata"
+      // também) — aqui o hífen conta como parte da palavra, tal como a-z/à-ÿ.
+      var re = new RegExp("(^|[^a-zà-ÿ-])" + key + "([^a-zà-ÿ-]|$)", "i");
+      if (re.test(lower)) matchedNames.push(name);
+    });
+    var foods = matchedNames.map(function(name){
+      return {name: name, qty: defaultQtyForFood(name), group: groupOfFood(name)};
+    });
+    draft.push({mealName: mealName, mealTime: mealTime, sourceText: segText.trim(), foods: foods});
+  });
+  return draft;
+}
+
+function renderDailyPlanDraft(draft){
+  var totalFoods = draft.reduce(function(sum,d){ return sum + d.foods.length; }, 0);
+  if (!draft.length){
+    return "<p class=\"muted-p\" style=\"margin-top:8px;\">Não encontrei nenhuma refeição identificável no texto (pequeno-almoço/meio da manhã/almoço/lanche/jantar/ceia) — tenta reescrever com essas palavras, ou monta o plano manualmente com o texto acima como referência.</p>";
+  }
+  var html = "<div class=\"card\" style=\"padding:12px; margin-top:8px;\">" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Proposta a partir do texto do dia-a-dia — revê com atenção antes de aplicar, o reconhecimento de texto livre nunca é perfeito:</p>";
+  draft.forEach(function(d){
+    html += "<div style=\"margin-bottom:10px;\">" +
+      "<div style=\"font-weight:600; font-size:0.85rem;\">" + escapeHtml(d.mealName) + " <span class=\"muted-p\" style=\"font-weight:400;\">· " + d.mealTime + "</span></div>" +
+      (d.foods.length ?
+        "<div style=\"display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;\">" + d.foods.map(function(f){
+          return "<span class=\"pill\">" + escapeHtml(f.name) + " · " + escapeHtml(f.qty) + "</span>";
+        }).join("") + "</div>" :
+        "<p class=\"muted-p\" style=\"font-size:0.8rem; margin-top:4px;\">Nenhum alimento reconhecido nesta refeição — acrescenta manualmente.</p>") +
+    "</div>";
+  });
+  html += totalFoods ?
+    ("<button type=\"button\" class=\"btn primary btn-sm\" id=\"applyDailyPlanDraft\" style=\"width:100%;\">Aplicar ao plano</button>" +
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Só cria/completa as refeições acima com os alimentos reconhecidos, em quantidades-padrão — depois ajusta livremente (inclusive com o botão \"Ajustar quantidades aos alvos\", mais abaixo).</p>")
+    : "<p class=\"muted-p\" style=\"font-size:0.8rem;\">Não reconheci nenhum alimento da nossa base no texto — monta o plano manualmente com o texto como referência.</p>";
+  html += "</div>";
+  return html;
+}
+
 function addFoodToMeal(targetMeal, name, group, amount){
   var qty = buildQtyString(name, amount);
   if (qty == null) return false;
@@ -6470,8 +6635,12 @@ function tplQuestionnaireCopy(s){
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\">" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"copyQuestionnaire\">Copiar respostas</button>" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"createPlanSkeleton\">Criar esqueleto de plano</button>" +
+      (s.dailyEatingDescription ? "<button type=\"button\" class=\"btn btn-sm\" id=\"draftFromDailyText\">🍽️ Gerar plano a partir do dia-a-dia</button>" : "") +
     "</div>" +
-    "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O esqueleto cria só a estrutura (" + PLAN_SKELETON_MEALS.map(function(p){return p[0];}).join("/") + ", sem alimentos) — os alimentos ficam ao teu critério, com a resposta acima como referência.</p>" +
+    "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O esqueleto cria só a estrutura (" + PLAN_SKELETON_MEALS.map(function(p){return p[0];}).join("/") + ", sem alimentos) — os alimentos ficam ao teu critério, com a resposta acima como referência." +
+      (s.dailyEatingDescription ? " Já o \"Gerar plano\" tenta reconhecer alimentos da nossa base no texto do dia-a-dia — é só uma proposta para reveres, nunca aplica nada sem confirmares." : "") +
+    "</p>" +
+    (s.dailyEatingDescription ? "<div id=\"dailyPlanDraftResult\"></div>" : "") +
   "</details>";
 }
 
@@ -7144,6 +7313,37 @@ function wireProTab(s){
     renderProTabContent(s);
     persistStudent(s);
     showToast("Esqueleto de plano criado — adiciona os alimentos de cada refeição");
+  });
+
+  var draftBtn = el.querySelector("#draftFromDailyText");
+  if (draftBtn) draftBtn.addEventListener("click", function(){
+    var draft = draftPlanFromDailyText(s.dailyEatingDescription);
+    var resultEl = el.querySelector("#dailyPlanDraftResult");
+    resultEl.innerHTML = renderDailyPlanDraft(draft);
+    var applyBtn = resultEl.querySelector("#applyDailyPlanDraft");
+    if (applyBtn) applyBtn.addEventListener("click", function(){
+      var createdMeals = 0, addedFoods = 0;
+      draft.forEach(function(d){
+        if (!d.foods.length) return;
+        var targetMeal = s.meals.find(function(m){ return m.name === d.mealName; });
+        if (!targetMeal){
+          targetMeal = meal(d.mealName, d.mealTime, []);
+          s.meals.push(targetMeal);
+          logMealAdded(s, targetMeal);
+          createdMeals++;
+        }
+        d.foods.forEach(function(f){
+          if (targetMeal.foods.some(function(existing){ return existing.name === f.name; })) return;
+          targetMeal.foods.push(food(f.name, f.qty, f.group));
+          addedFoods++;
+        });
+      });
+      sortMealsByTime(s);
+      if (addedFoods > 0) logPlanEvent(s, "plano_gerado_texto", "Plano gerado a partir do dia-a-dia alimentar (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)", null, null);
+      renderProTabContent(s);
+      persistStudent(s);
+      showToast(addedFoods > 0 ? "✓ Plano gerado: " + createdMeals + " refeições novas, " + addedFoods + " alimentos — revê e ajusta" : "Nada para aplicar — nenhum alimento novo reconhecido");
+    });
   });
 
   var saveT = el.querySelector("#saveTargets");
