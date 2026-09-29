@@ -280,6 +280,7 @@
   .macro-target-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:12px; margin-top:8px;}
   .macro-target-grid .f label{display:block; font-size:0.68rem; color:var(--muted); text-transform:uppercase; margin-bottom:5px; font-weight:600;}
   .macro-target-grid .f input{width:100%; border:1px solid var(--line-strong); border-radius:9px; padding:8px 10px; background:var(--bg); font-family:var(--mono); font-weight:600;}
+  .target-extra{color:var(--accent-strong); font-weight:700; text-transform:none; letter-spacing:0;}
 
   .history-row{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:0.86rem;}
   .history-row:last-child{border-bottom:none;}
@@ -4694,11 +4695,20 @@ var GOAL_ADJUST = {
 var WEIGHT_GOAL_RATE_KG_PER_WEEK = 0.5;
 var KCAL_PER_KG = 7700;
 
+// Fórmula de Mifflin-St Jeor (a mesma já usada para sugerir alvos no
+// onboarding) — devolve null se faltar algum dado do perfil para calcular.
+function computeBMR(sexOrProfile, weight, height, age){
+  var sex = sexOrProfile, w = weight, h = height, a = age;
+  if (typeof sexOrProfile === "object" && sexOrProfile){
+    sex = sexOrProfile.sex; w = sexOrProfile.weightCurrent != null ? sexOrProfile.weightCurrent : sexOrProfile.weight; h = sexOrProfile.height; a = sexOrProfile.age;
+  }
+  if (!(w > 0) || !(h > 0) || !(a > 0)) return null;
+  var bmr = sex === "Masculino" ? (10*w + 6.25*h - 5*a + 5) : (10*w + 6.25*h - 5*a - 161);
+  return isFinite(bmr) && bmr > 0 ? Math.round(bmr) : null;
+}
+
 function computeSuggestedTargets(p){
-  var bmr = p.sex==="Masculino"
-    ? (10*p.weight + 6.25*p.height - 5*p.age + 5)
-    : (10*p.weight + 6.25*p.height - 5*p.age - 161);
-  if (!isFinite(bmr) || bmr<0) bmr = 0;
+  var bmr = computeBMR(p.sex, p.weight, p.height, p.age) || 0;
   var activity = activityFromTrainings(p.trainingsPerWeek);
   var tdee = bmr * activity;
   var kcal;
@@ -6636,7 +6646,10 @@ function proStat(v, l, key){
   return "<" + tag + " class=\"pro-stat-card" + (key ? " pro-stat-card-clickable" : "") + (active ? " active" : "") + "\"" + (key ? " data-stat-key=\"" + key + "\"" : "") + "><div class=\"v num\">" + v + "</div><div class=\"l\">" + l + "</div></" + closeTag + ">";
 }
 
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Plano"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+// Fase 25: o separador chama-se "Nutrição" na interface, mas a key interna
+// continua "plano" (routing/estado e todo o resto do código já dependem
+// dela) — só o rótulo visível muda, pedido explícito.
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
@@ -6842,10 +6855,10 @@ function tplProPlano(s){
   }
   html += "<div class=\"eyebrow\">Alvos nutricionais</div>" +
     "<div class=\"macro-target-grid\">" +
-    "<div class=\"f\"><label>Calorias</label><input type=\"number\" min=\"0\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
-    "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" min=\"0\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
-    "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" min=\"0\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
-    "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" min=\"0\" id=\"tFat\" value=\"" + (t.fat!=null?t.fat:t.fatMax) + "\"></div>" +
+    "<div class=\"f\"><label>Calorias <span class=\"num target-extra\" id=\"tKcalDiff\"></span></label><input type=\"number\" min=\"0\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
+    "<div class=\"f\"><label>Proteína (g) <span class=\"num target-extra\" id=\"tProteinPct\"></span></label><input type=\"number\" min=\"0\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
+    "<div class=\"f\"><label>Hidratos (g) <span class=\"num target-extra\" id=\"tCarbsPct\"></span></label><input type=\"number\" min=\"0\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
+    "<div class=\"f\"><label>Gordura (g) <span class=\"num target-extra\" id=\"tFatPct\"></span></label><input type=\"number\" min=\"0\" id=\"tFat\" value=\"" + (t.fat!=null?t.fat:t.fatMax) + "\"></div>" +
     "</div>" +
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
@@ -7134,13 +7147,39 @@ function tplEditFoodForm(midx, fidx, f){
   "</div>";
 }
 
-function renderTargetWarning(el){
+// Fase 25: além do aviso de coerência já existente, mostra também — ao
+// lado de cada label — a % de calorias que cada macro representa (P/H em
+// 4 kcal/g, G em 9 kcal/g) e, junto a "Calorias", a diferença face ao
+// metabolismo basal do aluno (Mifflin-St Jeor, os mesmos dados do perfil
+// já usados para sugerir alvos no onboarding): "+500 kcal" se o alvo está
+// acima do metabolismo basal (fase de ganho), "-500 kcal" se está abaixo
+// (fase de perda). Sem dados suficientes no perfil (idade/sexo/altura/
+// peso), fica em branco em vez de inventar um valor.
+function renderTargetWarning(el, s){
   var box = el.querySelector("#targetWarning");
   if (!box) return;
   var kcal = parseFloat(el.querySelector("#tKcal").value) || 0;
   var protein = parseFloat(el.querySelector("#tProtein").value) || 0;
   var carbs = parseFloat(el.querySelector("#tCarbs").value) || 0;
   var fat = parseFloat(el.querySelector("#tFat").value) || 0;
+
+  var pctEl = el.querySelector("#tProteinPct"), cEl = el.querySelector("#tCarbsPct"), fEl = el.querySelector("#tFatPct");
+  if (kcal > 0){
+    if (pctEl) pctEl.textContent = "· " + Math.round(protein*4/kcal*100) + "%";
+    if (cEl) cEl.textContent = "· " + Math.round(carbs*4/kcal*100) + "%";
+    if (fEl) fEl.textContent = "· " + Math.round(fat*9/kcal*100) + "%";
+  } else {
+    if (pctEl) pctEl.textContent = "";
+    if (cEl) cEl.textContent = "";
+    if (fEl) fEl.textContent = "";
+  }
+
+  var diffEl = el.querySelector("#tKcalDiff");
+  if (diffEl){
+    var bmr = s ? computeBMR(s) : null;
+    diffEl.textContent = bmr ? "· " + (kcal >= bmr ? "+" : "−") + Math.abs(Math.round(kcal - bmr)) + " kcal vs. basal" : "";
+  }
+
   if (kcal <= 0 || protein < 0 || carbs < 0 || fat < 0){
     box.innerHTML = "<div class=\"pill critical\" style=\"margin-top:10px;\">⚠ As calorias têm de ser superiores a 0 e os macros não podem ser negativos</div>";
     return;
@@ -7618,9 +7657,9 @@ function wireProTab(s){
 
   var saveT = el.querySelector("#saveTargets");
   if (saveT) {
-    renderTargetWarning(el);
+    renderTargetWarning(el, s);
     ["tKcal","tProtein","tCarbs","tFat"].forEach(function(id){
-      el.querySelector("#"+id).addEventListener("input", function(){ renderTargetWarning(el); });
+      el.querySelector("#"+id).addEventListener("input", function(){ renderTargetWarning(el, s); });
     });
     saveT.addEventListener("click", function(){
       var newKcal = parseInt(el.querySelector("#tKcal").value,10);
