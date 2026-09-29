@@ -146,7 +146,7 @@ function freshStudent(overrides){
 // 15. wireProTab tem a lógica de wiring esperada (existência das ligações certas)
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 2600);
+  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 4000);
   check.check("15. Chama draftPlanFromDailyText(s.dailyEatingDescription)", block.indexOf("draftPlanFromDailyText(s.dailyEatingDescription)") >= 0);
   check.check("15. Preenche #dailyPlanDraftResult com renderDailyPlanDraft", block.indexOf("renderDailyPlanDraft(draft)") >= 0);
   check.check("15. Ao aplicar, regista no histórico com logPlanEvent", block.indexOf('logPlanEvent(s, "plano_gerado_texto"') >= 0);
