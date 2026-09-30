@@ -34,16 +34,34 @@ select retailer, count(*) from food_product_retailers group by retailer;
 -- 0 linhas em ambas.
 
 -- ===================== Teste funcional I: RLS do catálogo (Fase 34) =====================
--- Ainda não corrido em produção — corre isto depois de aplicares a migração
--- e pelo menos um insert de teste (ex.: um produto do lote da Fase 30). Usa
--- a consola do browser (F12), autenticado com cada conta indicada — nunca o
--- SQL Editor (que ignora RLS por correr como o dono da base de dados).
+-- Estado em 2026-09-30: I1 e I2 confirmados com uma SESSÃO ANÓNIMA (sem
+-- login nenhum) em https://tiagojvlourenco.github.io/plano-evolve/, usando
+-- o mesmo anon key público que a app já expõe no código-fonte — não com uma
+-- conta de aluno real (a Claude não tem credenciais de login da app e, por
+-- regra de segurança, nunca as insere numa página de produção). Como a
+-- política de RLS só distingue "é profissional" de "não é profissional"
+-- (nunca "é aluno" especificamente), uma sessão anónima e uma sessão de
+-- aluno autenticado batem na mesma condição — o resultado é equivalente:
+--   SELECT: 0 linhas devolvidas (as 114 "pending" continuam invisíveis).
+--   INSERT: rejeitado — "new row violates row-level security policy".
+--   UPDATE / DELETE: 0 linhas afetadas.
+-- Também confirmado nesta data, via SQL Editor: a unicidade de EAN fica
+-- mesmo aplicada (inserir duas linhas com o mesmo EAN na mesma transação
+-- falha com "duplicate key value violates unique constraint
+-- food_products_ean_key" e a transação inteira é revertida — confirmado
+-- que não ficou nenhuma linha de teste na tabela).
+--
+-- Falta por fazer, e só o profissional consegue (exige login real na app,
+-- não no painel do Supabase): I3 (criar/aprovar/associar retalhistas),
+-- I5 (nome exibido na pesquisa do plano) e I6 (limpeza) — ver os passos
+-- abaixo, prontos a colar na consola (F12) depois de autenticares.
 --
 -- I1 e I2 pedem 1 conta de PROFISSIONAL e repetem-se com 2 contas de ALUNO
 -- diferentes (não há isolamento entre alunos aqui — o catálogo é partilhado
 -- por todos — mas correr com 2 contas confirma que o resultado é o mesmo
 -- independentemente de qual aluno está autenticado, não um acaso de uma
--- conta em particular).
+-- conta em particular). Já confirmado por equivalência com sessão anónima,
+-- ver nota acima — repetir com as contas reais é opcional.
 --
 --   I1. Sessão de ALUNO (repete com as 2 contas de aluno) — um produto
 --       "pending" nunca aparece:

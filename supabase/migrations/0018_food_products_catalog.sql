@@ -127,5 +127,9 @@ comment on table food_product_retailers is 'Associação de um produto a um ou m
 -- Seed dos 114 produtos da Fase 30 (scripts/output-migrate-phase30.sql)
 -- também aplicado em 2026-09-30: 114 linhas inseridas, todas "pending",
 -- confirmado com select verification_status, count(*) from food_products
--- group by verification_status. Falta ainda: Teste funcional I (RLS com
--- sessões reais de aluno/profissional, por fazer).
+-- group by verification_status. Teste funcional I (ver
+-- verify_food_products_security.sql): I1/I2 confirmados por equivalência
+-- com sessão anónima (SELECT devolve 0 linhas, INSERT rejeitado,
+-- UPDATE/DELETE afetam 0 linhas) e unicidade de EAN confirmada por
+-- inserção real com rollback. I3/I5/I6 (exigem login real de profissional
+-- na app) ainda por fazer, por escolha do profissional.
