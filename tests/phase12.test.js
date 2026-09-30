@@ -73,7 +73,7 @@ function freshStudent(overrides){
 
 // 6. wireProTab: guardar recalcula os alvos com base no novo peso objetivo, e reativa o banner de sugestão
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 22000);
   check.check("6. Liga saveWeightGoal", fnSrc.indexOf("saveWeightGoal") >= 0);
   check.check("6. Recalcula com computeSuggestedTargets", fnSrc.indexOf("computeSuggestedTargets({") >= 0);
   check.check("6. Regista a alteração com logTargetsChange", /saveWeightGoal[\s\S]{0,900}logTargetsChange/.test(fnSrc));

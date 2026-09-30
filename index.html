@@ -311,6 +311,7 @@
   .add-food-details[open] summary{margin-bottom:4px;}
   .perfil-section > *:not(summary){margin-top:10px;}
   .muted-p{font-size:0.85rem; color:var(--muted); line-height:1.5;}
+  .food-nutri-preview{margin-top:6px; display:flex; flex-direction:column; gap:2px;}
 
   /* Body composition assessments */
   table.assess-table{width:100%; border-collapse:collapse; margin-top:12px; font-size:0.82rem;}
@@ -4085,6 +4086,27 @@ function foodNutrition(name, qty){
   return { kcal: Math.round(db.kcal*scale), p: round1(db.p*scale), c: round1(db.c*scale), f: round1(db.f*scale) };
 }
 
+// Fase 31: ao escolher/ajustar um alimento no editor de refeições, mostra
+// logo a info nutricional — por 100g (ou por unidade, para alimentos como
+// "Ovos") e para a dose que está de facto a ser adicionada — em vez de o
+// profissional ter de adivinhar ou ir consultar a base à parte. Sem
+// info para "à vontade" (per:"fixed"): não há dose nenhuma a mostrar.
+function foodNutritionPreviewHtml(name, amount){
+  var db = FOOD_DB[name];
+  if (!db || db.per === "fixed") return "";
+  var isUnit = db.per === "unit";
+  var unit = isUnit ? "unid." : (isBeverage(name) ? "ml" : "g");
+  var defaultAmt = isUnit ? 1 : 100;
+  amount = (amount > 0) ? amount : defaultAmt;
+  var qty = isUnit ? (Math.max(1, Math.round(amount)) + " unid.") : (Math.max(1, Math.round(amount)) + " " + unit);
+  var dose = foodNutrition(name, qty);
+  var baseLabel = isUnit ? "Por unidade" : ("Por 100" + unit);
+  return "<div class=\"food-nutri-preview\">" +
+    "<div class=\"muted-p\" style=\"font-size:0.72rem;\">" + baseLabel + ": " + Math.round(db.kcal) + " kcal · P " + round1(db.p) + "g · H " + round1(db.c) + "g · G " + round1(db.f) + "g</div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.72rem;\">Nesta dose (" + qty + "): " + dose.kcal + " kcal · P " + dose.p + "g · H " + dose.c + "g · G " + dose.f + "g</div>" +
+  "</div>";
+}
+
 function sumNutrition(list){
   return list.reduce(function(acc,n){ acc.kcal+=n.kcal; acc.p+=n.p; acc.c+=n.c; acc.f+=n.f; return acc; }, {kcal:0,p:0,c:0,f:0});
 }
@@ -7438,10 +7460,10 @@ function tplAddFoodQty(name){
     return "<label>Quantidade</label><div class=\"v\" style=\"padding:9px 0; color:var(--muted); font-size:0.85rem;\">À vontade — sem quantidade a definir</div>";
   }
   if (kind === "unit"){
-    return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"1\">";
+    return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"1\">" + foodNutritionPreviewHtml(name, 1);
   }
   var unitLabel = isBeverage(name) ? "ml" : "g";
-  return "<label>Quantidade (" + unitLabel + ")</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"100\">";
+  return "<label>Quantidade (" + unitLabel + ")</label><input type=\"number\" class=\"af-qty-num\" min=\"1\" step=\"1\" value=\"100\">" + foodNutritionPreviewHtml(name, 100);
 }
 
 // Fase 21: igual a tplAddFoodQty, mas pré-preenchido com a quantidade ATUAL
@@ -7453,10 +7475,12 @@ function tplEditFoodQty(name, currentAmount){
     return "<label>Quantidade</label><div class=\"v\" style=\"padding:9px 0; color:var(--muted); font-size:0.85rem;\">À vontade — sem quantidade a definir</div>";
   }
   if (kind === "unit"){
-    return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"ef-qty-num\" min=\"1\" step=\"1\" value=\"" + Math.max(1, Math.round(currentAmount || 1)) + "\">";
+    var units = Math.max(1, Math.round(currentAmount || 1));
+    return "<label>Quantidade (unid.)</label><input type=\"number\" class=\"ef-qty-num\" min=\"1\" step=\"1\" value=\"" + units + "\">" + foodNutritionPreviewHtml(name, units);
   }
   var unitLabel = isBeverage(name) ? "ml" : "g";
-  return "<label>Quantidade (" + unitLabel + ")</label><input type=\"number\" class=\"ef-qty-num\" min=\"1\" step=\"1\" value=\"" + Math.max(1, Math.round(currentAmount || 100)) + "\">";
+  var grams = Math.max(1, Math.round(currentAmount || 100));
+  return "<label>Quantidade (" + unitLabel + ")</label><input type=\"number\" class=\"ef-qty-num\" min=\"1\" step=\"1\" value=\"" + grams + "\">" + foodNutritionPreviewHtml(name, grams);
 }
 
 function tplEditFoodForm(midx, fidx, f){
@@ -8183,6 +8207,28 @@ function wireProTab(s){
       persistStudent(s);
       showToast("✓ Alimento atualizado");
     });
+  });
+
+  // Fase 31: a info nutricional (por 100g/unidade + nesta dose) já vem
+  // embutida sempre que tplAddFoodQty/tplEditFoodQty são chamados de novo
+  // (troca de grupo, escolha de alimento na pesquisa, alimento personalizado
+  // guardado) — só falta atualizá-la ao vivo enquanto o profissional escreve
+  // uma quantidade diferente. Delegado em "el" (não nos inputs individuais,
+  // que são recriados de cada vez que a quantidade/grupo mudam) para nunca
+  // precisar de ser religado.
+  el.addEventListener("input", function(e){
+    if (!e.target.classList || !(e.target.classList.contains("af-qty-num") || e.target.classList.contains("ef-qty-num"))) return;
+    var wrap = e.target.closest(".af-qty-wrap, .ef-qty-wrap");
+    if (!wrap) return;
+    var preview = wrap.querySelector(".food-nutri-preview");
+    if (!preview) return;
+    var midx = wrap.getAttribute("data-midx");
+    var fidx = wrap.getAttribute("data-fidx");
+    var nameInput = fidx != null
+      ? el.querySelector(".ef-food[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]")
+      : el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
+    if (!nameInput) return;
+    preview.outerHTML = foodNutritionPreviewHtml(nameInput.value, parseFloat(e.target.value));
   });
 
   el.querySelectorAll(".af-group").forEach(function(sel){
