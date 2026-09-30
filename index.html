@@ -7520,7 +7520,9 @@ function renderProCatalogMain(){
         "</select></div>" +
       "</div>" +
     "</div>" +
-    "<div id=\"catalogBulkBar\" style=\"display:none; margin-bottom:10px;\">" +
+    "<div id=\"catalogBulkBar\" style=\"display:none; align-items:center; gap:10px; margin-bottom:10px;\">" +
+      "<label style=\"display:flex; align-items:center; gap:6px; cursor:pointer;\"><input type=\"checkbox\" id=\"catalogSelectAll\"> Selecionar todos os pendentes visíveis</label>" +
+      "<span id=\"catalogSelectedCount\" class=\"muted-p\"></span>" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"catalogApproveSelected\">✓ Aprovar selecionados</button>" +
     "</div>" +
     "<div id=\"catalogList\"><p class=\"muted-p\">A carregar...</p></div>";
@@ -7562,7 +7564,17 @@ function catalogStatusColor(status){
 function renderCatalogList(main){
   var listEl = main.querySelector("#catalogList");
   var items = catalogFilteredProducts();
-  if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; main.querySelector("#catalogBulkBar").style.display = "none"; return; }
+  var bulkBar = main.querySelector("#catalogBulkBar");
+  var pendingInView = items.filter(function(p){ return p.verification_status === "pending"; });
+  if (!pendingInView.length){
+    bulkBar.style.display = "none";
+  } else {
+    bulkBar.style.display = "flex";
+    main.querySelector("#catalogSelectAll").checked = pendingInView.every(function(p){ return !!state.catalogSelected[p.id]; });
+    var selectedCount = Object.keys(state.catalogSelected).filter(function(id){ return state.catalogSelected[id]; }).length;
+    main.querySelector("#catalogSelectedCount").textContent = selectedCount ? (selectedCount + " selecionado" + (selectedCount > 1 ? "s" : "")) : "";
+  }
+  if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; return; }
   listEl.innerHTML = items.map(function(p){
     var retailers = (p.food_product_retailers || []).map(function(r){ return r.retailer; }).join(", ");
     return "<div class=\"card\" style=\"margin-bottom:8px; display:flex; align-items:flex-start; gap:10px;\">" +
@@ -7581,7 +7593,6 @@ function renderCatalogList(main){
       "</div>" +
     "</div>";
   }).join("");
-  main.querySelector("#catalogBulkBar").style.display = Object.keys(state.catalogSelected).some(function(id){ return state.catalogSelected[id]; }) ? "block" : "none";
   wireCatalogListActions(main);
 }
 
@@ -7614,7 +7625,9 @@ function wireCatalogListActions(main){
   main.querySelectorAll(".catalog-select").forEach(function(cb){
     cb.addEventListener("change", function(){
       state.catalogSelected[cb.getAttribute("data-id")] = cb.checked;
-      main.querySelector("#catalogBulkBar").style.display = Object.keys(state.catalogSelected).some(function(id){ return state.catalogSelected[id]; }) ? "block" : "none";
+      main.querySelector("#catalogSelectAll").checked = catalogFilteredProducts().filter(function(p){ return p.verification_status === "pending"; }).every(function(p){ return !!state.catalogSelected[p.id]; });
+      var selectedCount = Object.keys(state.catalogSelected).filter(function(id){ return state.catalogSelected[id]; }).length;
+      main.querySelector("#catalogSelectedCount").textContent = selectedCount ? (selectedCount + " selecionado" + (selectedCount > 1 ? "s" : "")) : "";
     });
   });
 }
@@ -7637,6 +7650,13 @@ function wireProCatalog(main){
   });
   main.querySelector("#catalogStatusFilter").addEventListener("change", function(){
     state.catalogFilters.status = this.value;
+    renderCatalogList(main);
+  });
+  main.querySelector("#catalogSelectAll").addEventListener("change", function(){
+    var checked = this.checked;
+    catalogFilteredProducts().forEach(function(p){
+      if (p.verification_status === "pending") state.catalogSelected[p.id] = checked;
+    });
     renderCatalogList(main);
   });
   main.querySelector("#catalogApproveSelected").addEventListener("click", function(){
