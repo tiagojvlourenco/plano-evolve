@@ -78,7 +78,13 @@ async function fetchCategory(group, cat, cap) {
   }).filter((p) =>
     p.ean && p.name && p.name.length >= 2 && p.brand &&
     typeof p.kcal === "number" && typeof p.protein === "number" && typeof p.carbs === "number" && typeof p.fat === "number" &&
-    p.kcal >= 0 && p.protein >= 0 && p.carbs >= 0 && p.fat >= 0
+    p.kcal >= 0 && p.protein >= 0 && p.carbs >= 0 && p.fat >= 0 &&
+    // Sanidade física: 900 kcal/100g é o máximo plausível (gordura pura tem
+    // ~884-900). Valores acima disso são erro de introdução na Open Food
+    // Facts (ex.: "100% Espelta integral" com 5232.9 kcal/100g, visto num
+    // lote real) — melhor descartar do que entrar "pending" com um valor
+    // fisicamente impossível.
+    p.kcal <= 902
   );
   return { total: json.count, kept: products };
 }
