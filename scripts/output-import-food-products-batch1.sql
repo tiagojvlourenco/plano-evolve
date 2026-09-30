@@ -9,6 +9,15 @@
 -- source_url individual para cada ficha da Open Food Facts) — aprova ou
 -- corrige no Catálogo do profissional antes de ficarem visíveis a um aluno.
 -- FICHEIRO VERSIONADO — registo auditável do que foi realmente aplicado.
+--
+-- APLICADO em produção em 2026-09-30: 244 inserts, 108 associações de
+-- retalhista (Mercadona 88, Lidl 10, Continente 6, Pingo Doce 4).
+-- Confirmado com select verification_status, source_type, count(*) ...
+-- (114 legacy_phase30 + 244 open_food_facts, todos pending) e com
+-- select count(*), count(distinct ean) ... (358 total, 244 com EAN,
+-- todos únicos). Aplicado colando o conteúdo exato deste ficheiro no SQL
+-- Editor via window.name (transporte entre a aba local do ficheiro e a
+-- aba do SQL Editor, ambas no browser embutido) — nunca reescrito à mão.
 
 insert into food_products (ean, name, brand, food_group, nutrition_basis, kcal, protein, carbs, fat, sugars, fiber, saturated_fat, salt, source_url, source_type, verification_status) values ('8480000093691', 'Pan de molde 100% integral', 'MERCADONA', 'cereais', '100g', 250, 11.3, 36, 4.8, 2.6, 8.3, 0.8, 0.9, 'https://world.openfoodfacts.org/product/8480000093691', 'open_food_facts', 'pending') on conflict (ean) do nothing;
 insert into food_product_retailers (food_product_id, retailer) select id, 'Mercadona' from food_products where ean = '8480000093691' on conflict do nothing;
