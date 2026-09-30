@@ -118,6 +118,12 @@ comment on column food_products.verification_status is 'pending = importado/cria
 comment on table food_product_retailers is 'Associação de um produto a um ou mais supermercados onde está disponível — um produto não é duplicado por estar em vários.';
 
 -- ===================== Estado desta migração =====================
--- AINDA NÃO APLICADA. Confirmar com o profissional antes de correr no SQL
--- Editor de produção. Depois de aplicada, validar com as consultas de
--- supabase/verify_food_products_security.sql.
+-- APLICADA em produção em 2026-09-30. Confirmado no SQL Editor com as
+-- consultas 1, 2, 3 e 4 de supabase/verify_food_products_security.sql:
+-- -> 8 políticas (4 em food_products, 4 em food_product_retailers);
+-- -> 1 constraint unique em food_products.ean (food_products_ean_key);
+-- -> CHECK de food_group com os 7 grupos da Fase 29;
+-- -> food_products vazia (0 linhas), como esperado antes do seed.
+-- Falta ainda: Teste funcional I (RLS com sessões reais de aluno/
+-- profissional) e o seed dos 114 produtos da Fase 30 (scripts/
+-- output-migrate-phase30.sql), ambos por fazer.
