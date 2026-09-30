@@ -74,7 +74,7 @@ var check = require("./check")();
   check.check("6. .af-food atualiza o Grupo com groupOfFood(name) ao escolher", afBlock.indexOf("groupSel.value = groupOfFood(name)") >= 0);
 
   var efIdx = appSource.indexOf('el.querySelectorAll(".ef-food")');
-  var efBlock = appSource.slice(efIdx, efIdx + 1200);
+  var efBlock = appSource.slice(efIdx, efIdx + 1600);
   check.check("6. .ef-food atualiza o Grupo com groupOfFood(name) ao escolher", efBlock.indexOf("groupSel.value = groupOfFood(name)") >= 0);
 })();
 

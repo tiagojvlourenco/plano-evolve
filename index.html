@@ -8155,13 +8155,29 @@ function wireProTab(s){
   });
 
   // Fase 32: mudar o grupo aqui já não filtra a pesquisa (é sempre global,
-  // ver allFoodNames()) nem reinicia o alimento escolhido — só fica a
-  // servir para o profissional poder corrigir manualmente a etiqueta de
-  // grupo de um alimento já escolhido, se algum dia precisar.
+  // ver allFoodNames()). Fase 33: mas se o alimento já escolhido não
+  // pertencer ao grupo novo, limpa o campo "Alimento" — fica confuso deixar
+  // lá um alimento que já não corresponde à categoria selecionada.
+  el.querySelectorAll(".ef-group").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      var midx = sel.getAttribute("data-midx"), fidx = sel.getAttribute("data-fidx");
+      var foodInput = el.querySelector(".ef-food[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
+      if (foodInput.value && groupOfFood(foodInput.value) !== sel.value){
+        foodInput.value = "";
+        var qtyWrap = el.querySelector(".ef-qty-wrap[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
+        if (qtyWrap) qtyWrap.innerHTML = tplEditFoodQty("", null);
+      }
+    });
+  });
 
   el.querySelectorAll(".ef-food").forEach(function(input){
     var midx = input.getAttribute("data-midx"), fidx = input.getAttribute("data-fidx");
-    var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
+    // Fase 33: nunca ir buscar por data-midx sozinho — uma refeição com mais
+    // de um alimento tem vários ".food-search-results" com o mesmo midx (um
+    // por cada "Editar alimento" já existente, todos com data-fidx próprio),
+    // e o seletor apanhava sempre o primeiro (o de outro alimento, escondido)
+    // em vez do deste. O resultado é sempre o próximo irmão do input no DOM.
+    var resultsEl = input.nextElementSibling;
     function refresh(){
       resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
       resultsEl.classList.add("open");
@@ -8232,10 +8248,20 @@ function wireProTab(s){
   });
 
   // Fase 32: mudar o grupo aqui já não filtra a pesquisa (é sempre global,
-  // ver allFoodNames()) nem reinicia o alimento escolhido — só serve para
-  // definir a etiqueta de grupo de um alimento novo/personalizado antes de
-  // escolher, e é atualizada automaticamente assim que um alimento é
-  // escolhido na pesquisa.
+  // ver allFoodNames()). Fase 33: mas se o alimento já escolhido não
+  // pertencer ao grupo novo, limpa o campo "Alimento" — fica confuso deixar
+  // lá um alimento que já não corresponde à categoria selecionada.
+  el.querySelectorAll(".af-group").forEach(function(sel){
+    sel.addEventListener("change", function(){
+      var midx = sel.getAttribute("data-midx");
+      var foodInput = el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
+      if (foodInput.value && groupOfFood(foodInput.value) !== sel.value){
+        foodInput.value = "";
+        var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
+        if (qtyWrap) qtyWrap.innerHTML = tplAddFoodQty("");
+      }
+    });
+  });
 
   // Fase 16: .af-food passou de <select> a pesquisa de texto (base do INSA
   // tem centenas de alimentos por grupo — um <select> nativo ainda funciona,
@@ -8245,7 +8271,11 @@ function wireProTab(s){
   // ordenada ao focar/escrever, nunca escolhe nada sozinho.
   el.querySelectorAll(".af-food").forEach(function(input){
     var midx = input.getAttribute("data-midx");
-    var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"]");
+    // Fase 33: mesmo motivo do bloco .ef-food acima — não ir buscar por
+    // data-midx sozinho (colide com os ".food-search-results" de cada
+    // "Editar alimento" já existente na mesma refeição, que têm o mesmo
+    // midx). O resultado é sempre o próximo irmão do input no DOM.
+    var resultsEl = input.nextElementSibling;
     function refresh(){
       resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
       resultsEl.classList.add("open");
