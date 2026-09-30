@@ -124,6 +124,8 @@ comment on table food_product_retailers is 'Associação de um produto a um ou m
 -- -> 1 constraint unique em food_products.ean (food_products_ean_key);
 -- -> CHECK de food_group com os 7 grupos da Fase 29;
 -- -> food_products vazia (0 linhas), como esperado antes do seed.
--- Falta ainda: Teste funcional I (RLS com sessões reais de aluno/
--- profissional) e o seed dos 114 produtos da Fase 30 (scripts/
--- output-migrate-phase30.sql), ambos por fazer.
+-- Seed dos 114 produtos da Fase 30 (scripts/output-migrate-phase30.sql)
+-- também aplicado em 2026-09-30: 114 linhas inseridas, todas "pending",
+-- confirmado com select verification_status, count(*) from food_products
+-- group by verification_status. Falta ainda: Teste funcional I (RLS com
+-- sessões reais de aluno/profissional, por fazer).
