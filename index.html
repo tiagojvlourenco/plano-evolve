@@ -4277,6 +4277,20 @@ function foodOptionsForGroup(group){
   return (FOOD_GROUPS[resolveGroup(group)] || []).map(function(o){ return o.name; });
 }
 
+// Fase 32: pedido do profissional — a pesquisa de "+ Adicionar alimento"/
+// "Editar alimento" estava restrita ao grupo selecionado, o que escondia
+// alimentos reais (ex.: "Queijo fresco magro" ao pesquisar com o grupo em
+// "Cereais"). Passa a pesquisar SEMPRE em todos os alimentos, ordenados
+// alfabeticamente — o grupo passa a ser só a etiqueta gravada com o
+// alimento (atualizada automaticamente para o grupo real assim que se
+// escolhe um alimento na pesquisa, ver wireProTab). optionsFor()/
+// foodOptionsForGroup() continuam por grupo — usados nas substituições e no
+// "ver mais alimentos", onde faz sentido manter as alternativas dentro do
+// mesmo grupo do alimento original.
+function allFoodNames(){
+  return Object.keys(FOOD_DB).sort(function(a, b){ return a.localeCompare(b, "pt"); });
+}
+
 // Fase 16: pesquisa partilhada sobre uma lista de nomes de alimentos —
 // usada no "+ Adicionar alimento" do profissional, no "ver mais alimentos"
 // do construtor de refeições, e na pesquisa dentro de "Substituir". Limite
@@ -7431,8 +7445,6 @@ function openCustomFoodModal(defaultGroup, onSaved){
 
 function tplAddFoodForm(midx){
   var defaultGroup = PRO_PLAN_GROUPS[0];
-  var options = foodOptionsForGroup(defaultGroup);
-  var defaultFood = options[0];
   return "<div style=\"margin-top:10px;\">" +
     "<div class=\"onb-row\" style=\"align-items:end;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Grupo</label>" +
@@ -7440,12 +7452,12 @@ function tplAddFoodForm(midx){
           PRO_PLAN_GROUPS.map(function(g){ return "<option value=\"" + g + "\">" + groupLabel(g) + "</option>"; }).join("") +
         "</select></div>" +
       "<div class=\"onb-field food-search-wrap\" style=\"margin-bottom:0;\"><label>Alimento</label>" +
-        "<input type=\"text\" class=\"af-food\" data-midx=\"" + midx + "\" value=\"" + escapeHtml(defaultFood || "") + "\" autocomplete=\"off\" placeholder=\"Pesquisar alimento...\">" +
-        "<div class=\"food-search-results\" data-midx=\"" + midx + "\">" + foodSearchResultsHtml(options, "") + "</div>" +
+        "<input type=\"text\" class=\"af-food\" data-midx=\"" + midx + "\" value=\"\" autocomplete=\"off\" placeholder=\"Pesquisar alimento...\">" +
+        "<div class=\"food-search-results\" data-midx=\"" + midx + "\">" + foodSearchResultsHtml(allFoodNames(), "") + "</div>" +
       "</div>" +
     "</div>" +
     "<div class=\"onb-row\" style=\"margin-top:8px; align-items:end;\">" +
-      "<div class=\"onb-field af-qty-wrap\" data-midx=\"" + midx + "\" style=\"margin-bottom:0;\">" + tplAddFoodQty(defaultFood) + "</div>" +
+      "<div class=\"onb-field af-qty-wrap\" data-midx=\"" + midx + "\" style=\"margin-bottom:0;\">" + tplAddFoodQty("") + "</div>" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\">" +
         "<button type=\"button\" class=\"btn primary btn-sm\" data-add-food=\"" + midx + "\" style=\"width:100%;\">Adicionar</button>" +
       "</div>" +
@@ -7485,7 +7497,6 @@ function tplEditFoodQty(name, currentAmount){
 
 function tplEditFoodForm(midx, fidx, f){
   var group = f.group ? resolveGroup(f.group) : PRO_PLAN_GROUPS[0];
-  var options = foodOptionsForGroup(group);
   var amt = parseQtyAmount(f.qty);
   return "<div class=\"food-edit-form hidden\" data-edit-form=\"" + midx + "-" + fidx + "\" style=\"margin:-4px 0 10px; padding:10px; border:1px solid var(--line-strong); border-radius:10px; background:var(--surface-2);\">" +
     "<div class=\"onb-row\" style=\"align-items:end;\">" +
@@ -7495,7 +7506,7 @@ function tplEditFoodForm(midx, fidx, f){
         "</select></div>" +
       "<div class=\"onb-field food-search-wrap\" style=\"margin-bottom:0;\"><label>Alimento</label>" +
         "<input type=\"text\" class=\"ef-food\" data-midx=\"" + midx + "\" data-fidx=\"" + fidx + "\" value=\"" + escapeHtml(f.name) + "\" autocomplete=\"off\">" +
-        "<div class=\"food-search-results\" data-midx=\"" + midx + "\" data-fidx=\"" + fidx + "\">" + foodSearchResultsHtml(options, "") + "</div>" +
+        "<div class=\"food-search-results\" data-midx=\"" + midx + "\" data-fidx=\"" + fidx + "\">" + foodSearchResultsHtml(allFoodNames(), "") + "</div>" +
       "</div>" +
     "</div>" +
     "<div class=\"onb-row\" style=\"margin-top:8px; align-items:end;\">" +
@@ -8143,29 +8154,16 @@ function wireProTab(s){
     });
   });
 
-  el.querySelectorAll(".ef-group").forEach(function(sel){
-    sel.addEventListener("change", function(){
-      var midx = sel.getAttribute("data-midx"), fidx = sel.getAttribute("data-fidx");
-      var foodInput = el.querySelector(".ef-food[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
-      var options = foodOptionsForGroup(sel.value);
-      foodInput.value = options[0] || "";
-      var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
-      resultsEl.innerHTML = foodSearchResultsHtml(options, "");
-      var qtyWrap = el.querySelector(".ef-qty-wrap[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
-      qtyWrap.innerHTML = tplEditFoodQty(options[0], 100);
-    });
-  });
+  // Fase 32: mudar o grupo aqui já não filtra a pesquisa (é sempre global,
+  // ver allFoodNames()) nem reinicia o alimento escolhido — só fica a
+  // servir para o profissional poder corrigir manualmente a etiqueta de
+  // grupo de um alimento já escolhido, se algum dia precisar.
 
   el.querySelectorAll(".ef-food").forEach(function(input){
     var midx = input.getAttribute("data-midx"), fidx = input.getAttribute("data-fidx");
     var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
-    function currentGroup(){
-      var groupSel = el.querySelector(".ef-group[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
-      return groupSel ? groupSel.value : PRO_PLAN_GROUPS[0];
-    }
     function refresh(){
-      var options = foodOptionsForGroup(currentGroup());
-      resultsEl.innerHTML = foodSearchResultsHtml(options, input.value);
+      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
       resultsEl.classList.add("open");
     }
     input.addEventListener("input", refresh);
@@ -8178,6 +8176,8 @@ function wireProTab(s){
       resultsEl.classList.remove("open");
       var qtyWrap = el.querySelector(".ef-qty-wrap[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
       qtyWrap.innerHTML = tplEditFoodQty(name, 100);
+      var groupSel = el.querySelector(".ef-group[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
+      if (groupSel) groupSel.value = groupOfFood(name);
     });
     document.addEventListener("click", function(e){
       if (e.target !== input && !resultsEl.contains(e.target)) resultsEl.classList.remove("open");
@@ -8231,32 +8231,23 @@ function wireProTab(s){
     preview.outerHTML = foodNutritionPreviewHtml(nameInput.value, parseFloat(e.target.value));
   });
 
-  el.querySelectorAll(".af-group").forEach(function(sel){
-    sel.addEventListener("change", function(){
-      var midx = sel.getAttribute("data-midx");
-      var foodInput = el.querySelector(".af-food[data-midx=\"" + midx + "\"]");
-      var options = foodOptionsForGroup(sel.value);
-      foodInput.value = options[0] || "";
-      var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"]");
-      resultsEl.innerHTML = foodSearchResultsHtml(options, "");
-      var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
-      qtyWrap.innerHTML = tplAddFoodQty(options[0]);
-    });
-  });
+  // Fase 32: mudar o grupo aqui já não filtra a pesquisa (é sempre global,
+  // ver allFoodNames()) nem reinicia o alimento escolhido — só serve para
+  // definir a etiqueta de grupo de um alimento novo/personalizado antes de
+  // escolher, e é atualizada automaticamente assim que um alimento é
+  // escolhido na pesquisa.
 
   // Fase 16: .af-food passou de <select> a pesquisa de texto (base do INSA
   // tem centenas de alimentos por grupo — um <select> nativo ainda funciona,
   // mas <datalist> tem suporte pouco fiável no iOS, daí uma lista própria).
+  // Fase 32: pesquisa sempre em todos os alimentos (não só os do grupo
+  // selecionado) e sem alimento pré-preenchido — só mostra a lista
+  // ordenada ao focar/escrever, nunca escolhe nada sozinho.
   el.querySelectorAll(".af-food").forEach(function(input){
     var midx = input.getAttribute("data-midx");
     var resultsEl = el.querySelector(".food-search-results[data-midx=\"" + midx + "\"]");
-    function currentGroup(){
-      var groupSel = el.querySelector(".af-group[data-midx=\"" + midx + "\"]");
-      return groupSel ? groupSel.value : PRO_PLAN_GROUPS[0];
-    }
     function refresh(){
-      var options = foodOptionsForGroup(currentGroup());
-      resultsEl.innerHTML = foodSearchResultsHtml(options, input.value);
+      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
       resultsEl.classList.add("open");
     }
     input.addEventListener("input", refresh);
@@ -8269,6 +8260,8 @@ function wireProTab(s){
       resultsEl.classList.remove("open");
       var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
       qtyWrap.innerHTML = tplAddFoodQty(name);
+      var groupSel = el.querySelector(".af-group[data-midx=\"" + midx + "\"]");
+      if (groupSel) groupSel.value = groupOfFood(name);
     });
     document.addEventListener("click", function(e){
       if (e.target !== input && !resultsEl.contains(e.target)) resultsEl.classList.remove("open");
@@ -8315,6 +8308,7 @@ function wireProTab(s){
         if (foodInput) foodInput.value = name;
         var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
         if (qtyWrap) qtyWrap.innerHTML = tplAddFoodQty(name);
+        if (groupSel) groupSel.value = groupOfFood(name);
       });
     });
   });
