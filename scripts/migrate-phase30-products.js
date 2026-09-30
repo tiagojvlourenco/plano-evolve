@@ -17,22 +17,30 @@
 //      auditável a partir de agora — nem este script nem o histórico do git
 //      precisam de ser corridos outra vez para repetir/confirmar a operação.
 //
-//   2. source_url: não existe um URL da Open Food Facts guardado por
-//      produto (a Fase 30 só gravou nome/marca/kcal/macros já limpos, não a
-//      ficha de origem de cada um). Tentar voltar a encontrar cada produto
-//      na Open Food Facts por pesquisa de texto foi testado e é pouco
-//      fiável (a pesquisa por texto da API devolve resultados que não
-//      correspondem ao produto, teria de confiar numa correspondência às
-//      cegas) — arriscava marcar como "verified" um produto com a fonte
-//      errada, o que é pior do que não ter fonte nenhuma. Em vez disso, o
-//      source_url de todos os 114 aponta para o commit do GitHub onde foram
-//      revistos e onde o método está descrito (e393fa9) — é uma fonte real,
-//      estável e auditável do que foi efetivamente feito, mesmo não sendo
-//      uma ficha de produto individual.
+//   2. CORREÇÃO IMPORTANTE (a primeira versão deste script estava errada):
+//      um commit do GitHub NÃO é uma fonte nutricional verificável de um
+//      produto — é só o registo interno de quando/como o código foi
+//      escrito. Por isso:
+//        - source_url fica NULL para todos os 114 (não existe uma fonte
+//          INDIVIDUAL verificável guardada por produto — a Fase 30 só
+//          gravou nome/marca/kcal/macros já limpos, não a ficha de origem
+//          de cada um; tentar voltar a encontrar cada produto na Open Food
+//          Facts por pesquisa de texto foi testado e é pouco fiável,
+//          arriscando associar a fonte errada);
+//        - o link do commit (e393fa9) vai só em internal_note — uma nota de
+//          auditoria interna, nunca mostrada ao aluno, nunca contada como
+//          fonte nutricional;
+//        - source_type = 'legacy_phase30' (não 'open_food_facts'), um tipo
+//          de origem próprio para produtos migrados do código sem fonte
+//          individual guardada;
+//        - verification_status = 'pending' para todos os 114 — nenhum
+//          fica "verified" só por ter uma nota de auditoria. Ficam por
+//          aprovar no Catálogo, um a um, à medida que se confirmar uma
+//          fonte real (página oficial, rótulo fotografado, ou uma ficha da
+//          Open Food Facts corretamente associada a esse produto).
 //
-//   3. ean: não fica preenchido para nenhum dos 114 (mesma razão do ponto
-//      2 — sem correspondência fiável, fica null em vez de arriscar um EAN
-//      errado). Fica como limitação conhecida, documentada no relatório.
+//   3. ean: não fica preenchido para nenhum dos 114 — melhor null do que um
+//      código que não se tem a certeza que está correto.
 //
 //   4. Retalhista (food_product_retailers): NÃO é escrito por este script.
 //      mergeFoodProduct() só acrescenta "· Retalhista" ao nome quando o
@@ -40,12 +48,14 @@
 //      mudaria o nome de ~70 destes produtos (os de marca própria de um só
 //      retalhista óbvio), o que quebraria qualquer plano de aluno já
 //      guardado com o nome atual. Prioriza-se "manter o nome atual" sobre
-//      "associar o retalhista" nesta primeira migração — a associação pode
-//      ser acrescentada depois, sem tocar no nome, se se resolver esse
-//      condicionamento em mergeFoodProduct() primeiro.
+//      "associar o retalhista" nesta primeira migração.
 //
-//   5. Todos os 114 entram como "verified" (o commit e393fa9 É a fonte
-//      verificável, ver ponto 2) — nenhum fica "pending" nesta migração.
+//   5. O FOOD_DB atual (index.html/evolve-nutrition.html) continua
+//      inalterado — nenhum destes 114 é removido do código nesta fase. Como
+//      todos entram "pending" na base de dados (ver ponto 2), nenhum
+//      alimento chega a FOOD_DB por loadFoodProducts() antes de ser
+//      aprovado — o código continua a ser o único fallback ativo até lá,
+//      garantindo que nenhum plano antigo deixa de funcionar.
 
 const fs = require("fs");
 const path = require("path");
@@ -138,19 +148,27 @@ function main(){
     "-- Gerado por scripts/migrate-phase30-products.js — FICHEIRO VERSIONADO, não",
     "-- precisa de ser regenerado para repetir/auditar esta operação no futuro.",
     "--",
-    "-- Todos entram como 'verified': source_url aponta para o commit do GitHub",
-    "-- onde foram revistos (" + PHASE30_SOURCE_URL + "),",
-    "-- que é a fonte real e auditável destes valores (não existe uma ficha da",
-    "-- Open Food Facts individual guardada por produto — ver comentário no topo",
-    "-- do script). ean fica por preencher (mesma razão) — limitação conhecida.",
+    "-- Todos entram como 'pending' — nenhum tem uma fonte INDIVIDUAL verificável",
+    "-- guardada (página oficial, rótulo fotografado, ou ficha da Open Food Facts",
+    "-- corretamente associada a esse produto específico), por isso source_url",
+    "-- fica null em todos. O link do commit onde foram originalmente revistos",
+    "-- (" + PHASE30_SOURCE_URL + ") vai só em",
+    "-- internal_note, como nota de auditoria interna — NUNCA conta como fonte",
+    "-- nutricional nem é mostrado ao aluno. source_type = 'legacy_phase30'.",
+    "-- ean fica por preencher (melhor null do que um código incerto).",
     "-- Nenhum retalhista é associado nesta migração, para não mudar o nome de",
     "-- nenhum produto já usado em planos de alunos (ver ponto 4 no script).",
+    "--",
+    "-- Aprova cada um no Catálogo à medida que confirmares uma fonte real —",
+    "-- até lá, o FOOD_DB atual no código continua a ser o fallback ativo (estes",
+    "-- produtos só chegam à app via loadFoodProducts() depois de 'verified').",
     ""
   ];
   rows.forEach((r) => {
+    const note = "Migrado do código (Fase 30) sem fonte individual guardada — ver " + PHASE30_SOURCE_URL;
     lines.push(
-      "insert into food_products (name, brand, food_group, nutrition_basis, kcal, protein, carbs, fat, source_url, source_type, verification_status, verified_at) values (" +
-      [sqlStr(r.name), sqlStr(r.brand), sqlStr(r.group), sqlStr("100g"), r.kcal, r.p, r.c, r.f, sqlStr(PHASE30_SOURCE_URL), sqlStr("open_food_facts"), sqlStr("verified"), "now()"].join(", ") +
+      "insert into food_products (name, brand, food_group, nutrition_basis, kcal, protein, carbs, fat, source_url, internal_note, source_type, verification_status) values (" +
+      [sqlStr(r.name), sqlStr(r.brand), sqlStr(r.group), sqlStr("100g"), r.kcal, r.p, r.c, r.f, "null", sqlStr(note), sqlStr("legacy_phase30"), sqlStr("pending")].join(", ") +
       ");"
     );
   });
@@ -158,7 +176,7 @@ function main(){
   const outPath = path.join(APP_DIR, "scripts", "output-migrate-phase30.sql");
   fs.writeFileSync(outPath, lines.join("\n") + "\n");
   console.log("Guardado:", outPath);
-  console.log("Produtos incluídos:", rows.length, "| todos 'verified' | todos com source_url | 0 com EAN (limitação documentada)");
+  console.log("Produtos incluídos:", rows.length, "| todos 'pending' (0 com fonte individual verificável) | todos com internal_note | 0 com source_url | 0 com EAN");
 }
 
 main();

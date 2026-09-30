@@ -7493,7 +7493,7 @@ function openCustomFoodModal(defaultGroup, onSaved){
    loadFoodProducts() no arranque (ver mais acima). */
 var RETAILERS = ["Continente","Pingo Doce","Mercadona","Auchan","Lidl"];
 var VERIFICATION_STATUS_LABELS = {pending:"Pendente", verified:"Verificado", rejected:"Rejeitado"};
-var SOURCE_TYPE_LABELS = {official:"Página oficial", label:"Rótulo físico", open_food_facts:"Open Food Facts"};
+var SOURCE_TYPE_LABELS = {official:"Página oficial", label:"Rótulo físico", open_food_facts:"Open Food Facts", legacy_phase30:"Migrado do código (sem fonte individual)"};
 
 function renderProCatalogMain(){
   var main = document.getElementById("proMain");
@@ -7571,7 +7571,8 @@ function renderCatalogList(main){
         "<div><strong>" + escapeHtml(p.name) + "</strong> <span class=\"muted-p\">(" + escapeHtml(p.brand) + ")</span> " +
           "<span class=\"tag\" style=\"border-color:" + catalogStatusColor(p.verification_status) + "; color:" + catalogStatusColor(p.verification_status) + ";\">" + (VERIFICATION_STATUS_LABELS[p.verification_status] || p.verification_status) + "</span></div>" +
         "<div class=\"muted-p\" style=\"font-size:0.78rem; margin-top:2px;\">" + groupLabel(p.food_group) + (p.ean ? " · EAN " + escapeHtml(p.ean) : "") + (retailers ? " · " + escapeHtml(retailers) : "") + "</div>" +
-        "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + p.kcal + " kcal · P " + p.protein + "g · H " + p.carbs + "g · G " + p.fat + "g (por " + (p.nutrition_basis || "100g") + ") · fonte: " + (SOURCE_TYPE_LABELS[p.source_type] || p.source_type) + "</div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + p.kcal + " kcal · P " + p.protein + "g · H " + p.carbs + "g · G " + p.fat + "g (por " + (p.nutrition_basis || "100g") + ") · fonte: " + (SOURCE_TYPE_LABELS[p.source_type] || p.source_type) + (p.source_url ? "" : " (sem link)") + "</div>" +
+        (p.internal_note ? "<div class=\"muted-p\" style=\"font-size:0.72rem; font-style:italic;\">" + escapeHtml(p.internal_note) + "</div>" : "") +
       "</div>" +
       "<div style=\"display:flex; flex-direction:column; gap:4px; flex-shrink:0;\">" +
         "<button type=\"button\" class=\"btn btn-sm\" data-catalog-edit=\"" + p.id + "\">Editar</button>" +
@@ -7699,7 +7700,8 @@ function openFoodProductModal(product, onSaved){
         Object.keys(VERIFICATION_STATUS_LABELS).map(function(k){ return "<option value=\"" + k + "\"" + ((p.verification_status||"pending")===k?" selected":"") + ">" + VERIFICATION_STATUS_LABELS[k] + "</option>"; }).join("") +
       "</select></div>" +
     "</div>" +
-    "<div class=\"checkin-field\"><label for=\"fpSourceUrl\">Link da fonte</label><input type=\"text\" id=\"fpSourceUrl\" value=\"" + escapeHtml(p.source_url || "") + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"fpSourceUrl\">Link da fonte (individual, deste produto — nunca um link genérico)</label><input type=\"text\" id=\"fpSourceUrl\" value=\"" + escapeHtml(p.source_url || "") + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"fpInternalNote\">Nota de auditoria interna (nunca mostrada ao aluno, nunca conta como fonte)</label><textarea id=\"fpInternalNote\" rows=\"2\">" + escapeHtml(p.internal_note || "") + "</textarea></div>" +
     "<p class=\"muted-p\" id=\"fpError\" style=\"color:var(--critical); display:none; margin:8px 0;\"></p>" +
     "<button type=\"button\" class=\"btn primary\" id=\"fpSave\" style=\"width:100%; margin-top:6px;\">Guardar produto</button>"
   );
@@ -7731,6 +7733,7 @@ function openFoodProductModal(product, onSaved){
       ingredients: sheet.querySelector("#fpIngredients").value.trim() || null,
       allergens: sheet.querySelector("#fpAllergens").value.trim() || null,
       source_url: sheet.querySelector("#fpSourceUrl").value.trim() || null,
+      internal_note: sheet.querySelector("#fpInternalNote").value.trim() || null,
       source_type: sheet.querySelector("#fpSourceType").value,
       verification_status: sheet.querySelector("#fpStatus").value,
       updated_at: new Date().toISOString()

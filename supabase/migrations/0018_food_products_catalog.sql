@@ -33,7 +33,8 @@ create table if not exists food_products (
   ingredients text,
   allergens text,
   source_url text,
-  source_type text not null check (source_type in ('official','label','open_food_facts')),
+  internal_note text,
+  source_type text not null check (source_type in ('official','label','open_food_facts','legacy_phase30')),
   verification_status text not null default 'pending' check (verification_status in ('pending','verified','rejected')),
   verified_at timestamptz,
   verified_by uuid references professionals(user_id),
@@ -109,8 +110,10 @@ create policy "professionals delete retailers" on food_product_retailers
 
 comment on table food_products is
   'Catálogo de produtos comerciais de supermercado (marca própria e de fabricante), identificados por EAN quando existe. Substitui gradualmente os produtos de marca antes escritos diretamente no código (Fase 30). Só "verified" fica visível aos alunos; "pending"/"rejected" só ao profissional, para rever no Catálogo.';
-comment on column food_products.ean is 'Código de barras EAN, quando existe — chave de deduplicação preferencial (ver scripts/import-food-products.js).';
-comment on column food_products.source_type is '''official'' = página oficial do fabricante/supermercado; ''label'' = rótulo físico fotografado/confirmado pelo profissional; ''open_food_facts'' = importado da Open Food Facts, por confirmar.';
+comment on column food_products.ean is 'Código de barras EAN, quando existe — chave de deduplicação preferencial (ver scripts/import-food-products.js). Preferível ficar null a guardar um código que não se tem a certeza que está correto.';
+comment on column food_products.source_url is 'Fonte INDIVIDUAL e verificável deste produto específico — página oficial do fabricante/supermercado, ou a ficha da Open Food Facts correta para ESTE produto. Nunca um link genérico (ex.: um commit do GitHub) — isso vai em internal_note, não aqui. Sem source_url, o produto não deve ficar "verified" (ver verification_status).';
+comment on column food_products.internal_note is 'Nota de auditoria interna (ex.: referência ao commit/sessão onde um lote foi originalmente revisto) — nunca conta como fonte nutricional do produto, só como rasto de como chegou à base. Nunca mostrado ao aluno.';
+comment on column food_products.source_type is '''official'' = página oficial do fabricante/supermercado; ''label'' = rótulo físico fotografado/confirmado pelo profissional; ''open_food_facts'' = ficha individual da Open Food Facts, associada corretamente a este produto; ''legacy_phase30'' = migrado do código onde já estava antes deste catálogo existir (Fase 30) SEM uma fonte individual verificável guardada — fica sempre "pending" até se confirmar uma fonte real ou se rejeitar.';
 comment on column food_products.verification_status is 'pending = importado/criado, ainda por confirmar; verified = confirmado pelo profissional, visível aos alunos; rejected = confirmado como incorreto/indisponível, nunca visível.';
 comment on table food_product_retailers is 'Associação de um produto a um ou mais supermercados onde está disponível — um produto não é duplicado por estar em vários.';
 
