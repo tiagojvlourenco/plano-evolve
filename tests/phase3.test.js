@@ -111,7 +111,7 @@ function freshMeal(){
   check.check("10. optionsFor usa allowedSubs quando definido", opts.length === 1 && opts[0].name === "Peru (fatiado)");
   var fNoOverride = food("Frango (peito)","150 g","protein");
   var opts2 = optionsFor(fNoOverride);
-  check.check("10. optionsFor usa FOOD_GROUPS quando não há allowedSubs", opts2 === FOOD_GROUPS.protein);
+  check.check("10. optionsFor usa FOOD_GROUPS quando não há allowedSubs (resolve o grupo antigo 'protein' -> 'carnes')", opts2 === FOOD_GROUPS.carnes);
 })();
 
 // 11. Alimento sem substituição disponível (grupo vazio) não rebenta
@@ -143,11 +143,13 @@ function freshMeal(){
   check.check("14. 1 porção é tratada como unidade", parseQtyAmount("1 porção").kind === "unit" && parseQtyAmount("1 porção").value === 1);
 })();
 
-// 15. Grupo com prioridade de macro (protein/carb/fat) calcula equivalência correta
+// 15. Grupo com prioridade de macro (carnes/cereais/gorduras, ou os grupos antigos
+// equivalentes protein/carb/fat de um plano já guardado) calcula equivalência correta
 (function(){
-  check.check("15. GROUP_PRIORITY_KEY mapeia protein->p", GROUP_PRIORITY_KEY.protein === "p");
-  check.check("15. GROUP_PRIORITY_KEY mapeia carb->c", GROUP_PRIORITY_KEY.carb === "c");
-  check.check("15. GROUP_PRIORITY_KEY mapeia fat->f", GROUP_PRIORITY_KEY.fat === "f");
+  check.check("15. GROUP_PRIORITY_KEY mapeia carnes->p", GROUP_PRIORITY_KEY.carnes === "p");
+  check.check("15. GROUP_PRIORITY_KEY mapeia cereais->c", GROUP_PRIORITY_KEY.cereais === "c");
+  check.check("15. GROUP_PRIORITY_KEY mapeia gorduras->f", GROUP_PRIORITY_KEY.gorduras === "f");
+  check.check("15. resolveGroup traduz os grupos antigos (retrocompat)", resolveGroup("protein") === "carnes" && resolveGroup("carb") === "cereais" && resolveGroup("fat") === "gorduras");
   var original = food("Arroz (cozido)","150 g","carb");
   var alt = computeEquivalentAlternative(original, {name:"Batata-doce", qty:"100 g"});
   var origN = foodNutrition(original.name, original.qty);
@@ -188,7 +190,7 @@ function freshMeal(){
 (function(){
   var m = freshMeal();
   ensureLiveChoiceDefaults(m);
-  m.liveChoice.protein = -1 in FOOD_GROUPS.protein ? 0 : 0;
+  m.liveChoice.protein = 0;
   var allMsgs = Object.keys(MACRO_FEEDBACK).map(function(k){ return MACRO_FEEDBACK[k].low + " " + MACRO_FEEDBACK[k].high; }).join(" ");
   check.check("19. Nenhuma mensagem de feedback usa linguagem culpabilizadora", /falhaste|errado|mal feito|devias|não devias/i.test(allMsgs) === false);
   var msgs = builderFeedback(m);

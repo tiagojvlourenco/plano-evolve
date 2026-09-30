@@ -66,8 +66,8 @@ function freshStudent(overrides){
 
 // 6. groupOfFood devolve o grupo correto (não confunde com priorityMacroForFood)
 (function(){
-  check.check("6. Frango (peito) pertence ao grupo protein", groupOfFood("Frango (peito)") === "protein");
-  check.check("6. Maçã pertence ao grupo fruit (não carb, mesmo dominando em hidratos)", groupOfFood("Maçã") === "fruit");
+  check.check("6. Frango (peito) pertence ao grupo carnes", groupOfFood("Frango (peito)") === "carnes");
+  check.check("6. Maçã pertence ao grupo fruta (não cereais, mesmo dominando em hidratos)", groupOfFood("Maçã") === "fruta");
 })();
 
 // ---- 3. getFoodKeywordIndex: prioriza os nomes curados/simples sobre variantes do INSA ----
