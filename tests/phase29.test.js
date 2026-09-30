@@ -100,11 +100,14 @@ var NEW_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras",
   check.check("9. Alimento acrescentado ao grupo novo equivalente ('carnes')", FOOD_GROUPS.carnes.some(function(o){ return o.name === "Barra XPTO Antiga"; }));
 })();
 
-// 10. Nenhum alimento se perdeu na reclassificação (mesmo total de entradas)
+// 10. Nenhum alimento se perdeu na reclassificação (o total nunca fica
+// abaixo dos 1393 da reclassificação inicial — só cresce com o tempo,
+// conforme se vão acrescentando produtos de marca, por isso não fixa um
+// número exato)
 (function(){
   var total = 0;
   NEW_GROUPS.forEach(function(g){ total += FOOD_GROUPS[g].length; });
-  check.check("10. O total de alimentos nos 7 grupos novos é o mesmo de antes (1393, mais o de teste acrescentado no ponto 9)", total === 1394);
+  check.check("10. O total de alimentos nos 7 grupos novos nunca é inferior ao da reclassificação inicial (1393 + o de teste do ponto 9)", total >= 1394);
 })();
 
 check.summarize();
