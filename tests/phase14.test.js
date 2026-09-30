@@ -25,7 +25,7 @@ function freshStudent(overrides){
 
 // 1. renderProShell calcula scrollLeft manualmente, sem scrollIntoView
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 3600);
   check.check("1. Já não usa scrollIntoView (confirmado a deslocar a página toda num telemóvel real)", fnSrc.indexOf(".scrollIntoView(") === -1);
   check.check("1. Lê container = .pro-sidebar", fnSrc.indexOf('querySelector(".pro-sidebar")') >= 0);
   check.check("1. Calcula o centro do separador ativo (offsetLeft + offsetWidth/2)", /activeNavItem\.offsetLeft\s*\+\s*activeNavItem\.offsetWidth\s*\/\s*2/.test(fnSrc));

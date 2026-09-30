@@ -1,0 +1,120 @@
+-- EVOLVE NUTRITION — Fase 34: catálogo de produtos de supermercado
+-- Corre isto no SQL Editor do Supabase, DEPOIS de 0001-0017 já terem corrido.
+--
+-- Pedido do profissional: substituir os produtos de marca escritos
+-- diretamente no código (Fase 30) por um catálogo próprio, apoiado em
+-- Supabase — identificados por EAN, com fonte/data/estado de validação,
+-- associáveis a vários supermercados, geridos numa área própria do
+-- profissional. Mesmo padrão de segurança já usado em custom_foods (Fase
+-- 17, ver 0015_custom_foods.sql): leitura ampla, escrita só para
+-- profissionais.
+--
+-- Um produto só fica visível a um aluno depois de "verification_status"
+-- passar a 'verified' — antes disso ('pending'/'rejected') só o
+-- profissional o vê, para poder rever/corrigir no Catálogo.
+
+create table if not exists food_products (
+  id uuid primary key default gen_random_uuid(),
+  ean text unique,
+  name text not null,
+  brand text not null,
+  food_group text not null check (food_group in ('cereais','laticinios','carnes','fruta','vegetais','gorduras','snacks')),
+  package_quantity numeric,
+  package_unit text,
+  nutrition_basis text not null default '100g' check (nutrition_basis in ('100g','100ml')),
+  kcal numeric not null,
+  protein numeric not null,
+  carbs numeric not null,
+  fat numeric not null,
+  sugars numeric,
+  fiber numeric,
+  saturated_fat numeric,
+  salt numeric,
+  ingredients text,
+  allergens text,
+  source_url text,
+  source_type text not null check (source_type in ('official','label','open_food_facts')),
+  verification_status text not null default 'pending' check (verification_status in ('pending','verified','rejected')),
+  verified_at timestamptz,
+  verified_by uuid references professionals(user_id),
+  created_by uuid references professionals(user_id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists food_product_retailers (
+  id uuid primary key default gen_random_uuid(),
+  food_product_id uuid not null references food_products(id) on delete cascade,
+  retailer text not null check (retailer in ('Continente','Pingo Doce','Mercadona','Auchan','Lidl')),
+  retailer_product_url text,
+  last_seen_at timestamptz not null default now(),
+  unique(food_product_id, retailer)
+);
+
+create index if not exists food_products_verification_status_idx on food_products(verification_status);
+create index if not exists food_product_retailers_product_idx on food_product_retailers(food_product_id);
+
+alter table food_products enable row level security;
+
+drop policy if exists "verified products readable by all, all statuses by professionals" on food_products;
+create policy "verified products readable by all, all statuses by professionals" on food_products
+  for select
+  using (
+    verification_status = 'verified'
+    or exists (select 1 from professionals where user_id = auth.uid())
+  );
+
+drop policy if exists "professionals insert food products" on food_products;
+create policy "professionals insert food products" on food_products
+  for insert
+  with check (exists (select 1 from professionals where user_id = auth.uid()));
+
+drop policy if exists "professionals update food products" on food_products;
+create policy "professionals update food products" on food_products
+  for update
+  using (exists (select 1 from professionals where user_id = auth.uid()));
+
+drop policy if exists "professionals delete food products" on food_products;
+create policy "professionals delete food products" on food_products
+  for delete
+  using (exists (select 1 from professionals where user_id = auth.uid()));
+
+alter table food_product_retailers enable row level security;
+
+drop policy if exists "retailers follow product visibility" on food_product_retailers;
+create policy "retailers follow product visibility" on food_product_retailers
+  for select
+  using (
+    exists (
+      select 1 from food_products fp
+      where fp.id = food_product_retailers.food_product_id
+      and (fp.verification_status = 'verified' or exists (select 1 from professionals where user_id = auth.uid()))
+    )
+  );
+
+drop policy if exists "professionals insert retailers" on food_product_retailers;
+create policy "professionals insert retailers" on food_product_retailers
+  for insert
+  with check (exists (select 1 from professionals where user_id = auth.uid()));
+
+drop policy if exists "professionals update retailers" on food_product_retailers;
+create policy "professionals update retailers" on food_product_retailers
+  for update
+  using (exists (select 1 from professionals where user_id = auth.uid()));
+
+drop policy if exists "professionals delete retailers" on food_product_retailers;
+create policy "professionals delete retailers" on food_product_retailers
+  for delete
+  using (exists (select 1 from professionals where user_id = auth.uid()));
+
+comment on table food_products is
+  'Catálogo de produtos comerciais de supermercado (marca própria e de fabricante), identificados por EAN quando existe. Substitui gradualmente os produtos de marca antes escritos diretamente no código (Fase 30). Só "verified" fica visível aos alunos; "pending"/"rejected" só ao profissional, para rever no Catálogo.';
+comment on column food_products.ean is 'Código de barras EAN, quando existe — chave de deduplicação preferencial (ver scripts/import-food-products.js).';
+comment on column food_products.source_type is '''official'' = página oficial do fabricante/supermercado; ''label'' = rótulo físico fotografado/confirmado pelo profissional; ''open_food_facts'' = importado da Open Food Facts, por confirmar.';
+comment on column food_products.verification_status is 'pending = importado/criado, ainda por confirmar; verified = confirmado pelo profissional, visível aos alunos; rejected = confirmado como incorreto/indisponível, nunca visível.';
+comment on table food_product_retailers is 'Associação de um produto a um ou mais supermercados onde está disponível — um produto não é duplicado por estar em vários.';
+
+-- ===================== Estado desta migração =====================
+-- AINDA NÃO APLICADA. Confirmar com o profissional antes de correr no SQL
+-- Editor de produção. Depois de aplicada, validar com as consultas de
+-- supabase/verify_food_products_security.sql.

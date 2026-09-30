@@ -4060,6 +4060,40 @@ function loadCustomFoods(){
   }).catch(function(){});
 }
 
+// Fase 34: catálogo de produtos de marca de supermercado (food_products),
+// substitui gradualmente os produtos escritos diretamente no código na
+// Fase 30. Só "verified" chega aqui (o pedido em loadFoodProducts já filtra
+// por isso) — "pending"/"rejected" só aparecem no Catálogo do profissional.
+// Nome final "Nome (Marca)", com "· Retalhista" a seguir só quando o
+// produto está associado a exatamente 1 supermercado (0 ou 2+ retalhistas
+// ficam sem sufixo, para não ser ambíguo nem repetir o mesmo nome duas
+// vezes na pesquisa).
+function foodProductDisplayName(row, retailers){
+  var base = row.name + " (" + row.brand + ")";
+  if (retailers && retailers.length === 1) return base + " · " + retailers[0].retailer;
+  return base;
+}
+
+function mergeFoodProduct(row, retailers){
+  if (!row || !row.name || !row.brand) return false;
+  var name = foodProductDisplayName(row, retailers);
+  if (FOOD_DB[name]) return false; // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods)
+  FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
+  var group = FOOD_GROUPS[resolveGroup(row.food_group)];
+  if (group && !group.some(function(o){ return o.name === name; })){
+    group.push({name: name, qty: qtyStringWithBeverageUnit(name, "100 g")});
+  }
+  return true;
+}
+
+function loadFoodProducts(){
+  if (!sbReady) return Promise.resolve();
+  return sb.from("food_products").select("*, food_product_retailers(*)").eq("verification_status", "verified").then(function(res){
+    if (res.error || !res.data) return;
+    res.data.forEach(function(row){ mergeFoodProduct(row, row.food_product_retailers); });
+  }).catch(function(){});
+}
+
 function parseQtyAmount(qty){
   qty = (qty||"").trim();
   if (/vontade/i.test(qty)) return {kind:"fixed", value:1};
@@ -5119,7 +5153,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", showDemoStudents:false, dashboardListMode:null };
+var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", proView:"dashboard", showDemoStudents:false, dashboardListMode:null };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -6676,9 +6710,14 @@ function wireAlunoTab(s){
 var proRoot = document.getElementById("proApp");
 
 function renderProShell(){
-  var sidebar = "<div class=\"pro-sidebar\">" +
-    "<button type=\"button\" class=\"pro-nav-item" + (!state.proSelectedId ? " active" : "") + "\" id=\"navDashboard\">Dashboard</button>";
   var selected = state.proSelectedId ? findStudent(state.proSelectedId) : null;
+  // Fase 34: "Catálogo" é uma área ao mesmo nível do "Dashboard" — não é um
+  // PRO_TABS (esses são por aluno) nem entra na página principal, como
+  // pedido. Só um de "Dashboard"/"Catálogo" fica ativo de cada vez, e
+  // qualquer aluno selecionado tem sempre prioridade sobre os dois.
+  var sidebar = "<div class=\"pro-sidebar\">" +
+    "<button type=\"button\" class=\"pro-nav-item" + (!selected && state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Dashboard</button>" +
+    "<button type=\"button\" class=\"pro-nav-item" + (!selected && state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
   if (selected){
     sidebar += "<div class=\"pro-sidebar-divider\"></div>" +
       "<div class=\"pro-sidebar-student\"><div class=\"avatar\" style=\"width:28px; height:28px; font-size:0.66rem;\">" + selected.initials + "</div><span>" + selected.name + "</span></div>" +
@@ -6688,7 +6727,8 @@ function renderProShell(){
 
   proRoot.innerHTML = "<div class=\"pro-shell\">" + sidebar + "<div class=\"pro-main\" id=\"proMain\"></div></div>";
 
-  document.getElementById("navDashboard").addEventListener("click", function(){ state.proSelectedId=null; renderProShell(); });
+  document.getElementById("navDashboard").addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
+  document.getElementById("navCatalog").addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
@@ -6720,7 +6760,9 @@ function renderProShell(){
     }
   }, 0);
 
-  if (selected) renderProDetailMain(selected); else renderProDashboardMain();
+  if (selected) renderProDetailMain(selected);
+  else if (state.proView === "catalog") renderProCatalogMain();
+  else renderProDashboardMain();
 }
 
 function daysAgoLabel(n){ if (n===0) return "hoje"; if (n===1) return "há 1 dia"; return "há " + n + " dias"; }
@@ -7438,6 +7480,280 @@ function openCustomFoodModal(defaultGroup, onSaved){
       closeModal();
       onSaved(name);
     }
+  });
+
+  return sheet;
+}
+
+/* ==================== Fase 34: Catálogo de alimentos (área do profissional) ====================
+   Área própria (ver renderProShell/state.proView), independente da página
+   principal do dashboard. Gere food_products/food_product_retailers
+   diretamente no Supabase — os dados só chegam a FOOD_DB (e por isso à
+   pesquisa de alimentos de um plano) depois de "verified", via
+   loadFoodProducts() no arranque (ver mais acima). */
+var RETAILERS = ["Continente","Pingo Doce","Mercadona","Auchan","Lidl"];
+var VERIFICATION_STATUS_LABELS = {pending:"Pendente", verified:"Verificado", rejected:"Rejeitado"};
+var SOURCE_TYPE_LABELS = {official:"Página oficial", label:"Rótulo físico", open_food_facts:"Open Food Facts"};
+
+function renderProCatalogMain(){
+  var main = document.getElementById("proMain");
+  if (!state.catalogFilters) state.catalogFilters = {q:"", retailer:"", group:"", status:""};
+  if (!state.catalogSelected) state.catalogSelected = {};
+  var f = state.catalogFilters;
+
+  main.innerHTML =
+    "<div style=\"display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;\">" +
+      "<h2 style=\"margin:0;\">Catálogo de alimentos</h2>" +
+      "<button type=\"button\" class=\"btn primary btn-sm\" id=\"catalogNewProduct\">+ Novo produto</button>" +
+    "</div>" +
+    "<div class=\"card\" style=\"margin-bottom:14px;\">" +
+      "<div class=\"field-row\">" +
+        "<div class=\"f\"><label>Pesquisar (nome, marca ou EAN)</label><input type=\"text\" id=\"catalogSearch\" value=\"" + escapeHtml(f.q) + "\"></div>" +
+        "<div class=\"f\"><label>Retalhista</label><select id=\"catalogRetailerFilter\"><option value=\"\">Todos</option>" +
+          RETAILERS.map(function(r){ return "<option value=\"" + r + "\"" + (f.retailer===r?" selected":"") + ">" + r + "</option>"; }).join("") +
+        "</select></div>" +
+        "<div class=\"f\"><label>Grupo</label><select id=\"catalogGroupFilter\"><option value=\"\">Todos</option>" +
+          PRO_PLAN_GROUPS.map(function(g){ return "<option value=\"" + g + "\"" + (f.group===g?" selected":"") + ">" + groupLabel(g) + "</option>"; }).join("") +
+        "</select></div>" +
+        "<div class=\"f\"><label>Estado</label><select id=\"catalogStatusFilter\"><option value=\"\">Todos</option>" +
+          Object.keys(VERIFICATION_STATUS_LABELS).map(function(st){ return "<option value=\"" + st + "\"" + (f.status===st?" selected":"") + ">" + VERIFICATION_STATUS_LABELS[st] + "</option>"; }).join("") +
+        "</select></div>" +
+      "</div>" +
+    "</div>" +
+    "<div id=\"catalogBulkBar\" style=\"display:none; margin-bottom:10px;\">" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"catalogApproveSelected\">✓ Aprovar selecionados</button>" +
+    "</div>" +
+    "<div id=\"catalogList\"><p class=\"muted-p\">A carregar...</p></div>";
+
+  wireProCatalog(main);
+  loadCatalogProducts(main);
+}
+
+function loadCatalogProducts(main){
+  if (!sbReady){
+    main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">Sem ligação à base de dados.</p>";
+    return;
+  }
+  sb.from("food_products").select("*, food_product_retailers(*)").order("name").then(function(res){
+    if (res.error){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; return; }
+    state.catalogProducts = res.data || [];
+    renderCatalogList(main);
+  }).catch(function(){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; });
+}
+
+function catalogFilteredProducts(){
+  var f = state.catalogFilters || {};
+  var q = (f.q || "").trim().toLowerCase();
+  return (state.catalogProducts || []).filter(function(p){
+    if (q && p.name.toLowerCase().indexOf(q) === -1 && p.brand.toLowerCase().indexOf(q) === -1 && !(p.ean && p.ean.toLowerCase().indexOf(q) >= 0)) return false;
+    if (f.group && p.food_group !== f.group) return false;
+    if (f.status && p.verification_status !== f.status) return false;
+    if (f.retailer && !(p.food_product_retailers || []).some(function(r){ return r.retailer === f.retailer; })) return false;
+    return true;
+  });
+}
+
+function catalogStatusColor(status){
+  if (status === "verified") return "var(--accent-strong)";
+  if (status === "rejected") return "var(--critical)";
+  return "var(--warn)";
+}
+
+function renderCatalogList(main){
+  var listEl = main.querySelector("#catalogList");
+  var items = catalogFilteredProducts();
+  if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; main.querySelector("#catalogBulkBar").style.display = "none"; return; }
+  listEl.innerHTML = items.map(function(p){
+    var retailers = (p.food_product_retailers || []).map(function(r){ return r.retailer; }).join(", ");
+    return "<div class=\"card\" style=\"margin-bottom:8px; display:flex; align-items:flex-start; gap:10px;\">" +
+      (p.verification_status === "pending" ? "<input type=\"checkbox\" class=\"catalog-select\" data-id=\"" + p.id + "\"" + (state.catalogSelected[p.id] ? " checked" : "") + " style=\"margin-top:4px;\">" : "<span style=\"width:16px; display:inline-block;\"></span>") +
+      "<div style=\"flex:1; min-width:0;\">" +
+        "<div><strong>" + escapeHtml(p.name) + "</strong> <span class=\"muted-p\">(" + escapeHtml(p.brand) + ")</span> " +
+          "<span class=\"tag\" style=\"border-color:" + catalogStatusColor(p.verification_status) + "; color:" + catalogStatusColor(p.verification_status) + ";\">" + (VERIFICATION_STATUS_LABELS[p.verification_status] || p.verification_status) + "</span></div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.78rem; margin-top:2px;\">" + groupLabel(p.food_group) + (p.ean ? " · EAN " + escapeHtml(p.ean) : "") + (retailers ? " · " + escapeHtml(retailers) : "") + "</div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + p.kcal + " kcal · P " + p.protein + "g · H " + p.carbs + "g · G " + p.fat + "g (por " + (p.nutrition_basis || "100g") + ") · fonte: " + (SOURCE_TYPE_LABELS[p.source_type] || p.source_type) + "</div>" +
+      "</div>" +
+      "<div style=\"display:flex; flex-direction:column; gap:4px; flex-shrink:0;\">" +
+        "<button type=\"button\" class=\"btn btn-sm\" data-catalog-edit=\"" + p.id + "\">Editar</button>" +
+        (p.verification_status !== "verified" ? "<button type=\"button\" class=\"btn btn-sm\" data-catalog-approve=\"" + p.id + "\">Aprovar</button>" : "") +
+        (p.verification_status !== "rejected" ? "<button type=\"button\" class=\"btn btn-sm\" data-catalog-reject=\"" + p.id + "\">Rejeitar</button>" : "") +
+      "</div>" +
+    "</div>";
+  }).join("");
+  main.querySelector("#catalogBulkBar").style.display = Object.keys(state.catalogSelected).some(function(id){ return state.catalogSelected[id]; }) ? "block" : "none";
+  wireCatalogListActions(main);
+}
+
+function catalogUpdateProductStatus(main, id, status){
+  if (!sbReady) return;
+  sb.from("food_products").update({verification_status: status, verified_at: status === "verified" ? new Date().toISOString() : null}).eq("id", id).then(function(res){
+    if (res.error){ showToast("⚠ Não foi possível atualizar — tenta novamente"); return; }
+    var p = (state.catalogProducts || []).find(function(x){ return x.id === id; });
+    if (p) p.verification_status = status;
+    delete state.catalogSelected[id];
+    showToast(status === "verified" ? "✓ Produto aprovado" : "Produto rejeitado");
+    renderCatalogList(main);
+  }).catch(function(){ showToast("⚠ Não foi possível atualizar — tenta novamente"); });
+}
+
+function wireCatalogListActions(main){
+  main.querySelectorAll("[data-catalog-approve]").forEach(function(btn){
+    btn.addEventListener("click", function(){ catalogUpdateProductStatus(main, btn.getAttribute("data-catalog-approve"), "verified"); });
+  });
+  main.querySelectorAll("[data-catalog-reject]").forEach(function(btn){
+    btn.addEventListener("click", function(){ catalogUpdateProductStatus(main, btn.getAttribute("data-catalog-reject"), "rejected"); });
+  });
+  main.querySelectorAll("[data-catalog-edit]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-catalog-edit");
+      var p = (state.catalogProducts || []).find(function(x){ return x.id === id; });
+      if (p) openFoodProductModal(p, function(){ loadCatalogProducts(main); });
+    });
+  });
+  main.querySelectorAll(".catalog-select").forEach(function(cb){
+    cb.addEventListener("change", function(){
+      state.catalogSelected[cb.getAttribute("data-id")] = cb.checked;
+      main.querySelector("#catalogBulkBar").style.display = Object.keys(state.catalogSelected).some(function(id){ return state.catalogSelected[id]; }) ? "block" : "none";
+    });
+  });
+}
+
+function wireProCatalog(main){
+  main.querySelector("#catalogNewProduct").addEventListener("click", function(){
+    openFoodProductModal(null, function(){ loadCatalogProducts(main); });
+  });
+  main.querySelector("#catalogSearch").addEventListener("input", function(){
+    state.catalogFilters.q = this.value;
+    renderCatalogList(main);
+  });
+  main.querySelector("#catalogRetailerFilter").addEventListener("change", function(){
+    state.catalogFilters.retailer = this.value;
+    renderCatalogList(main);
+  });
+  main.querySelector("#catalogGroupFilter").addEventListener("change", function(){
+    state.catalogFilters.group = this.value;
+    renderCatalogList(main);
+  });
+  main.querySelector("#catalogStatusFilter").addEventListener("change", function(){
+    state.catalogFilters.status = this.value;
+    renderCatalogList(main);
+  });
+  main.querySelector("#catalogApproveSelected").addEventListener("click", function(){
+    var ids = Object.keys(state.catalogSelected).filter(function(id){ return state.catalogSelected[id]; });
+    if (!ids.length || !sbReady) return;
+    sb.from("food_products").update({verification_status:"verified", verified_at: new Date().toISOString()}).in("id", ids).then(function(res){
+      if (res.error){ showToast("⚠ Não foi possível aprovar — tenta novamente"); return; }
+      ids.forEach(function(id){
+        var p = (state.catalogProducts || []).find(function(x){ return x.id === id; });
+        if (p) p.verification_status = "verified";
+        delete state.catalogSelected[id];
+      });
+      showToast("✓ " + ids.length + " produto(s) aprovado(s)");
+      renderCatalogList(main);
+    }).catch(function(){ showToast("⚠ Não foi possível aprovar — tenta novamente"); });
+  });
+}
+
+// Cria ou edita um produto do catálogo (product === null -> criar). Guarda
+// primeiro em food_products, depois substitui por completo as linhas de
+// food_product_retailers desse produto pelas marcadas no formulário — mais
+// simples do que calcular a diferença, e a tabela é sempre pequena por
+// produto (no máximo 5 retalhistas).
+function openFoodProductModal(product, onSaved){
+  var p = product || {};
+  var currentRetailers = (p.food_product_retailers || []).map(function(r){ return r.retailer; });
+  var sheet = openModal(
+    "<div class=\"mtitle\">" + (product ? "Editar produto" : "Novo produto") + "</div>" +
+    "<div class=\"field-row\">" +
+      "<div class=\"f\"><label>EAN (código de barras)</label><input type=\"text\" id=\"fpEan\" value=\"" + escapeHtml(p.ean || "") + "\"></div>" +
+      "<div class=\"f\"><label>Nome comercial</label><input type=\"text\" id=\"fpName\" value=\"" + escapeHtml(p.name || "") + "\"></div>" +
+      "<div class=\"f\"><label>Marca</label><input type=\"text\" id=\"fpBrand\" value=\"" + escapeHtml(p.brand || "") + "\"></div>" +
+      "<div class=\"f\"><label>Grupo</label><select id=\"fpGroup\">" +
+        PRO_PLAN_GROUPS.map(function(g){ return "<option value=\"" + g + "\"" + (p.food_group===g?" selected":"") + ">" + groupLabel(g) + "</option>"; }).join("") +
+      "</select></div>" +
+      "<div class=\"f\"><label>Tamanho da embalagem</label><input type=\"number\" id=\"fpPackageQty\" min=\"0\" step=\"0.1\" value=\"" + (p.package_quantity != null ? p.package_quantity : "") + "\"></div>" +
+      "<div class=\"f\"><label>Unidade da embalagem</label><input type=\"text\" id=\"fpPackageUnit\" placeholder=\"g, ml, unid.\" value=\"" + escapeHtml(p.package_unit || "") + "\"></div>" +
+      "<div class=\"f\"><label>Valores por</label><select id=\"fpBasis\">" +
+        "<option value=\"100g\"" + (p.nutrition_basis!=="100ml"?" selected":"") + ">100 g</option>" +
+        "<option value=\"100ml\"" + (p.nutrition_basis==="100ml"?" selected":"") + ">100 ml</option>" +
+      "</select></div>" +
+      "<div class=\"f\"><label>Calorias (kcal)</label><input type=\"number\" id=\"fpKcal\" min=\"0\" value=\"" + (p.kcal != null ? p.kcal : "") + "\"></div>" +
+      "<div class=\"f\"><label>Proteína (g)</label><input type=\"number\" id=\"fpProtein\" min=\"0\" step=\"0.1\" value=\"" + (p.protein != null ? p.protein : "") + "\"></div>" +
+      "<div class=\"f\"><label>Hidratos (g)</label><input type=\"number\" id=\"fpCarbs\" min=\"0\" step=\"0.1\" value=\"" + (p.carbs != null ? p.carbs : "") + "\"></div>" +
+      "<div class=\"f\"><label>Gordura (g)</label><input type=\"number\" id=\"fpFat\" min=\"0\" step=\"0.1\" value=\"" + (p.fat != null ? p.fat : "") + "\"></div>" +
+      "<div class=\"f\"><label>Açúcares (g)</label><input type=\"number\" id=\"fpSugars\" min=\"0\" step=\"0.1\" value=\"" + (p.sugars != null ? p.sugars : "") + "\"></div>" +
+      "<div class=\"f\"><label>Fibra (g)</label><input type=\"number\" id=\"fpFiber\" min=\"0\" step=\"0.1\" value=\"" + (p.fiber != null ? p.fiber : "") + "\"></div>" +
+      "<div class=\"f\"><label>Gordura saturada (g)</label><input type=\"number\" id=\"fpSatFat\" min=\"0\" step=\"0.1\" value=\"" + (p.saturated_fat != null ? p.saturated_fat : "") + "\"></div>" +
+      "<div class=\"f\"><label>Sal (g)</label><input type=\"number\" id=\"fpSalt\" min=\"0\" step=\"0.1\" value=\"" + (p.salt != null ? p.salt : "") + "\"></div>" +
+    "</div>" +
+    "<div class=\"checkin-field\"><label for=\"fpIngredients\">Ingredientes</label><textarea id=\"fpIngredients\" rows=\"2\">" + escapeHtml(p.ingredients || "") + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"fpAllergens\">Alergénios</label><input type=\"text\" id=\"fpAllergens\" value=\"" + escapeHtml(p.allergens || "") + "\"></div>" +
+    "<div class=\"checkin-field\"><label>Disponível em</label><div style=\"display:flex; flex-wrap:wrap; gap:10px;\">" +
+      RETAILERS.map(function(r){ return "<label style=\"display:flex; align-items:center; gap:4px; font-size:0.85rem; white-space:nowrap;\"><input type=\"checkbox\" class=\"fp-retailer\" value=\"" + r + "\"" + (currentRetailers.indexOf(r) >= 0 ? " checked" : "") + ">" + r + "</label>"; }).join("") +
+    "</div></div>" +
+    "<div class=\"field-row\">" +
+      "<div class=\"f\"><label>Fonte</label><select id=\"fpSourceType\">" +
+        Object.keys(SOURCE_TYPE_LABELS).map(function(k){ return "<option value=\"" + k + "\"" + (p.source_type===k?" selected":"") + ">" + SOURCE_TYPE_LABELS[k] + "</option>"; }).join("") +
+      "</select></div>" +
+      "<div class=\"f\"><label>Estado</label><select id=\"fpStatus\">" +
+        Object.keys(VERIFICATION_STATUS_LABELS).map(function(k){ return "<option value=\"" + k + "\"" + ((p.verification_status||"pending")===k?" selected":"") + ">" + VERIFICATION_STATUS_LABELS[k] + "</option>"; }).join("") +
+      "</select></div>" +
+    "</div>" +
+    "<div class=\"checkin-field\"><label for=\"fpSourceUrl\">Link da fonte</label><input type=\"text\" id=\"fpSourceUrl\" value=\"" + escapeHtml(p.source_url || "") + "\"></div>" +
+    "<p class=\"muted-p\" id=\"fpError\" style=\"color:var(--critical); display:none; margin:8px 0;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"fpSave\" style=\"width:100%; margin-top:6px;\">Guardar produto</button>"
+  );
+
+  sheet.querySelector("#fpSave").addEventListener("click", function(){
+    var errEl = sheet.querySelector("#fpError");
+    errEl.style.display = "none";
+    var name = sheet.querySelector("#fpName").value.trim();
+    var brand = sheet.querySelector("#fpBrand").value.trim();
+    var kcal = parseFloat(sheet.querySelector("#fpKcal").value);
+    var protein = parseFloat(sheet.querySelector("#fpProtein").value);
+    var carbs = parseFloat(sheet.querySelector("#fpCarbs").value);
+    var fat = parseFloat(sheet.querySelector("#fpFat").value);
+    if (!name || !brand){ errEl.textContent = "Preenche o nome e a marca."; errEl.style.display = "block"; return; }
+    if (!(kcal >= 0) || !(protein >= 0) || !(carbs >= 0) || !(fat >= 0)){ errEl.textContent = "Preenche kcal/proteína/hidratos/gordura (podem ser 0, nunca negativos)."; errEl.style.display = "block"; return; }
+    if (!sbReady){ errEl.textContent = "Sem ligação à base de dados."; errEl.style.display = "block"; return; }
+
+    function numOrNull(id){ var v = parseFloat(sheet.querySelector(id).value); return isFinite(v) ? v : null; }
+    var row = {
+      ean: sheet.querySelector("#fpEan").value.trim() || null,
+      name: name, brand: brand,
+      food_group: sheet.querySelector("#fpGroup").value,
+      package_quantity: numOrNull("#fpPackageQty"),
+      package_unit: sheet.querySelector("#fpPackageUnit").value.trim() || null,
+      nutrition_basis: sheet.querySelector("#fpBasis").value,
+      kcal: kcal, protein: protein, carbs: carbs, fat: fat,
+      sugars: numOrNull("#fpSugars"), fiber: numOrNull("#fpFiber"),
+      saturated_fat: numOrNull("#fpSatFat"), salt: numOrNull("#fpSalt"),
+      ingredients: sheet.querySelector("#fpIngredients").value.trim() || null,
+      allergens: sheet.querySelector("#fpAllergens").value.trim() || null,
+      source_url: sheet.querySelector("#fpSourceUrl").value.trim() || null,
+      source_type: sheet.querySelector("#fpSourceType").value,
+      verification_status: sheet.querySelector("#fpStatus").value,
+      updated_at: new Date().toISOString()
+    };
+    var selectedRetailers = Array.from(sheet.querySelectorAll(".fp-retailer:checked")).map(function(cb){ return cb.value; });
+
+    var save = product
+      ? sb.from("food_products").update(row).eq("id", product.id).select()
+      : sb.from("food_products").insert(row).select();
+
+    save.then(function(res){
+      if (res.error){ errEl.textContent = "⚠ Não foi possível guardar — verifica se o EAN já existe noutro produto."; errEl.style.display = "block"; return; }
+      var saved = res.data && res.data[0];
+      var productId = saved ? saved.id : product.id;
+      return sb.from("food_product_retailers").delete().eq("food_product_id", productId).then(function(){
+        if (!selectedRetailers.length) return;
+        return sb.from("food_product_retailers").insert(selectedRetailers.map(function(r){ return {food_product_id: productId, retailer: r}; }));
+      }).then(function(){
+        showToast("✓ Produto guardado");
+        closeModal();
+        onSaved();
+      });
+    }).catch(function(){ errEl.textContent = "⚠ Não foi possível guardar — tenta novamente."; errEl.style.display = "block"; });
   });
 
   return sheet;
@@ -8629,7 +8945,7 @@ function handleSession(session){
       return sb.from("students").select("*");
     }).then(function(res){
       STUDENTS = (res.data || []).map(rowToStudent);
-      return Promise.all([resolvePhotoUrls(STUDENTS), loadCustomFoods()]);
+      return Promise.all([resolvePhotoUrls(STUDENTS), loadCustomFoods(), loadFoodProducts()]);
     }).then(function(){
       document.getElementById("signOutBtn").classList.remove("hidden");
       if (isProfessional){

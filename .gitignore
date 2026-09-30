@@ -1,0 +1,6 @@
+# Lotes de importação gerados por scripts/import-food-products.js — cada
+# execução cria um ficheiro novo com timestamp; revê e comita explicitamente
+# só o que for mesmo aplicado (o registo da migração da Fase 30 já
+# revista/aplicada fica em scripts/output-migrate-phase30.sql, fora desta
+# pasta, por isso não é afetado por esta regra).
+scripts/output/
