@@ -39,12 +39,20 @@ select retailer, count(*) from food_product_retailers group by retailer;
 -- a consola do browser (F12), autenticado com cada conta indicada — nunca o
 -- SQL Editor (que ignora RLS por correr como o dono da base de dados).
 --
---   I1. Sessão de ALUNO — um produto "pending" nunca aparece:
---         var { data } = await sb.from("food_products").select("*");
---       Esperado: só produtos "verified" na lista (confirma comparando com
---       o resultado da query 4 acima, corrida como profissional).
+-- I1 e I2 pedem 1 conta de PROFISSIONAL e repetem-se com 2 contas de ALUNO
+-- diferentes (não há isolamento entre alunos aqui — o catálogo é partilhado
+-- por todos — mas correr com 2 contas confirma que o resultado é o mesmo
+-- independentemente de qual aluno está autenticado, não um acaso de uma
+-- conta em particular).
 --
---   I2. Sessão de ALUNO — não consegue criar, editar nem apagar um produto:
+--   I1. Sessão de ALUNO (repete com as 2 contas de aluno) — um produto
+--       "pending" nunca aparece:
+--         var { data } = await sb.from("food_products").select("*");
+--       Esperado, nas duas contas: só produtos "verified" na lista (confirma
+--       comparando com o resultado da query 4 acima, corrida como profissional).
+--
+--   I2. Sessão de ALUNO (repete com as 2 contas de aluno) — não consegue
+--       criar, editar nem apagar um produto:
 --         await sb.from("food_products").insert({name:"Teste",brand:"Teste",food_group:"snacks",kcal:1,protein:0,carbs:0,fat:0,source_type:"label"})
 --       Esperado: erro de RLS / 0 linhas inseridas.
 --         await sb.from("food_products").update({kcal:999}).eq("id","<id de um produto qualquer>")
