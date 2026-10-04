@@ -50,7 +50,7 @@ check.check("flexTier(100) = flexivel", flexTier(100) === "flexivel");
 
 // ---- 8. Substituições (dados nutricionais existem e variam) ----
 (function () {
-  var opts = FOOD_GROUPS.protein;
+  var opts = FOOD_GROUPS.carnes;
   var known = opts.every(function (o) { return FOOD_DB[o.name] != null; });
   check.check("todas as alternativas de proteína têm dados nutricionais", known);
   var n1 = foodNutrition(opts[0].name, opts[0].qty);

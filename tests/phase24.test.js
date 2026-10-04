@@ -14,14 +14,14 @@ var appSource = require("./extract-app")();
 eval(appSource);
 var check = require("./check")();
 
-// ---- 1. matchFoodsInText: encontra correspondências ordenadas por posição no texto ----
+// ---- 1. matchDraftPhrase (Fase 35, substitui matchFoodsInText): reconhece o alimento de cada frase ----
 
-// 1. Devolve as correspondências ordenadas pela posição em que aparecem
+// 1. Uma linha com vários alimentos separados por "com" é partida e cada pedaço reconhecido
 (function(){
-  var index = getFoodKeywordIndex();
-  var found = matchFoodsInText("frango com arroz", index);
-  check.check("1. Encontra 'Frango (peito)' e 'Arroz (cozido)'", found.some(function(f){return f.name==="Frango (peito)";}) && found.some(function(f){return f.name==="Arroz (cozido)";}));
-  check.check("1. 'Frango' vem antes de 'Arroz' (está mais cedo no texto)", found.findIndex(function(f){return f.name==="Frango (peito)";}) < found.findIndex(function(f){return f.name==="Arroz (cozido)";}));
+  var draft = draftPlanFromDailyText("Ao almoço como frango com arroz");
+  var names = draft[0].foods.map(function(f){ return f.name; });
+  check.check("1. Encontra 'Frango (peito)' e 'Arroz (cozido)'", names.indexOf("Frango (peito)") >= 0 && names.indexOf("Arroz (cozido)") >= 0);
+  check.check("1. 'Frango' vem antes de 'Arroz' (está mais cedo no texto)", names.indexOf("Frango (peito)") < names.indexOf("Arroz (cozido)"));
 })();
 
 // ---- 2. draftPlanFromDailyText: "/" numa linha é alternativa, só a primeira conta ----
@@ -74,21 +74,24 @@ var check = require("./check")();
 // 7. Com alternativas "/" e "ou" corretamente tratadas como escolha única, o plano gerado já
 // não fica inflacionado — e o "Ajustar quantidades aos alvos" (Fase 22) consegue bater perto do alvo.
 (function(){
-  // Texto completo (com fontes de gordura no pequeno-almoço) — a versão só
-  // com Almoço/Jantar não tem nenhum alimento de gordura mencionado, o que
-  // dispara skippedMacros("fat") e portanto um défice real de calorias por
-  // falta de alimentos desse grupo, não por causa deste bug.
+  // Texto com fontes de gordura (frutos secos, azeite) — sem nenhum alimento
+  // de gordura mencionado dispara skippedMacros("fat") e portanto um défice
+  // real de calorias por falta de alimentos desse grupo, não por causa deste
+  // bug. (Antes da Fase 35 isto passava por acaso: "queijo" virava Queijo
+  // Brie, uma fonte de gordura que o texto nunca pediu.)
   var texto = [
     "Pequeno-almoço",
     "* 200 ml leite meio-gordo",
     "* 60 g queijo fresco magro",
     "* 100g mirtilos",
+    "* 30 g frutos secos",
     "",
     "Almoço",
     "* 159 g arroz basmati / massa integral / quinoa / batata-doce",
     "* 150 g frango / peru / coelho",
     "* ou 150 g peixe branco",
     "* 100 g legumes verdes",
+    "* 15 g azeite",
     "",
     "Jantar",
     "* 150 g arroz basmati / massa integral / quinoa / batata-doce",

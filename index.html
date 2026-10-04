@@ -4408,18 +4408,23 @@ function removeMealFromPlan(s, targetMeal){
 // que refeições e que alimentos (da nossa base) a pessoa já descreveu, e
 // propor isso como plano de partida. Mantém a mesma cautela das Fases
 // 12/17 com texto livre: nunca inventa um alimento fora da base (só
-// reconhece o que já existe em FOOD_DB/FOOD_GROUPS por palavra-chave), usa
-// sempre a quantidade-padrão já definida para esse alimento (nunca tenta
-// ler gramagens do texto), e nunca aplica nada ao plano sem o profissional
-// rever a proposta e confirmar — ver draftPlanFromDailyText/renderDailyPlanDraft.
+// reconhece o que já existe em FOOD_DB/FOOD_GROUPS), e nunca aplica nada ao
+// plano sem o profissional rever a proposta e confirmar — ver
+// draftPlanFromDailyText/renderDailyPlanDraft. (Fase 35: passou a ler as
+// quantidades escritas no texto e a reconhecer por frase, não por palavra-chave.)
 var DAILY_TEXT_MEAL_MARKERS = [
   {key:"Pequeno-almoço", re:/pequeno[\s-]?almo[çc]o/i},
   {key:"Meio da manhã", re:/meio[\s-]da[\s-]manh[ãa]/i},
   {key:"Almoço", re:/\balmo[çc]o\b/i},
   {key:"Lanche", re:/\blanche\b/i},
+  {key:"Lanche", re:/meio[\s-]da[\s-]tarde/i},
+  {key:"Lanche", re:/pr[ée][\s-]?treino/i},
   {key:"Jantar", re:/\bjantar\b/i},
-  {key:"Ceia", re:/\bceia\b/i}
+  {key:"Ceia", re:/\bceia\b/i},
+  {key:"Pós-treino", re:/p[óo]s[\s-]?treino/i}
 ];
+// Fase 35: "Pós-treino" também é uma refeição do questionário (a seguir ao treino).
+var DAILY_DRAFT_MEALS = PLAN_SKELETON_MEALS.concat([["Pós-treino", "19:00"]]);
 
 function splitDailyTextByMeal(text){
   text = text || "";
@@ -4509,49 +4514,314 @@ function getFoodKeywordIndex(){
   // genérico/comum.
   Object.keys(FOOD_DB).forEach(function(name){
     var key = keyOf(name);
-    if (key.length < 3 || curatedKeySet[key]) return;
+    // Fase 35: um produto de marca ("Cereais Cookie Crisp (Nestlé)") nunca fica com a
+    // chave genérica ("cereais") — só serve para reconhecer palavras conhecidas.
+    if (key.length < 3 || curatedKeySet[key] || brandOfFoodName(name)) return;
     if (!index[key] || name.length < index[key].length) index[key] = name;
   });
   _foodKeywordIndexCache = index;
   return index;
 }
 
-// Fronteira feita à mão em vez de "\b": "\b" trata o hífen como fronteira de
-// palavra, o que faria "doce" acertar dentro de "batata-doce" (e "batata"
-// também) — aqui o hífen conta como parte da palavra, tal como a-z/à-ÿ.
-// Devolve as correspondências ordenadas pela posição em que aparecem no
-// texto (para se poder identificar "a primeira" dentro de um grupo).
-function matchFoodsInText(text, index){
-  var lower = (text || "").toLowerCase();
-  var found = [];
-  Object.keys(index).forEach(function(key){
-    var re = new RegExp("(^|[^a-zà-ÿ-])" + key + "([^a-zà-ÿ-]|$)", "i");
-    var m = re.exec(lower);
-    if (m) found.push({name: index[key], pos: m.index});
-  });
-  found.sort(function(a,b){ return a.pos - b.pos; });
-  return found;
+// Fase 35: pedido do profissional depois de usar o "Gerar plano a partir do
+// dia-a-dia" com um questionário real — muitos erros: "leite meio-gordo"
+// virava "Leite creme" (uma sobremesa), "sem açúcar" acrescentava Açúcar
+// branco, "2 fatias de pão" virava Fatias de presunto, "queijo fresco magro"
+// virava Queijo Brie, "15 g proteína" virava Proteína texturizada de soja,
+// as quantidades escritas no texto (200 ml, 60 g...) eram ignoradas, e
+// "Meio da tarde / pré-treino" e "Pós-treino" nem eram reconhecidos como
+// refeições (os alimentos caíam no Almoço). Causa comum: o reconhecimento
+// olhava só para a PRIMEIRA palavra do nome do alimento. Agora reconhece por
+// frase (as palavras que identificam o alimento têm de estar no texto),
+// trata "sem X" como negação, só escolhe um produto de marca se a marca for
+// mencionada, e lê as quantidades escritas. Continua a nunca inventar um
+// alimento fora da base: o que não reconhece fica à vista, para acrescentar à mão.
+var DRAFT_CONNECTORS = {
+  de:1, da:1, do:1, das:1, dos:1, com:1, e:1, em:1, a:1, o:1, as:1, os:1, um:1, uma:1, uns:1, umas:1,
+  ao:1, na:1, no:1, nas:1, nos:1, the:1, ou:1, para:1, por:1, pelo:1, pela:1, ate:1
+};
+// Atributos "suaves": podem faltar no texto sem tornar errado o alimento
+// ("leite sem lactose" aceita "Leite magro sem lactose, UHT"), ao contrário do
+// que identifica o alimento ("brie", "creme", "pita"...).
+var DRAFT_SOFT_ATTRS = {meio:1, gordo:1, magro:1, desnatado:1, integral:1, natural:1, simples:1, fresco:1, branco:1, comum:1};
+var DRAFT_PREFERRED_QUAL = {uht:1, pasteurizado:1, medio:1, valor:1};
+var DRAFT_DISPREFERRED_QUAL = {po:1, condensado:1, evaporado:1, seco:1, desidratado:1, instantaneo:1, liofilizado:1, enlatado:1};
+// Peso aproximado de medidas caseiras (g ou ml) — só para converter o que o
+// texto diz ("2 fatias", "1 prato de sopa") quando o alimento está em gramas.
+var DAILY_UNIT_GRAMS = {fatia:40, "colher de sopa":15, "colher de cha":5, "colher de sobremesa":10, colher:15, chavena:150, copo:200, prato:300, tigela:250, iogurte:125};
+var DAILY_FOOD_ALIASES = [
+  // descrições genéricas do dia-a-dia que não são o nome de nenhum alimento da base
+  {words:["peixe","branco"], food:"Pescada"},
+  {words:["carne","branca"], food:"Frango (peito)"},
+  {words:["carne","vermelha"], food:"Carne vermelha magra"},
+  {words:["legume","verde"], food:"Brócolos"},
+  {words:["iogurte","proteico"], food:"Iogurte grego natural", block:["liquido","bebivel"]},
+  // palavras soltas — só quando nada mais específico reconheceu a frase
+  {words:["legume"], food:"Brócolos", single:true},
+  {words:["sopa"], food:"Sopa juliana", single:true},
+  {words:["iogurte"], food:"Iogurte grego natural", single:true, block:["liquido","bebivel"]},
+  {words:["carne"], food:"Carne magra", single:true},
+  {words:["peixe"], food:"Pescada", single:true},
+  {words:["salada"], food:"Salada mista", single:true}
+];
+
+function foldAccents(s){
+  s = (s || "").toLowerCase();
+  if (s.normalize) s = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return s;
 }
 
-// Fase 24: bug real apanhado com o texto do questionário de um aluno —
-// "150 g frango / peru / coelho" é uma escolha (um OU outro), não os três
-// a somar; da mesma forma, uma linha seguinte a começar por "ou" (ex.:
-// "ou 150 g peixe branco") é mais uma alternativa ao mesmo grupo. O
-// reconhecimento por palavra-chave, sozinho, não distingue isto de uma
-// lista de alimentos genuinamente diferentes — por isso agora processa-se
-// linha a linha: linhas com "/" (e as que se seguem a começar por "ou")
-// formam um grupo de alternativas, do qual só a PRIMEIRA correspondência
-// entra na proposta; uma linha sem "/" continua a poder ter vários
-// alimentos genuínos, como sempre.
+// Um "(Marca)" no fim do nome (com maiúscula inicial) identifica um produto de
+// supermercado — os qualificadores do INSA são minúsculos ("Arroz (cozido)").
+function brandOfFoodName(name){
+  var m = (name || "").match(/\(([A-ZÀ-Ý][^()]*)\)\s*(?:·.*)?$/);
+  return m ? m[1] : null;
+}
+
+function draftStem(t){
+  return (t.length > 3 && t.charAt(t.length - 1) === "s") ? t.slice(0, -1) : t;
+}
+
+function draftTokens(s, keepConnectors){
+  var f = foldAccents(s).replace(/\b(sem|zero)\s+([a-z0-9]+)/g, "$1_$2");
+  return f.split(/[^a-z0-9_]+/).filter(function(t){
+    return t && !/^\d+$/.test(t) && (keepConnectors || !DRAFT_CONNECTORS[t]);
+  }).map(draftStem);
+}
+
+function withinOneEdit(a, b){
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  var i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length){
+    if (a.charAt(i) === b.charAt(j)){ i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
+
+function draftTokenInLine(lineSet, t, fuzzy){
+  if (lineSet[t]) return true;
+  if (!fuzzy || t.length < 5) return false;
+  for (var k in lineSet){ if (withinOneEdit(k, t)) return true; }
+  return false;
+}
+
+var _draftEntriesCache = null, _draftEntriesCount = -1;
+function getDraftFoodEntries(){
+  var names = Object.keys(FOOD_DB);
+  if (_draftEntriesCache && _draftEntriesCount === names.length) return _draftEntriesCache;
+  var curated = {};
+  CURATED_FOOD_NAMES.forEach(function(n){ curated[n] = true; });
+  _draftEntriesCache = names.map(function(name){
+    var brandStr = brandOfFoodName(name);
+    var base = brandStr ? name.replace(/\s*\([^()]*\)\s*(?:·.*)?$/, "") : name;
+    var cut = base.search(/[,(]/);
+    return {
+      name: name,
+      head: draftTokens(cut >= 0 ? base.slice(0, cut) : base),
+      qual: draftTokens(cut >= 0 ? base.slice(cut) : ""),
+      brand: brandStr ? draftTokens(brandStr) : [],
+      curated: !!curated[name]
+    };
+  }).filter(function(e){ return e.head.length; });
+  _draftEntriesCount = names.length;
+  return _draftEntriesCache;
+}
+
+// Procura, na base, o alimento que melhor descreve as palavras da frase.
+// Regras que evitam os erros de antes:
+//  - todas as palavras que identificam o alimento (a "cabeça" do nome, antes
+//    da vírgula/parênteses) têm de estar na frase — menos atributos suaves;
+//  - um produto de marca só entra se a marca (ou parte dela, com tolerância
+//    a gralhas) for mencionada — "arroz basmati" nunca vira um pacote de
+//    arroz cru de um supermercado;
+//  - "sem açúcar" é uma palavra à parte ("sem_acucar"), nunca "açúcar".
+function findFoodForTokens(tokens){
+  var lineSet = {};
+  tokens.forEach(function(t){ lineSet[t] = true; });
+  var noise = getDraftNoise();
+  var content = tokens.filter(function(t){ return !noise[t]; });
+  function aliasMatch(wantSingle, exactOnly){
+    for (var i = 0; i < DAILY_FOOD_ALIASES.length; i++){
+      var a = DAILY_FOOD_ALIASES[i];
+      if (!!a.single !== wantSingle || !FOOD_DB[a.food]) continue;
+      if (!a.words.every(function(w){ return lineSet[w]; })) continue;
+      if (a.block && a.block.some(function(w){ return lineSet[w]; })) continue;
+      // descrição genérica pura ("sopa", "carne"): só vale se o texto não tiver mais nada que identifique o alimento
+      if (exactOnly && !content.every(function(t){ return a.words.indexOf(t) >= 0; })) continue;
+      return a.food;
+    }
+    return null;
+  }
+  var viaAlias = aliasMatch(false, false) || aliasMatch(true, true);
+  if (viaAlias) return viaAlias;
+  var best = null;
+  getDraftFoodEntries().forEach(function(e){
+    var covered = {}, missing = 0, softOnly = true, brandHits = 0;
+    e.head.forEach(function(t){
+      if (lineSet[t]) covered[t] = true;
+      else { missing++; if (!DRAFT_SOFT_ATTRS[t]) softOnly = false; }
+    });
+    if (e.brand.length){
+      e.brand.forEach(function(t){ if (draftTokenInLine(lineSet, t, true)){ brandHits++; covered["b:" + t] = true; } });
+      if (brandHits < Math.ceil(e.brand.length / 2)) return;
+      if (!lineSet[e.head[0]]) return;
+    } else if (!Object.keys(covered).length || (missing && !softOnly)){
+      return;
+    }
+    var qualMissing = 0, penalty = 0;
+    e.qual.forEach(function(t){
+      if (lineSet[t]) covered[t] = true;
+      else {
+        qualMissing++;
+        if (DRAFT_DISPREFERRED_QUAL[t]) penalty += 6;
+        if (DRAFT_PREFERRED_QUAL[t]) penalty -= 2;
+      }
+    });
+    var score = Object.keys(covered).length * 10 - missing * (e.brand.length ? 1 : 3) - qualMissing * 0.4 - penalty +
+      (e.curated ? 8 : 0) - e.name.length * 0.02;
+    if (!best || score > best.score) best = {name: e.name, score: score};
+  });
+  return best ? best.name : aliasMatch(true, false);
+}
+
+// Lê a quantidade escrita na frase: "200 ml", "60 g", "2 fatias", "1 prato",
+// "15 g proteína" (gramas de PROTEÍNA a atingir, não do alimento) ou
+// "Iogurte proteico com 25 g". Devolve também o texto que sobra, já sem isso.
+function parseDailyQuantity(raw){
+  var t = " " + foldAccents(raw) + " ";
+  var out = {grams:null, count:null, unit:null, proteinG:null, rest:""};
+  var m = t.match(/(\d+(?:[.,]\d+)?)\s*g\s*(?:de\s*)?proteinas?/);
+  if (m){
+    out.proteinG = parseFloat(m[1].replace(",", "."));
+    t = t.replace(m[0], " ");
+  } else if (/proteic[oa]/.test(t)){
+    m = t.match(/\bcom\s+(\d+(?:[.,]\d+)?)\s*g\b/);
+    if (m){
+      out.proteinG = parseFloat(m[1].replace(",", "."));
+      t = t.replace(m[0], " ");
+    }
+  }
+  m = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|gramas?|gr|g|ml|cl|dl|l)\b/);
+  if (m){
+    var v = parseFloat(m[1].replace(",", ".")), u = m[2];
+    out.grams = (u === "kg" || u === "l") ? v * 1000 : (u === "cl" ? v * 10 : (u === "dl" ? v * 100 : v));
+    t = t.replace(m[0], " ");
+  } else {
+    m = t.match(/(\d+(?:[.,]\d+)?)\s*(fatias?|colher(?:es)?(?:\s+de\s+(?:sopa|cha|sobremesa))?|chavenas?|copos?|pratos?|tigelas?|unidades?|unid)\b\.?/);
+    if (m){
+      out.count = parseFloat(m[1].replace(",", "."));
+      var unit = m[2];
+      if (/^fatia/.test(unit)) out.unit = "fatia";
+      else if (/^colher/.test(unit)) out.unit = /sopa/.test(unit) ? "colher de sopa" : (/cha/.test(unit) ? "colher de cha" : (/sobremesa/.test(unit) ? "colher de sobremesa" : "colher"));
+      else if (/^chavena/.test(unit)) out.unit = "chavena";
+      else if (/^copo/.test(unit)) out.unit = "copo";
+      else if (/^prato/.test(unit)) out.unit = "prato";
+      else if (/^tigela/.test(unit)) out.unit = "tigela";
+      else out.unit = "unidade";
+      t = t.replace(m[0], " ");
+    } else {
+      m = t.match(/^\s*(\d+)\s+(?=[a-z])/);
+      if (m){
+        out.count = parseInt(m[1], 10);
+        t = t.replace(m[0], " ");
+      }
+    }
+  }
+  out.rest = t;
+  return out;
+}
+
+function resolveDraftQty(name, q){
+  var db = FOOD_DB[name];
+  if (!db) return defaultQtyForFood(name);
+  if (db.per === "fixed") return "à vontade";
+  if (db.per === "unit"){
+    if (q.count != null && (!q.unit || q.unit === "unidade")) return Math.max(1, Math.round(q.count)) + " unid.";
+    // uma peça de fruta ≈ 150 g (a base define "Fruta" como 1 unid. ≈ 80 kcal)
+    if (q.grams != null && name === "Fruta") return Math.max(1, Math.round(q.grams / 150)) + " unid.";
+    return defaultQtyForFood(name);
+  }
+  var grams = null;
+  if (q.proteinG && db.p >= 5) grams = Math.round(q.proteinG / db.p * 100 / 5) * 5;
+  else if (q.grams != null) grams = q.grams;
+  else if (q.count != null && q.unit && DAILY_UNIT_GRAMS[q.unit]) grams = q.count * DAILY_UNIT_GRAMS[q.unit];
+  if (grams == null) return defaultQtyForFood(name);
+  return buildQtyString(name, Math.min(2000, Math.max(5, grams)));
+}
+
+var _draftNoise = null;
+function getDraftNoise(){
+  if (_draftNoise) return _draftNoise;
+  var out = {};
+  Object.keys(DRAFT_CONNECTORS).forEach(function(k){ out[k] = true; });
+  Object.keys(DAILY_TEXT_STOPWORDS).forEach(function(k){ draftTokens(k, true).forEach(function(t){ out[t] = true; }); });
+  ["pequeno","almoco","manha","meio","tarde","jantar","lanche","ceia","treino","pre","pos","noite","proteina","proteico","proteica",
+   "fatia","grama","colher","prato","chavena","copo","tigela","unidade","unid","porcao"].forEach(function(k){ out[draftStem(k)] = true; });
+  _draftNoise = out;
+  return out;
+}
+
+// Uma frase só conta como "não reconhecida" se tiver palavras de conteúdo —
+// títulos de refeição ("Almoço", "Meio da manhã") e conversa não contam.
+function hasDraftContent(text){
+  var noise = getDraftNoise();
+  return draftTokens(parseDailyQuantity(text).rest).some(function(t){ return !noise[t]; });
+}
+
+function matchDraftPhrase(text){
+  var q = parseDailyQuantity(text);
+  var tokens = draftTokens(q.rest);
+  if (!tokens.length) return null;
+  if (q.count != null && !q.unit && tokens.indexOf("iogurte") >= 0) q.unit = "iogurte";
+  var name = findFoodForTokens(tokens);
+  if (!name) return null;
+  // pediu-se uma dose de proteína ("20 g proteína") mas o alimento reconhecido quase não
+  // tem proteína — não é o alimento certo, melhor deixar por reconhecer do que errar
+  if (q.proteinG && FOOD_DB[name].per === "100g" && FOOD_DB[name].p < 5) return null;
+  return {name: name, qty: resolveDraftQty(name, q)};
+}
+
+// Uma linha de lista ("* 60 g queijo fresco magro", ou a começar por número)
+// é UMA frase (pode ter "com" no nome: "iogurte com pedaços de fruta"); texto
+// corrido ("frango com arroz", "como ovos com pão integral e um café") parte-se
+// pelos conetores, cada pedaço procurado à parte. Um "com 25 g" (quantidade)
+// nunca separa a frase.
+function splitDraftPhrases(line){
+  var stripped = line.trim().replace(/^[*\-•▪●]+\s*/, "");
+  var bulleted = stripped.length !== line.trim().length;
+  var single = bulleted || /^\d/.test(stripped);
+  if (single) return [{text: stripped, single: true}];
+  return stripped.split(/\s*[,;]\s*|\s*\.(?=\s|$)\s*|\s+(?:e|com|mais)\s+(?!\d)|\s*\+\s*/i)
+    .filter(function(p){ return p && p.trim(); })
+    .map(function(p){ return {text: p.trim(), single: false}; });
+}
+
+// Fase 24: "150 g frango / peru / coelho" é uma escolha (um OU outro), não os
+// três a somar; uma linha seguinte a começar por "ou" é mais uma alternativa
+// ao mesmo grupo. Linhas com "/" (e as que se seguem a começar por "ou")
+// formam um grupo de alternativas do qual só entra a PRIMEIRA que se
+// reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
 function draftPlanFromDailyText(text){
   var segments = splitDailyTextByMeal(text);
-  var index = getFoodKeywordIndex();
   var draft = [];
-  PLAN_SKELETON_MEALS.forEach(function(pair){
+  DAILY_DRAFT_MEALS.forEach(function(pair){
     var mealName = pair[0], mealTime = pair[1];
     var segText = segments[mealName];
     if (!segText) return;
-    var matchedNames = [];
+    var found = [];
+    var unmatchedLines = [];
+    function addFound(res){
+      if (!found.some(function(f){ return f.name === res.name; })) found.push(res);
+    }
+    function addUnmatched(t){
+      var clean = t.trim().replace(/^[*\-•▪●]+\s*/, "").replace(/\s+/g, " ");
+      if (clean && unmatchedLines.indexOf(clean) === -1) unmatchedLines.push(clean);
+    }
     var rawLines = segText.split(/\n+/).map(function(l){ return l.trim(); }).filter(function(l){ return l; });
     var groups = [];
     rawLines.forEach(function(line){
@@ -4563,19 +4833,28 @@ function draftPlanFromDailyText(text){
       }
     });
     groups.forEach(function(groupLines){
-      var groupText = groupLines.join(" / ");
-      var hasAlternatives = groupLines.length > 1 || groupText.indexOf("/") >= 0;
-      var found = matchFoodsInText(groupText, index).filter(function(f){ return matchedNames.indexOf(f.name) === -1; });
+      var hasAlternatives = groupLines.length > 1 || groupLines[0].indexOf("/") >= 0;
       if (hasAlternatives){
-        if (found.length) matchedNames.push(found[0].name);
+        var alts = [];
+        groupLines.forEach(function(l){
+          l.split("/").forEach(function(a){ if (a.trim()) alts.push(a.trim()); });
+        });
+        var picked = null;
+        for (var i = 0; i < alts.length && !picked; i++) picked = matchDraftPhrase(alts[i]);
+        if (picked) addFound(picked);
+        else if (hasDraftContent(groupLines.join(" "))) addUnmatched(groupLines[0]);
       } else {
-        found.forEach(function(f){ matchedNames.push(f.name); });
+        splitDraftPhrases(groupLines[0]).forEach(function(p){
+          var res = matchDraftPhrase(p.text);
+          if (res) addFound(res);
+          else if (p.single && hasDraftContent(p.text)) addUnmatched(p.text);
+        });
       }
     });
-    var foods = matchedNames.map(function(name){
-      return {name: name, qty: defaultQtyForFood(name), group: groupOfFood(name)};
+    var foods = found.map(function(f){
+      return {name: f.name, qty: f.qty, group: groupOfFood(f.name)};
     });
-    draft.push({mealName: mealName, mealTime: mealTime, sourceText: segText.trim(), foods: foods});
+    draft.push({mealName: mealName, mealTime: mealTime, sourceText: segText.trim(), foods: foods, unmatchedLines: unmatchedLines});
   });
   return draft;
 }
@@ -4609,15 +4888,26 @@ var DAILY_TEXT_STOPWORDS = {
 // comuns) mas não corresponderam a nada reconhecido — recalculado a cada
 // render a partir dos alimentos atuais do rascunho, para que remover um pill
 // errado "devolva" a palavra correspondente à lista de não-reconhecidos.
-function extractUnmatchedWords(segText, matchedNames, index){
+function extractUnmatchedWords(segText, matchedNames, index, skipText){
   var words = (segText || "").toLowerCase().match(/[a-zà-ÿ]+(?:-[a-zà-ÿ]+)*/g) || [];
   var matchedNamesLower = matchedNames.map(function(n){ return n.toLowerCase(); });
+  var matchedTokens = [];
+  matchedNames.forEach(function(n){ draftTokens(n).forEach(function(t){ matchedTokens.push(t); }); });
+  var skipLower = (skipText || "").toLowerCase();
+  var noise = getDraftNoise();
   var seen = {};
   var out = [];
   words.forEach(function(w){
     if (w.length < 4 || DAILY_TEXT_STOPWORDS[w] || seen[w]) return;
+    var folded = draftStem(foldAccents(w));
+    if (noise[folded]) return; // medidas (fatias, gramas...), palavras de refeição, proteína/proteico
     if (index[w]) return; // é uma chave conhecida — já teria virado um alimento reconhecido
     if (matchedNamesLower.some(function(n){ return n.indexOf(w) >= 0; })) return; // faz parte do nome de um alimento já reconhecido
+    // gralha na marca ("Rustic" em vez de "Rustik") ou palavra já listada como linha por reconhecer
+    if (matchedTokens.some(function(t){ return t === folded || (folded.length >= 5 && withinOneEdit(t, folded)); })) return;
+    if (skipLower && skipLower.indexOf(w) >= 0) return;
+    // palavra com hífen ("meio-gordo") cujas partes já fazem parte do alimento reconhecido
+    if (w.indexOf("-") >= 0 && foldAccents(w).split("-").every(function(p){ p = draftStem(p); return noise[p] || matchedTokens.indexOf(p) >= 0; })) return;
     seen[w] = true;
     out.push(w);
   });
@@ -4634,7 +4924,8 @@ function renderDailyPlanDraft(draft){
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Proposta a partir do texto do dia-a-dia — revê com atenção antes de aplicar, o reconhecimento de texto livre nunca é perfeito. Tira (×) o que não fizer sentido.</p>";
   draft.forEach(function(d, mi){
     var matchedNames = d.foods.map(function(f){ return f.name; });
-    var unmatchedWords = extractUnmatchedWords(d.sourceText, matchedNames, index);
+    var unmatchedLines = d.unmatchedLines || [];
+    var unmatchedWords = extractUnmatchedWords(d.sourceText, matchedNames, index, unmatchedLines.join(" "));
     html += "<div style=\"margin-bottom:10px;\">" +
       "<div style=\"font-weight:600; font-size:0.85rem;\">" + escapeHtml(d.mealName) + " <span class=\"muted-p\" style=\"font-weight:400;\">· " + d.mealTime + "</span></div>" +
       (d.foods.length ?
@@ -4643,13 +4934,15 @@ function renderDailyPlanDraft(draft){
             " <button type=\"button\" data-remove-draft-food=\"" + mi + "\" data-food-idx=\"" + fi + "\" aria-label=\"Remover " + escapeHtml(f.name) + "\" style=\"background:none; border:none; color:inherit; cursor:pointer; padding:0 0 0 6px; font-size:0.95em; line-height:1;\">×</button></span>";
         }).join("") + "</div>" :
         "<p class=\"muted-p\" style=\"font-size:0.8rem; margin-top:4px;\">Nenhum alimento reconhecido nesta refeição — acrescenta manualmente.</p>") +
+      (unmatchedLines.length ?
+        "<p style=\"font-size:0.76rem; margin-top:6px; color:var(--warn);\">⚠ Não consegui reconhecer (acrescenta à mão): <strong>" + unmatchedLines.map(function(l){ return "«" + escapeHtml(l) + "»"; }).join(", ") + "</strong></p>" : "") +
       (unmatchedWords.length ?
         "<p style=\"font-size:0.76rem; margin-top:6px; color:var(--warn);\">⚠ Também mencionado, mas não está na nossa base: <strong>" + unmatchedWords.map(function(w){ return escapeHtml(w); }).join(", ") + "</strong> — acrescenta manualmente se for relevante.</p>" : "") +
     "</div>";
   });
   html += totalFoods ?
     ("<button type=\"button\" class=\"btn primary btn-sm\" id=\"applyDailyPlanDraft\" style=\"width:100%;\">Aplicar ao plano</button>" +
-    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Só cria/completa as refeições acima com os alimentos reconhecidos, em quantidades-padrão — depois ajusta livremente (inclusive com o botão \"Ajustar quantidades aos alvos\", mais abaixo).</p>")
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Só cria/completa as refeições acima com os alimentos reconhecidos, nas quantidades escritas no texto (quando não há, a quantidade-padrão) — depois ajusta livremente (inclusive com o botão \"Ajustar quantidades aos alvos\", mais abaixo).</p>")
     : "<p class=\"muted-p\" style=\"font-size:0.8rem;\">Não reconheci nenhum alimento da nossa base no texto — monta o plano manualmente com o texto como referência.</p>";
   html += "</div>";
   return html;
@@ -8344,8 +8637,12 @@ function wireProTab(s){
         var allUnmatchedWords = [];
         draft.forEach(function(d){
           var matchedNames = d.foods.map(function(fo){ return fo.name; });
-          extractUnmatchedWords(d.sourceText, matchedNames, index).forEach(function(w){
+          var lines = d.unmatchedLines || [];
+          extractUnmatchedWords(d.sourceText, matchedNames, index, lines.join(" ")).forEach(function(w){
             if (allUnmatchedWords.indexOf(w) === -1) allUnmatchedWords.push(w);
+          });
+          lines.forEach(function(l){
+            if (allUnmatchedWords.indexOf(l) === -1) allUnmatchedWords.push(l);
           });
         });
         var summary = "Plano gerado a partir do dia-a-dia alimentar (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)" +

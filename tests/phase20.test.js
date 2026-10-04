@@ -230,9 +230,9 @@ function freshStudent(overrides){
 
 // 21. renderDailyPlanDraft mostra o aviso de "também mencionado" quando há palavras por reconhecer
 (function(){
-  var draft = draftPlanFromDailyText("Ao almoço como frango com azeitonas.");
+  var draft = draftPlanFromDailyText("Ao almoço como frango com kombucha.");
   var html = renderDailyPlanDraft(draft);
-  check.check("21. Mostra o aviso com a palavra não reconhecida", html.indexOf("azeitonas") >= 0 && html.toLowerCase().indexOf("não está na nossa base") >= 0);
+  check.check("21. Mostra o aviso com a palavra não reconhecida", html.indexOf("kombucha") >= 0 && html.toLowerCase().indexOf("não está na nossa base") >= 0);
 })();
 
 // 22. Cada pill de alimento tem um botão de remover (×) com os índices certos

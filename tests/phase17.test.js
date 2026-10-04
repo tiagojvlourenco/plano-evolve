@@ -47,7 +47,7 @@ var check = require("./check")();
   var ok = mergeCustomFood(row);
   check.check("4. mergeCustomFood devolve true ao acrescentar", ok === true);
   check.check("4. Fica no FOOD_DB com os valores corretos", FOOD_DB["Teste Barra Proteica XPTO"].kcal === 380 && FOOD_DB["Teste Barra Proteica XPTO"].p === 30);
-  check.check("4. Fica no FOOD_GROUPS.protein", FOOD_GROUPS.protein.some(function(o){ return o.name === "Teste Barra Proteica XPTO"; }));
+  check.check("4. Fica no FOOD_GROUPS.carnes", FOOD_GROUPS.carnes.some(function(o){ return o.name === "Teste Barra Proteica XPTO"; }));
 })();
 
 // 5. Nunca substitui um alimento já existente com o mesmo nome
@@ -62,10 +62,10 @@ var check = require("./check")();
 (function(){
   var row = {name:"Teste Idempotente ABC", kcal:100, protein:5, carbs:10, fat:2, food_group:"carb"};
   mergeCustomFood(row);
-  var countAfterFirst = FOOD_GROUPS.carb.filter(function(o){ return o.name === "Teste Idempotente ABC"; }).length;
+  var countAfterFirst = FOOD_GROUPS.cereais.filter(function(o){ return o.name === "Teste Idempotente ABC"; }).length;
   // segunda chamada: já existe no FOOD_DB, por isso mergeCustomFood devolve false e não mexe em mais nada
   mergeCustomFood(row);
-  var countAfterSecond = FOOD_GROUPS.carb.filter(function(o){ return o.name === "Teste Idempotente ABC"; }).length;
+  var countAfterSecond = FOOD_GROUPS.cereais.filter(function(o){ return o.name === "Teste Idempotente ABC"; }).length;
   check.check("6. Não duplica no FOOD_GROUPS ao chamar duas vezes", countAfterFirst === 1 && countAfterSecond === 1);
 })();
 

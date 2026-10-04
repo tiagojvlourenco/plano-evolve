@@ -26,8 +26,8 @@ function freshStudent(overrides){
 // 1. FOOD_DB e FOOD_GROUPS cresceram muito face à base curada original (~31 / ~27)
 (function(){
   check.check("1. FOOD_DB tem mais de 1000 alimentos", Object.keys(FOOD_DB).length > 1000);
-  ["protein","carb","veg","fat","fruit"].forEach(function(g){
-    check.check("1. FOOD_GROUPS." + g + " tem mais de 90 alimentos", FOOD_GROUPS[g].length > 90);
+  ["carnes","cereais","vegetais","gorduras","fruta"].forEach(function(g){
+    check.check("1. FOOD_GROUPS." + g + " tem alimentos suficientes", FOOD_GROUPS[g].length > (g === "fruta" ? 60 : 90)); // "Frutas Frescas" (Fase 29) é um grupo mais pequeno
   });
 })();
 
@@ -59,7 +59,7 @@ function freshStudent(overrides){
 
 // 5. foodSearchResultsHtml limita o número de linhas renderizadas (FOOD_SEARCH_RENDER_CAP)
 (function(){
-  var names = FOOD_GROUPS.protein.map(function(o){ return o.name; });
+  var names = FOOD_GROUPS.carnes.map(function(o){ return o.name; });
   check.check("5. Grupo protein tem mais alimentos que o limite de render", names.length > FOOD_SEARCH_RENDER_CAP);
   var html = foodSearchResultsHtml(names, "");
   var itemCount = (html.match(/food-search-item/g) || []).length;
@@ -83,7 +83,7 @@ function freshStudent(overrides){
   var afFoodBlock = fnSrc.slice(fnSrc.indexOf('querySelectorAll(".af-food")'), fnSrc.indexOf('querySelectorAll(".af-food")') + 1200);
   check.check("7. Liga .af-food a 'input' (pesquisa em tempo real)", afFoodBlock.indexOf('addEventListener("input", refresh)') >= 0);
   check.check("7. Liga também a 'focus' (mostra sugestões ao focar)", afFoodBlock.indexOf('addEventListener("focus", refresh)') >= 0);
-  check.check("7. Usa foodSearchResultsHtml para renderizar os resultados", afFoodBlock.indexOf("foodSearchResultsHtml(options, input.value)") >= 0);
+  check.check("7. Usa foodSearchResultsHtml para renderizar os resultados", afFoodBlock.indexOf("foodSearchResultsHtml(allFoodNames(), input.value)") >= 0);
 })();
 
 // ---- 4. Construtor de refeições (aluno): opções inline limitadas + "Ver mais" ----
@@ -94,7 +94,7 @@ function freshStudent(overrides){
   var m = meal("Almoço", "13:00", [food("Frango (peito)","150 g","protein")]);
   var html = tplMealChoice(m, 0, s);
   var optCount = (html.match(/class="builder-opt/g) || []).length;
-  check.check("8. protein tem mais opções que o limite inline", FOOD_GROUPS.protein.length > INLINE_BUILDER_OPTIONS_MAX);
+  check.check("8. protein tem mais opções que o limite inline", FOOD_GROUPS.carnes.length > INLINE_BUILDER_OPTIONS_MAX);
   check.check("8. Não mostra todas as opções inline (fica pelo limite)", optCount <= INLINE_BUILDER_OPTIONS_MAX + 1);
   check.check("8. Mostra o botão 'Ver mais alimentos' com a contagem em falta", /Ver mais alimentos \(\+\d+\)/.test(html));
 })();
@@ -103,10 +103,10 @@ function freshStudent(overrides){
 (function(){
   var s = freshStudent({allergies:[], avoid:[]});
   var m = meal("Almoço", "13:00", [food("Frango (peito)","150 g","protein")]);
-  m.liveChoice = {protein: FOOD_GROUPS.protein.length - 1}; // último item, certamente fora do subconjunto inicial
+  m.liveChoice = {protein: FOOD_GROUPS.carnes.length - 1}; // último item, certamente fora do subconjunto inicial
   var html = tplMealChoice(m, 0, s);
-  check.check("9. A opção selecionada (fora do topo) continua a aparecer marcada", html.indexOf('data-oi="' + (FOOD_GROUPS.protein.length - 1) + '"') >= 0);
-  var idx = html.indexOf('data-oi="' + (FOOD_GROUPS.protein.length - 1) + '"');
+  check.check("9. A opção selecionada (fora do topo) continua a aparecer marcada", html.indexOf('data-oi="' + (FOOD_GROUPS.carnes.length - 1) + '"') >= 0);
+  var idx = html.indexOf('data-oi="' + (FOOD_GROUPS.carnes.length - 1) + '"');
   var tagStart = html.lastIndexOf("<div", idx);
   check.check("9. Essa opção tem a classe 'sel'", html.slice(tagStart, idx).indexOf(" sel\"") >= 0);
 })();

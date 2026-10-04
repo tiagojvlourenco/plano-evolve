@@ -39,9 +39,9 @@ function freshStudent(overrides){
   check.check("2. Brócolos com valor real do INSA (32 kcal/100g cru)", FOOD_DB["Brócolos"].kcal === 32);
 })();
 
-// 3. FOOD_GROUPS.veg já não sugere "à vontade" por omissão — sugere uma quantidade real
+// 3. FOOD_GROUPS.vegetais já não sugere "à vontade" por omissão — sugere uma quantidade real
 (function(){
-  var brocolos = FOOD_GROUPS.veg.find(function(o){ return o.name === "Brócolos"; });
+  var brocolos = FOOD_GROUPS.vegetais.find(function(o){ return o.name === "Brócolos"; });
   check.check("3. Quantidade sugerida é real (150 g), não 'à vontade'", brocolos && brocolos.qty === "150 g");
 })();
 

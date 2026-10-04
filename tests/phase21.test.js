@@ -139,14 +139,14 @@ function freshStudent(overrides){
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 3600);
-  check.check("13. Calcula allUnmatchedWords com extractUnmatchedWords", block.indexOf("extractUnmatchedWords(d.sourceText, matchedNames, index)") >= 0);
+  check.check("13. Calcula allUnmatchedWords com extractUnmatchedWords", block.indexOf("extractUnmatchedWords(d.sourceText, matchedNames, index, ") >= 0);
   check.check("13. Inclui os não-reconhecidos na notificação (toast)", block.indexOf("toastMsg += \". Não reconhecidos") >= 0);
   check.check("13. Inclui os não-reconhecidos no resumo registado no histórico", block.indexOf("não reconhecidos: \" + allUnmatchedWords.join") >= 0);
 })();
 
 // 14. Simulação direta: aplicar com uma palavra não reconhecida na descrição regista-a no histórico
 (function(){
-  var s = freshStudent({dailyEatingDescription:"Ao almoço como frango com azeitonas."});
+  var s = freshStudent({dailyEatingDescription:"Ao almoço como frango com kombucha."});
   var draft = draftPlanFromDailyText(s.dailyEatingDescription);
   var index = getFoodKeywordIndex();
   var allUnmatchedWords = [];
@@ -156,7 +156,7 @@ function freshStudent(overrides){
       if (allUnmatchedWords.indexOf(w) === -1) allUnmatchedWords.push(w);
     });
   });
-  check.check("14. Encontra 'azeitonas' como não reconhecido mesmo com o resto da refeição aplicada", allUnmatchedWords.indexOf("azeitonas") >= 0);
+  check.check("14. Encontra 'kombucha' como não reconhecido mesmo com o resto da refeição aplicada", allUnmatchedWords.indexOf("kombucha") >= 0);
 })();
 
 // ---- 5. Bug apanhado ao testar ao vivo: logPlanEvent(s, tipo, resumo, null, null) nunca
