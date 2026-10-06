@@ -3,7 +3,7 @@
 -- (300 g = 25 g de proteína, versão portuguesa sabor café, EAN 5601050036114).
 -- Todos 'pending', com a ficha individual da Open Food Facts como fonte; sem retalhista
 -- associado (o nome fica sem o sufixo de loja, que repetiria 'Continente').
--- O sabor baunilha / sabor café são os que a app propõe quando o texto diz só 'pudim proteico' / 'iogurte líquido proteico'.
+-- O sabor chocolate (o que o aluno come) / sabor café são os que a app propõe quando o texto diz só 'pudim proteico' / 'iogurte líquido proteico'.
 insert into food_products (ean, name, brand, food_group, package_quantity, package_unit, nutrition_basis, kcal, protein, carbs, fat, source_url, source_type, verification_status) values ('5601312511229', 'Pudim proteico sabor baunilha', 'Continente', 'laticinios', 200, 'g', '100g', 83, 10, 7.4, 1.5, 'https://world.openfoodfacts.org/product/5601312511229', 'open_food_facts', 'pending') on conflict (ean) do nothing;
 insert into food_products (ean, name, brand, food_group, package_quantity, package_unit, nutrition_basis, kcal, protein, carbs, fat, source_url, source_type, verification_status) values ('5601312511236', 'Pudim proteico sabor caramelo', 'Continente', 'laticinios', 200, 'g', '100g', 79, 10, 6.7, 1.4, 'https://world.openfoodfacts.org/product/5601312511236', 'open_food_facts', 'pending') on conflict (ean) do nothing;
 insert into food_products (ean, name, brand, food_group, package_quantity, package_unit, nutrition_basis, kcal, protein, carbs, fat, source_url, source_type, verification_status) values ('5601312511243', 'Pudim proteico sabor chocolate', 'Continente', 'laticinios', 200, 'g', '100g', 79, 10, 6.1, 1.6, 'https://world.openfoodfacts.org/product/5601312511243', 'open_food_facts', 'pending') on conflict (ean) do nothing;

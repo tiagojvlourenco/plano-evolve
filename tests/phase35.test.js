@@ -191,11 +191,11 @@ function mergeCatalogSample(){
   var draft0 = draftPlanFromDailyText(TEXTO);
   check.check("10. Antes de existirem na base, continuam sinalizados (nunca trocados por outra coisa)",
     mealOf(draft0, "Lanche").unmatchedLines.some(function(l){ return /pudim/i.test(l); }) && mealOf(draft0, "Pós-treino").unmatchedLines.length === 1);
-  mergeFoodProduct({name:"Pudim proteico sabor baunilha", brand:"Continente", food_group:"laticinios", kcal:83, protein:10, carbs:7.4, fat:1.5, package_quantity:200, package_unit:"g"}, []);
+  mergeFoodProduct({name:"Pudim proteico sabor chocolate", brand:"Continente", food_group:"laticinios", kcal:79, protein:10, carbs:6.1, fat:1.6, package_quantity:200, package_unit:"g"}, []);
   mergeFoodProduct({name:"Iogurte líquido proteico sabor café", brand:"YoPro", food_group:"laticinios", kcal:59, protein:8.3, carbs:5.3, fat:0.4, package_quantity:300, package_unit:"g"}, []);
   var draft = draftPlanFromDailyText(TEXTO);
   var lanche = mealOf(draft, "Lanche"), pos = mealOf(draft, "Pós-treino");
-  check.check("10. '1 pudim proteico — 20 g proteína' → pudim Continente, 200 g (= 20 g de proteína)", qtyOf(lanche, "Pudim proteico sabor baunilha (Continente)") === "200 g");
+  check.check("10. '1 pudim proteico — 20 g proteína' → pudim Continente, 200 g (= 20 g de proteína)", qtyOf(lanche, "Pudim proteico sabor chocolate (Continente)") === "200 g");
   check.check("10. 'Iogurte Líquido Proteico com 25 g' → YoPro, 300 ml (≈ 25 g de proteína)", qtyOf(pos, "Iogurte líquido proteico sabor café (YoPro)") === "300 ml" && pos.unmatchedLines.length === 0);
   check.check("10. O iogurte proteico (não líquido) continua a ser o iogurte grego", namesOf(mealOf(draft, "Meio da manhã")).indexOf("Iogurte grego natural") >= 0);
 })();
