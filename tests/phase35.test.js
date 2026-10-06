@@ -174,4 +174,16 @@ function mergeCatalogSample(){
   check.check("8. O texto de ajuda já não diz que as quantidades são sempre as padrão", html.indexOf("em quantidades-padrão") === -1 && html.indexOf("quantidades escritas no texto") >= 0);
 })();
 
+// ---- 9. Produto de dose única (Barebells, 55 g) e "N unidades" sem unidade ----
+(function(){
+  mergeFoodProduct({name:"Barra proteica Cookies & Cream", brand:"Barebells", food_group:"snacks", kcal:346, protein:37, carbs:31, fat:12, package_quantity:55, package_unit:"g"}, []);
+  var n = "Barra proteica Cookies & Cream (Barebells)";
+  check.check("9. mergeFoodProduct: dose-padrão = embalagem (55 g) quando é dose única", FOOD_GROUPS.snacks.some(function(o){ return o.name === n && o.qty === "55 g"; }));
+  var meio = mealOf(draftPlanFromDailyText("Meio da manhã\n* 1 Barebells Cookies & Cream"), "Meio da manhã");
+  check.check("9. '1 Barebells Cookies & Cream' → a barra, 55 g", namesOf(meio).indexOf(n) >= 0 && qtyOf(meio, n) === "55 g" && meio.unmatchedLines.length === 0);
+  var dois = mealOf(draftPlanFromDailyText("Meio da manhã\n* 2 Barebells Cookies & Cream"), "Meio da manhã");
+  check.check("9. '2 Barebells Cookies & Cream' → 110 g (2 × a dose-padrão)", qtyOf(dois, n) === "110 g");
+  check.check("9. Sem dizer a marca, 'barra proteica' não escolhe a barra de marca", namesOf(mealOf(draftPlanFromDailyText("Meio da manhã\n* 1 barra proteica"), "Meio da manhã")).indexOf(n) === -1);
+})();
+
 check.summarize();

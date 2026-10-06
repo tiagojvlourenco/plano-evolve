@@ -4081,7 +4081,9 @@ function mergeFoodProduct(row, retailers){
   FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
   var group = FOOD_GROUPS[resolveGroup(row.food_group)];
   if (group && !group.some(function(o){ return o.name === name; })){
-    group.push({name: name, qty: qtyStringWithBeverageUnit(name, "100 g")});
+    // produtos de dose única (ex.: uma barra de 55 g) propõem a embalagem como quantidade-padrão
+    var single = (row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 150;
+    group.push({name: name, qty: qtyStringWithBeverageUnit(name, single ? row.package_quantity + " g" : "100 g")});
   }
   return true;
 }
@@ -4669,7 +4671,7 @@ function findFoodForTokens(tokens){
     if (e.brand.length){
       e.brand.forEach(function(t){ if (draftTokenInLine(lineSet, t, true)){ brandHits++; covered["b:" + t] = true; } });
       if (brandHits < Math.ceil(e.brand.length / 2)) return;
-      if (!lineSet[e.head[0]]) return;
+      if (!e.head.some(function(t){ return lineSet[t]; })) return; // com a marca dita, basta uma palavra do nome
     } else if (!Object.keys(covered).length || (missing && !softOnly)){
       return;
     }
@@ -4750,6 +4752,11 @@ function resolveDraftQty(name, q){
   if (q.proteinG && db.p >= 5) grams = Math.round(q.proteinG / db.p * 100 / 5) * 5;
   else if (q.grams != null) grams = q.grams;
   else if (q.count != null && q.unit && DAILY_UNIT_GRAMS[q.unit]) grams = q.count * DAILY_UNIT_GRAMS[q.unit];
+  else if (q.count != null && !q.unit){
+    // "1 barra", "2 maçãs": N vezes a dose-padrão do alimento
+    var dq = parseQtyAmount(defaultQtyForFood(name));
+    if (dq.kind === "g") grams = q.count * dq.value;
+  }
   if (grams == null) return defaultQtyForFood(name);
   return buildQtyString(name, Math.min(2000, Math.max(5, grams)));
 }
