@@ -235,13 +235,21 @@
     -webkit-text-fill-color:var(--ink); -webkit-box-shadow:0 0 0 1000px var(--bg) inset; caret-color:var(--ink);
   }
   .checkin-field textarea{min-height:64px; resize:vertical;}
-  input[type=range]{width:100%; accent-color:var(--ink);}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:32px; background:transparent; accent-color:var(--accent); margin:2px 0;}
+  input[type=range]::-webkit-slider-runnable-track{height:8px; border-radius:999px; background:linear-gradient(to right, var(--accent) var(--p,50%), var(--surface-3) var(--p,50%));}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:26px; height:26px; margin-top:-9px; border-radius:50%; background:var(--ink); border:4px solid var(--accent);}
+  input[type=range]::-moz-range-track{height:8px; border-radius:999px; background:var(--surface-3);}
+  input[type=range]::-moz-range-progress{height:8px; border-radius:999px; background:var(--accent);}
+  input[type=range]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:var(--ink); border:4px solid var(--accent);}
+  .checkin-field input[type=range]{border:none; background:transparent; padding:0;}
+  input[type=range]:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px; border-radius:999px;}
   .range-value{font-family:var(--mono); font-weight:700; float:right;}
   .checkin-history-row{display:flex; justify-content:space-between; font-size:0.82rem; padding:8px 0; border-bottom:1px solid var(--line);}
   .checkin-history-row:last-child{border-bottom:none;}
 
   .weight-chart-wrap svg{width:100%; max-width:560px; margin-inline:auto; height:auto; display:block;}
   .stat-grid-4{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px;}
+  @media (max-width:760px){ .pro-main .stat-grid-4{grid-template-columns:repeat(2,1fr);} }
   .stat-tile{background:var(--surface-2); border-radius:12px; padding:10px 8px; text-align:center;}
   .stat-tile .v{font-family:var(--mono); font-weight:700; font-size:1rem;}
   .stat-tile .l{font-size:0.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-top:2px;}
@@ -332,14 +340,26 @@
   .history-row{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:0.86rem;}
   .history-row:last-child{border-bottom:none;}
   .history-row .hlabel{font-weight:700;}
-  .history-row .hdate{color:var(--muted); font-size:0.78rem;}
+  .history-row .hdate{color:var(--muted); font-size:0.78rem; white-space:nowrap;}
+  @media (max-width:520px){ .history-row:has(> .hdate){flex-direction:column; align-items:flex-start; gap:4px;} }
   .history-row .hval{font-family:var(--mono); text-align:right;}
 
   textarea.notes-area{width:100%; min-height:160px; border:1px solid var(--line-strong); border-radius:11px; padding:12px 14px; background:var(--bg); font-size:0.9rem; line-height:1.5; resize:vertical;}
 
   .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
   .evolve-mark{height:26px; width:auto; color:var(--ink); flex-shrink:0;}
+  @media (max-width:520px){
+    .brand-header{display:grid; grid-template-columns:1fr auto; align-items:center; gap:10px 12px;}
+    .brand-header .evolve-mark{grid-column:1; grid-row:1;}
+    .brand-header #signOutBtn{grid-column:2; grid-row:1;}
+    .brand-header .mode-switch{grid-column:1 / -1; grid-row:2; display:flex;}
+    .brand-header .mode-switch button{flex:1;}
+  }
   .section-gap{margin-top:22px;}
+  .qa-text .qa-line{margin:4px 0;}
+  .qa-text .qa-gap{height:8px;}
+  .qa-text .qa-list{margin:4px 0 4px 18px; padding:0;}
+  .qa-text .qa-list li{margin:2px 0;}
 
   .perfil-section{margin-top:14px; border-top:1px solid var(--line); padding-top:14px;}
   .perfil-section:first-of-type{margin-top:0; border-top:none; padding-top:0;}
@@ -2359,7 +2379,7 @@ function shouldNotifyForMeal(m){
 }
 
 function isTrainingDayToday(s){
-  if (!s.trainingDays) return null;
+  if (!s.trainingDays || !s.trainingDays.length) return null; // lista vazia = dias por definir, nao "descanso" todos os dias
   return s.trainingDays.indexOf(new Date().getDay()) !== -1;
 }
 
@@ -6260,10 +6280,12 @@ function tplTrainingOverview(s){
   if (s.trainingType) meta.push(escapeHtml(s.trainingType));
   if (s.trainingsPerWeek) meta.push(s.trainingsPerWeek + "× por semana");
   if (s.trainingTime && s.trainingTime !== "—") meta.push(escapeHtml(s.trainingTime));
-  if (s.trainingDays || meta.length){
+  var hasDays = !!(s.trainingDays && s.trainingDays.length);
+  if (hasDays || meta.length){
     html += "<div class=\"card\"><div class=\"eyebrow\">Semana de treino</div>" +
       (meta.length ? "<p class=\"muted-p\" style=\"margin-top:6px;\">" + meta.join(" · ") + "</p>" : "") +
-      (s.trainingDays ? "<div class=\"week-chips\">" + [1,2,3,4,5,6,0].map(function(d){
+      (!hasDays ? "<p class=\"muted-p\" style=\"margin-top:8px;\">Dias de treino por definir.</p>" : "") +
+      (hasDays ? "<div class=\"week-chips\">" + [1,2,3,4,5,6,0].map(function(d){
         var on = s.trainingDays.indexOf(d) !== -1;
         return "<div class=\"week-chip" + (on?" on":"") + "\">" + names[d] + "<i></i></div>";
       }).join("") + "</div>" : "") + "</div>";
@@ -6559,9 +6581,10 @@ function tplCheckin(s){
   return html;
 }
 
+function rangeFill(v){ return Math.round((Number(v) - 1) / 9 * 100); }
 function rangeField(id, label, val){
   return "<div class=\"checkin-field\"><label for=\"" + id + "\">" + label + " <span class=\"range-value\" id=\"" + id + "Val\">" + val + "</span></label>" +
-    "<input type=\"range\" min=\"1\" max=\"10\" id=\"" + id + "\" value=\"" + val + "\"></div>";
+    "<input type=\"range\" min=\"1\" max=\"10\" id=\"" + id + "\" value=\"" + val + "\" style=\"--p:" + rangeFill(val) + "%\"></div>";
 }
 
 function computeWeeklyTrend(weights){
@@ -7002,7 +7025,7 @@ function statTile(label, val){
 
 function weightSvg(weights){
   if (weights.length < 2){
-    return "<p class=\"muted-p\" style=\"text-align:center; padding:20px 0;\">Ainda não há dados suficientes para mostrar a evolução.</p>";
+    return "<p class=\"muted-p\" style=\"text-align:center; padding:6px 0 2px;\">Ainda não há dados suficientes para mostrar a evolução.</p>";
   }
   var w = 380, h = 120, pad = 18;
   var vals = weights.map(function(x){ return x.w; });
@@ -7124,7 +7147,10 @@ function wireAlunoTab(s){
 
   ["ciHunger","ciEnergy","ciAdherence"].forEach(function(id){
     var input = el.querySelector("#"+id);
-    if (input) input.addEventListener("input", function(){ el.querySelector("#"+id+"Val").textContent = input.value; });
+    if (input) input.addEventListener("input", function(){
+      el.querySelector("#"+id+"Val").textContent = input.value;
+      input.style.setProperty("--p", rangeFill(input.value) + "%");
+    });
   });
 
   el.querySelectorAll(".photo-upload-input").forEach(function(photoInput){
@@ -7734,6 +7760,24 @@ function questionnaireAnswersText(s){
 }
 
 
+// Texto livre do questionário (com linhas "* item") em parágrafos e listas, tudo escapado.
+function bulletedText(text){
+  if (!String(text || "").trim()) return "";
+  var out = "", inList = false;
+  String(text || "").split("\n").forEach(function(line){
+    var m = line.match(/^\s*[*\-•]\s+(.*)$/);
+    if (m){
+      if (!inList){ out += "<ul class=\"qa-list\">"; inList = true; }
+      out += "<li>" + escapeHtml(m[1]) + "</li>";
+    } else {
+      if (inList){ out += "</ul>"; inList = false; }
+      out += line.trim() ? "<p class=\"qa-line\">" + escapeHtml(line) + "</p>" : "<div class=\"qa-gap\"></div>";
+    }
+  });
+  if (inList) out += "</ul>";
+  return out;
+}
+
 function tplQuestionnaireCopy(s){
   if (!hasQuestionnaireAnswers(s)) return "";
   // Fase 15: ao contrário das secções do Perfil (informação passiva, por
@@ -7741,7 +7785,7 @@ function tplQuestionnaireCopy(s){
   // se está a montar o plano — fechado por omissão tornava-o fácil de nem
   // reparar que existia. Começa aberto.
   return "<details class=\"perfil-section\" open style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Respostas do questionário inicial</summary>" +
-    "<p class=\"muted-p\" style=\"white-space:pre-wrap; margin-top:8px;\">" + escapeHtml(questionnaireAnswersText(s)) + "</p>" +
+    "<div class=\"muted-p qa-text\" style=\"margin-top:8px;\">" + bulletedText(questionnaireAnswersText(s)) + "</div>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\">" +
       "<button type=\"button\" class=\"btn btn-sm\" id=\"createPlanSkeleton\">Criar esqueleto de plano</button>" +
       (s.dailyEatingDescription ? "<button type=\"button\" class=\"btn btn-sm\" id=\"draftFromDailyText\">🍽️ Gerar plano a partir do dia-a-dia</button>" : "") +
