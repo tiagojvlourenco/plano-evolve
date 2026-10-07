@@ -129,7 +129,7 @@
     body{ background: radial-gradient(ellipse at 50% 0%, #1A1D24 0%, var(--bg) 60%); }
     #alunoApp{
       background:var(--bg); border:2px solid var(--line-strong); border-radius:36px;
-      padding:24px 18px 34px; box-shadow:0 50px 90px -30px rgba(0,0,0,0.8), 0 0 0 8px var(--surface);
+      padding:28px 28px 40px; box-shadow:0 50px 90px -30px rgba(0,0,0,0.8), 0 0 0 8px var(--surface);
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
@@ -149,6 +149,17 @@
   .tabbar button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
   .tabbar button.active{background:var(--accent); color:var(--accent-ink);}
   .tabbar button .dot{width:5px; height:5px; border-radius:50%; background:var(--accent);}
+  @media (min-width:760px){
+    #alunoApp{max-width:760px;}
+    .tabbar{width:min(560px, calc(100% - 32px));}
+  }
+  @media (min-width:1100px){
+    #alunoApp{max-width:1120px;}
+    .tabbar{width:min(640px, calc(100% - 32px));}
+    .aluno-tabs{display:block; column-count:2; column-gap:16px;}
+    .aluno-tabs > *{break-inside:avoid; margin-bottom:16px;}
+    .aluno-tabs > .tab-head, .aluno-tabs > .btn{column-span:all;}
+  }
 
   .kcal-ring-wrap{display:flex; align-items:center; gap:18px;}
   .kcal-ring-wrap .stat-block{flex:1;}
