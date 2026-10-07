@@ -4088,9 +4088,25 @@ function mergeFoodProduct(row, retailers){
   return true;
 }
 
+/* O Supabase devolve no máximo 1000 linhas por pedido — o catálogo já tem milhares de produtos,
+   por isso lê-se em páginas de 1000 (ordenadas por id para a paginação ser estável). */
+function fetchAllFoodProductPages(makeQuery){
+  var all = [];
+  function next(from){
+    return makeQuery().range(from, from + 999).then(function(res){
+      if (res.error) return res;
+      var rows = res.data || [];
+      all = all.concat(rows);
+      if (rows.length < 1000) return {data: all, error: null};
+      return next(from + 1000);
+    });
+  }
+  return next(0);
+}
+
 function loadFoodProducts(){
   if (!sbReady) return Promise.resolve();
-  return sb.from("food_products").select("*, food_product_retailers(*)").eq("verification_status", "verified").then(function(res){
+  return fetchAllFoodProductPages(function(){ return sb.from("food_products").select("*, food_product_retailers(*)").eq("verification_status", "verified").order("id"); }).then(function(res){
     if (res.error || !res.data) return;
     res.data.forEach(function(row){ mergeFoodProduct(row, row.food_product_retailers); });
   }).catch(function(){});
@@ -7840,9 +7856,9 @@ function loadCatalogProducts(main){
     main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">Sem ligação à base de dados.</p>";
     return;
   }
-  sb.from("food_products").select("*, food_product_retailers(*)").order("name").then(function(res){
+  fetchAllFoodProductPages(function(){ return sb.from("food_products").select("*, food_product_retailers(*)").order("id"); }).then(function(res){
     if (res.error){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; return; }
-    state.catalogProducts = res.data || [];
+    state.catalogProducts = (res.data || []).slice().sort(function(a, b){ return a.name.localeCompare(b.name, "pt"); });
     renderCatalogList(main);
   }).catch(function(){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; });
 }
