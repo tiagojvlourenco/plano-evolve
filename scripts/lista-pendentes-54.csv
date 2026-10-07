@@ -11,8 +11,6 @@ EAN,Nome,Marca,Grupo,kcal/100g,Proteína,Hidratos,Gordura,kcal calculada,Denomin
 "4068263007156","Queijo fresco","Milsani",laticinios,248,13,0.6,21.5,248,"","","100 g","",https://world.openfoodfacts.org/product/4068263007156
 "4068263016547","Massa folhada tipo tarte","Aldi",snacks,244,2.3,27,14,243,"","525g","52.5g","",https://world.openfoodfacts.org/product/4068263016547
 "4068264002815","Kokosfir","Aldi",laticinios,63,2,9.3,2.2,65,"","250 g (243 ml)","250g","",https://world.openfoodfacts.org/product/4068264002815
-"5601002046116","Atum posta em óleo vegetal","Auchan",carnes,438,17,0.5,41,439,"","110 g (72 g)","","",https://world.openfoodfacts.org/product/5601002046116
-"5601002060105","Atum posta em óleo vegetal","Auchan",carnes,419,17,0,39,419,"Atum Posta em Óleo Vegetal","120 g (78 g)","","",https://world.openfoodfacts.org/product/5601002060105
 "5601002102973","Adoçante em pastilhas","Auchan",snacks,331,3.2,80.9,0,336,"","","","",https://world.openfoodfacts.org/product/5601002102973
 "5601002112729","Iogurte com pedaços de frutos vermelhos","Auchan",laticinios,61.6,3.7,16.6,1.9,98,"","","125.0g","",https://world.openfoodfacts.org/product/5601002112729
 "5601002123626","Queijo de cabra fresco","Auchan",laticinios,132.8,9.4,3.8,12.6,166,"Queijo de Cabra Fresco","125 g (2 x 62,5 g)","","",https://world.openfoodfacts.org/product/5601002123626
@@ -35,35 +33,20 @@ EAN,Nome,Marca,Grupo,kcal/100g,Proteína,Hidratos,Gordura,kcal calculada,Denomin
 "5601227041057","Tortitas","Amanhecer",cereais,443,6.5,71.1,13.5,432,"","","","",https://world.openfoodfacts.org/product/5601227041057
 "5601227042337","Aromati 8","Amanhecer",snacks,6,0.9,0.5,0.1,7,"","","","",https://world.openfoodfacts.org/product/5601227042337
 "5601312002000","Milho para pipocas","Continente",snacks,258,9.9,23,2.5,154,"","","","",https://world.openfoodfacts.org/product/5601312002000
-"5601312002833","Presunto","Continente",snacks,517,6.5,53.1,30,508,"","175 g","30 g","",https://world.openfoodfacts.org/product/5601312002833
 "5601312006251","Grão de Bico","Continente",gorduras,97,6.3,6,2.2,69,"","540gr","","",https://world.openfoodfacts.org/product/5601312006251
 "5601312044376","Pastilhas elasticas","Continente",snacks,167,0.7,66,0,267,"","22 g","1,4 g","",https://world.openfoodfacts.org/product/5601312044376
-"5601312061977","Bolachas Digestive","Continente",snacks,155.8,6.4,69.2,17.4,459,"Bolacha de Trigo","400 g","14,3 g","kcal 155,8 não bate; digestive costuma ter ≈ 460",https://world.openfoodfacts.org/product/5601312061977
-"5601312069652","Crunchy Muesli Frutos Secos","Continente",cereais,471,0,60.2,0,241,"","500 g","45g","proteína e gordura a 0 — valores em falta",https://world.openfoodfacts.org/product/5601312069652
-"5601312070078","Bolacha Baunilha","Continente",snacks,123,1.1,18,5.3,124,"Bolacha com Recheio com Sabor a Baunilha","500 g","25 g","kcal 123 é da dose de 25 g",https://world.openfoodfacts.org/product/5601312070078
 "5601312070382","Stevia","Continente",snacks,0,0,98,0,392,"Edulcorante de Mesa em Pó à Base de Glicosídeos de Esteviol","40 g (40 x 1 g)","1 g","",https://world.openfoodfacts.org/product/5601312070382
-"5601312074694","Pipocas doces","Continente",snacks,481,7.5,59,10,356,"Pipocas Doces","340 g","25 g","",https://world.openfoodfacts.org/product/5601312074694
-"5601312077053","Ketchup","Continente",snacks,538,6.7,51,33,528,"","170 g","30 g","valores parecem de batatas fritas, não de ketchup",https://world.openfoodfacts.org/product/5601312077053
 "5601312078531","Maçã & Ananás","Continente",fruta,63,0.7,0,62,561,"Polme de Maçã e Ananás / Alimento para Lactentes e Crianças Pequenas","90 g","","",https://world.openfoodfacts.org/product/5601312078531
 "5601312079699","Flocos de Batata Para Puré","Continente",cereais,68,2.2,13,0.6,66,"Flocos de Batata para Puré","","100","",https://world.openfoodfacts.org/product/5601312079699
-"5601312090960","Néctar Uva Merlot do Mediterrâneo","Continente",laticinios,47,0.2,11,10,135,"","1 l","200 ml","",https://world.openfoodfacts.org/product/5601312090960
 "5601312093947","Maçã","Continente Equilíbrio",snacks,44,0.5,10.7,0,45,"","","","",https://world.openfoodfacts.org/product/5601312093947
-"5601312100522","5 Cereais e Framboesa Mini Bolachas","Continente Equilíbrio",snacks,113.5,7,60.7,16.3,418,"","","40 g","",https://world.openfoodfacts.org/product/5601312100522
-"5601312101048","Batata Doce","Continente",cereais,566,3.3,45,40.2,555,"","250g","","",https://world.openfoodfacts.org/product/5601312101048
-"5601312105244","Paté Morcela da Beira e Maçã Reineta","Continente",carnes,167,7.4,5.9,7.8,123,"Paté de Morcela da Beira e Maçã Reineta","110 g","","",https://world.openfoodfacts.org/product/5601312105244
 "5601312107286","Achocolatado em Pó","Continente",snacks,42,1.3,7.1,0.6,39,"Preparado em Pó para Bebida Instantânea com Tâmara, Cacau e Farinhas de Aveia e de Arroz","375 g","12 g","kcal 42/100 g é da dose de 12 g; confirmar valores por 100 g do pó",https://world.openfoodfacts.org/product/5601312107286
 "5601312108573","Pipocas Salgadas","Continente",snacks,106.7,5.7,17,1.7,106,"","3 x 90 g","30 g","",https://world.openfoodfacts.org/product/5601312108573
 "5601312109211","Gelatina 0% Açúcar","Continente",snacks,9,64,24,0.5,357,"","","1 portion (100 g)","",https://world.openfoodfacts.org/product/5601312109211
 "5601312147169","Queijo Cabra Fatiado","Continente",laticinios,236.7,22,1.5,29,355,"Queijo de Cabra Curado Fatiado","150 g","","",https://world.openfoodfacts.org/product/5601312147169
 "5601312217459","Tremoço (Lupins)","Continente",gorduras,84,12,0.6,0.6,56,"","","","",https://world.openfoodfacts.org/product/5601312217459
 "5601312502791","Melancia Melão","Continente",laticinios,64,2.2,10.5,1.4,63,"","160 ml","160 ml","",https://world.openfoodfacts.org/product/5601312502791
-"5601312508311","Morango","Continente",laticinios,186,0.8,34,5,184,"","550 g","","",https://world.openfoodfacts.org/product/5601312508311
-"5601312509578","Skyr Mirtilo","Continente Equilíbrio",laticinios,46.7,11,5.5,0,66,"Iogurte Aromatizado Batido Magro com Mirtilo","150 g","150 g","",https://world.openfoodfacts.org/product/5601312509578
-"5601312511939","Iogurte Morango Sabor +Proteína","Continente",laticinios,70.5,7.6,4.1,0.4,50,"Iogurte Aromatizado Líquido de Morango, com 0,4% de Matéria Gorda","280 g / 267 ml","280 g","",https://world.openfoodfacts.org/product/5601312511939
 "5601312515005","Amendoa","Continente",gorduras,31,0.6,3.6,1.4,29,"","","","",https://world.openfoodfacts.org/product/5601312515005
-"5601312516187","Nuts for cups","Continente",laticinios,294,6.9,27,17.3,291,"","500ml","100 g","",https://world.openfoodfacts.org/product/5601312516187
 "5601312516194","Nutsy caramelt down","Continente",laticinios,253,3.5,29.3,13.3,251,"","418 g","","",https://world.openfoodfacts.org/product/5601312516194
-"5601312516316","Super Breakfast Frutos Vermelhos Muesli Chia","Continente Equilíbrio",laticinios,259.2,4.9,6.1,1.9,61,"","","1 yogurt (125 g)","",https://world.openfoodfacts.org/product/5601312516316
 "5604260273102","Bolacha relevo com mel e coco","Chabrior",snacks,157,6,70,18,466,"","700 g","","",https://world.openfoodfacts.org/product/5604260273102
 "5607047012345","Tostas S/Gluten C/Cacau pd","Pingo Doce",cereais,37,0.8,7.6,0.5,38,"","10 porções / 100g","10 porções de aproximadamente 10g.","",https://world.openfoodfacts.org/product/5607047012345
 "5607047014264","Café Moído Envolvente","Pingo Doce",snacks,6,0.9,0.7,0.5,11,"Café Torrado Moído","250 g","35 ml","",https://world.openfoodfacts.org/product/5607047014264
