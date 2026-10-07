@@ -2294,12 +2294,23 @@ function createHelpRequest(s, meal, situation, note){
   logAdaptation(s, meal, "pedido_profissional", {situation: situation, note: note || ""});
   persistStudent(s);
   if (!sbReady) return Promise.resolve({success:false, offline:true});
-  return sb.from("help_requests").insert({
+  // Os chamadores mostram logo "O teu profissional vai ver este pedido"; se a gravação
+  // falhar, esse aviso seria falso — por isso é substituído por um erro visível.
+  function insertFailed(detail){
+    console.error("help_requests: falhou ao gravar o pedido", detail);
+    document.querySelectorAll(".toast").forEach(function(t){ t.remove(); });
+    showToast("Não foi possível enviar o pedido ao teu profissional. Tenta outra vez.");
+    return {success:false, error:detail};
+  }
+  return Promise.resolve(sb.from("help_requests").insert({
     student_id: s.id,
     situation: situation,
     meal_name: meal ? meal.name : null,
     note: note || null
-  });
+  })).then(function(res){
+    if (res && res.error) return insertFailed(res.error);
+    return res;
+  }, insertFailed);
 }
 
 function loadHelpRequests(studentId){
@@ -2308,7 +2319,17 @@ function loadHelpRequests(studentId){
     .select("*, help_request_notes(professional_note)")
     .eq("student_id", studentId)
     .order("created_at", {ascending:false})
-    .then(function(res){ return res.data || []; });
+    .then(function(res){
+      var data = res.data || [];
+      // Um erro não pode parecer "sem pedidos": segue como propriedade da lista.
+      if (res.error){ console.error("help_requests: falhou a leitura", res.error); data.error = res.error; }
+      return data;
+    }, function(err){
+      console.error("help_requests: falhou a leitura", err);
+      var data = [];
+      data.error = err || {message:"Sem resposta do servidor"};
+      return data;
+    });
 }
 
 function markHelpRequestHandled(requestId){
@@ -7585,6 +7606,11 @@ function renderProTabContent(s){
     loadHelpRequests(s.id).then(function(reqs){
       if (state.proTab !== "pedidos") return; // o profissional já mudou de separador
       el.innerHTML = tplProPedidos(s, reqs);
+      if (reqs.error){
+        var retry = document.getElementById("retryHelpRequests");
+        if (retry) retry.addEventListener("click", function(){ renderProTabContent(s); });
+        return;
+      }
       wireProPedidos(s, reqs);
     });
     return;
@@ -8400,6 +8426,15 @@ ASSISTANT_SITUATIONS.forEach(function(sit){ HELP_SITUATION_LABEL[sit.key] = sit.
 function tplProPedidos(s, reqs){
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pedidos de ajuda</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Situações que " + escapeHtml(s.name.split(" ")[0]) + " assinalou através do assistente — a resposta e a decisão são sempre tuas. A nota abaixo de cada pedido é privada, o aluno nunca a vê.</p>";
+  if (reqs.error){
+    var detail = (reqs.error && (reqs.error.message || reqs.error.code)) || String(reqs.error);
+    return html + "<div class=\"card\" role=\"alert\" style=\"border-color:var(--critical);\">" +
+      "<div class=\"eyebrow\" style=\"color:var(--critical); margin-bottom:6px;\">Não foi possível carregar os pedidos</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Isto não quer dizer que não haja pedidos — só que não foi possível lê-los.</p>" +
+      "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-bottom:12px; word-break:break-word;\">Detalhe: " + escapeHtml(String(detail)) + "</p>" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"retryHelpRequests\">Tentar de novo</button>" +
+    "</div>";
+  }
   if (!reqs.length){
     html += "<p class=\"muted-p\">Ainda sem pedidos de ajuda.</p>";
     return html;
