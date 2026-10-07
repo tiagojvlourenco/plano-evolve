@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="E V O L V E">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0A0A0A">
+<meta name="theme-color" content="#0D0F12">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
@@ -21,15 +21,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#0A0A0A;
-    --surface:#161616;
-    --surface-2:#1E1E1E;
-    --surface-3:#262626;
-    --ink:#F2F1EE;
-    --muted:#8C8C86;
-    --muted-2:#5F5F5A;
-    --line:#2A2A27;
-    --line-strong:#3D3D38;
+    --bg:#0D0F12;
+    --surface:#1A1D24;
+    --surface-2:#21252E;
+    --surface-3:#2A2F3A;
+    --ink:#F4F6F8;
+    --muted:#8A91A0;
+    --muted-2:#6B7280;
+    --line:#262B35;
+    --line-strong:#363C49;
     --accent:#E85D2C;
     --accent-strong:#FF7A42;
     --accent-soft:#2E1D12;
@@ -40,8 +40,8 @@
     --warn-soft:#2A2013;
     --critical:#E5534B;
     --critical-soft:#2B1715;
-    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 26px -16px rgba(0,0,0,0.6);
-    --radius:16px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 14px 30px -18px rgba(0,0,0,0.7);
+    --radius:20px;
     --display:'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --sans:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono:'Jura', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -72,7 +72,7 @@
   .mode-switch button.active{background:var(--accent); color:var(--accent-ink);}
 
   /* ---------- generic ---------- */
-  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px;}
   .eyebrow{font-size:0.68rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); font-weight:600; font-family:var(--mono);}
   .checkin-field label, .stat-tile .l, .field-row .f label, .macro-target-grid .f label,
   table.assess-table th, .assess-form-grid .f label, .onb-field label{
@@ -90,13 +90,13 @@
   a.linklike{color:var(--accent-strong); text-decoration:underline; cursor:pointer; font-weight:600;}
 
   /* progress bar */
-  .bar-track{height:8px; background:var(--surface-3); border-radius:999px; overflow:hidden;}
+  .bar-track{height:10px; background:var(--surface-3); border-radius:999px; overflow:hidden;}
   .bar-fill{height:100%; background:var(--accent); border-radius:999px;}
 
   /* ============ ALUNO MODE ============ */
   #alunoApp{max-width:430px; margin:0 auto;}
   @media (min-width:760px){
-    body{ background: radial-gradient(ellipse at 50% 0%, #17170f 0%, var(--bg) 60%); }
+    body{ background: radial-gradient(ellipse at 50% 0%, #1A1D24 0%, var(--bg) 60%); }
     #alunoApp{
       background:var(--bg); border:2px solid var(--line-strong); border-radius:36px;
       padding:24px 18px 34px; box-shadow:0 50px 90px -30px rgba(0,0,0,0.8), 0 0 0 8px var(--surface);
@@ -113,8 +113,11 @@
     background:var(--surface); border:1px solid var(--line-strong); border-radius:18px; display:flex; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5); z-index:20;
     padding:6px;
   }
-  .tabbar button{flex:1; background:transparent; border:none; color:var(--muted); padding:9px 4px; border-radius:13px; font-size:0.62rem; font-weight:600; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;}
-  .tabbar button.active{background:var(--accent-soft); color:var(--accent-strong);}
+  .tabbar button{flex:1; min-height:52px; background:transparent; border:none; color:var(--muted); padding:8px 2px; border-radius:14px; font-size:0.62rem; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:var(--sans); letter-spacing:0.02em; transition:background .15s,color .15s;}
+  .tabbar button svg{width:20px; height:20px; flex:none;}
+  .tabbar button:hover{color:var(--ink);}
+  .tabbar button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  .tabbar button.active{background:var(--accent); color:var(--accent-ink);}
   .tabbar button .dot{width:5px; height:5px; border-radius:50%; background:var(--accent);}
 
   .kcal-ring-wrap{display:flex; align-items:center; gap:18px;}
@@ -126,7 +129,7 @@
 
   .meal-row{display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--line);}
   .meal-row:last-child{border-bottom:none;}
-  .check-circle{width:24px; height:24px; border-radius:50%; border:2px solid var(--line-strong); flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface);}
+  .check-circle{width:30px; height:30px; border-radius:50%; border:2px solid var(--line-strong); flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; background:var(--surface);}
   .check-circle.done{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
   .check-circle.adapted{background:var(--surface-3); border-color:var(--accent); color:var(--accent-strong); font-size:0.85rem;}
   .meal-row .info{flex:1; min-width:0;}
@@ -6103,10 +6106,10 @@ function renderAlunoShell(){
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
     "<div class=\"tabbar\">" +
-      "<button data-tab=\"hoje\">Hoje</button>" +
-      "<button data-tab=\"plano\">Plano</button>" +
-      "<button data-tab=\"checkin\">Check-in</button>" +
-      "<button data-tab=\"evolucao\">Evolução</button>" +
+      "<button data-tab=\"hoje\" aria-label=\"Resumo\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"2\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"2\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"2\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"2\"/></svg><span>Resumo</span></button>" +
+      "<button data-tab=\"plano\" aria-label=\"Alimentação\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 3v8a2 2 0 0 0 2 2v8M11 3v6a2 2 0 0 1-2 2M17 21V3c-2 1-3.5 3.5-3.5 7 0 2 1 3 3.5 3\"/></svg><span>Alimentação</span></button>" +
+      "<button data-tab=\"checkin\" aria-label=\"Treino\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12\"/></svg><span>Treino</span></button>" +
+      "<button data-tab=\"evolucao\" aria-label=\"Avaliação\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"5\" r=\"2\"/><path d=\"M5 9l7 2 7-2M12 11v5M9 21l3-5 3 5\"/></svg><span>Avaliação</span></button>" +
     "</div>";
   var switcherEl = document.getElementById("alunoStudentSwitch");
   if (switcherEl) switcherEl.addEventListener("change", function(e){
@@ -6146,7 +6149,7 @@ function tplHoje(s){
     "<div class=\"kcal-ring-wrap\">" +
       "<div class=\"stat-block\">" +
         "<div class=\"eyebrow\">Calorias hoje</div>" +
-        "<div style=\"font-family:var(--display); font-size:2.1rem; font-weight:800; margin-top:2px;\" class=\"num\">" + totals.kcal + " <span style=\"font-size:1rem; color:var(--muted); font-weight:600;\">/ " + s.targets.kcal + " kcal</span></div>" +
+        "<div style=\"font-family:var(--display); font-size:2.9rem; line-height:1.05; font-weight:700; margin-top:4px; letter-spacing:-0.01em;\" class=\"num\">" + totals.kcal + " <span style=\"font-size:1rem; color:var(--muted); font-weight:600;\">/ " + s.targets.kcal + " kcal</span></div>" +
         "<div class=\"bar-track\" style=\"margin-top:10px;\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div>" +
       "</div>" +
     "</div>" +
