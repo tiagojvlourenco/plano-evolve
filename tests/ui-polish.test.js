@@ -55,4 +55,21 @@ var check = require("./check")();
   check.check("5. Os sliders têm trilho visível", /input\[type=range\]::-webkit-slider-runnable-track\{[^}]*var\(--p,50%\)/.test(html));
 })();
 
+// ---- 6. Menu horizontal do profissional (telemóvel): o aluno nunca fica cortado a meio ----
+(function(){
+  // menu de 356px; aluno em 188, primeiro separador (Perfil) em 312, Leitura termina em 462
+  var perfil  = {studentLeft:188, firstTabLeft:312, center:346, right:380};
+  var leitura = {studentLeft:188, firstTabLeft:312, center:424, right:462};
+  var pedidos = {studentLeft:188, firstTabLeft:312, center:501, right:539};
+  var longe   = {studentLeft:188, firstTabLeft:312, center:960, right:1020};
+  check.check("6. Perfil ativo: o menu começa no aluno, que fica inteiro", stripScrollLeft(perfil, 356) === 178);
+  check.check("6. Leitura ativa: continua a começar no aluno (cabe a seguir a ele)", stripScrollLeft(leitura, 356) === 178);
+  var p = stripScrollLeft(pedidos, 356);
+  check.check("6. Quando já não cabe, o aluno sai por inteiro (nunca a meio)", p >= 312 - 2 && p === 323);
+  check.check("6. Separadores mais à frente centram normalmente", stripScrollLeft(longe, 356) === 782);
+  check.check("6. Sem aluno nem separadores (Dashboard/Catálogo), começa no início", stripScrollLeft({studentLeft:0, firstTabLeft:0, center:60, right:118}, 356) === 0);
+  check.check("6. Nunca devolve scroll negativo", stripScrollLeft({studentLeft:0, firstTabLeft:0, center:10, right:400}, 356) >= 0);
+  check.check("6. renderProShell usa stripPositions/stripScrollLeft e continua a usar scrollTo no contentor", /stripPositions\(container, activeNavItem\)/.test(appSource) && /stripScrollLeft\(pos, container\.clientWidth\)/.test(appSource) && /container\.scrollTo\(\{/.test(appSource));
+})();
+
 check.summarize();

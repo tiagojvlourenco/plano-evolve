@@ -7221,6 +7221,34 @@ function wireAlunoTab(s){
 /* ===================== PROFISSIONAL RENDER ===================== */
 var proRoot = document.getElementById("proApp");
 
+// Menu horizontal do profissional (telemóvel). Posições RELATIVAS ao próprio menu:
+// offsetLeft é medido a partir da página, por isso incluía a margem do menu e desviava o centrar.
+function stripPositions(container, active){
+  var cLeft = container.getBoundingClientRect().left;
+  function rel(el){ return el.getBoundingClientRect().left - cLeft + container.scrollLeft; }
+  var first = container.querySelector(".pro-nav-item[data-t]");
+  var student = container.querySelector(".pro-sidebar-student");
+  var activeLeft = rel(active);
+  var firstLeft = first ? rel(first) : 0;
+  return {
+    center: activeLeft + active.offsetWidth / 2,
+    right: activeLeft + active.offsetWidth,
+    firstTabLeft: firstLeft,
+    studentLeft: student ? rel(student) : firstLeft
+  };
+}
+
+// Onde deixar o scroll do menu:
+// - se o separador ativo cabe a seguir ao aluno, o menu começa no aluno (inteiro);
+// - senão centra o ativo, mas nunca deixa o aluno a meio: salta já para o primeiro separador.
+function stripScrollLeft(pos, containerWidth){
+  var startAtStudent = Math.max(0, pos.studentLeft - 10);
+  if (pos.right - startAtStudent <= containerWidth - 16) return startAtStudent;
+  var left = pos.center - containerWidth / 2;
+  var minLeft = Math.max(0, pos.firstTabLeft - 2);
+  return left < minLeft ? minLeft : left;
+}
+
 function renderProShell(){
   var selected = state.proSelectedId ? findStudent(state.proSelectedId) : null;
   // Fase 34: "Catálogo" é uma área ao mesmo nível do "Dashboard" — não é um
@@ -7267,8 +7295,9 @@ function renderProShell(){
     var container = proRoot.querySelector(".pro-sidebar");
     var activeNavItem = container && container.querySelector(".pro-nav-item.active");
     if (container && activeNavItem){
-      var targetCenter = activeNavItem.offsetLeft + activeNavItem.offsetWidth / 2;
-      container.scrollTo({left: targetCenter - container.clientWidth / 2, behavior: "instant"});
+      var pos = stripPositions(container, activeNavItem);
+      var targetCenter = pos.center; // centro relativo ao menu (offsetLeft é relativo à página)
+      container.scrollTo({left: stripScrollLeft(pos, container.clientWidth), behavior: "instant"});
     }
   }, 0);
 

@@ -28,7 +28,10 @@ function freshStudent(overrides){
   var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 3600);
   check.check("1. Já não usa scrollIntoView (confirmado a deslocar a página toda num telemóvel real)", fnSrc.indexOf(".scrollIntoView(") === -1);
   check.check("1. Lê container = .pro-sidebar", fnSrc.indexOf('querySelector(".pro-sidebar")') >= 0);
-  check.check("1. Calcula o centro do separador ativo (offsetLeft + offsetWidth/2)", /activeNavItem\.offsetLeft\s*\+\s*activeNavItem\.offsetWidth\s*\/\s*2/.test(fnSrc));
+  // Atualizado: offsetLeft é medido a partir da página (incluía a margem do menu e desviava o centrar,
+  // deixando o aluno cortado). O centro passou a ser calculado relativamente ao próprio menu
+  // (stripPositions, com getBoundingClientRect); o conceito é o mesmo: centro = esquerda + largura/2.
+  check.check("1. Calcula o centro do separador ativo (relativo ao menu: esquerda + largura/2)", /targetCenter\s*=\s*pos\.center/.test(fnSrc) && /center:\s*activeLeft\s*\+\s*active\.offsetWidth\s*\/\s*2/.test(appSource));
   check.check("1. Usa container.scrollTo() em vez de atribuição direta a scrollLeft (nunca escala a ancestrais)", /container\.scrollTo\(\{/.test(fnSrc));
   // Confirmado ao vivo: mesmo container.scrollLeft = x herda scroll-behavior:smooth
   // do CSS neste motor de browser — só scrollTo({behavior:"instant"}) é garantidamente imediato.
