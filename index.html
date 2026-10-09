@@ -6596,8 +6596,14 @@ function rangeField(id, label, val){
 
 function computeWeeklyTrend(weights){
   if (weights.length < 2) return null;
-  var first = weights[0], last = weights[weights.length-1];
-  var days = (new Date(last.date) - new Date(first.date)) / 86400000;
+  var last = weights[weights.length-1];
+  var lastT = new Date(last.date).getTime();
+  // Janela das últimas 8 semanas: com histórico longo (anos de pesagens importadas), primeiro→último
+  // daria uma média sem sentido. Se a janela tiver menos de 7 dias de dados, usa o histórico todo.
+  var recent = weights.filter(function(x){ return lastT - new Date(x.date).getTime() <= 56 * 86400000; });
+  var set = (recent.length >= 2 && lastT - new Date(recent[0].date).getTime() >= 7 * 86400000) ? recent : weights;
+  var first = set[0];
+  var days = (lastT - new Date(first.date).getTime()) / 86400000;
   if (days < 7) return null;
   return (last.w - first.w) / (days/7);
 }
@@ -6616,12 +6622,12 @@ function tplEvolucaoAluno(s, opts){
       statTile("Objetivo", (s.weightGoal || "—") + (s.weightGoal ? " kg":"")) +
       statTile("Diferença", (diff>0?"+":"") + diff + " kg") +
     "</div>" +
-    (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + trend.toFixed(2) + " kg/semana</span></p>" : "") +
+    (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência recente: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + trend.toFixed(2) + " kg/semana</span></p>" : "") +
   "</div>";
 
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
-    (opts.editable ? tplAssessForm(s) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
+    (opts.editable ? tplAssessForm(s) + tplImportWeighIns(s) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessTable(s, opts.editable) +
   "</div>";
 
@@ -6647,6 +6653,193 @@ function assessmentKey(a){ return (a.date || "") + " " + (a.time || "00:00"); }
 function compareAssessmentsDesc(a, b){ var ka = assessmentKey(a), kb = assessmentKey(b); return ka < kb ? 1 : (ka > kb ? -1 : 0); }
 function nowHHMM(){ var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
 
+// ---------- Importar pesagens do bloco de notas ----------
+// Formato aceite (uma pesagem por bloco, linhas em branco são ignoradas):
+//   24/08/2020 - 7:00 (jejum) - NOVA DIETA            data, hora opcional (7:00, 07:00, 13h, 14:30), notas opcionais
+//   Calorias: 1500 kcal                               linhas de texto livre ficam como nota
+//   72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %    peso / gordura / massa muscular / gordura visceral / água
+//   69.9 kg                                           só o peso
+function parseWeighInNum(str){ return parseFloat(String(str).replace(",", ".")); }
+
+function parseWeighInTime(rest){
+  var m = String(rest || "").match(/^(\d{1,2})\s*[:h]\s*(\d{2})?(?=\s|$|\()/i);
+  var time = "", after = String(rest || "");
+  if (m){
+    var hh = parseInt(m[1], 10), mm = m[2] ? parseInt(m[2], 10) : 0;
+    if (hh <= 23 && mm <= 59){ time = ("0" + hh).slice(-2) + ":" + ("0" + mm).slice(-2); after = after.slice(m[0].length); }
+  }
+  var fasting = /jejum/i.test(after);
+  var note = after.replace(/\bjejum\b/gi, "").replace(/[()]/g, " ").replace(/\s+/g, " ").replace(/^[\s\-–—·,;]+|[\s\-–—·,;]+$/g, "");
+  return {time: time, fasting: fasting, note: note};
+}
+
+function parseWeighInMeasures(line){
+  if (!/\d/.test(line)) return null;
+  var parts = line.split("/"), out = {}, plain = [];
+  for (var i = 0; i < parts.length; i++){
+    var t = parts[i].trim();
+    if (!t) continue;
+    var gv = t.match(/^GV\s*([\d.,]+)$/i), h2o = t.match(/^H2O\s*([\d.,]+)\s*%?$/i);
+    if (gv) out.visceral = parseWeighInNum(gv[1]);
+    else if (h2o) out.water = parseWeighInNum(h2o[1]);
+    else if (/^[\d.,]+\s*%$/.test(t)) out.bodyFat = parseWeighInNum(t);
+    else if (/^[\d.,]+\s*(kg)?$/i.test(t)) plain.push(parseWeighInNum(t));
+    else return null;
+  }
+  if (!plain.length || plain.length > 2) return null;
+  out.weight = plain[0];
+  if (plain.length === 2) out.muscle = plain[1];
+  return out;
+}
+
+function parseWeighInNotes(text){
+  var out = {name: "", entries: [], warnings: []};
+  var cur = null, pending = [];
+  var dateRe = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(?:[-–—]\s*)?(.*)$/;
+  function pad(n){ return ("0" + n).slice(-2); }
+  String(text || "").split(/\r?\n/).forEach(function(raw, i){
+    var line = raw.replace(/\s+/g, " ").trim();
+    if (!line) return;
+    var d = line.match(dateRe);
+    if (d){
+      var day = parseInt(d[1], 10), mon = parseInt(d[2], 10), yr = parseInt(d[3], 10);
+      var dt = new Date(Date.UTC(yr, mon - 1, day));
+      if (yr < 2000 || yr > 2100 || dt.getUTCFullYear() !== yr || dt.getUTCMonth() !== mon - 1 || dt.getUTCDate() !== day){
+        out.warnings.push("Linha " + (i + 1) + ": data inválida (" + line.slice(0, 40) + ")");
+        cur = null; pending = [];
+        return;
+      }
+      var info = parseWeighInTime(d[4]);
+      cur = {date: yr + "-" + pad(mon) + "-" + pad(day), time: info.time, fasting: info.fasting,
+             note: [pending.join(" · "), info.note].filter(Boolean).join(" · "), line: i + 1, hasMeasures: false};
+      pending = [];
+      out.entries.push(cur);
+      return;
+    }
+    var m = parseWeighInMeasures(line);
+    if (m){
+      if (!cur || cur.hasMeasures){ out.warnings.push("Linha " + (i + 1) + ": medidas sem data — ignorada (" + line.slice(0, 40) + ")"); return; }
+      Object.keys(m).forEach(function(k){ cur[k] = m[k]; });
+      cur.hasMeasures = true;
+      return;
+    }
+    // texto livre: o nome no início, notas antes da data seguinte ou entre a data e as medidas
+    if (!out.name && !cur && !pending.length && !out.entries.length && /^[A-Za-zÀ-ÿ' .\-]{2,60}$/.test(line)){ out.name = line; return; }
+    if (cur && !cur.hasMeasures) cur.note = [cur.note, line].filter(Boolean).join(" · ");
+    else pending.push(line);
+  });
+  var ranges = {bodyFat: [1, 70], muscle: [10, 200], visceral: [0, 60], water: [20, 90]};
+  out.entries = out.entries.filter(function(e){
+    var when = e.date.slice(8) + "/" + e.date.slice(5, 7) + "/" + e.date.slice(0, 4);
+    if (!e.hasMeasures){ out.warnings.push("Linha " + e.line + ": " + when + " sem medidas — ignorada"); return false; }
+    if (!(e.weight >= 20 && e.weight <= 400)){ out.warnings.push("Linha " + e.line + ": " + when + " peso fora do intervalo (" + e.weight + ") — ignorada"); return false; }
+    var have = 0, bad = false;
+    Object.keys(ranges).forEach(function(k){
+      if (e[k] == null || isNaN(e[k])) return;
+      if (e[k] >= ranges[k][0] && e[k] <= ranges[k][1]) have++; else bad = true;
+    });
+    e.complete = !bad && have === 4;
+    if (!e.complete && have > 0) out.warnings.push("Linha " + e.line + ": " + when + (bad ? " valores fora do intervalo" : " medidas incompletas") + " — fica só o peso");
+    return true;
+  });
+  return out;
+}
+
+// Junta as pesagens ao aluno sem duplicar (mesma data+hora+peso). Completas → avaliação + peso; só peso → só peso.
+// apply=false só conta (pré-visualização); apply=true grava no objeto do aluno.
+function mergeWeighIns(s, entries, apply){
+  var assessKeys = {}, weightKeys = {};
+  (s.assessments || []).forEach(function(a){ assessKeys[a.date + "|" + (a.time || "") + "|" + Number(a.weight).toFixed(1)] = 1; });
+  (s.weights || []).forEach(function(w){ weightKeys[w.date + "|" + Number(w.w).toFixed(1)] = 1; });
+  var res = {full: 0, weightOnly: 0, duplicates: 0}, newAssess = [], newWeights = [];
+  function weightEntry(e){
+    var w = {date: e.date, w: e.weight};
+    if (e.time) w.time = e.time;
+    if (e.fasting) w.fasting = true;
+    if (e.note) w.note = e.note;
+    return w;
+  }
+  entries.forEach(function(e){
+    var wk = e.date + "|" + e.weight.toFixed(1);
+    if (e.complete){
+      var ak = e.date + "|" + (e.time || "") + "|" + e.weight.toFixed(1);
+      if (assessKeys[ak]){ res.duplicates++; return; }
+      assessKeys[ak] = 1; res.full++;
+      var a = {date: e.date, weight: e.weight, bodyFat: e.bodyFat, muscle: e.muscle, visceral: e.visceral, water: e.water};
+      if (e.time) a.time = e.time;
+      if (e.fasting) a.fasting = true;
+      if (e.note) a.note = e.note;
+      newAssess.push(a);
+      if (!weightKeys[wk]){ weightKeys[wk] = 1; newWeights.push(weightEntry(e)); }
+    } else {
+      if (weightKeys[wk]){ res.duplicates++; return; }
+      weightKeys[wk] = 1; res.weightOnly++;
+      newWeights.push(weightEntry(e));
+    }
+  });
+  if (apply && (newAssess.length || newWeights.length)){
+    var prevLatest = (s.weights || []).reduce(function(m, w){ return w.date > m ? w.date : m; }, "");
+    s.assessments = (s.assessments || []).concat(newAssess);
+    s.weights = (s.weights || []).concat(newWeights).map(function(w, i){ return {w: w, i: i}; })
+      .sort(function(a, b){ return a.w.date < b.w.date ? -1 : (a.w.date > b.w.date ? 1 : a.i - b.i); })
+      .map(function(x){ return x.w; });
+    var latestNew = newWeights.slice().sort(function(a, b){
+      var ka = a.date + " " + (a.time || ""), kb = b.date + " " + (b.time || "");
+      return ka < kb ? 1 : (ka > kb ? -1 : 0);
+    })[0];
+    if (latestNew && (!prevLatest || latestNew.date > prevLatest)) s.weightCurrent = latestNew.w;
+  }
+  return res;
+}
+
+function tplImportWeighIns(s){
+  return '<details class="perfil-section" style="margin-top:14px;"><summary class="eyebrow">Importar pesagens do bloco de notas</summary>' +
+    '<p class="muted-p" style="margin:8px 0;">Cola o texto das pesagens: cada bloco tem a data (e a hora, se quiseres), e a linha com os valores, por exemplo <span class="num">72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %</span> (peso, gordura, massa muscular, gordura visceral, água) ou só o peso. Vês o que foi percebido antes de gravar; pesagens que já existem não são repetidas.</p>' +
+    '<div class="checkin-field"><textarea id="importWeighText" rows="8" placeholder="24/08/2020 - 7:00 (jejum)&#10;72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %"></textarea></div>' +
+    '<button type="button" class="btn btn-sm" id="importWeighPreview">Ver pré-visualização</button>' +
+    '<div id="importWeighResult" style="margin-top:12px;"></div>' +
+  '</details>';
+}
+
+function tplImportPreview(s, parsed, plan){
+  function pt(iso){ return iso.slice(8) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4); }
+  var html = "";
+  var firstName = String(s.name || "").split(" ")[0];
+  if (parsed.name && s.name && parsed.name.toLowerCase().replace(/\s+/g, " ") !== String(s.name).toLowerCase().replace(/\s+/g, " ")){
+    html += '<p class="muted-p" role="alert" style="color:var(--warn); margin-bottom:8px;">⚠ O texto parece ser de “' + escapeHtml(parsed.name) + '”, mas estás a importar para “' + escapeHtml(s.name) + '”.</p>';
+  }
+  var n = parsed.entries.length;
+  if (!n){
+    html += '<p class="muted-p">Não percebi nenhuma pesagem. Confirma que cada bloco tem a data (dd/mm/aaaa) e a linha com o peso.</p>';
+  } else {
+    var dates = parsed.entries.map(function(e){ return e.date; }).sort();
+    var fresh = plan.full + plan.weightOnly;
+    html += '<p style="margin-bottom:8px;"><strong>' + n + ' pesagens</strong> entre ' + pt(dates[0]) + ' e ' + pt(dates[dates.length - 1]) +
+      ' — ' + parsed.entries.filter(function(e){ return e.complete; }).length + ' completas, ' + parsed.entries.filter(function(e){ return !e.complete; }).length + ' só com o peso.</p>' +
+      '<p class="muted-p" style="margin-bottom:8px;">A importar: <strong>' + fresh + '</strong>' + (plan.duplicates ? ' · já existiam (ignoradas): ' + plan.duplicates : '') + '</p>';
+    var sample = parsed.entries.length <= 6 ? parsed.entries : parsed.entries.slice(0, 3).concat(parsed.entries.slice(-3));
+    html += '<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th></tr></thead><tbody>' +
+      sample.map(function(e){
+        return '<tr><td class="date-cell">' + pt(e.date) + (e.time ? ' <span class="atime">· ' + escapeHtml(e.time) + '</span>' : '') + (e.fasting ? ' <span class="atime">· jejum</span>' : '') + '</td>' +
+          '<td>' + e.weight.toFixed(1) + 'kg</td>' +
+          '<td>' + (e.complete ? e.bodyFat.toFixed(1) + '%' : '—') + '</td><td>' + (e.complete ? e.muscle.toFixed(1) + 'kg' : '—') + '</td>' +
+          '<td>' + (e.complete ? e.visceral : '—') + '</td><td>' + (e.complete ? e.water.toFixed(1) + '%' : '—') + '</td></tr>';
+      }).join("") + '</tbody></table></div>' +
+      (parsed.entries.length > 6 ? '<p class="muted-p" style="font-size:0.76rem; margin-top:4px;">Mostradas as 3 primeiras e as 3 últimas.</p>' : '');
+  }
+  if (parsed.warnings.length){
+    html += '<p class="muted-p" style="margin-top:10px; font-weight:600;">Avisos (' + parsed.warnings.length + '):</p><ul class="qa-list" style="font-size:0.8rem; color:var(--muted);">' +
+      parsed.warnings.slice(0, 8).map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join("") +
+      (parsed.warnings.length > 8 ? '<li>… e mais ' + (parsed.warnings.length - 8) + '</li>' : '') + '</ul>';
+  }
+  if (n && plan.full + plan.weightOnly > 0){
+    html += '<button type="button" class="btn primary btn-sm" id="importWeighConfirm" style="margin-top:10px;">Importar ' + (plan.full + plan.weightOnly) + ' pesagens para ' + escapeHtml(firstName) + '</button>';
+  } else if (n){
+    html += '<p class="muted-p" style="margin-top:10px;">Tudo isto já existe — nada a importar.</p>';
+  }
+  return html;
+}
+
 function tplAssessForm(s){
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
@@ -6665,10 +6858,11 @@ function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
   var html = "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th>" + (editable?"<th></th>":"") + "</tr></thead><tbody>";
-  list.forEach(function(a, idx){
+  var LIMIT = 10, collapsed = list.length > LIMIT && !state.assessShowAll;
+  (collapsed ? list.slice(0, LIMIT) : list).forEach(function(a, idx){
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
+      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.fasting ? " <span class=\"atime\">· jejum</span>" : "") + "</td>" +
       "<td>" + a.weight.toFixed(1) + "kg" + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + a.bodyFat.toFixed(1) + "%" + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + a.muscle.toFixed(1) + "kg" + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -6678,6 +6872,10 @@ function tplAssessTable(s, editable){
     "</tr>";
   });
   html += "</tbody></table></div>";
+  if (list.length > LIMIT){
+    html += "<button type=\"button\" class=\"btn btn-sm\" id=\"assessToggleAll\" style=\"margin-top:10px;\">" +
+      (collapsed ? "Mostrar todas (" + list.length + ")" : "Mostrar só as " + LIMIT + " mais recentes") + "</button>";
+  }
   return html;
 }
 
@@ -7247,6 +7445,8 @@ function wireAlunoTab(s){
   });
   wirePhotoCompare(s, el);
   wirePhotoRemove(s, el, function(){ renderAlunoTab(s); });
+  var toggleAllAluno = el.querySelector("#assessToggleAll");
+  if (toggleAllAluno) toggleAllAluno.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderAlunoTab(s); });
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
@@ -9432,6 +9632,25 @@ function wireProTab(s){
       reader.readAsDataURL(file);
     }
     weightLogInput.value = "";
+  });
+
+  var toggleAll = el.querySelector("#assessToggleAll");
+  if (toggleAll) toggleAll.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderProTabContent(s); });
+
+  var importPreviewBtn = el.querySelector("#importWeighPreview");
+  if (importPreviewBtn) importPreviewBtn.addEventListener("click", function(){
+    var parsed = parseWeighInNotes(el.querySelector("#importWeighText").value);
+    var plan = mergeWeighIns(s, parsed.entries, false);
+    var resultEl = el.querySelector("#importWeighResult");
+    resultEl.innerHTML = tplImportPreview(s, parsed, plan);
+    var confirmBtn = resultEl.querySelector("#importWeighConfirm");
+    if (confirmBtn) confirmBtn.addEventListener("click", function(){
+      var done = mergeWeighIns(s, parsed.entries, true);
+      state.assessShowAll = false;
+      showToast("Importadas " + (done.full + done.weightOnly) + " pesagens");
+      renderProTabContent(s);
+      persistStudent(s);
+    });
   });
 
   var addAs = el.querySelector("#addAssessment");
