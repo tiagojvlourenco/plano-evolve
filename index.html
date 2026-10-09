@@ -6661,7 +6661,7 @@ function nowHHMM(){ var d = new Date(); return ("0" + d.getHours()).slice(-2) + 
 //   69.9 kg                                           só o peso
 function parseWeighInNum(str){ return parseFloat(String(str).replace(",", ".")); }
 
-function parseWeighInTime(rest){
+function parseWeighInTime(rest, defaultTime){
   var m = String(rest || "").match(/^(\d{1,2})\s*[:h]\s*(\d{2})?(?=\s|$|\()/i);
   var time = "", after = String(rest || "");
   if (m){
@@ -6669,18 +6669,21 @@ function parseWeighInTime(rest){
     if (hh <= 23 && mm <= 59){ time = ("0" + hh).slice(-2) + ":" + ("0" + mm).slice(-2); after = after.slice(m[0].length); }
   }
   // "jejum" sem hora conta como 06:00 (o jejum em si já não é guardado nem mostrado)
-  if (!time && /jejum/i.test(after)) time = "06:00";
+  if (!time && /jejum/i.test(after)) time = defaultTime || "06:00";
+  if (!time && defaultTime) time = defaultTime;
   var note = after.replace(/\bjejum\b/gi, "").replace(/[()]/g, " ").replace(/\s+/g, " ").replace(/^[\s\-–—·,;]+|[\s\-–—·,;]+$/g, "");
   return {time: time, note: note};
 }
 
 function parseWeighInMeasures(line){
   if (!/\d/.test(line)) return null;
+  // GV e H2O (ou H20) podem vir sem "/" antes
+  line = line.replace(/\s*\b(GV|H\s*2\s*[O0])/gi, " / $1");
   var parts = line.split("/"), out = {}, plain = [];
   for (var i = 0; i < parts.length; i++){
     var t = parts[i].trim();
     if (!t) continue;
-    var gv = t.match(/^GV\s*([\d.,]+)$/i), h2o = t.match(/^H2O\s*([\d.,]+)\s*%?$/i);
+    var gv = t.match(/^GV\s*([\d.,]+)$/i), h2o = t.match(/^H\s*2\s*[O0]\s*([\d.,]+)\s*%?$/i);
     if (gv) out.visceral = parseWeighInNum(gv[1]);
     else if (h2o) out.water = parseWeighInNum(h2o[1]);
     else if (/^[\d.,]+\s*%$/.test(t)) out.bodyFat = parseWeighInNum(t);
@@ -6693,10 +6696,11 @@ function parseWeighInMeasures(line){
   return out;
 }
 
-function parseWeighInNotes(text){
+function parseWeighInNotes(text, opts){
+  var defaultTime = (opts && /^\d{2}:\d{2}$/.test(opts.defaultTime || "")) ? opts.defaultTime : "";
   var out = {name: "", entries: [], warnings: []};
   var cur = null, pending = [];
-  var dateRe = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(?:[-–—]\s*)?(.*)$/;
+  var dateRe = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\s*(?:[-–—]\s*)?(.*)$/;
   function pad(n){ return ("0" + n).slice(-2); }
   String(text || "").split(/\r?\n/).forEach(function(raw, i){
     var line = raw.replace(/\s+/g, " ").trim();
@@ -6704,13 +6708,14 @@ function parseWeighInNotes(text){
     var d = line.match(dateRe);
     if (d){
       var day = parseInt(d[1], 10), mon = parseInt(d[2], 10), yr = parseInt(d[3], 10);
+      if (d[3].length === 2) yr += 2000;
       var dt = new Date(Date.UTC(yr, mon - 1, day));
       if (yr < 2000 || yr > 2100 || dt.getUTCFullYear() !== yr || dt.getUTCMonth() !== mon - 1 || dt.getUTCDate() !== day){
         out.warnings.push("Linha " + (i + 1) + ": data inválida (" + line.slice(0, 40) + ")");
         cur = null; pending = [];
         return;
       }
-      var info = parseWeighInTime(d[4]);
+      var info = parseWeighInTime(d[4], defaultTime);
       cur = {date: yr + "-" + pad(mon) + "-" + pad(day), time: info.time,
              note: [pending.join(" · "), info.note].filter(Boolean).join(" · "), line: i + 1, hasMeasures: false};
       pending = [];
@@ -6718,6 +6723,10 @@ function parseWeighInNotes(text){
       return;
     }
     var m = parseWeighInMeasures(line);
+    if (!m && /^[\d\s.,]+$/.test(line) && /\d/.test(line)){
+      out.warnings.push("Linha " + (i + 1) + ": números sem data nem unidades — ignorada (" + line.slice(0, 40) + ")");
+      return;
+    }
     if (m){
       if (!cur || cur.hasMeasures){ out.warnings.push("Linha " + (i + 1) + ": medidas sem data — ignorada (" + line.slice(0, 40) + ")"); return; }
       Object.keys(m).forEach(function(k){ cur[k] = m[k]; });
@@ -6740,6 +6749,8 @@ function parseWeighInNotes(text){
       if (e[k] >= ranges[k][0] && e[k] <= ranges[k][1]) have++; else bad = true;
     });
     e.complete = !bad && have === 4;
+    if (e.muscle != null && e.weight > 0 && (e.muscle / e.weight < 0.6 || e.muscle / e.weight > 0.95))
+      out.warnings.push("Linha " + e.line + ": " + when + " massa muscular (" + e.muscle + " kg) parece estranha para um peso de " + e.weight + " kg — confirma");
     if (!e.complete && have > 0) out.warnings.push("Linha " + e.line + ": " + when + (bad ? " valores fora do intervalo" : " medidas incompletas") + " — fica só o peso");
     return true;
   });
@@ -6802,6 +6813,7 @@ function mergeWeighIns(s, entries, apply){
 function tplImportWeighIns(s){
   return '<details class="perfil-section" style="margin-top:14px;"><summary class="eyebrow">Importar pesagens do bloco de notas</summary>' +
     '<p class="muted-p" style="margin:8px 0;">Cola o texto das pesagens: cada bloco tem a data (e a hora, se quiseres), e a linha com os valores, por exemplo <span class="num">72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %</span> (peso, gordura, massa muscular, gordura visceral, água) ou só o peso. Vês o que foi percebido antes de gravar; pesagens que já existem não são repetidas.</p>' +
+    '<div class="checkin-field"><label for="importWeighDefaultTime">Hora por omissão (para pesagens sem hora; opcional)</label><input type="time" id="importWeighDefaultTime"></div>' +
     '<div class="checkin-field"><textarea id="importWeighText" rows="8" placeholder="24/08/2020 - 7:00 (jejum)&#10;72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %"></textarea></div>' +
     '<button type="button" class="btn btn-sm" id="importWeighPreview">Ver pré-visualização</button>' +
     '<div id="importWeighResult" style="margin-top:12px;"></div>' +
@@ -9647,7 +9659,7 @@ function wireProTab(s){
 
   var importPreviewBtn = el.querySelector("#importWeighPreview");
   if (importPreviewBtn) importPreviewBtn.addEventListener("click", function(){
-    var parsed = parseWeighInNotes(el.querySelector("#importWeighText").value);
+    var parsed = parseWeighInNotes(el.querySelector("#importWeighText").value, {defaultTime: el.querySelector("#importWeighDefaultTime").value});
     var plan = mergeWeighIns(s, parsed.entries, false);
     var resultEl = el.querySelector("#importWeighResult");
     resultEl.innerHTML = tplImportPreview(s, parsed, plan);
