@@ -51,11 +51,11 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   check.check("1. '13h' vira 13:00", byDate("2023-05-05").time === "13:00");
   check.check("1. Vírgula decimal (16,5) e sem espaços (14.5%, 56.4kg, kg/)", byDate("2023-05-05").bodyFat === 16.5 && byDate("2023-05-08").bodyFat === 14.5 && byDate("2023-05-08").muscle === 56.4);
   var j = byDate("2023-05-06");
-  check.check("1. '9:00 (jejum)' dá 09:00 e jejum, sem nota", j.time === "09:00" && j.fasting === true && j.note === "");
+  check.check("1. '9:00 (jejum)' dá 09:00, sem nota e sem guardar o jejum", j.time === "09:00" && j.note === "" && !("fasting" in j));
   check.check("1. Peso sem 'kg' (78.3 /) é lido", byDate("2023-05-07").weight === 78.3);
   check.check("1. Linha antes da data (NOVA DIETA…) fica como nota da pesagem seguinte", byDate("2023-05-07").note === "NOVA DIETA - 1800 kcal");
   var f = byDate("2023-05-08");
-  check.check("1. Nota depois da hora e linha entre a data e as medidas juntam-se", f.fasting === true && f.note === "FÉRIAS · Calorias: 2000 kcal");
+  check.check("1. Nota depois da hora e linha entre a data e as medidas juntam-se (sem a palavra jejum)", f.time === "07:00" && f.note === "FÉRIAS · Calorias: 2000 kcal");
   check.check("1. Espaços duplos não estragam (70  kg)", byDate("2023-05-09").weight === 70);
   check.check("1. Linhas em branco repetidas são ignoradas", P.entries.length === 7);
 })();
@@ -82,8 +82,8 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   var r = mergeWeighIns(s, P.entries, true);
   check.check("3. Completas viram avaliação + peso; só peso vira só peso", s.assessments.length === 6 && r.full === 6 && r.weightOnly === 1);
   check.check("3. Peso já existente na mesma data não é duplicado", s.weights.filter(function(w){ return w.date === "2023-05-09"; }).length === 1);
-  check.check("3. A avaliação guarda hora, jejum e nota", s.assessments.some(function(a){ return a.time === "09:00" && a.fasting === true; }) && s.assessments.some(function(a){ return a.note === "FÉRIAS · Calorias: 2000 kcal"; }));
-  check.check("3. Avaliações sem hora/jejum/nota não ganham campos vazios", !("time" in s.assessments.filter(function(a){ return a.date === "2020-03-01"; })[0]));
+  check.check("3. A avaliação guarda hora e nota, e nunca o jejum", s.assessments.some(function(a){ return a.time === "09:00"; }) && s.assessments.some(function(a){ return a.note === "FÉRIAS · Calorias: 2000 kcal"; }) && !s.assessments.some(function(a){ return "fasting" in a; }) && !s.weights.some(function(w){ return "fasting" in w; }));
+  check.check("3. Avaliações sem hora/nota não ganham campos vazios", !("time" in s.assessments.filter(function(a){ return a.date === "2020-03-01"; })[0]));
   var dates = s.weights.map(function(w){ return w.date; });
   check.check("3. Os pesos ficam ordenados por data (gráfico)", dates.join() === dates.slice().sort().join());
   check.check("3. O peso atual passa a ser o mais recente", s.weightCurrent === 70 && s.weights[s.weights.length - 1].date === "2023-05-09");
@@ -122,12 +122,12 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
 // ---- 5. Tabela: só as 10 mais recentes, com 'jejum' ----
 (function(){
   var lista = [];
-  for (var i = 1; i <= 25; i++) lista.push({date:"2024-01-" + ("0" + i).slice(-2), weight:70, bodyFat:15, muscle:55, visceral:3, water:60, fasting: i === 25, time: i === 25 ? "07:00" : undefined});
+  for (var i = 1; i <= 25; i++) lista.push({date:"2024-01-" + ("0" + i).slice(-2), weight:70, bodyFat:15, muscle:55, visceral:3, water:60, time: i === 25 ? "07:00" : undefined});
   state.assessShowAll = false;
   var t = tplAssessTable({assessments: lista}, true);
   check.check("5. Com mais de 10, mostra só as 10 mais recentes", (t.match(/<tr><td class="date-cell"/g) || []).length === 10);
   check.check("5. Oferece 'Mostrar todas (25)'", /id="assessToggleAll"[^>]*>Mostrar todas \(25\)/.test(t));
-  check.check("5. A mais recente (25/01) está primeiro e mostra hora e jejum", /25\/01 <span class="atime">· 07:00<\/span> <span class="atime">· jejum<\/span>/.test(t));
+  check.check("5. A mais recente (25/01) está primeiro e mostra a hora, sem 'jejum'", /25\/01 <span class="atime">· 07:00<\/span>/.test(t) && t.indexOf("jejum") === -1);
   check.check("5. Os índices de apagar continuam certos (0 a 9)", /data-idx="0"/.test(t) && /data-idx="9"/.test(t) && !/data-idx="10"/.test(t));
   state.assessShowAll = true;
   var todas = tplAssessTable({assessments: lista}, true);
@@ -152,6 +152,41 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   check.check("6. Menos de 7 dias no total: sem tendência", computeWeeklyTrend([{date: d(3), w: 70}, {date: d(0), w: 71}]) === null);
   check.check("6. Menos de 2 pesagens: sem tendência", computeWeeklyTrend([{date: d(0), w: 70}]) === null);
   check.check("6. O rótulo diz 'Tendência recente'", appSource.indexOf("Tendência recente:") >= 0);
+})();
+
+// ---- 7. "jejum" sem hora conta como 06:00; o jejum em si já não aparece ----
+(function(){
+  var j = parseWeighInNotes("01/02/2024 (jejum)\n70 kg\n\n02/02/2024 - jejum\n70.5 kg\n\n03/02/2024 - 8:15 (jejum)\n71 kg\n\n04/02/2024\n71.5 kg\n\n05/02/2024 (Jejum) - FÉRIAS\n72 kg");
+  function e(d){ return j.entries.filter(function(x){ return x.date === d; })[0]; }
+  check.check("7. '(jejum)' sem hora → 06:00", e("2024-02-01").time === "06:00");
+  check.check("7. '- jejum' sem hora → 06:00", e("2024-02-02").time === "06:00");
+  check.check("7. 'Jejum' com maiúscula também (e a nota fica só FÉRIAS)", e("2024-02-05").time === "06:00" && e("2024-02-05").note === "FÉRIAS");
+  check.check("7. Jejum com hora mantém a hora escrita (08:15), não força 06:00", e("2024-02-03").time === "08:15");
+  check.check("7. Sem jejum e sem hora continua sem hora", e("2024-02-04").time === "");
+  check.check("7. Nenhuma pesagem tem o campo fasting, e a palavra 'jejum' não aparece na nota", j.entries.every(function(x){ return !("fasting" in x) && !/jejum/i.test(x.note); }));
+  var prev = tplImportPreview({id:"t", name:"Aluno"}, j, {full:0, weightOnly:5, duplicates:0, newInitial:null});
+  check.check("7. A pré-visualização não mostra 'jejum' mas mostra a hora 06:00", prev.indexOf("jejum") === -1 && prev.indexOf("06:00") >= 0);
+})();
+
+// ---- 8. Peso inicial = pesagem mais antiga (se a importação trouxer datas anteriores a tudo) ----
+(function(){
+  var ents = parseWeighInNotes("24/08/2020\n72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %\n\n26/09/2026 - 6:00\n71.5 kg").entries;
+  var s = {id:"t", name:"Aluno", weightInitial: 71.5, weightCurrent: 71.5, weights:[{date:"2026-09-26", w:71.5}], assessments:[]};
+  var plan = mergeWeighIns(s, ents, false);
+  check.check("8. A pré-visualização anuncia o novo peso inicial (72.4 em 24/08/2020) sem o gravar", plan.newInitial && plan.newInitial.w === 72.4 && plan.newInitial.date === "2020-08-24" && s.weightInitial === 71.5);
+  var prev = tplImportPreview(s, {name:"", entries:ents, warnings:[]}, plan);
+  check.check("8. O texto da pré-visualização diz o novo peso inicial e a data", /peso inicial<\/strong> passa a ser <strong>72\.4 kg<\/strong> \(pesagem de 24\/08\/2020\)/.test(prev));
+  mergeWeighIns(s, ents, true);
+  check.check("8. Ao importar, o peso inicial passa a ser a pesagem de 24/08/2020", s.weightInitial === 72.4);
+  check.check("8. O peso atual não muda (a pesagem mais recente é a mesma)", s.weightCurrent === 71.5);
+  var sMid = {id:"t", weightInitial: 70, weightCurrent: 75, weights:[{date:"2020-01-01", w:70}], assessments:[]};
+  mergeWeighIns(sMid, ents, true);
+  check.check("8. Se já existe uma pesagem mais antiga, o peso inicial não muda", sMid.weightInitial === 70);
+  var sSame = {id:"t", weightInitial: 72.4, weights:[], assessments:[], weightCurrent: 0};
+  check.check("8. Se o peso inicial já é esse valor, não anuncia mudança", mergeWeighIns(sSame, ents, false).newInitial === null);
+  var sNone = {id:"t", weightInitial: 80, weights:[], assessments:[], weightCurrent: 80};
+  mergeWeighIns(sNone, ents, true);
+  check.check("8. Sem histórico, o peso inicial passa a ser a primeira pesagem importada", sNone.weightInitial === 72.4);
 })();
 
 check.summarize();

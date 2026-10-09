@@ -6655,7 +6655,7 @@ function nowHHMM(){ var d = new Date(); return ("0" + d.getHours()).slice(-2) + 
 
 // ---------- Importar pesagens do bloco de notas ----------
 // Formato aceite (uma pesagem por bloco, linhas em branco são ignoradas):
-//   24/08/2020 - 7:00 (jejum) - NOVA DIETA            data, hora opcional (7:00, 07:00, 13h, 14:30), notas opcionais
+//   24/08/2020 - 7:00 (jejum) - NOVA DIETA            data, hora opcional (7:00, 07:00, 13h, 14:30; "jejum" sem hora = 06:00), notas opcionais
 //   Calorias: 1500 kcal                               linhas de texto livre ficam como nota
 //   72.4 kg / 13.9 % / 59.2 kg / GV 3 / H2O 61.3 %    peso / gordura / massa muscular / gordura visceral / água
 //   69.9 kg                                           só o peso
@@ -6668,9 +6668,10 @@ function parseWeighInTime(rest){
     var hh = parseInt(m[1], 10), mm = m[2] ? parseInt(m[2], 10) : 0;
     if (hh <= 23 && mm <= 59){ time = ("0" + hh).slice(-2) + ":" + ("0" + mm).slice(-2); after = after.slice(m[0].length); }
   }
-  var fasting = /jejum/i.test(after);
+  // "jejum" sem hora conta como 06:00 (o jejum em si já não é guardado nem mostrado)
+  if (!time && /jejum/i.test(after)) time = "06:00";
   var note = after.replace(/\bjejum\b/gi, "").replace(/[()]/g, " ").replace(/\s+/g, " ").replace(/^[\s\-–—·,;]+|[\s\-–—·,;]+$/g, "");
-  return {time: time, fasting: fasting, note: note};
+  return {time: time, note: note};
 }
 
 function parseWeighInMeasures(line){
@@ -6710,7 +6711,7 @@ function parseWeighInNotes(text){
         return;
       }
       var info = parseWeighInTime(d[4]);
-      cur = {date: yr + "-" + pad(mon) + "-" + pad(day), time: info.time, fasting: info.fasting,
+      cur = {date: yr + "-" + pad(mon) + "-" + pad(day), time: info.time,
              note: [pending.join(" · "), info.note].filter(Boolean).join(" · "), line: i + 1, hasMeasures: false};
       pending = [];
       out.entries.push(cur);
@@ -6751,11 +6752,10 @@ function mergeWeighIns(s, entries, apply){
   var assessKeys = {}, weightKeys = {};
   (s.assessments || []).forEach(function(a){ assessKeys[a.date + "|" + (a.time || "") + "|" + Number(a.weight).toFixed(1)] = 1; });
   (s.weights || []).forEach(function(w){ weightKeys[w.date + "|" + Number(w.w).toFixed(1)] = 1; });
-  var res = {full: 0, weightOnly: 0, duplicates: 0}, newAssess = [], newWeights = [];
+  var res = {full: 0, weightOnly: 0, duplicates: 0, newInitial: null}, newAssess = [], newWeights = [];
   function weightEntry(e){
     var w = {date: e.date, w: e.weight};
     if (e.time) w.time = e.time;
-    if (e.fasting) w.fasting = true;
     if (e.note) w.note = e.note;
     return w;
   }
@@ -6767,7 +6767,6 @@ function mergeWeighIns(s, entries, apply){
       assessKeys[ak] = 1; res.full++;
       var a = {date: e.date, weight: e.weight, bodyFat: e.bodyFat, muscle: e.muscle, visceral: e.visceral, water: e.water};
       if (e.time) a.time = e.time;
-      if (e.fasting) a.fasting = true;
       if (e.note) a.note = e.note;
       newAssess.push(a);
       if (!weightKeys[wk]){ weightKeys[wk] = 1; newWeights.push(weightEntry(e)); }
@@ -6777,6 +6776,14 @@ function mergeWeighIns(s, entries, apply){
       newWeights.push(weightEntry(e));
     }
   });
+  // O peso inicial passa a ser a pesagem mais antiga, se a importação trouxer datas anteriores a tudo o que já existia.
+  var prevEarliest = (s.weights || []).reduce(function(m, w){ return (!m || w.date < m) ? w.date : m; }, "");
+  var earliestNew = newWeights.slice().sort(function(a, b){
+    var ka = a.date + " " + (a.time || ""), kb = b.date + " " + (b.time || "");
+    return ka < kb ? -1 : (ka > kb ? 1 : 0);
+  })[0];
+  if (earliestNew && (!prevEarliest || earliestNew.date < prevEarliest) && earliestNew.w !== s.weightInitial) res.newInitial = {date: earliestNew.date, w: earliestNew.w};
+  if (apply && res.newInitial) s.weightInitial = res.newInitial.w;
   if (apply && (newAssess.length || newWeights.length)){
     var prevLatest = (s.weights || []).reduce(function(m, w){ return w.date > m ? w.date : m; }, "");
     s.assessments = (s.assessments || []).concat(newAssess);
@@ -6816,11 +6823,12 @@ function tplImportPreview(s, parsed, plan){
     var fresh = plan.full + plan.weightOnly;
     html += '<p style="margin-bottom:8px;"><strong>' + n + ' pesagens</strong> entre ' + pt(dates[0]) + ' e ' + pt(dates[dates.length - 1]) +
       ' — ' + parsed.entries.filter(function(e){ return e.complete; }).length + ' completas, ' + parsed.entries.filter(function(e){ return !e.complete; }).length + ' só com o peso.</p>' +
-      '<p class="muted-p" style="margin-bottom:8px;">A importar: <strong>' + fresh + '</strong>' + (plan.duplicates ? ' · já existiam (ignoradas): ' + plan.duplicates : '') + '</p>';
+      '<p class="muted-p" style="margin-bottom:8px;">A importar: <strong>' + fresh + '</strong>' + (plan.duplicates ? ' · já existiam (ignoradas): ' + plan.duplicates : '') + '</p>' +
+      (plan.newInitial ? '<p class="muted-p" style="margin-bottom:8px;">O <strong>peso inicial</strong> passa a ser <strong>' + plan.newInitial.w.toFixed(1) + ' kg</strong> (pesagem de ' + pt(plan.newInitial.date) + ').</p>' : '');
     var sample = parsed.entries.length <= 6 ? parsed.entries : parsed.entries.slice(0, 3).concat(parsed.entries.slice(-3));
     html += '<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th></tr></thead><tbody>' +
       sample.map(function(e){
-        return '<tr><td class="date-cell">' + pt(e.date) + (e.time ? ' <span class="atime">· ' + escapeHtml(e.time) + '</span>' : '') + (e.fasting ? ' <span class="atime">· jejum</span>' : '') + '</td>' +
+        return '<tr><td class="date-cell">' + pt(e.date) + (e.time ? ' <span class="atime">· ' + escapeHtml(e.time) + '</span>' : '') + '</td>' +
           '<td>' + e.weight.toFixed(1) + 'kg</td>' +
           '<td>' + (e.complete ? e.bodyFat.toFixed(1) + '%' : '—') + '</td><td>' + (e.complete ? e.muscle.toFixed(1) + 'kg' : '—') + '</td>' +
           '<td>' + (e.complete ? e.visceral : '—') + '</td><td>' + (e.complete ? e.water.toFixed(1) + '%' : '—') + '</td></tr>';
@@ -6862,7 +6870,7 @@ function tplAssessTable(s, editable){
   (collapsed ? list.slice(0, LIMIT) : list).forEach(function(a, idx){
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.fasting ? " <span class=\"atime\">· jejum</span>" : "") + "</td>" +
+      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
       "<td>" + a.weight.toFixed(1) + "kg" + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + a.bodyFat.toFixed(1) + "%" + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + a.muscle.toFixed(1) + "kg" + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
