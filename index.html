@@ -88,6 +88,11 @@
   .btn{border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink); border-radius:11px; padding:10px 16px; font-size:0.76rem; font-weight:600; cursor:pointer; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.05em;}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
   .btn.ghost{background:transparent; border-color:transparent;}
+  /* Botão de carregar ficheiro: <label class="btn-file"> com um <input type=file> escondido dentro. Sem isto parecia texto simples. */
+  .btn-file{display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:10px 16px; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink); border-radius:11px; font-size:0.76rem; font-weight:600; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;}
+  .btn-file:hover{border-color:var(--accent);}
+  .btn-file:active{background:var(--surface-3);}
+  .btn-file:focus-within{outline:2px solid var(--accent-strong); outline-offset:2px;}
   .btn:disabled{opacity:0.5; cursor:default;}
   .btn-sm{padding:6px 12px; font-size:0.78rem; border-radius:9px;}
   a.linklike{color:var(--accent-strong); text-decoration:underline; cursor:pointer; font-weight:600;}
@@ -390,6 +395,7 @@
   .assess-table-scroll{overflow-x:auto; margin-top:12px; -webkit-overflow-scrolling:touch;}
   .assess-table-scroll table.assess-table{margin-top:0;}
   .assess-delta{font-size:0.68rem; color:var(--muted-2); margin-left:3px;}
+  .atime{color:var(--muted); white-space:nowrap;}
   .assess-form-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:10px; margin-top:12px; align-items:end;}
   .assess-form-grid .f{min-width:0;}
   .assess-form-grid .f label{display:block; font-size:0.65rem; color:var(--muted); text-transform:uppercase; margin-bottom:4px; font-weight:600;}
@@ -399,7 +405,7 @@
        grelha de 3 colunas isso empurrava-o para cima do campo seguinte
        ("peso"). Abaixo de 480px força-se a data a ocupar a linha toda. */
     .assess-form-grid{grid-template-columns:repeat(2,1fr);}
-    .assess-form-grid .f:first-child{grid-column:1/-1;}
+    .assess-form-grid .f:first-child, .assess-form-grid .f:nth-child(2){grid-column:1/-1;}
   }
   .assess-del{border:none; background:transparent; color:var(--muted-2); cursor:pointer; font-size:0.85rem;}
   .assess-del:hover{color:var(--critical);}
@@ -5367,6 +5373,7 @@ function rowToStudent(r){
   return {
     id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
     birthDate: r.birth_date || null,
+    authUserId: r.auth_user_id || null, // só leitura: pasta do aluno no Storage (nunca é gravado de volta)
     weightInitial: r.weight_initial, weightCurrent: r.weight_current, weightGoal: r.weight_goal,
     goal: r.goal, trainingsPerWeek: r.trainings_per_week, trainingDays: r.training_days || [], activityLevel: r.activity_level || null,
     trainingType: r.training_type, trainingTime: r.training_time, wakeTime: r.wake_time, sleepTime: r.sleep_time,
@@ -6306,7 +6313,7 @@ function tplTrainingOverview(s){
 }
 // Composição corporal: última avaliação vs anterior (Avaliação)
 function tplAssessKpis(s){
-  var list = (s.assessments||[]).slice().sort(function(a,b){ return a.date<b.date?1:-1; });
+  var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "";
   var a = list[0], p = list[1] || {};
   return "<div class=\"kpi-grid\">" +
@@ -6635,9 +6642,15 @@ function assessDelta(curr, prev, unit){
   return "<span class=\"assess-delta\">" + (d>0?"▲":"▼") + " " + Math.abs(d).toFixed(1) + unit + "</span>";
 }
 
+// Mais recentes primeiro: por data e, no mesmo dia, pela hora da pesagem (se existir).
+function assessmentKey(a){ return (a.date || "") + " " + (a.time || "00:00"); }
+function compareAssessmentsDesc(a, b){ var ka = assessmentKey(a), kb = assessmentKey(b); return ka < kb ? 1 : (ka > kb ? -1 : 0); }
+function nowHHMM(){ var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+
 function tplAssessForm(s){
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
+    "<div class=\"f\"><label>Hora da pesagem</label><input type=\"time\" id=\"asTime\" value=\"" + nowHHMM() + "\"></div>" +
     "<div class=\"f\"><label>Peso (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"asWeight\"></div>" +
     "<div class=\"f\"><label>Massa gorda (%)</label><input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" id=\"asBodyFat\"></div>" +
     "<div class=\"f\"><label>Massa muscular (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"asMuscle\"></div>" +
@@ -6649,13 +6662,13 @@ function tplAssessForm(s){
 }
 
 function tplAssessTable(s, editable){
-  var list = (s.assessments||[]).slice().sort(function(a,b){ return a.date<b.date?1:-1; });
+  var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
   var html = "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th>" + (editable?"<th></th>":"") + "</tr></thead><tbody>";
   list.forEach(function(a, idx){
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDatePt(a.date) + "</td>" +
+      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
       "<td>" + a.weight.toFixed(1) + "kg" + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + a.bodyFat.toFixed(1) + "%" + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + a.muscle.toFixed(1) + "kg" + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -6998,12 +7011,57 @@ function downloadPhotoComparison(s, dateA, dateB, errEl){
   });
 }
 
+// O profissional carrega uma foto de progresso em nome do aluno. Com ligação, o ficheiro vai para a
+// pasta do ALUNO no Storage (a política de leitura do aluno só deixa ler a própria pasta; o profissional
+// pode inserir em qualquer uma) — por isso o aluno também vê a foto. Sem a conta do aluno ativada
+// (sem auth_user_id) não há pasta onde a guardar: avisa em vez de falhar em silêncio.
+function uploadProgressPhotoAsPro(s, file, position, onDone){
+  if (!file) return Promise.resolve(false);
+  if (sbReady){
+    if (!s.authUserId){
+      showToast("O aluno ainda não ativou a conta — só depois é possível carregar fotos.");
+      return Promise.resolve(false);
+    }
+    var uploadedPath = s.authUserId + "/" + Date.now() + ".jpg";
+    return resizeImageFile(file, 1280).then(function(blob){
+      return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
+    }).then(function(res){
+      if (res.error){ showToast("⚠ Falha ao enviar foto: " + (res.error.message || "erro de acesso")); return false; }
+      return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
+        var photo = { date: todayISO(), path: uploadedPath, position: position, by: "profissional" };
+        photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
+        s.photos.push(photo);
+        if (onDone) onDone();
+        persistStudent(s);
+        return true;
+      });
+    }).catch(function(err){ showToast("⚠ Falha ao enviar foto" + (err && err.message ? ": " + err.message : "")); return false; });
+  }
+  return new Promise(function(resolve){
+    var reader = new FileReader();
+    reader.onload = function(){
+      s.photos.push({date: todayISO(), dataUrl: reader.result, position: position, by: "profissional"});
+      if (onDone) onDone();
+      persistStudent(s);
+      resolve(true);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function tplPhotosSection(s, opts){
   var html = "<div class=\"card\"><div class=\"eyebrow\">Fotografias de progresso</div>";
   if (opts.editable){
     html += "<label style=\"display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; margin:10px 0;\">" +
       "<input type=\"checkbox\" id=\"togglePhotos\"" + (s.allowPhotos?" checked":"") + "> Permitir que o aluno carregue fotos de progresso</label>" +
-      photoGridHtml(s) + tplPhotoCompare(s);
+      photoGridHtml(s) +
+      "<div class=\"muted-p\" style=\"margin:10px 0 6px;\">Carregar foto de progresso (tirada por ti):</div>" +
+      "<div style=\"display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;\">" +
+        PHOTO_POSITIONS.map(function(p){
+          return "<label class=\"btn-file\">" + p.label + "<input type=\"file\" accept=\"image/*\" class=\"pro-photo-upload-input\" data-position=\"" + p.key + "\" style=\"display:none;\"></label>";
+        }).join("") +
+      "</div>" +
+      tplPhotoCompare(s);
   } else if (!s.allowPhotos){
     html += "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional ainda não ativou fotografias de progresso para ti.</p>";
   } else {
@@ -9332,6 +9390,14 @@ function wireProTab(s){
     renderProTabContent(s);
     persistStudent(s);
   });
+  el.querySelectorAll(".pro-photo-upload-input").forEach(function(photoInput){
+    photoInput.addEventListener("change", function(e){
+      var file = e.target.files && e.target.files[0];
+      var position = photoInput.getAttribute("data-position");
+      uploadProgressPhotoAsPro(s, file, position, function(){ renderProTabContent(s); });
+      photoInput.value = "";
+    });
+  });
   wirePhotoCompare(s, el);
   wirePhotoRemove(s, el, function(){ renderProTabContent(s); });
   wireWeightLogPhotoRemove(s, el, function(){ renderProTabContent(s); });
@@ -9372,6 +9438,8 @@ function wireProTab(s){
   if (addAs) addAs.addEventListener("click", function(){
     var errEl = el.querySelector("#assessError");
     var date = el.querySelector("#asDate").value || new Date().toISOString().slice(0,10);
+    var timeEl = el.querySelector("#asTime");
+    var time = (timeEl && /^\d{2}:\d{2}$/.test(timeEl.value)) ? timeEl.value : "";
     var weight = parseFloat(el.querySelector("#asWeight").value);
     var bodyFat = parseFloat(el.querySelector("#asBodyFat").value);
     var muscle = parseFloat(el.querySelector("#asMuscle").value);
@@ -9387,14 +9455,16 @@ function wireProTab(s){
     }
     if (errEl) errEl.style.display = "none";
     if (!s.assessments) s.assessments = [];
-    s.assessments.push({date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0});
+    var entry = {date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
+    if (time) entry.time = time;
+    s.assessments.push(entry);
     if (!isNaN(weight)){ s.weightCurrent = weight; s.weights.push({date:date, w:weight}); }
     renderProTabContent(s);
     persistStudent(s);
   });
   el.querySelectorAll(".assess-del").forEach(function(btn){
     btn.addEventListener("click", function(){
-      var sorted = s.assessments.slice().sort(function(a,b){ return a.date<b.date?1:-1; });
+      var sorted = s.assessments.slice().sort(compareAssessmentsDesc);
       var idx = parseInt(btn.getAttribute("data-idx"),10);
       var target = sorted[idx];
       s.assessments = s.assessments.filter(function(a){ return a!==target; });
