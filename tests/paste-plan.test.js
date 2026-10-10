@@ -113,4 +113,14 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   var q = draftPlanFromDailyText("Meio da manhã\n1 iogurte proteico")[0].foods[0];
   check.check("8. No questionário do aluno continua o iogurte proteico genérico", q.name === "Iogurte proteico");
 })();
+// ---- 9. Notas manuscritas ("Leia ...") com várias linhas, gralha "logurte" e campos de hora que não saem do cartão ----
+(function(){
+  var base = "Refeição 4 (meio da tarde):\n1 logurte Proteico com 10-15g de Proteína\n100g Morangos OU 100g Uvas\nRefeição 5 (jantar):\n70g Arroz Basmati\n100g Carne Branca";
+  var d = draftPlanFromDailyText(base + "\nHidratação → 3L Água\nLeia (caso seja preciso):\nIogurte Proteico com 10-15g de Proteína");
+  function m(n){ return d.filter(function(x){ return x.mealName === n; })[0]; }
+  check.check("9. 'logurte' (I maiúsculo lido como l) é lido como iogurte", m("Lanche").foods.some(function(f){ return /^Iogurte/.test(f.name); }));
+  check.check("9. As linhas depois de 'Leia (...)' não acrescentam alimentos ao jantar", m("Jantar").foods.length === 2 && !m("Jantar").foods.some(function(f){ return /Iogurte/.test(f.name); }));
+  var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  check.check("9. Campos de hora/data sem aspeto nativo e limitados à coluna (iOS)", /input\[type="time"\], input\[type="date"\]\{\s*-webkit-appearance:none; appearance:none; display:block;[^}]*width:100%; min-width:0; max-width:100%/.test(html));
+})();
 check.summarize();
