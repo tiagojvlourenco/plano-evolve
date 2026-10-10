@@ -67,7 +67,7 @@ var logger = tplWorkoutLogger(s);
 check.check("8. O registo tem atalhos de 30 s a 3 min", [30, 45, 60, 90, 120, 180].every(function(sec){ return logger.indexOf('data-rest-start="' + sec + '"') >= 0; }));
 check.check("8. Cada série tem o botão ⏱ com o descanso prescrito (120 s) e 90 s por omissão", (logger.match(/data-rest-start="120" data-rest-label="Supino"/g) || []).length === 2 && /data-rest-start="90" data-rest-label="Remada"/.test(logger));
 check.check("8. O cronómetro está ligado aos botões e existe um painel #restTimer", /\[data-rest-start\]/.test(appSource) && fsHas("id=\"restTimer\""));
-check.check("8. É parado ao terminar sessão e escondido fora do modo aluno", /restTimerStop\(\);\s*\n\s*sb\.auth\.signOut/.test(appSource) && /state\.mode === "aluno" && !\(app && app\.classList\.contains\("hidden"\)\)/.test(appSource));
+check.check("8. É parado ao terminar sessão e escondido fora do modo aluno", /restTimerStop\(\);\s*\n\s*wlDraftWipe\(\);\s*\n\s*sb\.auth\.signOut/.test(appSource) && /state\.mode === "aluno" && !\(app && app\.classList\.contains\("hidden"\)\)/.test(appSource));
 function fsHas(x){ return require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8").indexOf(x) >= 0; }
 check.check("8. Respeita 'reduzir animação' e tem alvos de toque ≥ 44 px", fsHas("prefers-reduced-motion:reduce){ #restTimer.done{animation:none;}") && /\.rt-presets button, \.wl-rest\{min-height:44px; min-width:44px/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8")));
 

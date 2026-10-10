@@ -43,7 +43,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 // ---- 2. Registo: só séries marcadas; rascunho sobrevive a re-desenhar ----
 (function(){
   var store = {};
-  global.window.localStorage = {getItem: function(k){ return store[k] || null; }, setItem: function(k, v){ store[k] = v; }};
+  global.window.localStorage = {getItem: function(k){ return store[k] || null; }, setItem: function(k, v){ store[k] = v; }, removeItem: function(k){ delete store[k]; }};
   state.wlDraft = null;
   var s = {id:"aluno1", trainingsPerWeek:3, workoutLogs:[], trainingProgram:{name:"P", days:[{id:"d1", name:"A", exercises:[{id:"e1", name:"Supino", sets:2, reps:"8", rest:60}]}]}};
   var h = tplWorkoutLogger(s);
@@ -53,11 +53,17 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("2. O envio só lê séries com ✓ e dá erro claro se nenhuma", /if \(!box \|\| !box\.checked\) continue/.test(appSource) && /Marca ✓ pelo menos uma série feita/.test(appSource));
   var d = wlDraftGet(s, "d1");
   d.sets["e1:0"] = {done:true, reps:"10", load:"62.5"}; d.rpe = 9; d.notes = "ombro a doer";
-  wlDraftSave();
+  wlDraftSave(d);
   var h2 = tplWorkoutLogger(s);
   check.check("2. Ao re-desenhar (mudar de separador) a série marcada, as repetições, a carga, o RPE e as notas mantêm-se", /data-wl-done="e1:0"[^>]* checked/.test(h2) && /data-wl-reps="e1:0"[^>]*value="10"/.test(h2) && /data-wl-load="e1:0"[^>]*value="62.5"/.test(h2) && /id="wlRpeVal">9</.test(h2) && /ombro a doer/.test(h2));
   state.wlDraft = null;
   check.check("2. E sobrevive a recarregar a página (localStorage)", wlDraftGet(s, "d1").sets["e1:0"].reps === "10");
+  // rascunho de há mais de 12 h = treino abandonado: não volta a aparecer
+  var old = wlDraftGet(s, "d1"); old.savedAt = Date.now() - 13 * 3600 * 1000; wlDraftSave(); state.wlDraft = null;
+  check.check("2. Um rascunho com mais de 12 h é descartado (séries marcadas de ontem não reaparecem)", !wlDraftGet(s, "d1").sets["e1:0"]);
+  var d2 = wlDraftGet(s, "d1"); d2.sets["e1:0"] = {done:true, reps:"8"}; wlDraftSave(d2);
+  wlDraftWipe();
+  check.check("2. Terminar sessão apaga os rascunhos (também do localStorage)", Object.keys(wlDraftStore()).length === 0 && !store[WL_DRAFT_KEY]);
   wlDraftClear(s, "d1"); state.wlDraft = null;
   check.check("2. Depois de guardar o treino o rascunho é apagado", !wlDraftGet(s, "d1").sets["e1:0"]);
   check.check("2. Os listeners ficam nos campos (não acumulam no contentor reutilizado)", /querySelectorAll\("\[data-wl-reps\], \[data-wl-load\], \[data-wl-done\], #wlRpe, #wlNotes"\)/.test(appSource));
