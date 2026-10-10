@@ -14,18 +14,18 @@ var appSource = require("./extract-app")();
 eval(appSource);
 var check = require("./check")();
 
-var NEW_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras","snacks"];
+var NEW_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras","bebidas","snacks"];
 
-// 1. FOOD_GROUPS tem exatamente os 7 grupos novos, nenhum antigo sobrevive
+// 1. FOOD_GROUPS tem exatamente os 8 grupos, nenhum antigo sobrevive
 (function(){
   var keys = Object.keys(FOOD_GROUPS);
-  check.check("1. FOOD_GROUPS tem exatamente os 7 grupos novos", keys.length === 7 && NEW_GROUPS.every(function(g){ return keys.indexOf(g) >= 0; }));
+  check.check("1. FOOD_GROUPS tem exatamente os 8 grupos", keys.length === 8 && NEW_GROUPS.every(function(g){ return keys.indexOf(g) >= 0; }));
   check.check("1. Nenhuma chave antiga (protein/carb/veg/fat/fruit) sobrevive em FOOD_GROUPS", ["protein","carb","veg","fat","fruit"].every(function(g){ return !FOOD_GROUPS[g]; }));
 })();
 
 // 2. GROUP_LABELS tem os rótulos com emoji pedidos, um por grupo novo
 (function(){
-  check.check("2. GROUP_LABELS cobre os 7 grupos novos", NEW_GROUPS.every(function(g){ return !!GROUP_LABELS[g]; }));
+  check.check("2. GROUP_LABELS cobre os 8 grupos", NEW_GROUPS.every(function(g){ return !!GROUP_LABELS[g]; }));
   check.check("2. Rótulo de 'cereais' tem o emoji e o nome pedidos", GROUP_LABELS.cereais.indexOf("🥖") >= 0 && GROUP_LABELS.cereais.indexOf("Cereais") >= 0);
   check.check("2. Rótulo de 'laticinios' tem o emoji e o nome pedidos", GROUP_LABELS.laticinios.indexOf("🥛") >= 0 && GROUP_LABELS.laticinios.indexOf("Lacticínios") >= 0);
   check.check("2. Rótulo de 'carnes' tem o emoji e o nome pedidos", GROUP_LABELS.carnes.indexOf("🥩") >= 0 && GROUP_LABELS.carnes.indexOf("Carnes") >= 0);
@@ -84,10 +84,10 @@ var NEW_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras",
 })();
 
 // 8. PRO_PLAN_GROUPS (editor do profissional) e CUSTOM_FOOD_GROUP_LABELS (alimento
-// personalizado) usam os 7 grupos novos — o segundo reaproveita GROUP_LABELS
+// personalizado) usam os 8 grupos — o segundo reaproveita GROUP_LABELS
 // diretamente, para nunca dessincronizar os rótulos entre os dois sítios
 (function(){
-  check.check("8. PRO_PLAN_GROUPS tem os 7 grupos novos", PRO_PLAN_GROUPS.length === 7 && NEW_GROUPS.every(function(g){ return PRO_PLAN_GROUPS.indexOf(g) >= 0; }));
+  check.check("8. PRO_PLAN_GROUPS tem os 8 grupos", PRO_PLAN_GROUPS.length === 8 && NEW_GROUPS.every(function(g){ return PRO_PLAN_GROUPS.indexOf(g) >= 0; }));
   check.check("8. CUSTOM_FOOD_GROUP_LABELS é o mesmo objeto que GROUP_LABELS", CUSTOM_FOOD_GROUP_LABELS === GROUP_LABELS);
 })();
 
@@ -107,7 +107,7 @@ var NEW_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras",
 (function(){
   var total = 0;
   NEW_GROUPS.forEach(function(g){ total += FOOD_GROUPS[g].length; });
-  check.check("10. O total de alimentos nos 7 grupos novos nunca é inferior ao da reclassificação inicial (1393 + o de teste do ponto 9)", total >= 1394);
+  check.check("10. O total de alimentos nos 8 grupos nunca é inferior ao da reclassificação inicial (1393 + o de teste do ponto 9)", total >= 1394);
 })();
 
 check.summarize();

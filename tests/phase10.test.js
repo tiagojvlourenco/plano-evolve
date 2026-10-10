@@ -142,7 +142,7 @@ function freshStudent(overrides){
 (function(){
   var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   check.check("12. .assess-form-grid .f tem min-width:0 (impede overflow do date input)", /\.assess-form-grid \.f\{min-width:0;\}/.test(html));
-  check.check("12. Media query força a data a ocupar a linha toda abaixo de 480px", /max-width:480px\)\{[\s\S]{0,400}assess-form-grid\{grid-template-columns:repeat\(2,1fr\)/.test(html));
+  check.check("12. Media query força a data a ocupar a linha toda abaixo de 480px", /max-width:480px\)\{[\s\S]{0,400}assess-form-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/.test(html));
 })();
 
 // ---- 5. Perfil reorganizado em secções recolhíveis ----
