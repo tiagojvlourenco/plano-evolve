@@ -48,7 +48,7 @@ var check = require("./check")();
 // ---- 5. CSS responsivo (contrato: as regras existem) ----
 (function(){
   var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
-  check.check("5. Blocos de peso do profissional ficam 2x2 em ecrãs pequenos", /@media \(max-width:760px\)\{ \.pro-main \.stat-grid-4\{grid-template-columns:repeat\(2,1fr\);\} \}/.test(html));
+  check.check("5. Blocos de peso do profissional ficam 2x2 em ecrãs pequenos", /@media \(max-width:760px\)\{ \.pro-main \.stat-grid-4\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\} \}/.test(html));
   check.check("5. 'Sair' fica na linha do logótipo em ecrãs pequenos", /\.brand-header #signOutBtn\{grid-column:2; grid-row:1;\}/.test(html));
   check.check("5. A data do Histórico passa para baixo do texto em ecrãs pequenos", /\.history-row:has\(> \.hdate\)\{flex-direction:column/.test(html));
   check.check("5. A data do Histórico não parte em duas linhas", /\.history-row \.hdate\{[^}]*white-space:nowrap/.test(html));

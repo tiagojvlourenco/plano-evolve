@@ -117,7 +117,7 @@ var check = require("./check")();
 
 // 13. wireProTab liga [data-new-food] a abrir o modal, e atualiza a pesquisa/quantidade ao guardar
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 23000);
   var block = fnSrc.slice(fnSrc.indexOf("data-new-food"), fnSrc.indexOf("data-new-food") + 800);
   check.check("13. Abre openCustomFoodModal", block.indexOf("openCustomFoodModal(") >= 0);
   check.check("13. Ao guardar, preenche o campo de pesquisa com o novo nome", block.indexOf("foodInput.value = name") >= 0);

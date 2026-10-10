@@ -138,7 +138,7 @@ function freshStudent(overrides){
 // 13. wireProTab calcula e mostra os não-reconhecidos na notificação e no histórico ao aplicar
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 3600);
+  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 3900);
   check.check("13. Calcula allUnmatchedWords com extractUnmatchedWords", block.indexOf("extractUnmatchedWords(d.sourceText, matchedNames, index, ") >= 0);
   check.check("13. Inclui os não-reconhecidos na notificação (toast)", block.indexOf("toastMsg += \". Não reconhecidos") >= 0);
   check.check("13. Inclui os não-reconhecidos no resumo registado no histórico", block.indexOf("não reconhecidos: \" + allUnmatchedWords.join") >= 0);
