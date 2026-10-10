@@ -146,6 +146,28 @@
   select.student-switch{border:1px solid var(--line-strong); background:var(--surface); border-radius:9px; padding:6px 10px; font-size:0.75rem; font-weight:600;}
 
   .aluno-tabs{display:flex; flex-direction:column; gap:14px; padding-bottom:78px;}
+  #alunoApp.rt-open .aluno-tabs{padding-bottom:230px;}
+  #restTimer{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(92px + env(safe-area-inset-bottom, 0px)); width:min(398px, calc(100% - 32px)); z-index:25; background:var(--surface-2); border:1px solid var(--accent); border-radius:18px; padding:12px 14px 14px; box-shadow:0 14px 34px -10px rgba(0,0,0,0.7);}
+  #restTimer.hidden{display:none;}
+  #restTimer.done{border-color:var(--critical); animation:rtPulse 1s ease-in-out infinite;}
+  @keyframes rtPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,0.0), 0 14px 34px -10px rgba(0,0,0,0.7);} 50%{box-shadow:0 0 0 6px rgba(255,80,80,0.35), 0 14px 34px -10px rgba(0,0,0,0.7);}}
+  @media (prefers-reduced-motion:reduce){ #restTimer.done{animation:none;} }
+  @media (min-width:760px){ #restTimer{width:min(560px, calc(100% - 32px));} }
+  #restTimer .rt-head{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);}
+  #restTimer .rt-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
+  #restTimer .rt-head button{background:transparent; border:none; color:var(--muted); font-size:1rem; min-width:44px; min-height:32px; cursor:pointer;}
+  #restTimer .rt-time{font-family:var(--display); font-weight:700; font-size:3rem; line-height:1.05; text-align:center; font-variant-numeric:tabular-nums; margin:2px 0 6px;}
+  #restTimer .rt-time.over{color:var(--critical);}
+  #restTimer .rt-bar{height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden;}
+  #restTimer .rt-bar i{display:block; height:100%; background:var(--accent); transition:width .25s linear;}
+  #restTimer.done .rt-bar i{background:var(--critical);}
+  #restTimer .rt-status{min-height:1.1em; text-align:center; font-size:0.8rem; font-weight:700; color:var(--critical); margin-top:6px;}
+  #restTimer .rt-actions{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:8px;}
+  #restTimer .rt-actions button{min-height:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-size:0.74rem; font-weight:700; cursor:pointer;}
+  #restTimer .rt-actions button:focus-visible, #restTimer .rt-head button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  .rt-presets{display:grid; grid-template-columns:repeat(auto-fit,minmax(48px,1fr)); gap:6px; margin-top:8px;}
+  .rt-presets button, .wl-rest{min-height:44px; min-width:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-size:0.8rem; font-weight:700; cursor:pointer; padding:0 4px;}
+  .rt-presets button:hover, .wl-rest:hover{border-color:var(--accent); color:var(--accent-strong);}
   .tabbar{
     position:fixed; left:50%; transform:translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width:min(398px, calc(100% - 32px));
     background:var(--surface); border:1px solid var(--line-strong); border-radius:18px; display:flex; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5); z-index:20;
@@ -585,6 +607,7 @@
   <div id="proApp" class="hidden"></div>
 </div>
 
+<div id="restTimer" class="hidden" role="region" aria-label="Cronómetro de descanso"></div>
 <div id="modalRoot"></div>
 
 <script>
@@ -6949,6 +6972,128 @@ function nextWorkoutDay(s){
 }
 function fmtLoadSet(top){ return top ? (top.load > 0 ? String(top.load).replace(".", ",") + " kg × " + top.reps : top.reps + " reps (peso do corpo)") : "—"; }
 
+/* ---------- Cronómetro de descanso ----------
+   Contagem decrescente entre séries (por exercício usa o descanso prescrito; ou 30 s a 3 min à escolha), com
+   -15/+15 s, pausa, reiniciar e, a zero, som + vibração + painel a piscar; depois conta o tempo a mais (+0:12).
+   Usa o relógio (Date.now) e não "ticks", por isso continua certo se o ecrã apagar ou a página ficar em segundo plano. */
+var REST_PRESETS = [30, 45, 60, 90, 120, 180];
+var REST_DEFAULT_SECONDS = 90;
+var restTimer = null; // {total, endsAt, label, pausedLeft, notified}
+var restTimerInterval = null;
+var restAudioCtx = null;
+function fmtClock(sec){ sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2); }
+function restTimerLeftMs(t, now){ if (!t) return 0; return t.pausedLeft != null ? t.pausedLeft : t.endsAt - now; }
+function restTimerStart(seconds, label, now){
+  seconds = Math.min(3600, Math.max(5, Math.round(seconds) || REST_DEFAULT_SECONDS));
+  now = now == null ? Date.now() : now;
+  restTimer = {total: seconds, endsAt: now + seconds * 1000, label: label || "Descanso", pausedLeft: null, notified: false};
+  unlockRestAudio();
+  startRestTicker();
+  renderRestTimer(now);
+  return restTimer;
+}
+function restTimerAdjust(deltaSec, now){
+  if (!restTimer) return;
+  now = now == null ? Date.now() : now;
+  if (restTimer.pausedLeft != null) restTimer.pausedLeft = Math.max(0, restTimer.pausedLeft + deltaSec * 1000);
+  else restTimer.endsAt += deltaSec * 1000;
+  restTimer.total = Math.max(5, restTimer.total + deltaSec);
+  if (restTimerLeftMs(restTimer, now) > 0) restTimer.notified = false;
+  renderRestTimer(now);
+}
+function restTimerTogglePause(now){
+  if (!restTimer) return;
+  now = now == null ? Date.now() : now;
+  if (restTimer.pausedLeft != null){ restTimer.endsAt = now + restTimer.pausedLeft; restTimer.pausedLeft = null; }
+  else restTimer.pausedLeft = Math.max(0, restTimer.endsAt - now);
+  renderRestTimer(now);
+}
+function restTimerRestart(now){
+  if (!restTimer) return;
+  restTimerStart(restTimer.total, restTimer.label, now);
+}
+function restTimerStop(){
+  restTimer = null;
+  if (restTimerInterval){ clearInterval(restTimerInterval); restTimerInterval = null; }
+  renderRestTimer();
+}
+function startRestTicker(){
+  if (restTimerInterval) return;
+  restTimerInterval = setInterval(function(){ restTimerTick(Date.now()); }, 250);
+}
+function restTimerTick(now){
+  if (!restTimer) return;
+  if (restTimerLeftMs(restTimer, now) <= 0 && !restTimer.notified && restTimer.pausedLeft == null){
+    restTimer.notified = true;
+    restTimerAlert();
+  }
+  renderRestTimer(now);
+}
+function unlockRestAudio(){
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!restAudioCtx) restAudioCtx = new AC();
+    if (restAudioCtx.state === "suspended") restAudioCtx.resume();
+  } catch (e) {}
+}
+function restTimerAlert(){
+  try {
+    if (restAudioCtx){
+      var t0 = restAudioCtx.currentTime;
+      [0, 0.28, 0.56].forEach(function(d){
+        var o = restAudioCtx.createOscillator(), g = restAudioCtx.createGain();
+        o.type = "sine"; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, t0 + d);
+        g.gain.exponentialRampToValueAtTime(0.4, t0 + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.22);
+        o.connect(g); g.connect(restAudioCtx.destination);
+        o.start(t0 + d); o.stop(t0 + d + 0.24);
+      });
+    }
+  } catch (e) {}
+  try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+}
+function restTimerHtml(now){
+  var t = restTimer;
+  var left = restTimerLeftMs(t, now);
+  var over = left < 0;
+  var secs = Math.ceil(Math.abs(left) / 1000);
+  var pct = over ? 100 : Math.min(100, Math.max(0, (1 - left / (t.total * 1000)) * 100));
+  var paused = t.pausedLeft != null;
+  return `<div class="rt-head"><span class="rt-label">⏱ ${escapeHtml(t.label)}${paused ? " · em pausa" : ""}</span><button type="button" data-rt="close" aria-label="Fechar cronómetro">✕</button></div>` +
+    `<div class="rt-time${over ? " over" : ""}" role="timer">${over ? "+" : ""}${fmtClock(secs)}</div>` +
+    `<div class="rt-bar"><i style="width:${pct.toFixed(1)}%"></i></div>` +
+    `<div class="rt-status" aria-live="polite">${over ? "Descanso terminado — próxima série!" : ""}</div>` +
+    `<div class="rt-actions"><button type="button" data-rt="-15">−15 s</button><button type="button" data-rt="pause">${paused ? "Continuar" : "Pausa"}</button><button type="button" data-rt="+15">+15 s</button><button type="button" data-rt="restart">Reiniciar</button></div>`;
+}
+function renderRestTimer(now){
+  var el = document.getElementById("restTimer");
+  if (!el) return;
+  var app = document.getElementById("alunoApp");
+  var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden"));
+  el.classList.toggle("hidden", !visible);
+  if (app) app.classList.toggle("rt-open", visible);
+  if (!visible){ el.innerHTML = ""; return; }
+  now = now == null ? Date.now() : now;
+  el.classList.toggle("done", restTimerLeftMs(restTimer, now) <= 0 && restTimer.pausedLeft == null);
+  el.innerHTML = restTimerHtml(now);
+}
+(function wireRestTimer(){
+  var el = document.getElementById("restTimer");
+  if (!el) return;
+  el.addEventListener("click", function(e){
+    var b = e.target.closest ? e.target.closest("[data-rt]") : null;
+    if (!b) return;
+    var a = b.getAttribute("data-rt");
+    if (a === "close") restTimerStop();
+    else if (a === "pause") restTimerTogglePause();
+    else if (a === "restart") restTimerRestart();
+    else if (a === "-15") restTimerAdjust(-15);
+    else if (a === "+15") restTimerAdjust(15);
+  });
+})();
+
 // ---------- Aluno: registar a sessão ----------
 function tplWorkoutLogger(s){
   var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; });
@@ -6958,6 +7103,9 @@ function tplWorkoutLogger(s){
   var selected = days.filter(function(d){ return d.id === state.workoutDayId; })[0] || nextWorkoutDay(s) || days[0];
   if (days.indexOf(selected) < 0) selected = days[0];
   var html = `<div class="card"><div class="eyebrow">Registar treino</div>` +
+    `<div class="checkin-field" style="margin-top:8px;"><label>Cronómetro de descanso</label><div class="rt-presets">` +
+      REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
+    `</div></div>` +
     `<div class="checkin-field" style="margin-top:8px;"><label for="wlDay">Treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
     `</select></div>`;
@@ -6971,10 +7119,11 @@ function tplWorkoutLogger(s){
       (last ? `<div class="muted-p" style="font-size:0.76rem; color:var(--accent-strong);">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
     var prefillLoad = last && last.topSet && last.topSet.load > 0 ? last.topSet.load : "";
     for (var i = 0; i < e.sets; i++){
-      html += `<div style="display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; margin-top:6px;">` +
+      html += `<div style="display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) 44px; gap:8px; align-items:center; margin-top:6px;">` +
         `<span class="muted-p" style="font-size:0.78rem;">${i + 1}.</span>` +
         `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" data-wl-reps="${escapeHtml(e.id)}:${i}" value="${firstRepsOf(e.reps) || ""}">` +
         `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" data-wl-load="${escapeHtml(e.id)}:${i}" value="${prefillLoad}">` +
+        `<button type="button" class="wl-rest" data-rest-start="${e.rest != null ? e.rest : REST_DEFAULT_SECONDS}" data-rest-label="${escapeHtml(e.name)}" aria-label="Iniciar descanso de ${e.rest != null ? e.rest : REST_DEFAULT_SECONDS} segundos">⏱</button>` +
       `</div>`;
     }
     html += `</div>`;
@@ -6989,6 +7138,9 @@ function tplWorkoutLogger(s){
 function wireWorkoutLogger(s, el, rerender){
   var daySel = el.querySelector("#wlDay");
   if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
+  el.querySelectorAll("[data-rest-start]").forEach(function(b){
+    b.addEventListener("click", function(){ restTimerStart(parseInt(b.getAttribute("data-rest-start"), 10), b.getAttribute("data-rest-label")); });
+  });
   var save = el.querySelector("#wlSave");
   if (!save) return;
   var rpeInput = el.querySelector("#wlRpe");
@@ -10384,6 +10536,7 @@ function setMode(mode){
   } else {
     renderProShell();
   }
+  renderRestTimer();
 }
 
 document.querySelectorAll("#modeSwitch button").forEach(function(b){
@@ -10634,6 +10787,7 @@ document.getElementById("recoveryForm").addEventListener("submit", function(e){
 });
 
 function doSignOut(){
+  restTimerStop();
   sb.auth.signOut().then(function(){ authRole = null; showAuthScreen("signin"); });
 }
 document.getElementById("signOutBtn").addEventListener("click", doSignOut);
