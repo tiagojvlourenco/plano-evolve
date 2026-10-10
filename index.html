@@ -8120,6 +8120,13 @@ function tplProPlano(s){
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
 
+  html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">Colar um plano em texto</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola o plano alimentar (por exemplo \"Refeição 1 (pequeno-almoço)\" seguido dos alimentos, com \"OU\" nas alternativas). Reconheço as refeições e os alimentos da nossa base e mostro uma proposta para reveres antes de aplicar.</p>" +
+    "<div class=\"checkin-field\"><textarea id=\"pastedPlanText\" rows=\"8\" placeholder=\"Refeição 1 (pequeno-almoço)&#10;1 fatia de pão integral&#10;50g queijo fresco magro\"></textarea></div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"draftFromPastedPlan\">🍽️ Gerar proposta</button>" +
+    "<div id=\"pastedPlanResult\"></div>" +
+  "</details>";
+
   sortMealsByTime(s);
   html += "<div class=\"section-gap eyebrow\" style=\"margin-bottom:4px;\">Refeições do plano</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Nível " + TIER_LABEL[flexTier(s.flexibility)] + " — o aluno vê: " + TIER_HINT[flexTier(s.flexibility)].toLowerCase() + ". As refeições ordenam-se sempre pelo horário.</p>";
@@ -9151,10 +9158,11 @@ function wireProTab(s){
     showToast("Esqueleto de plano criado — adiciona os alimentos de cada refeição");
   });
 
-  var draftBtn = el.querySelector("#draftFromDailyText");
+  ["#draftFromDailyText", "#draftFromPastedPlan"].forEach(function(sel){
+  var draftBtn = el.querySelector(sel), pasted = sel === "#draftFromPastedPlan";
   if (draftBtn) draftBtn.addEventListener("click", function(){
-    var draft = draftPlanFromDailyText(s.dailyEatingDescription);
-    var resultEl = el.querySelector("#dailyPlanDraftResult");
+    var draft = draftPlanFromDailyText(pasted ? el.querySelector("#pastedPlanText").value : s.dailyEatingDescription);
+    var resultEl = el.querySelector(pasted ? "#pastedPlanResult" : "#dailyPlanDraftResult");
 
     function renderAndWireDraft(){
       resultEl.innerHTML = renderDailyPlanDraft(draft);
@@ -9203,7 +9211,7 @@ function wireProTab(s){
             if (allUnmatchedWords.indexOf(l) === -1) allUnmatchedWords.push(l);
           });
         });
-        var summary = "Plano gerado a partir do dia-a-dia alimentar (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)" +
+        var summary = "Plano gerado a partir " + (pasted ? "de um plano em texto" : "do dia-a-dia alimentar") + " (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)" +
           (allUnmatchedWords.length ? " — não reconhecidos: " + allUnmatchedWords.join(", ") : "");
         if (addedFoods > 0 || allUnmatchedWords.length) logPlanEvent(s, "plano_gerado_texto", summary);
         renderProTabContent(s);
@@ -9214,6 +9222,7 @@ function wireProTab(s){
       });
     }
     renderAndWireDraft();
+  });
   });
 
   var saveT = el.querySelector("#saveTargets");
