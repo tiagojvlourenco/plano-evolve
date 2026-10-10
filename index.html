@@ -777,6 +777,7 @@ var FOOD_GROUPS = {
     {name:"Iogurte proteico de baunilha (YoPro Danone)", qty:"100 g"},
     {name:"Iogurte proteico de mirtilo (YoPro Danone)", qty:"120 g"},
     {name:"Queijo fresco longa duração light (Continente Equilíbrio)", qty:"63 g"},
+    {name:"Queijo fresco light (Hacendado)", qty:"63 g"},
     {name:"Iogurte proteico com manga e maracujá 0% (Mercadona)", qty:"100 g"},
     {name:"Iogurte com frutos do bosque (Mercadona)", qty:"100 g"},
     {name:"Iogurte 0% com fruta (Mercadona)", qty:"100 g"},
@@ -2638,7 +2639,8 @@ var FOOD_DB = {
   "Iogurte grego natural (Oikos)": {per:"100g", kcal:62.7, p:3.4, c:4.4, f:7},
   "Iogurte proteico de baunilha (YoPro Danone)": {per:"100g", kcal:53.3, p:9.4, c:3.6, f:0.1},
   "Iogurte proteico de mirtilo (YoPro Danone)": {per:"100g", kcal:54, p:9.4, c:3.7, f:0.1},
-  "Queijo fresco longa duração light (Continente Equilíbrio)": {per:"100g", kcal:101, p:11, c:4.9, f:4}, // 4 unidades de 62,5 g fechadas individualmente (250 g) // copo de 120 g = 11 g de proteína; EAN 8410500030865
+  "Queijo fresco longa duração light (Continente Equilíbrio)": {per:"100g", kcal:101, p:11, c:4.9, f:4},
+  "Queijo fresco light (Hacendado)": {per:"100g", kcal:99, p:11, c:4.4, f:4}, // embalagem de 2 unidades fechadas (125 g: 2 x 62,5 g) // 4 unidades de 62,5 g fechadas individualmente (250 g) // copo de 120 g = 11 g de proteína; EAN 8410500030865
   "Iogurte proteico com manga e maracujá 0% (Mercadona)": {per:"100g", kcal:56.7, p:8.3, c:5.8, f:0.2},
   "Iogurte com frutos do bosque (Mercadona)": {per:"100g", kcal:98, p:3.7, c:13.7, f:3.2},
   "Iogurte 0% com fruta (Mercadona)": {per:"100g", kcal:45, p:4.5, c:6.5, f:0.1},
@@ -4309,7 +4311,8 @@ function priorityMacroForFood(name){
    Por isso, quando se conhece o tamanho da embalagem (FOOD_PACKS), as quantidades são sempre embalagens inteiras. */
 var FOOD_PACKS = {
   "Iogurte proteico de mirtilo (YoPro Danone)": 120,
-  "Queijo fresco longa duração light (Continente Equilíbrio)": 62.5 // cada unidade vem fechada: 4 x 62,5 g
+  "Queijo fresco longa duração light (Continente Equilíbrio)": 62.5, // cada unidade vem fechada: 4 x 62,5 g
+  "Queijo fresco light (Hacendado)": 62.5 // 2 unidades por embalagem (62,5 g cada, como o Natural do Hacendado)
 };
 var PERISHABLE_AFTER_OPENING = /iogurte|skyr|leite|queijo|fiambre|presunto|peru fatiado|natas|requeij|bebida vegetal|kefir|sumo|molho|pudim|manteiga|margarina|húmus|hummus|paté/i;
 function isPerishableAfterOpening(name){ return PERISHABLE_AFTER_OPENING.test(name || ""); }
@@ -5002,7 +5005,10 @@ function splitDraftPhrases(line){
 // reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
 // Produtos que o profissional/aluno compra de facto: no plano colado, o alimento genérico passa para esse produto
 // (e para embalagens inteiras: 4 x 62,5 g de queijo fresco, fechadas uma a uma).
-var PREFERRED_PRODUCTS = {"Queijo fresco magro": "Queijo fresco longa duração light (Continente Equilíbrio)"};
+var PREFERRED_PRODUCTS = {
+  "Queijo fresco magro": "Queijo fresco light (Hacendado)",
+  "Iogurte proteico": "Iogurte proteico de mirtilo (YoPro Danone)"
+};
 function applyPreferredProductsIf(pasted, draft){ return pasted ? applyPreferredProducts(draft) : draft; }
 function applyPreferredProducts(draft){
   draft.forEach(function(d){

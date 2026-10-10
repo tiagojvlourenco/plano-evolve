@@ -99,8 +99,18 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   check.check("7. Unidade de 62,5 g: 63 g (1 unidade) e 125 g (2) sem sobras; 100 g deixa sobras", packLeftover(n, "63 g") === 0 && packLeftover(n, "125 g") === 0 && packLeftover(n, "100 g") > 0);
   var d = applyPreferredProducts(draftPlanFromDailyText("Refeição 1 (pequeno-almoço)\n1 Fatia Pão Integral\n50g Queijo Fresco Magro"));
   var q = d[0].foods.filter(function(f){ return /^Queijo/.test(f.name); })[0];
-  check.check("7. No plano colado, 'queijo fresco magro' 50 g vira o queijo do Continente, 1 unidade (63 g)", q && q.name === n && q.qty === "63 g" && q.group === "laticinios");
+  var h = "Queijo fresco light (Hacendado)";
+  check.check("7. No plano colado, 'queijo fresco magro' 50 g vira o queijo do Mercadona (Hacendado), 1 unidade (63 g)", q && q.name === h && q.qty === "63 g" && q.group === "laticinios");
+  check.check("7. Hacendado: 99 kcal, 11 g proteína, 4,4 g hidratos, 4 g gordura por 100 g; unidades de 62,5 g", FOOD_DB[h].kcal === 99 && FOOD_DB[h].p === 11 && FOOD_DB[h].c === 4.4 && FOOD_DB[h].f === 4 && packSizeOf(h) === 62.5 && packLeftover(h, "63 g") === 0 && packLeftover(h, "50 g") > 0);
   var quest = draftPlanFromDailyText("Pequeno-almoço\n* 60 g queijo fresco magro")[0].foods.filter(function(f){ return /^Queijo/.test(f.name); })[0];
   check.check("7. No questionário do aluno continua o genérico (60 g), sem trocar de produto", quest && quest.name === "Queijo fresco magro" && quest.qty === "60 g");
+})();
+// ---- 8. "Iogurte proteico" no plano colado = o YoPRO de mirtilo que a aluna compra (1 copo de 120 g) ----
+(function(){
+  var d = applyPreferredProducts(draftPlanFromDailyText("Refeição 4 (meio da tarde)\n1 Iogurte Proteico com 10-15g de Proteína\n100g Morangos OU 100g Uvas"));
+  var y = d[0].foods.filter(function(f){ return /YoPro/.test(f.name); })[0];
+  check.check("8. '1 iogurte proteico (10-15 g proteína)' → YoPRO mirtilo, 1 copo (120 g, ≈ 11 g de proteína)", y && y.name === "Iogurte proteico de mirtilo (YoPro Danone)" && y.qty === "120 g" && y.group === "laticinios");
+  var q = draftPlanFromDailyText("Meio da manhã\n1 iogurte proteico")[0].foods[0];
+  check.check("8. No questionário do aluno continua o iogurte proteico genérico", q.name === "Iogurte proteico");
 })();
 check.summarize();
