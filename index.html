@@ -5002,7 +5002,10 @@ function splitDraftPhrases(line){
 // reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
 // Produtos que o profissional/aluno compra de facto: no plano colado, o alimento genérico passa para esse produto
 // (e para embalagens inteiras: 4 x 62,5 g de queijo fresco, fechadas uma a uma).
-var PREFERRED_PRODUCTS = {"Queijo fresco magro": "Queijo fresco longa duração light (Continente Equilíbrio)"};
+var PREFERRED_PRODUCTS = {
+  "Queijo fresco magro": "Queijo fresco longa duração light (Continente Equilíbrio)",
+  "Iogurte proteico": "Iogurte proteico de mirtilo (YoPro Danone)"
+};
 function applyPreferredProductsIf(pasted, draft){ return pasted ? applyPreferredProducts(draft) : draft; }
 function applyPreferredProducts(draft){
   draft.forEach(function(d){
