@@ -439,6 +439,8 @@
   @media (hover:none) and (pointer:coarse){
     input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea{font-size:16px !important;}
   }
+  .wl-ex input[type=number]{width:100%; min-width:0; box-sizing:border-box; min-height:42px; border:1px solid var(--line-strong); border-radius:10px; padding:8px 10px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:0.95rem; text-align:center;}
+  .wl-ex input[type=number]::placeholder{color:var(--muted-2);}
   .onb-field{margin-bottom:14px; min-width:0;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
   .onb-field input, .onb-field select, .onb-field textarea{
@@ -5463,7 +5465,7 @@ function stripPhotoState(p){
 }
 
 function studentToRow(s){
-  return {
+  var row = {
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
     birth_date: s.birthDate || null,
     weight_initial: s.weightInitial, weight_current: s.weightCurrent, weight_goal: s.weightGoal,
@@ -5485,7 +5487,14 @@ function studentToRow(s){
     physical_limitations: s.physicalLimitations || null, medical_notes: s.medicalNotes || null,
     weight_log_photos: (s.weightLogPhotos || []).map(stripPhotoState)
   };
+  // colunas do módulo de treino (migração 0019): só se a base de dados já as tem
+  if (trainingColumnsAvailable){
+    row.training_program = s.trainingProgram || null;
+    row.workout_logs = s.workoutLogs || [];
+  }
+  return row;
 }
+var trainingColumnsAvailable = true;
 
 function rowToStudent(r){
   return {
@@ -5509,7 +5518,9 @@ function rowToStudent(r){
     hardestFoodToResist: r.hardest_food_to_resist || null, waterIntake: r.water_intake || null,
     medicalConditions: r.medical_conditions || null, currentMedication: r.current_medication || null,
     physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
-    weightLogPhotos: r.weight_log_photos || []
+    weightLogPhotos: r.weight_log_photos || [],
+    trainingProgram: r.training_program || null,
+    workoutLogs: r.workout_logs || []
   };
 }
 
@@ -5531,6 +5542,13 @@ function persistStudent(s){
   sb.from("students").update(studentToRow(s)).eq("id", s.id).then(function(res){
     if (res && res.error){
       console.error("Supabase: falha ao guardar", s.id, res.error.message);
+      if (trainingColumnsAvailable && /training_program|workout_logs/.test(res.error.message || "")){
+        // A migração 0019 ainda não foi aplicada: grava tudo o resto e avisa, em vez de perder as outras alterações
+        trainingColumnsAvailable = false;
+        showToast("⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase (SQL Editor). O resto foi guardado.");
+        persistStudent(s);
+        return;
+      }
       showToast("⚠ Não foi possível guardar — verifica a tua ligação");
     }
   });
@@ -5544,6 +5562,12 @@ function insertStudent(s){
   sb.from("students").insert(studentToRow(s)).then(function(res){
     if (res && res.error){
       console.error("Supabase: falha ao criar aluno", s.id, res.error.message);
+      if (trainingColumnsAvailable && /training_program|workout_logs/.test(res.error.message || "")){
+        trainingColumnsAvailable = false; // migração 0019 por aplicar: cria o aluno sem as colunas de treino
+        showToast("⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase (SQL Editor).");
+        insertStudent(s);
+        return;
+      }
       showToast("⚠ Não foi possível criar o aluno — verifica a tua ligação");
     }
   });
@@ -5758,7 +5782,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", proView:"dashboard", showDemoStudents:false, dashboardListMode:null };
+var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", proView:"dashboard", showDemoStudents:false, dashboardListMode:null };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -6806,7 +6830,7 @@ function tplMealBuilder(m, idx, s){
 }
 
 function tplCheckin(s){
-  var html = tabHead("Treino e aderência", "Acompanha a tua semana e envia o check-in.") + tplTrainingOverview(s) + "<div class=\"card\">" +
+  var html = tabHead("Treino e aderência", "Acompanha a tua semana e envia o check-in.") + tplTrainingOverview(s) + tplWorkoutLogger(s) + "<div class=\"card\">" +
     "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Check-in semanal</div>" +
     "<div class=\"checkin-field\"><label for=\"ciWeight\">Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"ciWeight\" value=\"" + s.weightCurrent + "\"></div>" +
     rangeField("ciHunger","Fome (1-10)",5) +
@@ -6828,6 +6852,296 @@ function tplCheckin(s){
   });
   html += "</div>";
   return html;
+}
+
+/* ===================== TREINO: programa, registo por sessão e progressão de carga =====================
+   trainingProgram (só o profissional escreve): {name, days:[{id, name, exercises:[{id, name, sets, reps, rpe, rest, notes}]}]}
+   workoutLogs (o aluno só acrescenta): [{id, date, dayId, dayName, rpe, notes, entries:[{exerciseId, name, sets:[{reps, load}]}]}]
+   Carga estimada (1RM) pela fórmula de Epley: carga × (1 + reps/30). */
+function uidShort(prefix){ return (prefix || "id") + "_" + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3); }
+function trainingProgramOf(s){ var p = s && s.trainingProgram; return p && Array.isArray(p.days) ? p : {name:"", days:[]}; }
+function ensureTrainingProgram(s){ if (!s.trainingProgram || !Array.isArray(s.trainingProgram.days)) s.trainingProgram = {name:"Programa de treino", days:[]}; return s.trainingProgram; }
+function addTrainingDay(s, name){
+  name = String(name || "").trim();
+  if (!name) return null;
+  var d = {id: uidShort("d"), name: name, exercises: []};
+  ensureTrainingProgram(s).days.push(d);
+  return d;
+}
+function removeTrainingDay(s, dayId){ var p = ensureTrainingProgram(s); p.days = p.days.filter(function(d){ return d.id !== dayId; }); }
+function addProgramExercise(s, dayId, ex){
+  var day = ensureTrainingProgram(s).days.filter(function(d){ return d.id === dayId; })[0];
+  var name = String(ex && ex.name || "").trim();
+  if (!day || !name) return null;
+  var sets = Math.min(20, Math.max(1, parseInt(ex.sets, 10) || 3));
+  var rpe = parseFloat(ex.rpe), rest = parseInt(ex.rest, 10);
+  var e = {id: uidShort("e"), name: name, sets: sets, reps: String(ex.reps || "8-12").trim().slice(0, 20),
+    rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(ex.notes || "").trim().slice(0, 200)};
+  day.exercises.push(e);
+  return e;
+}
+function removeProgramExercise(s, dayId, exId){
+  ensureTrainingProgram(s).days.forEach(function(d){ if (d.id === dayId) d.exercises = d.exercises.filter(function(e){ return e.id !== exId; }); });
+}
+function firstRepsOf(reps){ var m = String(reps || "").match(/\d+/); return m ? parseInt(m[0], 10) : 0; }
+function epley1RM(load, reps){
+  if (!(load > 0) || !(reps > 0)) return 0;
+  return Math.round((reps === 1 ? load : load * (1 + reps / 30)) * 10) / 10;
+}
+function workoutEntryStats(entry){
+  var sets = ((entry && entry.sets) || []).filter(function(x){ return x.reps > 0; });
+  var best = null, volume = 0, topLoad = 0;
+  sets.forEach(function(x){
+    var load = x.load > 0 ? x.load : 0;
+    volume += x.reps * load;
+    if (load > topLoad) topLoad = load;
+    var e = epley1RM(load, x.reps);
+    if (!best || e > best.e1rm || (e === best.e1rm && x.reps > best.reps)) best = {load: load, reps: x.reps, e1rm: e};
+  });
+  return {sets: sets.length, volume: Math.round(volume), topLoad: topLoad, est1RM: best ? best.e1rm : 0, topSet: best};
+}
+function exerciseHistory(s, exerciseId, name){
+  var key = String(name || "").trim().toLowerCase();
+  return (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); }).map(function(log){
+    var entry = (log.entries || []).filter(function(e){ return (exerciseId && e.exerciseId === exerciseId) || String(e.name || "").trim().toLowerCase() === key; })[0];
+    if (!entry) return null;
+    var st = workoutEntryStats(entry);
+    return st.sets ? Object.assign({date: log.date}, st) : null;
+  }).filter(Boolean);
+}
+// "progrediu" (novo máximo), "estagnado" (3 sessões sem novo máximo), "regrediu" (≥ 7% abaixo do melhor), "estável"; null se há menos de 2 sessões
+function progressionStatus(hist){
+  if (!hist || hist.length < 2) return null;
+  var last = hist[hist.length - 1];
+  var prior = hist.slice(0, -1).map(function(h){ return h.est1RM; });
+  var priorBest = Math.max.apply(null, prior);
+  if (last.est1RM > priorBest * 1.01) return "progrediu";
+  if (hist.length >= 4){
+    var before = Math.max.apply(null, hist.slice(0, -3).map(function(h){ return h.est1RM; }));
+    var recent = Math.max.apply(null, hist.slice(-3).map(function(h){ return h.est1RM; }));
+    if (recent <= before * 1.005) return "estagnado";
+  }
+  if (last.est1RM < priorBest * 0.93) return "regrediu";
+  return "estável";
+}
+function sessionsInLastDays(s, days){
+  return (s.workoutLogs || []).filter(function(l){ var d = daysSinceDate(l.date); return d != null && d < days; });
+}
+function logWorkout(s, data){
+  var entries = (data.entries || []).map(function(e){
+    return {exerciseId: e.exerciseId, name: e.name, sets: (e.sets || []).filter(function(x){ return x.reps > 0 && x.reps <= 100; }).map(function(x){ return {reps: Math.round(x.reps), load: x.load > 0 ? Math.round(x.load * 10) / 10 : 0}; })};
+  }).filter(function(e){ return e.sets.length; });
+  if (!entries.length) return null;
+  var rpe = parseInt(data.rpe, 10);
+  var log = {id: uidShort("w"), date: data.date || todayISO(), dayId: data.dayId || null, dayName: data.dayName || "", rpe: rpe >= 1 && rpe <= 10 ? rpe : null, notes: String(data.notes || "").trim().slice(0, 500), entries: entries};
+  if (!s.workoutLogs) s.workoutLogs = [];
+  s.workoutLogs.push(log);
+  return log;
+}
+function nextWorkoutDay(s){
+  var days = trainingProgramOf(s).days;
+  if (!days.length) return null;
+  var logs = s.workoutLogs || [];
+  if (!logs.length) return days[0];
+  var lastDayId = logs[logs.length - 1].dayId;
+  var idx = days.findIndex(function(d){ return d.id === lastDayId; });
+  return days[(idx + 1) % days.length];
+}
+function fmtLoadSet(top){ return top ? (top.load > 0 ? String(top.load).replace(".", ",") + " kg × " + top.reps : top.reps + " reps (peso do corpo)") : "—"; }
+
+// ---------- Aluno: registar a sessão ----------
+function tplWorkoutLogger(s){
+  var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; });
+  if (!days.length){
+    return `<div class="card"><div class="eyebrow">Treino</div><p class="muted-p" style="margin-top:6px;">O teu programa de treino ainda está a ser preparado pelo profissional.</p></div>`;
+  }
+  var selected = days.filter(function(d){ return d.id === state.workoutDayId; })[0] || nextWorkoutDay(s) || days[0];
+  if (days.indexOf(selected) < 0) selected = days[0];
+  var html = `<div class="card"><div class="eyebrow">Registar treino</div>` +
+    `<div class="checkin-field" style="margin-top:8px;"><label for="wlDay">Treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
+      days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
+    `</select></div>`;
+  selected.exercises.forEach(function(e){
+    var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
+    var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
+    html += `<div class="wl-ex" data-ex="${escapeHtml(e.id)}" style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px;">` +
+      `<div style="font-weight:700;">${escapeHtml(e.name)}</div>` +
+      `<div class="muted-p" style="font-size:0.78rem;">${presc}</div>` +
+      (e.notes ? `<div class="muted-p" style="font-size:0.76rem;">${escapeHtml(e.notes)}</div>` : "") +
+      (last ? `<div class="muted-p" style="font-size:0.76rem; color:var(--accent-strong);">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
+    var prefillLoad = last && last.topSet && last.topSet.load > 0 ? last.topSet.load : "";
+    for (var i = 0; i < e.sets; i++){
+      html += `<div style="display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; margin-top:6px;">` +
+        `<span class="muted-p" style="font-size:0.78rem;">${i + 1}.</span>` +
+        `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" data-wl-reps="${escapeHtml(e.id)}:${i}" value="${firstRepsOf(e.reps) || ""}">` +
+        `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" data-wl-load="${escapeHtml(e.id)}:${i}" value="${prefillLoad}">` +
+      `</div>`;
+    }
+    html += `</div>`;
+  });
+  html += `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", 7) + `</div>` +
+    `<div class="checkin-field"><label for="wlNotes">Como correu? (opcional)</label><textarea id="wlNotes" placeholder="Dores, sensações, o que mudar..."></textarea></div>` +
+    `<p class="muted-p" id="wlError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>` +
+    `<button type="button" class="btn primary" id="wlSave" style="width:100%;">Guardar treino</button></div>`;
+  return html;
+}
+
+function wireWorkoutLogger(s, el, rerender){
+  var daySel = el.querySelector("#wlDay");
+  if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
+  var save = el.querySelector("#wlSave");
+  if (!save) return;
+  var rpeInput = el.querySelector("#wlRpe");
+  if (rpeInput) rpeInput.addEventListener("input", function(){ el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
+  save.addEventListener("click", function(){
+    var day = trainingProgramOf(s).days.filter(function(d){ return d.id === daySel.value; })[0];
+    if (!day) return;
+    var entries = day.exercises.map(function(e){
+      var sets = [];
+      for (var i = 0; i < e.sets; i++){
+        var r = parseFloat((el.querySelector('[data-wl-reps="' + e.id + ':' + i + '"]') || {}).value);
+        var l = parseFloat((el.querySelector('[data-wl-load="' + e.id + ':' + i + '"]') || {}).value);
+        if (r > 0) sets.push({reps: r, load: l > 0 ? l : 0});
+      }
+      return {exerciseId: e.id, name: e.name, sets: sets};
+    });
+    var err = el.querySelector("#wlError");
+    var invalid = entries.some(function(e){ return e.sets.some(function(x){ return x.reps > 100 || x.load > 1000; }); });
+    if (invalid){ err.textContent = "Verifica os valores: máx. 100 repetições e 1000 kg."; err.style.display = "block"; return; }
+    var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
+    if (!log){ err.textContent = "Preenche pelo menos uma série (repetições)."; err.style.display = "block"; return; }
+    err.style.display = "none";
+    state.workoutDayId = null;
+    persistStudent(s);
+    showToast("✓ Treino guardado");
+    rerender();
+  });
+}
+
+// ---------- Profissional: programa, progressão e sessões ----------
+function tplProTreino(s){
+  var prog = trainingProgramOf(s);
+  var html = `<div class="eyebrow" style="margin-bottom:4px;">Programa de treino</div>` +
+    `<p class="muted-p" style="margin-bottom:12px;">Define os dias e os exercícios (séries, repetições, RPE alvo e descanso). O aluno regista cada sessão e tu vês a progressão de carga.</p>`;
+  if (!prog.days.length) html += `<p class="muted-p" style="margin-bottom:12px;">Ainda sem dias de treino. Acrescenta o primeiro (ex.: "Treino A — Superior").</p>`;
+  prog.days.forEach(function(d){
+    html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
+    d.exercises.forEach(function(e){
+      html += `<div class="food-item" style="cursor:default;"><span class="fname">${escapeHtml(e.name)}<span class="muted-p" style="display:block; font-size:0.74rem;">${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
+        `<button type="button" class="assess-del" data-del-ex="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Remover exercício">✕</button></div>`;
+    });
+    html += `<div class="assess-form-grid" style="margin-top:10px;" data-exform="${escapeHtml(d.id)}">` +
+      `<div class="f" style="grid-column:1/-1;"><label>Exercício</label><input type="text" data-ex-name placeholder="Ex.: Supino com barra"></div>` +
+      `<div class="f"><label>Séries</label><input type="number" min="1" max="20" value="3" data-ex-sets></div>` +
+      `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps></div>` +
+      `<div class="f"><label>RPE alvo</label><input type="number" min="1" max="10" step="0.5" data-ex-rpe></div>` +
+      `<div class="f"><label>Descanso (s)</label><input type="number" min="0" max="900" step="15" value="90" data-ex-rest></div>` +
+      `<div class="f" style="grid-column:1/-1;"><label>Notas (opcional)</label><input type="text" data-ex-notes placeholder="Tempo 3-1-1, pausa no peito..."></div>` +
+      `<div class="f"><button type="button" class="btn primary btn-sm" data-add-ex="${escapeHtml(d.id)}" style="width:100%;">+ Exercício</button></div>` +
+    `</div>` +
+    `<button type="button" class="btn btn-sm" data-del-day="${escapeHtml(d.id)}" style="margin-top:10px;">🗑 Remover este dia</button></details>`;
+  });
+  html += `<div class="assess-form-grid" style="margin-top:6px;"><div class="f" style="grid-column:1/-1;"><label>Novo dia de treino</label><input type="text" id="newDayName" placeholder="Ex.: Treino B — Inferior"></div>` +
+    `<div class="f"><button type="button" class="btn primary btn-sm" id="addTrainingDay" style="width:100%;">+ Dia</button></div></div>`;
+
+  // Progressão de carga por exercício
+  var names = [];
+  prog.days.forEach(function(d){ d.exercises.forEach(function(e){ if (!names.some(function(n){ return n.key === e.name.toLowerCase(); })) names.push({key: e.name.toLowerCase(), id: e.id, name: e.name}); }); });
+  (s.workoutLogs || []).forEach(function(l){ (l.entries || []).forEach(function(e){ if (!names.some(function(n){ return n.key === String(e.name || "").toLowerCase(); })) names.push({key: String(e.name || "").toLowerCase(), id: e.exerciseId, name: e.name}); }); });
+  var rows = names.map(function(n){ var h = exerciseHistory(s, n.id, n.name); return {n: n, h: h, status: progressionStatus(h)}; }).filter(function(r){ return r.h.length; });
+  html += `<div class="eyebrow" style="margin:22px 0 8px;">Progressão de carga</div>`;
+  if (!rows.length) html += `<p class="muted-p">Ainda sem sessões registadas pelo aluno.</p>`;
+  else {
+    var pill = {"progrediu": "good", "estável": "", "estagnado": "warn", "regrediu": "critical"};
+    html += `<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Exercício</th><th>Última</th><th>1RM est.</th><th>Tendência</th></tr></thead><tbody>` + rows.map(function(r){
+      var last = r.h[r.h.length - 1];
+      return `<tr><td class="date-cell" style="white-space:normal;">${escapeHtml(r.n.name)}</td><td>${escapeHtml(fmtLoadSet(last.topSet))}</td><td>${last.est1RM > 0 ? last.est1RM + " kg" : "—"}</td><td>${r.status ? `<span class="pill ${pill[r.status]}">${r.status}</span>` : "—"}</td></tr>`;
+    }).join("") + `</tbody></table></div>`;
+    var chartRow = rows.filter(function(r){ return r.h.length >= 2 && r.h[r.h.length - 1].est1RM > 0; })[0];
+    html += `<div class="checkin-field" style="margin-top:12px;"><label for="exChartSel">Gráfico de carga estimada (1RM)</label><select id="exChartSel" class="mini-select" style="width:100%;">` +
+      rows.map(function(r, i){ return `<option value="${i}"${chartRow && chartRow === r ? " selected" : ""}>${escapeHtml(r.n.name)}</option>`; }).join("") + `</select></div>` +
+      `<div id="exChart" class="weight-chart-wrap">${chartRow ? weightSvg(chartRow.h.map(function(h){ return {date: h.date, w: h.est1RM}; })) : weightSvg([])}</div>`;
+  }
+
+  // Sessões recentes e volume
+  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+  var wk = sessionsInLastDays(s, 7);
+  html += `<div class="eyebrow" style="margin:22px 0 8px;">Sessões registadas</div>`;
+  if (!logs.length) html += `<p class="muted-p">Sem sessões registadas.</p>`;
+  else {
+    var sets7 = wk.reduce(function(a, l){ return a + (l.entries || []).reduce(function(b, e){ return b + (e.sets || []).length; }, 0); }, 0);
+    html += `<p class="muted-p" style="margin-bottom:8px;">Últimos 7 dias: ${wk.length}${s.trainingsPerWeek ? " de " + s.trainingsPerWeek + " previstas" : ""} sessões · ${sets7} séries.</p>`;
+    logs.slice(0, 8).forEach(function(l){
+      html += `<div class="history-row" style="align-items:flex-start;"><div><div class="hlabel">${fmtDateFullPt(l.date)} · ${escapeHtml(l.dayName || "Treino")}</div>` +
+        (l.notes ? `<div class="muted-p">${escapeHtml(l.notes)}</div>` : "") +
+        `<div class="muted-p" style="font-size:0.74rem;">${(l.entries || []).map(function(e){ var st = workoutEntryStats(e); return escapeHtml(e.name) + " " + escapeHtml(fmtLoadSet(st.topSet)); }).join(" · ")}</div></div>` +
+        `<div class="hval">${l.rpe ? "RPE " + l.rpe : "—"}</div></div>`;
+    });
+  }
+  return html;
+}
+
+function wireProTreino(s, el){
+  var addDay = el.querySelector("#addTrainingDay");
+  if (addDay) addDay.addEventListener("click", function(){
+    if (!addTrainingDay(s, el.querySelector("#newDayName").value)){ showToast("Dá um nome ao dia de treino"); return; }
+    logPlanEvent(s, "treino_dia", "Dia de treino adicionado", null, el.querySelector("#newDayName").value);
+    persistStudent(s); renderProTabContent(s);
+  });
+  el.querySelectorAll("[data-add-ex]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = el.querySelector('[data-exform="' + btn.getAttribute("data-add-ex") + '"]');
+      function v(sel){ return box.querySelector(sel).value; }
+      var ex = addProgramExercise(s, btn.getAttribute("data-add-ex"), {name: v("[data-ex-name]"), sets: v("[data-ex-sets]"), reps: v("[data-ex-reps]"), rpe: v("[data-ex-rpe]"), rest: v("[data-ex-rest]"), notes: v("[data-ex-notes]")});
+      if (!ex){ showToast("Dá um nome ao exercício"); return; }
+      persistStudent(s); renderProTabContent(s);
+    });
+  });
+  el.querySelectorAll("[data-del-ex]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var parts = btn.getAttribute("data-del-ex").split(":");
+      removeProgramExercise(s, parts[0], parts[1]);
+      persistStudent(s); renderProTabContent(s);
+    });
+  });
+  el.querySelectorAll("[data-del-day]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if (!window.confirm("Remover este dia de treino e os seus exercícios? (As sessões já registadas ficam guardadas.)")) return;
+      removeTrainingDay(s, btn.getAttribute("data-del-day"));
+      persistStudent(s); renderProTabContent(s);
+    });
+  });
+  var sel = el.querySelector("#exChartSel");
+  if (sel) sel.addEventListener("change", function(){
+    var names = [], prog = trainingProgramOf(s);
+    prog.days.forEach(function(d){ d.exercises.forEach(function(e){ if (!names.some(function(n){ return n.key === e.name.toLowerCase(); })) names.push({key: e.name.toLowerCase(), id: e.id, name: e.name}); }); });
+    (s.workoutLogs || []).forEach(function(l){ (l.entries || []).forEach(function(e){ if (!names.some(function(n){ return n.key === String(e.name || "").toLowerCase(); })) names.push({key: String(e.name || "").toLowerCase(), id: e.exerciseId, name: e.name}); }); });
+    var rows = names.filter(function(n){ return exerciseHistory(s, n.id, n.name).length; });
+    var n = rows[parseInt(sel.value, 10)];
+    if (n) el.querySelector("#exChart").innerHTML = weightSvg(exerciseHistory(s, n.id, n.name).map(function(h){ return {date: h.date, w: h.est1RM}; }));
+  });
+}
+
+// Indicadores de treino registado
+function signalSessoes(s){
+  if (!(s.workoutLogs || []).length) return signal("sessoes", "Sessões de treino", "insuficiente", "Sem sessões de treino registadas pelo aluno.", "Desde sempre", "treino");
+  var last = s.workoutLogs.slice().sort(function(a, b){ return a.date < b.date ? 1 : -1; })[0];
+  var days = daysSinceDate(last.date), week = sessionsInLastDays(s, 7).length, planned = s.trainingsPerWeek || 0;
+  if (days >= 10) return signal("sessoes", "Sessões de treino", "atencao", "Sem sessões registadas há " + days + " dias.", "Desde a última sessão", "treino", days >= 21 ? "high" : "normal");
+  return signal("sessoes", "Sessões de treino", week >= planned || !planned ? "positivo" : "atencao",
+    "Últimos 7 dias: " + week + (planned ? " de " + planned + " sessões previstas" : " sessões") + ".", "Últimos 7 dias", "treino");
+}
+function signalProgressaoCarga(s){
+  if (!(s.workoutLogs || []).length) return signal("progressao_carga", "Progressão de carga", "insuficiente", "Sem sessões suficientes para avaliar a progressão.", "Sessões registadas", "treino");
+  var seen = {}, stalled = [], progressed = 0, evaluated = 0;
+  s.workoutLogs.forEach(function(l){ (l.entries || []).forEach(function(e){ var k = String(e.name || "").toLowerCase(); if (seen[k]) return; seen[k] = true;
+    var st = progressionStatus(exerciseHistory(s, e.exerciseId, e.name));
+    if (!st) return; evaluated++;
+    if (st === "estagnado" || st === "regrediu") stalled.push(e.name); else if (st === "progrediu") progressed++;
+  }); });
+  if (!evaluated) return signal("progressao_carga", "Progressão de carga", "insuficiente", "Precisa de pelo menos 2 sessões do mesmo exercício.", "Sessões registadas", "treino");
+  if (stalled.length >= 2 || (stalled.length && !progressed)) return signal("progressao_carga", "Progressão de carga", "atencao", "Sem progressão (ou a recuar) em: " + stalled.slice(0, 4).join(", ") + ".", "Sessões registadas", "treino");
+  return signal("progressao_carga", "Progressão de carga", "positivo", progressed + " de " + evaluated + " exercícios com nova carga.", "Sessões registadas", "treino");
 }
 
 function rangeFill(v){ return Math.round((Number(v) - 1) / 9 * 100); }
@@ -7540,6 +7854,7 @@ function weightSvg(weights){
 
 function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
+  wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
     row.addEventListener("click", function(){
@@ -8141,7 +8456,7 @@ function proStat(v, l, key){
 // Fase 25: o separador chama-se "Nutrição" na interface, mas a key interna
 // continua "plano" (routing/estado e todo o resto do código já dependem
 // dela) — só o rótulo visível muda, pedido explícito.
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
@@ -8172,6 +8487,7 @@ function renderProTabContent(s){
   if (state.proTab==="perfil") el.innerHTML = tplProPerfil(s);
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
+  else if (state.proTab==="treino") el.innerHTML = tplProTreino(s);
   else if (state.proTab==="evolucao") el.innerHTML = tplEvolucaoAluno(s, {editable:true});
   else if (state.proTab==="checkins") el.innerHTML = tplProCheckins(s);
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
@@ -9322,6 +9638,8 @@ function computeStudentSignals(s){
     signalPesagem(s),
     signalInatividadeTreino(s),
     signalRecuperacao(s),
+    signalSessoes(s),
+    signalProgressaoCarga(s),
     signalMealsOff(s),
     signalAdaptacoes(s)
   ];
@@ -10040,6 +10358,8 @@ function wireProTab(s){
       persistStudent(s);
     });
   });
+
+  wireProTreino(s, el);
 
   var addNote = el.querySelector("#addDatedNote");
   if (addNote) addNote.addEventListener("click", function(){
