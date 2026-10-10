@@ -204,7 +204,7 @@ function mergeCatalogSample(){
 (function(){
   mergeFoodProduct({name:"Iogurte proteico PRO+ sabor baunilha", brand:"Lindahls", food_group:"laticinios", kcal:59, protein:10, carbs:4.2, fat:0.2, package_quantity:160, package_unit:"g"}, []);
   var manha = mealOf(draftPlanFromDailyText(TEXTO), "Meio da manhã");
-  check.check("11. '1 iogurte proteico — 15 g proteína' → Lindahls PRO+, 150 g (= 15 g de proteína)", qtyOf(manha, "Iogurte proteico PRO+ sabor baunilha (Lindahls)") === "150 g" && namesOf(manha).indexOf("Iogurte grego natural") === -1);
+  check.check("11. '1 iogurte proteico — 15 g proteína' → Lindahls PRO+, 1 embalagem inteira de 160 g (≈ 15 g de proteína, sem sobras)", qtyOf(manha, "Iogurte proteico PRO+ sabor baunilha (Lindahls)") === "160 g" && namesOf(manha).indexOf("Iogurte grego natural") === -1);
   var liq = mealOf(draftPlanFromDailyText("Pós-treino\n* Iogurte líquido proteico com 25 g"), "Pós-treino");
   check.check("11. O iogurte LÍQUIDO proteico não vira o Lindahls (não líquido)", namesOf(liq).indexOf("Iogurte proteico PRO+ sabor baunilha (Lindahls)") === -1);
 })();
