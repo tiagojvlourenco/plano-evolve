@@ -147,7 +147,7 @@ function freshStudent(overrides){
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
   var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 4000);
-  check.check("15. Chama draftPlanFromDailyText(s.dailyEatingDescription)", block.indexOf("draftPlanFromDailyText(pasted ? el.querySelector(\"#pastedPlanText\").value : s.dailyEatingDescription)") >= 0);
+  check.check("15. Chama draftPlanFromDailyText(s.dailyEatingDescription)", block.indexOf("draftPlanFromDailyText(s.dailyEatingDescription)") >= 0);
   check.check("15. Preenche #dailyPlanDraftResult com renderDailyPlanDraft", block.indexOf("renderDailyPlanDraft(draft)") >= 0);
   check.check("15. Ao aplicar, regista no histórico com logPlanEvent", block.indexOf('logPlanEvent(s, "plano_gerado_texto"') >= 0);
   check.check("15. Ao aplicar, persiste e volta a renderizar", block.indexOf("persistStudent(s)") >= 0 && block.indexOf("renderProTabContent(s)") >= 0);

@@ -93,9 +93,9 @@ function mergeCatalogSample(){
   var draft = draftPlanFromDailyText(TEXTO);
   var manha = mealOf(draft, "Meio da manhã");
   check.check("3. '1 iogurte proteico — 15 g proteína' → iogurte, nunca Proteína texturizada de soja",
-    namesOf(manha).indexOf("Proteína texturizada de soja") === -1 && namesOf(manha).indexOf("Iogurte grego natural") >= 0);
-  var g = parseInt(qtyOf(manha, "Iogurte grego natural"), 10);
-  var proteina = FOOD_DB["Iogurte grego natural"].p * g / 100;
+    namesOf(manha).indexOf("Proteína texturizada de soja") === -1 && namesOf(manha).indexOf("Iogurte proteico") >= 0);
+  var g = parseInt(qtyOf(manha, "Iogurte proteico"), 10);
+  var proteina = FOOD_DB["Iogurte proteico"].p * g / 100;
   check.check("3. A quantidade do iogurte dá ≈ 15 g de proteína (" + proteina.toFixed(1) + " g)", Math.abs(proteina - 15) <= 1);
   check.check("3. Barebells (não existe na base) fica SINALIZADO, não substituído por outra coisa",
     manha.unmatchedLines.some(function(l){ return /Barebells/i.test(l); }) && namesOf(manha).length === 1);
@@ -197,7 +197,7 @@ function mergeCatalogSample(){
   var lanche = mealOf(draft, "Lanche"), pos = mealOf(draft, "Pós-treino");
   check.check("10. '1 pudim proteico — 20 g proteína' → pudim Continente, 200 g (= 20 g de proteína)", qtyOf(lanche, "Pudim proteico sabor chocolate (Continente)") === "200 g");
   check.check("10. 'Iogurte Líquido Proteico com 25 g' → YoPro, 300 ml (≈ 25 g de proteína)", qtyOf(pos, "Iogurte líquido proteico sabor café (YoPro)") === "300 ml" && pos.unmatchedLines.length === 0);
-  check.check("10. O iogurte proteico (não líquido) continua a ser o iogurte grego", namesOf(mealOf(draft, "Meio da manhã")).indexOf("Iogurte grego natural") >= 0);
+  check.check("10. O iogurte proteico (não líquido) é o \"Iogurte proteico\" genérico", namesOf(mealOf(draft, "Meio da manhã")).indexOf("Iogurte proteico") >= 0);
 })();
 
 // ---- 11. Iogurte proteico Lindahls PRO+ (o do aluno) ----

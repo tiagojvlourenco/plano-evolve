@@ -577,6 +577,8 @@
 
 var FOOD_GROUPS = {
   cereais: [
+    {name:"Arroz (cru)", qty:"70 g"},
+    {name:"Massa (crua)", qty:"70 g"},
     {name:"Pão de forma 100% integral (Mercadona)", qty:"100 g"},
     {name:"Pão de forma com sementes e pevides (Hacendado)", qty:"100 g"},
     {name:"Pão de forma branco (Hacendado)", qty:"100 g"},
@@ -770,6 +772,8 @@ var FOOD_GROUPS = {
     {name:"Wasabi, raiz crua", qty:"100 g"}
   ],
   laticinios: [
+    {name:"Iogurte skyr natural", qty:"150 g"},
+    {name:"Iogurte proteico", qty:"125 g"},
     {name:"Iogurte grego natural ligeiro (Continente Equilíbrio)", qty:"100 g"},
     {name:"Iogurte grego natural (Oikos)", qty:"100 g"},
     {name:"Iogurte proteico de baunilha (YoPro Danone)", qty:"100 g"},
@@ -2731,6 +2735,10 @@ var FOOD_DB = {
   "Carne magra": {per:"100g", kcal:182, p:27, c:0, f:8},
   "Tofu": {per:"100g", kcal:76, p:8, c:1.9, f:4.8},
   "Iogurte grego natural": {per:"100g", kcal:97, p:9, c:4, f:5},
+  "Arroz (cru)": {per:"100g", kcal:350, p:8.5, c:77, f:0.8},
+  "Massa (crua)": {per:"100g", kcal:355, p:12, c:72, f:1.5},
+  "Iogurte skyr natural": {per:"100g", kcal:63, p:11, c:4, f:0.2},
+  "Iogurte proteico": {per:"100g", kcal:55, p:10, c:4, f:0.2},
   "Arroz (cozido)": {per:"100g", kcal:130, p:2.7, c:28, f:0.3},
   "Massa (cozida)": {per:"100g", kcal:131, p:5, c:25, f:1.1},
   "Batata": {per:"100g", kcal:87, p:2, c:20, f:0.1},
@@ -4688,6 +4696,7 @@ var DAILY_FOOD_ALIASES = [
   {words:["iogurte","liquido","proteico"], food:"Iogurte líquido proteico sabor café (YoPro)"},
   {words:["pudim","proteico"], food:"Pudim proteico sabor chocolate (Continente)"},
   {words:["iogurte","proteico"], food:"Iogurte proteico PRO+ sabor baunilha (Lindahls)", block:["liquido","bebivel"]},
+  {words:["iogurte","proteico"], food:"Iogurte proteico", block:["liquido","bebivel"]},
   {words:["iogurte","proteico"], food:"Iogurte grego natural", block:["liquido","bebivel"]},
   // palavras soltas — só quando nada mais específico reconheceu a frase
   {words:["legume"], food:"Brócolos", single:true},
@@ -4880,8 +4889,9 @@ function resolveDraftQty(name, q){
     return defaultQtyForFood(name);
   }
   var grams = null;
-  if (q.proteinG && db.p >= 5) grams = Math.round(q.proteinG / db.p * 100 / 5) * 5;
-  else if (q.grams != null) grams = q.grams;
+  // "150g Iogurte Skyr com 15g de Proteína": a quantidade escrita manda; os gramas de proteína só servem quando não há quantidade
+  if (q.grams != null) grams = q.grams;
+  else if (q.proteinG && db.p >= 5) grams = Math.round(q.proteinG / db.p * 100 / 5) * 5;
   else if (q.count != null && q.unit && DAILY_UNIT_GRAMS[q.unit]) grams = q.count * DAILY_UNIT_GRAMS[q.unit];
   else if (q.count != null && !q.unit){
     // "1 barra", "2 maçãs": N vezes a dose-padrão do alimento
@@ -4918,6 +4928,8 @@ function matchDraftPhrase(text){
   if (q.count != null && !q.unit && tokens.indexOf("iogurte") >= 0) q.unit = "iogurte";
   var name = findFoodForTokens(tokens);
   if (!name) return null;
+  // "iogurte líquido proteico" não é o iogurte proteico (colher): fica por reconhecer, nunca trocado
+  if (name === "Iogurte proteico" && (tokens.indexOf("liquido") >= 0 || tokens.indexOf("bebivel") >= 0)) return null;
   // pediu-se uma dose de proteína ("20 g proteína") mas o alimento reconhecido quase não
   // tem proteína — não é o alimento certo, melhor deixar por reconhecer do que errar
   if (q.proteinG && FOOD_DB[name].per === "100g" && FOOD_DB[name].p < 5) return null;
@@ -4944,6 +4956,20 @@ function splitDraftPhrases(line){
 // ao mesmo grupo. Linhas com "/" (e as que se seguem a começar por "ou")
 // formam um grupo de alternativas do qual só entra a PRIMEIRA que se
 // reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
+// Planos entregues pelo nutricionista: "70 g de arroz/massa" são gramas em CRU (≈ 3x mais energia que cozido).
+// O questionário do aluno (draftPlanFromDailyText) descreve o que ele come, normalmente já cozido — por isso é à parte.
+var PLAN_SHEET_RAW_STAPLES = {"Arroz (cozido)":"Arroz (cru)", "Massa (cozida)":"Massa (crua)"};
+function draftPlanFromPlanSheet(text){
+  var draft = draftPlanFromDailyText(text);
+  draft.forEach(function(d){
+    d.foods.forEach(function(f){
+      var raw = PLAN_SHEET_RAW_STAPLES[f.name];
+      if (raw){ f.name = raw; f.group = groupOfFood(raw); }
+    });
+  });
+  return draft;
+}
+
 function draftPlanFromDailyText(text){
   // Linhas de hidratação e notas manuscritas ("Hidratação → 3L Água...", "Leia: ...") não são alimentos de nenhuma refeição
   text = String(text || "").replace(/^[ \t]*(?:hidrata[çc][ãa]o|leia|nota|notas|obs\.?|observa[çc][õo]es)\b.*$/gim, "");
@@ -4962,7 +4988,8 @@ function draftPlanFromDailyText(text){
       var clean = t.trim().replace(/^[*\-•▪●]+\s*/, "").replace(/\s+/g, " ");
       if (clean && unmatchedLines.indexOf(clean) === -1) unmatchedLines.push(clean);
     }
-    var rawLines = segText.split(/\n+/).map(function(l){ return l.trim(); }).filter(function(l){ return l; });
+    // texto entre parênteses sem números ("(verde / branco)", "(sem açúcar)", "(assada + deixar repousar)") só descreve variantes: não entra no reconhecimento
+    var rawLines = segText.split(/\n+/).map(function(l){ return l.replace(/\([^()\d]*\)/g, " ").replace(/\s+/g, " ").trim(); }).filter(function(l){ return l; });
     var groups = [];
     rawLines.forEach(function(line){
       var startsWithOu = /^(\*\s*)?ou\b/i.test(line);
@@ -4973,11 +5000,11 @@ function draftPlanFromDailyText(text){
       }
     });
     groups.forEach(function(groupLines){
-      var hasAlternatives = groupLines.length > 1 || groupLines[0].indexOf("/") >= 0;
+      var hasAlternatives = groupLines.length > 1 || groupLines[0].indexOf("/") >= 0 || /\sou\s/i.test(groupLines[0]);
       if (hasAlternatives){
         var alts = [];
         groupLines.forEach(function(l){
-          l.split("/").forEach(function(a){ if (a.trim()) alts.push(a.trim()); });
+          l.split(/\s*\/\s*|\s+ou\s+/i).forEach(function(a){ if (a.trim()) alts.push(a.trim()); });
         });
         var picked = null;
         for (var i = 0; i < alts.length && !picked; i++) picked = matchDraftPhrase(alts[i]);
@@ -8109,6 +8136,8 @@ function tplProPlano(s){
   html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">Colar um plano em texto</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola o plano alimentar (por exemplo \"Refeição 1 (pequeno-almoço)\" seguido dos alimentos, com \"OU\" nas alternativas). Reconheço as refeições e os alimentos da nossa base e mostro uma proposta para reveres antes de aplicar.</p>" +
     "<div class=\"checkin-field\"><textarea id=\"pastedPlanText\" rows=\"8\" placeholder=\"Refeição 1 (pequeno-almoço)&#10;1 fatia de pão integral&#10;50g queijo fresco magro\"></textarea></div>" +
+    "<label class=\"check-line\" style=\"display:flex; gap:8px; align-items:center; margin:8px 0; font-size:0.85rem;\"><input type=\"checkbox\" id=\"pastedReplace\" checked> Substituir o plano atual (apaga as refeições existentes)</label>" +
+    "<label class=\"check-line\" style=\"display:flex; gap:8px; align-items:center; margin:8px 0; font-size:0.85rem;\"><input type=\"checkbox\" id=\"pastedTargets\" checked> Definir os alvos (kcal e macros) a partir deste plano</label>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"draftFromPastedPlan\">🍽️ Gerar proposta</button>" +
     "<div id=\"pastedPlanResult\"></div>" +
   "</details>";
@@ -9080,6 +9109,23 @@ function logFoodRemoved(s, mealName, f){
 function logFoodEdited(s, mealName, oldFood, newFood){
   logPlanEvent(s, "alimento_editado", "Alimento alterado em " + mealName + ": " + oldFood.name + ", " + oldFood.qty + " → " + newFood.name + ", " + newFood.qty, oldFood.name + ", " + oldFood.qty, newFood.name + ", " + newFood.qty);
 }
+// Plano colado em texto: "Substituir o plano atual" apaga as refeições antes de aplicar a proposta
+function clearPlanIfReplacing(el, s, draft){
+  var box = el.querySelector("#pastedReplace");
+  if (box && box.checked && draft.some(function(d){ return d.foods.length; })) s.meals = [];
+}
+
+// O plano colado é a referência: os alvos passam a ser o que o plano dá (nada a "ajustar" depois)
+function setTargetsFromPlanIfAsked(el, s){
+  var box = el.querySelector("#pastedTargets");
+  if (!box || !box.checked) return;
+  var tot = foodsTotals(s.meals.reduce(function(a, m){ return a.concat(m.foods); }, []));
+  var newTargets = { kcal: Math.round(tot.kcal), protein: Math.round(tot.p), carbs: Math.round(tot.c), fat: Math.round(tot.f) };
+  logTargetsChange(s, s.targets, newTargets);
+  s.targets = newTargets;
+  s.fromOnboarding = false;
+}
+
 function logTargetsChange(s, oldTargets, newTargets){
   var oldCarbs = oldTargets.carbs != null ? oldTargets.carbs : oldTargets.carbsMax;
   var oldFat = oldTargets.fat != null ? oldTargets.fat : oldTargets.fatMax;
@@ -9147,7 +9193,7 @@ function wireProTab(s){
   ["#draftFromDailyText", "#draftFromPastedPlan"].forEach(function(sel){
   var draftBtn = el.querySelector(sel), pasted = sel === "#draftFromPastedPlan";
   if (draftBtn) draftBtn.addEventListener("click", function(){
-    var draft = draftPlanFromDailyText(pasted ? el.querySelector("#pastedPlanText").value : s.dailyEatingDescription);
+    var draft = pasted ? draftPlanFromPlanSheet(el.querySelector("#pastedPlanText").value) : draftPlanFromDailyText(s.dailyEatingDescription);
     var resultEl = el.querySelector(pasted ? "#pastedPlanResult" : "#dailyPlanDraftResult");
 
     function renderAndWireDraft(){
@@ -9165,6 +9211,7 @@ function wireProTab(s){
       var applyBtn = resultEl.querySelector("#applyDailyPlanDraft");
       if (applyBtn) applyBtn.addEventListener("click", function(){
         var createdMeals = 0, addedFoods = 0;
+        if (pasted) clearPlanIfReplacing(el, s, draft);
         draft.forEach(function(d){
           if (!d.foods.length) return;
           var targetMeal = s.meals.find(function(m){ return m.name === d.mealName; });
@@ -9181,6 +9228,7 @@ function wireProTab(s){
           });
         });
         sortMealsByTime(s);
+        if (pasted && addedFoods > 0) setTargetsFromPlanIfAsked(el, s);
         // Fase 21: pedido explícito — mostrar os "não reconhecidos" no
         // momento de aplicar (não só no rascunho, que desaparece a seguir).
         // Regista no histórico do plano (fica consultável no separador
