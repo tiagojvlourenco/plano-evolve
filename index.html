@@ -6502,6 +6502,10 @@ function tplTrainingOverview(s){
   return html;
 }
 // Composição corporal: última avaliação vs anterior (Avaliação)
+// massa gorda / massa magra em kg de uma avaliação (null se faltar o peso ou a % de gordura)
+function fatMassKg(a){ return a && a.weight > 0 && a.bodyFat > 0 ? Math.round(a.weight * a.bodyFat) / 100 : null; }
+function leanMassKg(a){ var f = fatMassKg(a); return f == null ? null : Math.round((a.weight - f) * 10) / 10; }
+
 function tplAssessKpis(s){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "";
@@ -6511,7 +6515,52 @@ function tplAssessKpis(s){
     kpiTile("Massa muscular", a.muscle, "kg", p.muscle, "up", 1) +
     kpiTile("Visceral", a.visceral, "", p.visceral, "down", 0) +
     kpiTile("Água", a.water, "%", p.water, "up", 1) +
+    (fatMassKg(a) != null ? kpiTile("Massa gorda (kg)", fatMassKg(a), "kg", fatMassKg(p), "down", 1) + kpiTile("Massa magra (kg)", leanMassKg(a), "kg", leanMassKg(p), "up", 1) : "") +
   "</div>";
+}
+
+// Perímetros: tabela com variação face à medição anterior + razões de risco (cintura/anca, cintura/altura)
+function tplPerimetersCard(s){
+  var list = (s.assessments || []).filter(function(a){ return PERIMETER_FIELDS.some(function(f){ return a[f[0]] > 0; }); })
+    .sort(function(x, y){ return compareAssessmentsDesc(x, y); });
+  if (!list.length) return "";
+  var a = list[0];
+  var html = "<div class=\"card\"><div class=\"eyebrow\">Perímetros</div>";
+  var ratios = [];
+  if (a.waist > 0 && a.hip > 0){
+    var whr = a.waist / a.hip, limit = s.sex === "Masculino" ? 0.90 : 0.85;
+    ratios.push(kpiTileText("Cintura / anca", whr.toFixed(2).replace(".", ","), whr > limit ? "bad" : "good", whr > limit ? "acima de " + String(limit).replace(".", ",") : "dentro do esperado"));
+  }
+  if (a.waist > 0 && s.height > 0){
+    var whtr = a.waist / s.height;
+    ratios.push(kpiTileText("Cintura / altura", whtr.toFixed(2).replace(".", ","), whtr >= 0.5 ? "bad" : "good", whtr >= 0.5 ? "≥ 0,50: risco aumentado" : "< 0,50"));
+  }
+  if (ratios.length) html += "<div class=\"kpi-grid\">" + ratios.join("") + "</div>";
+  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th>" + PERIMETER_FIELDS.map(function(f){ return "<th>" + f[1] + "</th>"; }).join("") + "</tr></thead><tbody>";
+  list.slice(0, 12).forEach(function(row, i){
+    var prev = list[i + 1];
+    html += "<tr><td class=\"date-cell\">" + fmtDateFullPt(row.date) + "</td>" + PERIMETER_FIELDS.map(function(f){
+      return "<td>" + fmtPos(row[f[0]], 1, "") + (prev ? assessDelta(row[f[0]], prev[f[0]], "") : "") + "</td>";
+    }).join("") + "</tr>";
+  });
+  return html + "</tbody></table></div></div>";
+}
+function kpiTileText(label, value, cls, note){
+  return "<div class=\"kpi\"><div class=\"l\">" + label + "</div><div class=\"v num\">" + value + "</div><div class=\"d " + cls + "\">" + note + "</div></div>";
+}
+
+// Gráfico de adesão: uma barra por check-in (últimos 8), vermelha abaixo do limiar de atenção
+function tplAdherenceChart(s){
+  var list = (s.checkins || []).slice(-8);
+  if (!list.length) return "";
+  var avg = list.reduce(function(a, c){ return a + (c.adherence || 0); }, 0) / list.length;
+  return "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:4px;\">Adesão por semana</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:6px;\">Média " + avg.toFixed(1).replace(".", ",") + "/10 nos últimos " + list.length + " check-ins · a vermelho: abaixo de " + SIGNAL_LOW_ADHERENCE + "</p>" +
+    "<div class=\"bars\">" + list.map(function(c){
+      var v = c.adherence || 0;
+      return "<div class=\"b\"><span>" + v + "</span><i style=\"height:" + Math.max(6, v * 10) + "%;" + (v < SIGNAL_LOW_ADHERENCE ? " background:var(--critical);" : "") + "\"></i></div>";
+    }).join("") + "</div>" +
+    "<div class=\"bar-labels\">" + list.map(function(c){ return "<span>" + fmtDatePt(c.date) + "</span>"; }).join("") + "</div></div>";
 }
 
 function tplHoje(s){
@@ -6763,6 +6812,9 @@ function tplCheckin(s){
     rangeField("ciHunger","Fome (1-10)",5) +
     rangeField("ciEnergy","Energia (1-10)",7) +
     rangeField("ciAdherence","Adesão ao plano (1-10)",8) +
+    "<div class=\"checkin-field\"><label for=\"ciSleep\">Sono: horas por noite (média da semana)</label><input type=\"number\" step=\"0.5\" min=\"0\" max=\"14\" id=\"ciSleep\" value=\"7\"></div>" +
+    rangeField("ciStress","Stress (1-10)",4) +
+    rangeField("ciRecovery","Recuperação / dores musculares (1 = muito cansado, 10 = ótima)",7) +
     "<div class=\"checkin-field\"><label for=\"ciWorkouts\">Treinos realizados</label><input type=\"number\" min=\"0\" id=\"ciWorkouts\" value=\"" + s.trainingsPerWeek + "\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciMealsOff\">Refeições fora do plano</label><input type=\"number\" min=\"0\" id=\"ciMealsOff\" value=\"0\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciNotes\">Dificuldades / observações</label><textarea id=\"ciNotes\" placeholder=\"Opcional\"></textarea></div>" +
@@ -6821,16 +6873,16 @@ function tplEvolucaoAluno(s, opts){
     tplAssessTable(s, opts.editable) +
   "</div>";
 
+  html += tplPerimetersCard(s);
+
   html += tplPhotosSection(s, opts);
 
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adesão por semana</div>" +
-    s.checkins.map(function(c){ return "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.adherence + "/10</span></div>"; }).join("") +
-  "</div>";
+  html += tplAdherenceChart(s);
   return html;
 }
 
 function assessDelta(curr, prev, unit){
-  if (curr==null || prev==null) return "";
+  if (!(curr > 0) || !(prev > 0)) return "";
   var d = curr - prev;
   if (Math.abs(d) < 0.05) return "<span class=\"assess-delta\">=</span>";
   return "<span class=\"assess-delta\">" + (d>0?"▲":"▼") + " " + Math.abs(d).toFixed(1) + unit + "</span>";
@@ -7048,6 +7100,12 @@ function tplImportPreview(s, parsed, plan){
   return html;
 }
 
+// Perímetros de referência (cm): [chave, rótulo, sufixo do id]. Cintura e anca dão a razão cintura/anca; cintura/altura é o melhor preditor simples de risco.
+var PERIMETER_FIELDS = [["waist","Cintura","Waist"], ["hip","Anca","Hip"], ["chest","Peito","Chest"], ["arm","Braço","Arm"], ["thigh","Coxa","Thigh"]];
+// A bioimpedância varia com a hidratação e o momento do dia: registar as condições torna as pesagens comparáveis.
+var WEIGH_CONTEXTS = ["Em jejum", "Pós-refeição", "Pós-treino", "Desidratado / muito hidratado"];
+function fmtPos(v, digits, unit){ return v > 0 ? Number(v).toFixed(digits) + unit : "—"; }
+
 function tplAssessForm(s){
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
@@ -7057,6 +7115,14 @@ function tplAssessForm(s){
     "<div class=\"f\"><label>Massa muscular (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"asMuscle\"></div>" +
     "<div class=\"f\"><label>Gordura visceral</label><input type=\"number\" step=\"1\" min=\"0\" id=\"asVisceral\"></div>" +
     "<div class=\"f\"><label>Água (%)</label><input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" id=\"asWater\"></div>" +
+    "<details class=\"assess-extra\" style=\"grid-column:1/-1;\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">Perímetros (cm) e condições da pesagem (opcional)</summary>" +
+      "<div style=\"display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px;\">" +
+        PERIMETER_FIELDS.map(function(f){ return "<div class=\"f\"><label>" + f[1] + " (cm)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"as" + f[2] + "\"></div>"; }).join("") +
+        "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Condições da pesagem</label><select id=\"asContext\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">—</option>" +
+          WEIGH_CONTEXTS.map(function(c){ return "<option value=\"" + c + "\">" + c + "</option>"; }).join("") +
+        "</select></div>" +
+      "</div>" +
+    "</details>" +
     "<div class=\"f\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"addAssessment\" style=\"width:100%;\">Adicionar</button></div>" +
     "<p class=\"muted-p\" id=\"assessError\" style=\"color:var(--critical); display:none; grid-column:1/-1; margin:0;\"></p>" +
   "</div>";
@@ -7082,12 +7148,12 @@ function tplAssessTable(s, editable){
     var idx = list.indexOf(a);
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
-      "<td>" + a.weight.toFixed(1) + "kg" + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
-      "<td>" + a.bodyFat.toFixed(1) + "%" + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
-      "<td>" + a.muscle.toFixed(1) + "kg" + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
-      "<td>" + a.visceral + (prev?assessDelta(a.visceral,prev.visceral,""):"") + "</td>" +
-      "<td>" + a.water.toFixed(1) + "%" + (prev?assessDelta(a.water,prev.water,"%"):"") + "</td>" +
+      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + "</td>" +
+      "<td>" + fmtPos(a.weight, 1, "kg") + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
+      "<td>" + fmtPos(a.bodyFat, 1, "%") + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
+      "<td>" + fmtPos(a.muscle, 1, "kg") + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
+      "<td>" + (a.visceral > 0 ? a.visceral : "—") + (prev?assessDelta(a.visceral,prev.visceral,""):"") + "</td>" +
+      "<td>" + fmtPos(a.water, 1, "%") + (prev?assessDelta(a.water,prev.water,"%"):"") + "</td>" +
       (editable ? "<td><button type=\"button\" class=\"assess-del\" data-idx=\"" + idx + "\" aria-label=\"Remover\">✕</button></td>" : "") +
     "</tr>";
   });
@@ -7572,7 +7638,7 @@ function wireAlunoTab(s){
     });
   });
 
-  ["ciHunger","ciEnergy","ciAdherence"].forEach(function(id){
+  ["ciHunger","ciEnergy","ciAdherence","ciStress","ciRecovery"].forEach(function(id){
     var input = el.querySelector("#"+id);
     if (input) input.addEventListener("input", function(){
       el.querySelector("#"+id+"Val").textContent = input.value;
@@ -7638,6 +7704,9 @@ function wireAlunoTab(s){
       adherence: parseInt(el.querySelector("#ciAdherence").value,10),
       workouts: Math.max(0, parseInt(el.querySelector("#ciWorkouts").value,10) || 0),
       mealsOff: Math.max(0, parseInt(el.querySelector("#ciMealsOff").value,10) || 0),
+      sleepHours: Math.min(14, Math.max(0, parseFloat(el.querySelector("#ciSleep").value) || 0)),
+      stress: parseInt(el.querySelector("#ciStress").value,10),
+      recovery: parseInt(el.querySelector("#ciRecovery").value,10),
       notes: el.querySelector("#ciNotes").value
     });
     s.weights.push({date: today, w: w});
@@ -8926,17 +8995,29 @@ function tplProCheckins(s){
   s.checkins.slice().reverse().forEach(function(c){
     html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + fmtDatePt(c.date) + "</div>" +
       (c.notes ? "<div class=\"muted-p\">" + escapeHtml(c.notes) + "</div>" : "") + "</div>" +
-      "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + "</span></div></div>";
+      "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + (c.sleepHours > 0 ? " · sono " + String(c.sleepHours).replace(".", ",") + "h" : "") + (c.stress > 0 ? " · stress " + c.stress : "") + (c.recovery > 0 ? " · recuperação " + c.recovery : "") + "</span></div></div>";
   });
   if (!s.checkins.length) html += "<p class=\"muted-p\">Sem check-ins registados.</p>";
   return html;
+}
+
+// "[10/10/2026 21:30] texto" no topo das notas: mais recente primeiro, nunca apaga as anteriores
+function prependDatedNote(existing, text){
+  var d = new Date();
+  var stamp = ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear() + " " + nowHHMM();
+  var line = "[" + stamp + "] " + String(text).trim();
+  return existing && String(existing).trim() ? line + "\n\n" + existing : line;
 }
 
 function tplProNotas(s){
   return "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Notas privadas</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Visíveis apenas para a equipa Evolve — o aluno não tem acesso.</p>" +
     "<textarea class=\"notes-area\" id=\"proNotes\">" + escapeHtml(s.notes) + "</textarea>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>";
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>" +
+    "<div style=\"margin-top:18px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Nova nota datada</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Fica no topo das notas com a data e a hora — o histórico da evolução do aluno.</p>" +
+      "<textarea id=\"proNoteNew\" placeholder=\"Ex.: Aumentei 100 kcal, queixa-se de pouca energia nos treinos\" style=\"width:100%; min-height:70px; border:1px solid var(--line-strong); border-radius:11px; padding:10px 12px; background:var(--bg);\"></textarea>" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"addDatedNote\" style=\"margin-top:8px;\">Acrescentar nota datada</button></div>";
 }
 
 var HELP_SITUATION_LABEL = {};
@@ -9112,6 +9193,25 @@ function signalWeight(s){
   return signal("peso", "Peso", "positivo", base + ".", period, "evolucao");
 }
 
+// Sono, stress e recuperação (só para quem já os registou nos check-ins recentes)
+var SIGNAL_LOW_SLEEP_HOURS = 6.5;
+var SIGNAL_HIGH_STRESS = 7;
+var SIGNAL_LOW_RECOVERY = 4;
+function signalRecuperacao(s){
+  var recent = recentCheckins(s).filter(function(c){ return c.sleepHours > 0 || c.stress > 0 || c.recovery > 0; });
+  if (!recent.length) return signal("recuperacao", "Sono e recuperação", "insuficiente", "Sem registos de sono, stress ou recuperação nos check-ins.", "Últimos " + SIGNAL_RECENT_CHECKINS + " check-ins", "checkins");
+  function avg(key){ var v = recent.filter(function(c){ return c[key] > 0; }); return v.length ? v.reduce(function(a, c){ return a + c[key]; }, 0) / v.length : null; }
+  var sleep = avg("sleepHours"), stress = avg("stress"), rec = avg("recovery");
+  var parts = [];
+  if (sleep != null) parts.push("sono " + sleep.toFixed(1).replace(".", ",") + " h");
+  if (stress != null) parts.push("stress " + stress.toFixed(1).replace(".", ",") + "/10");
+  if (rec != null) parts.push("recuperação " + rec.toFixed(1).replace(".", ",") + "/10");
+  var attention = (sleep != null && sleep < SIGNAL_LOW_SLEEP_HOURS) || (stress != null && stress > SIGNAL_HIGH_STRESS) || (rec != null && rec < SIGNAL_LOW_RECOVERY);
+  return signal("recuperacao", "Sono e recuperação", attention ? "atencao" : "positivo",
+    "Média: " + parts.join(" · ") + (attention ? " — sono curto, stress alto ou má recuperação explicam fome, estagnação e quebras de treino." : "."),
+    "Últimos " + recent.length + " check-ins", "checkins");
+}
+
 // Inatividade: sem pesagem há muito tempo, ou duas semanas seguidas sem treinos registados
 var SIGNAL_WEIGH_LATE_DAYS = 21;
 function daysSinceDate(iso){
@@ -9221,6 +9321,7 @@ function computeStudentSignals(s){
     signalTreinos(s),
     signalPesagem(s),
     signalInatividadeTreino(s),
+    signalRecuperacao(s),
     signalMealsOff(s),
     signalAdaptacoes(s)
   ];
@@ -9894,7 +9995,16 @@ function wireProTab(s){
     var muscle = parseFloat(el.querySelector("#asMuscle").value);
     var visceral = parseFloat(el.querySelector("#asVisceral").value);
     var water = parseFloat(el.querySelector("#asWater").value);
-    if ([weight,bodyFat,muscle,visceral,water].every(function(v){ return isNaN(v); })) return;
+    var perims = {};
+    PERIMETER_FIELDS.forEach(function(f){ var v = parseFloat(el.querySelector("#as" + f[2]).value); if (!isNaN(v)) perims[f[0]] = v; });
+    var ctxEl = el.querySelector("#asContext"), context = ctxEl ? ctxEl.value : "";
+    if ([weight,bodyFat,muscle,visceral,water].every(function(v){ return isNaN(v); }) && !Object.keys(perims).length) return;
+    var badPerim = Object.keys(perims).some(function(k){ return perims[k] < 20 || perims[k] > 250; });
+    if (badPerim){
+      errEl.textContent = "Os perímetros têm de estar entre 20 e 250 cm.";
+      errEl.style.display = "block";
+      return;
+    }
     var negative = [weight,muscle,visceral].some(function(v){ return !isNaN(v) && v < 0; });
     var outOfPercentRange = [bodyFat,water].some(function(v){ return !isNaN(v) && (v < 0 || v > 100); });
     if (negative || outOfPercentRange){
@@ -9906,6 +10016,8 @@ function wireProTab(s){
     if (!s.assessments) s.assessments = [];
     var entry = {date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
     if (time) entry.time = time;
+    Object.keys(perims).forEach(function(k){ entry[k] = perims[k]; });
+    if (context) entry.context = context;
     s.assessments.push(entry);
     if (!isNaN(weight)){ s.weightCurrent = weight; s.weights.push({date:date, w:weight}); }
     renderProTabContent(s);
@@ -9927,6 +10039,16 @@ function wireProTab(s){
       renderProTabContent(s);
       persistStudent(s);
     });
+  });
+
+  var addNote = el.querySelector("#addDatedNote");
+  if (addNote) addNote.addEventListener("click", function(){
+    var text = el.querySelector("#proNoteNew").value.trim();
+    if (!text) return;
+    s.notes = prependDatedNote(s.notes, text);
+    persistStudent(s);
+    renderProTabContent(s);
+    showToast("Nota acrescentada");
   });
 }
 
