@@ -92,4 +92,15 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   mergeFoodProduct(multi, []);
   check.check("6. Packs grandes (480 g = 4 copos) não são tratados como uma só embalagem", packSizeOf(foodProductDisplayName(multi, [])) === 0);
 })();
+// ---- 7. Queijo fresco Continente (4 x 62,5 g fechados): 50 g do plano → 1 unidade inteira ----
+(function(){
+  var n = "Queijo fresco longa duração light (Continente Equilíbrio)";
+  check.check("7. Existe na base com os valores por 100 g (101 kcal, 11 g proteína, 4,9 g hidratos, 4 g gordura)", FOOD_DB[n] && FOOD_DB[n].kcal === 101 && FOOD_DB[n].p === 11 && FOOD_DB[n].c === 4.9 && FOOD_DB[n].f === 4);
+  check.check("7. Unidade de 62,5 g: 63 g (1 unidade) e 125 g (2) sem sobras; 100 g deixa sobras", packLeftover(n, "63 g") === 0 && packLeftover(n, "125 g") === 0 && packLeftover(n, "100 g") > 0);
+  var d = applyPreferredProducts(draftPlanFromDailyText("Refeição 1 (pequeno-almoço)\n1 Fatia Pão Integral\n50g Queijo Fresco Magro"));
+  var q = d[0].foods.filter(function(f){ return /^Queijo/.test(f.name); })[0];
+  check.check("7. No plano colado, 'queijo fresco magro' 50 g vira o queijo do Continente, 1 unidade (63 g)", q && q.name === n && q.qty === "63 g" && q.group === "laticinios");
+  var quest = draftPlanFromDailyText("Pequeno-almoço\n* 60 g queijo fresco magro")[0].foods.filter(function(f){ return /^Queijo/.test(f.name); })[0];
+  check.check("7. No questionário do aluno continua o genérico (60 g), sem trocar de produto", quest && quest.name === "Queijo fresco magro" && quest.qty === "60 g");
+})();
 check.summarize();

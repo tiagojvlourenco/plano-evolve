@@ -776,6 +776,7 @@ var FOOD_GROUPS = {
     {name:"Iogurte grego natural (Oikos)", qty:"100 g"},
     {name:"Iogurte proteico de baunilha (YoPro Danone)", qty:"100 g"},
     {name:"Iogurte proteico de mirtilo (YoPro Danone)", qty:"120 g"},
+    {name:"Queijo fresco longa duração light (Continente Equilíbrio)", qty:"63 g"},
     {name:"Iogurte proteico com manga e maracujá 0% (Mercadona)", qty:"100 g"},
     {name:"Iogurte com frutos do bosque (Mercadona)", qty:"100 g"},
     {name:"Iogurte 0% com fruta (Mercadona)", qty:"100 g"},
@@ -2636,7 +2637,8 @@ var FOOD_DB = {
   "Iogurte grego natural ligeiro (Continente Equilíbrio)": {per:"100g", kcal:55, p:5.3, c:3.9, f:2},
   "Iogurte grego natural (Oikos)": {per:"100g", kcal:62.7, p:3.4, c:4.4, f:7},
   "Iogurte proteico de baunilha (YoPro Danone)": {per:"100g", kcal:53.3, p:9.4, c:3.6, f:0.1},
-  "Iogurte proteico de mirtilo (YoPro Danone)": {per:"100g", kcal:54, p:9.4, c:3.7, f:0.1}, // copo de 120 g = 11 g de proteína; EAN 8410500030865
+  "Iogurte proteico de mirtilo (YoPro Danone)": {per:"100g", kcal:54, p:9.4, c:3.7, f:0.1},
+  "Queijo fresco longa duração light (Continente Equilíbrio)": {per:"100g", kcal:101, p:11, c:4.9, f:4}, // 4 unidades de 62,5 g fechadas individualmente (250 g) // copo de 120 g = 11 g de proteína; EAN 8410500030865
   "Iogurte proteico com manga e maracujá 0% (Mercadona)": {per:"100g", kcal:56.7, p:8.3, c:5.8, f:0.2},
   "Iogurte com frutos do bosque (Mercadona)": {per:"100g", kcal:98, p:3.7, c:13.7, f:3.2},
   "Iogurte 0% com fruta (Mercadona)": {per:"100g", kcal:45, p:4.5, c:6.5, f:0.1},
@@ -4306,7 +4308,8 @@ function priorityMacroForFood(name){
    Se o plano pede 200 g de um iogurte de 300 g, sobram 100 g que o aluno não vai comer (e que estragam).
    Por isso, quando se conhece o tamanho da embalagem (FOOD_PACKS), as quantidades são sempre embalagens inteiras. */
 var FOOD_PACKS = {
-  "Iogurte proteico de mirtilo (YoPro Danone)": 120
+  "Iogurte proteico de mirtilo (YoPro Danone)": 120,
+  "Queijo fresco longa duração light (Continente Equilíbrio)": 62.5 // cada unidade vem fechada: 4 x 62,5 g
 };
 var PERISHABLE_AFTER_OPENING = /iogurte|skyr|leite|queijo|fiambre|presunto|peru fatiado|natas|requeij|bebida vegetal|kefir|sumo|molho|pudim|manteiga|margarina|húmus|hummus|paté/i;
 function isPerishableAfterOpening(name){ return PERISHABLE_AFTER_OPENING.test(name || ""); }
@@ -4318,7 +4321,7 @@ function packLeftover(name, qty){
   var a = parseQtyAmount(qty);
   if (a.kind !== "g") return 0;
   var rest = a.value % size;
-  return rest < 0.5 || size - rest < 0.5 ? 0 : Math.round(size - rest);
+  return rest < 1 || size - rest < 1 ? 0 : Math.round(size - rest); // tolera 1 g (as quantidades guardam-se arredondadas: 62,5 g → 63 g)
 }
 // arredonda para o nº de embalagens inteiras mais próximo (mínimo 1)
 function snapToWholePacks(name, grams){
@@ -4997,6 +5000,24 @@ function splitDraftPhrases(line){
 // ao mesmo grupo. Linhas com "/" (e as que se seguem a começar por "ou")
 // formam um grupo de alternativas do qual só entra a PRIMEIRA que se
 // reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
+// Produtos que o profissional/aluno compra de facto: no plano colado, o alimento genérico passa para esse produto
+// (e para embalagens inteiras: 4 x 62,5 g de queijo fresco, fechadas uma a uma).
+var PREFERRED_PRODUCTS = {"Queijo fresco magro": "Queijo fresco longa duração light (Continente Equilíbrio)"};
+function applyPreferredProductsIf(pasted, draft){ return pasted ? applyPreferredProducts(draft) : draft; }
+function applyPreferredProducts(draft){
+  draft.forEach(function(d){
+    d.foods.forEach(function(f){
+      var pref = PREFERRED_PRODUCTS[f.name];
+      if (!pref || !FOOD_DB[pref]) return;
+      var a = parseQtyAmount(f.qty);
+      f.name = pref;
+      f.group = groupOfFood(pref);
+      if (a.kind === "g") f.qty = buildQtyString(pref, snapToWholePacks(pref, a.value));
+    });
+  });
+  return draft;
+}
+
 function draftPlanFromDailyText(text){
   // Linhas de hidratação e notas manuscritas ("Hidratação → 3L Água...", "Leia: ...") não são alimentos de nenhuma refeição
   text = String(text || "").replace(/^[ \t]*(?:hidrata[çc][ãa]o|leia|nota|notas|obs\.?|observa[çc][õo]es)\b.*$/gim, "");
@@ -9220,7 +9241,7 @@ function wireProTab(s){
   ["#draftFromDailyText", "#draftFromPastedPlan"].forEach(function(sel){
   var draftBtn = el.querySelector(sel), pasted = sel === "#draftFromPastedPlan";
   if (draftBtn) draftBtn.addEventListener("click", function(){
-    var draft = draftPlanFromDailyText(pasted ? el.querySelector("#pastedPlanText").value : s.dailyEatingDescription);
+    var draft = applyPreferredProductsIf(pasted, draftPlanFromDailyText(pasted ? el.querySelector("#pastedPlanText").value : s.dailyEatingDescription));
     var resultEl = el.querySelector(pasted ? "#pastedPlanResult" : "#dailyPlanDraftResult");
 
     function renderAndWireDraft(){
