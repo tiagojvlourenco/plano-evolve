@@ -337,7 +337,7 @@
   .tag-list{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
   .tag{font-size:0.74rem; background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:3px 10px;}
 
-  .macro-target-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:12px; margin-top:8px;}
+  .macro-target-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:12px; margin-top:8px; align-items:end;}
   .macro-target-grid .f label{display:block; font-size:0.68rem; color:var(--muted); text-transform:uppercase; margin-bottom:5px; font-weight:600;}
   .macro-target-grid .f input{width:100%; border:1px solid var(--line-strong); border-radius:9px; padding:8px 10px; background:var(--bg); font-family:var(--mono); font-weight:600;}
   .target-extra{color:var(--accent-strong); font-weight:700; text-transform:none; letter-spacing:0;}
@@ -5772,7 +5772,7 @@ function openSubstitution(f, onConfirm, s, meal){
   function renderList(){
     var html = "<div class=\"mtitle\">Substituir</div>" +
       "<div class=\"food-item\" style=\"border-bottom:2px solid var(--line); margin-bottom:10px; padding-bottom:10px;\">" +
-        "<span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span>" +
+        "<span class=\"fname\">" + escapeHtml(f.name) + "</span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" +
       "</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
     if (!options.length){
@@ -5799,7 +5799,7 @@ function openSubstitution(f, onConfirm, s, meal){
   }
 
   function renderConfirm(chosen){
-    var html = "<div class=\"mtitle\">Substituir " + f.name + " por " + chosen.name + "?</div>" +
+    var html = "<div class=\"mtitle\">Substituir " + escapeHtml(f.name) + " por " + escapeHtml(chosen.name) + "?</div>" +
       "<div style=\"display:flex; align-items:center; gap:10px; margin:18px 0;\">" +
         "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--line); border-radius:10px; padding:10px;\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>" +
         "<span style=\"color:var(--muted); font-weight:700;\">→</span>" +
@@ -6153,7 +6153,7 @@ function openMealDetail(s, idx){
         m.foods.map(function(f, fi){
           var canSwap = f.group && profile.substitutionsEnabled;
           return "<div class=\"food-item\"" + (canSwap ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
-            "<span class=\"fname\">" + f.name + "</span>" +
+            "<span class=\"fname\">" + escapeHtml(f.name) + "</span>" +
             "<span><span class=\"fqty\">" + f.qty + "</span>" + (canSwap ? "<span class=\"swap-hint\">não tenho isto</span>" : "") + "</span>" +
           "</div>";
         }).join("") +
@@ -6228,7 +6228,7 @@ function openMealDetail(s, idx){
 function openFoodUnavailable(s, m, fi, idx){
   var f = m.foods[fi];
   var profile = computeFlexibilityProfile(s);
-  var html = "<div class=\"mtitle\">Não tenho " + f.name + "</div>" +
+  var html = "<div class=\"mtitle\">Não tenho " + escapeHtml(f.name) + "</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:14px;\">O que queres fazer?</p>" +
     "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
       "<button type=\"button\" class=\"btn primary\" id=\"fuSubstitute\" style=\"width:100%;\">Substituir por outro alimento</button>" +
@@ -6316,7 +6316,7 @@ function renderAlunoShell(){
                    : "<div class=\"sub\" style=\"margin-top:2px;\">Dia de descanso</div>");
   alunoRoot.innerHTML =
     "<div class=\"phone-header\">" +
-      "<div><div class=\"greet\">Olá, " + s.name.split(" ")[0] + "</div><div class=\"sub\">" + s.goal + "</div>" + trainingLine + "</div>" +
+      "<div><div class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</div><div class=\"sub\">" + escapeHtml(s.goal) + "</div>" + trainingLine + "</div>" +
       (showSwitcher ? "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" : "") +
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
@@ -6595,7 +6595,7 @@ function tplMealFixed(m, idx, s){
   return "<div>" + m.foods.map(function(f, fi){
     var swappable = f.group && canSwap;
     return "<div class=\"food-item\"" + (swappable ? " data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\"" : "") + ">" +
-      "<span class=\"fname\">" + f.name + "</span>" +
+      "<span class=\"fname\">" + escapeHtml(f.name) + "</span>" +
       "<span><span class=\"fqty\">" + f.qty + "</span>" + (swappable ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
     "</div>";
   }).join("") + "</div>";
@@ -7700,9 +7700,9 @@ function renderProDashboardMain(){
     proStat(visible.length, "Total de alunos", "total") +
   "</div>";
 
-  html += "<div style=\"display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;\">" +
-    (demoCount ? "<button type=\"button\" class=\"btn btn-sm\" id=\"toggleDemo\">" + (state.showDemoStudents ? "Ocultar contas de demonstração" : "Mostrar contas de demonstração (" + demoCount + ")") + "</button>" : "<span></span>") +
-    "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\">+ Convidar aluno</button>" +
+  html += "<div style=\"display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; margin-bottom:14px;\">" +
+    (demoCount ? "<button type=\"button\" class=\"btn btn-sm\" id=\"toggleDemo\" style=\"flex:1 1 150px; min-height:44px;\">" + (state.showDemoStudents ? "Ocultar contas de demonstração" : "Mostrar contas de demonstração (" + demoCount + ")") + "</button>" : "") +
+    "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\" style=\"flex:1 1 150px; min-height:44px;\">+ Convidar aluno</button>" +
   "</div>";
 
   // A lista completa (com pesagem/adesão/alertas por aluno) só aparece a
@@ -7718,7 +7718,7 @@ function renderProDashboardMain(){
       html += "<div class=\"card student-row\" data-id=\"" + s.id + "\">" +
         "<div class=\"student-row-main\" data-open=\"" + s.id + "\">" +
           "<div class=\"avatar\">" + s.initials + "</div>" +
-          "<div><div class=\"sname\">" + s.name + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + s.goal + "</div></div>" +
+          "<div><div class=\"sname\">" + escapeHtml(s.name) + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + escapeHtml(s.goal) + "</div></div>" +
         "</div>" +
         "<label class=\"switch\" title=\"" + (isStudentActive(s) ? "Ativo" : "Inativo") + "\">" +
           "<input type=\"checkbox\" data-active-toggle=\"" + s.id + "\"" + (isStudentActive(s) ? " checked" : "") + ">" +
@@ -8011,7 +8011,7 @@ function renderProDetailMain(s){
   var main = document.getElementById("proMain");
   main.innerHTML = "<div class=\"detail-header\">" +
     "<div class=\"avatar\">" + s.initials + "</div>" +
-    "<div><div class=\"sname\">" + s.name + "</div><div class=\"muted-p\">" + s.goal + "</div></div>" +
+    "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
   "</div>" +
   "<div id=\"proTabContent\" class=\"card\"></div>";
   renderProTabContent(s);
@@ -8114,7 +8114,7 @@ function tplProPerfil(s){
 
   var flexProfile = computeFlexibilityProfile(s);
   html += perfilSection("Personalizar comportamento do plano", false,
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Estas opções controlam o que " + s.name.split(" ")[0] + " vê e pode fazer no plano — têm sempre prioridade sobre o comportamento padrão.</p>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Estas opções controlam o que " + escapeHtml(s.name.split(" ")[0]) + " vê e pode fazer no plano — têm sempre prioridade sobre o comportamento padrão.</p>" +
     FLEX_OVERRIDE_CHECKBOXES.map(function(pair){
       var key = pair[0], label = pair[1];
       return "<div style=\"display:flex; align-items:center; gap:8px; margin-bottom:8px;\">" +
@@ -8851,7 +8851,7 @@ function tplProCheckins(s){
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de check-ins</div>";
   s.checkins.slice().reverse().forEach(function(c){
     html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + fmtDatePt(c.date) + "</div>" +
-      (c.notes ? "<div class=\"muted-p\">" + c.notes + "</div>" : "") + "</div>" +
+      (c.notes ? "<div class=\"muted-p\">" + escapeHtml(c.notes) + "</div>" : "") + "</div>" +
       "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + "</span></div></div>";
   });
   if (!s.checkins.length) html += "<p class=\"muted-p\">Sem check-ins registados.</p>";
@@ -8861,7 +8861,7 @@ function tplProCheckins(s){
 function tplProNotas(s){
   return "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Notas privadas</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Visíveis apenas para a equipa Evolve — o aluno não tem acesso.</p>" +
-    "<textarea class=\"notes-area\" id=\"proNotes\">" + s.notes + "</textarea>" +
+    "<textarea class=\"notes-area\" id=\"proNotes\">" + escapeHtml(s.notes) + "</textarea>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>";
 }
 
