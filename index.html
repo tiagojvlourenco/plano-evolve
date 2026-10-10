@@ -433,6 +433,12 @@
      e <input type=time/date> no iOS tem largura intrínseca — por isso minmax(0,1fr) + min-width:0. */
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea{max-width:100%; min-width:0; box-sizing:border-box;}
   input[type=time], input[type=date]{display:block; width:100%; text-align:left;}
+  /* iOS Safari faz zoom automático ao tocar num campo com letra < 16px e NÃO volta atrás quando o campo
+     desaparece (ex.: depois do login o ecrã ficava ampliado, com o logótipo e o "Sair" cortados).
+     Em ecrãs de toque, todos os campos têm 16px. */
+  @media (hover:none) and (pointer:coarse){
+    input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea{font-size:16px !important;}
+  }
   .onb-field{margin-bottom:14px; min-width:0;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
   .onb-field input, .onb-field select, .onb-field textarea{
