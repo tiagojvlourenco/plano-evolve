@@ -577,8 +577,6 @@
 
 var FOOD_GROUPS = {
   cereais: [
-    {name:"Arroz (cru)", qty:"70 g"},
-    {name:"Massa (crua)", qty:"70 g"},
     {name:"Pão de forma 100% integral (Mercadona)", qty:"100 g"},
     {name:"Pão de forma com sementes e pevides (Hacendado)", qty:"100 g"},
     {name:"Pão de forma branco (Hacendado)", qty:"100 g"},
@@ -2735,8 +2733,6 @@ var FOOD_DB = {
   "Carne magra": {per:"100g", kcal:182, p:27, c:0, f:8},
   "Tofu": {per:"100g", kcal:76, p:8, c:1.9, f:4.8},
   "Iogurte grego natural": {per:"100g", kcal:97, p:9, c:4, f:5},
-  "Arroz (cru)": {per:"100g", kcal:350, p:8.5, c:77, f:0.8},
-  "Massa (crua)": {per:"100g", kcal:355, p:12, c:72, f:1.5},
   "Iogurte skyr natural": {per:"100g", kcal:63, p:11, c:4, f:0.2},
   "Iogurte proteico": {per:"100g", kcal:55, p:10, c:4, f:0.2},
   "Arroz (cozido)": {per:"100g", kcal:130, p:2.7, c:28, f:0.3},
@@ -4956,20 +4952,6 @@ function splitDraftPhrases(line){
 // ao mesmo grupo. Linhas com "/" (e as que se seguem a começar por "ou")
 // formam um grupo de alternativas do qual só entra a PRIMEIRA que se
 // reconhece; uma linha sem "/" continua a poder ter vários alimentos genuínos.
-// Planos entregues pelo nutricionista: "70 g de arroz/massa" são gramas em CRU (≈ 3x mais energia que cozido).
-// O questionário do aluno (draftPlanFromDailyText) descreve o que ele come, normalmente já cozido — por isso é à parte.
-var PLAN_SHEET_RAW_STAPLES = {"Arroz (cozido)":"Arroz (cru)", "Massa (cozida)":"Massa (crua)"};
-function draftPlanFromPlanSheet(text){
-  var draft = draftPlanFromDailyText(text);
-  draft.forEach(function(d){
-    d.foods.forEach(function(f){
-      var raw = PLAN_SHEET_RAW_STAPLES[f.name];
-      if (raw){ f.name = raw; f.group = groupOfFood(raw); }
-    });
-  });
-  return draft;
-}
-
 function draftPlanFromDailyText(text){
   // Linhas de hidratação e notas manuscritas ("Hidratação → 3L Água...", "Leia: ...") não são alimentos de nenhuma refeição
   text = String(text || "").replace(/^[ \t]*(?:hidrata[çc][ãa]o|leia|nota|notas|obs\.?|observa[çc][õo]es)\b.*$/gim, "");
@@ -9193,7 +9175,7 @@ function wireProTab(s){
   ["#draftFromDailyText", "#draftFromPastedPlan"].forEach(function(sel){
   var draftBtn = el.querySelector(sel), pasted = sel === "#draftFromPastedPlan";
   if (draftBtn) draftBtn.addEventListener("click", function(){
-    var draft = pasted ? draftPlanFromPlanSheet(el.querySelector("#pastedPlanText").value) : draftPlanFromDailyText(s.dailyEatingDescription);
+    var draft = draftPlanFromDailyText(pasted ? el.querySelector("#pastedPlanText").value : s.dailyEatingDescription);
     var resultEl = el.querySelector(pasted ? "#pastedPlanResult" : "#dailyPlanDraftResult");
 
     function renderAndWireDraft(){

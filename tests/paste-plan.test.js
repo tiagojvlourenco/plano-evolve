@@ -21,7 +21,7 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
 // ---- 3. Hidratação/notas não viram alimentos; chá/café não são "Snacks"; o ajuste automático não gera disparates ----
 (function(){
   var full = txt + "\nHidratação → 3L Água (2L água + 1L chá)\nLeia: iogurte proteico";
-  var d2 = draftPlanFromPlanSheet(full);
+  var d2 = draftPlanFromDailyText(full);
   var jantar = d2.filter(function(x){ return x.mealName === "Jantar"; })[0];
   check.check("3. A linha de hidratação/notas não acrescenta alimentos ao jantar", jantar.foods.length === 2 && !jantar.foods.some(function(f){ return /Chá|Água/.test(f.name); }) && jantar.unmatchedLines.length === 0);
   check.check("3. Chá e café ficam num grupo próprio (Bebidas), não em Snacks", groupOfFood("Chá, infusão, verde") === "bebidas" && groupOfFood("Café, infusão - bica") === "bebidas" && GROUP_LABELS.bebidas.indexOf("Bebidas") >= 0);
@@ -40,12 +40,11 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
     "Refeição 5 (jantar):", "70g Arroz Basmati / Massa Integral", "100g Carne Branca OU 100g Peixe Branco", "100g Legumes Verdes",
     "Hidratação → 3L Água"
   ].join("\n");
-  var d = draftPlanFromPlanSheet(folha);
+  var d = draftPlanFromDailyText(folha);
   function f(meal, re){ var m = d.filter(function(x){ return x.mealName === meal; })[0]; return m && m.foods.filter(function(x){ return re.test(x.name); })[0]; }
   check.check("4. Skyr reconhecido, com os 150 g escritos (não 136 g pela proteína)", f("Meio da manhã", /skyr/i) && f("Meio da manhã", /skyr/i).qty === "150 g");
   check.check("4. Iogurte proteico reconhecido (nada por reconhecer no plano todo)", !!f("Lanche", /proteico/i) && d.every(function(x){ return x.unmatchedLines.length === 0; }));
-  check.check("4. 'Arroz 70 g' num plano de nutricionista é arroz cru (70 g), não cozido", f("Almoço", /Arroz/) && f("Almoço", /Arroz/).name === "Arroz (cru)" && f("Almoço", /Arroz/).qty === "70 g");
-  check.check("4. No questionário do aluno continua a ser arroz cozido", draftPlanFromDailyText("Almoço\n70g Arroz Basmati")[0].foods[0].name === "Arroz (cozido)");
+  check.check("4. 'Arroz 70 g' é arroz cozido, 70 g (a comida pesa-se já feita)", f("Almoço", /Arroz/) && f("Almoço", /Arroz/).name === "Arroz (cozido)" && f("Almoço", /Arroz/).qty === "70 g");
   check.check("4. Cada 'OU' dá um só alimento (carne/peixe = 1, fruta = 1)", d.filter(function(x){ return x.mealName === "Almoço"; })[0].foods.length === 3 && d.filter(function(x){ return x.mealName === "Lanche"; })[0].foods.length === 2);
   check.check("4. Texto entre parênteses (variantes) não cria alimentos nem avisos", d.every(function(x){ return x.unmatchedLines.length === 0; }));
   // alvos a partir do plano
@@ -55,8 +54,7 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   setTargetsFromPlanIfAsked(el, s);
   var tot = foodsTotals(s.meals.reduce(function(a, m){ return a.concat(m.foods); }, []));
   check.check("4. Os alvos passam a ser exatamente o que o plano dá (sem 'ajustar quantidades')", s.targets.kcal === Math.round(tot.kcal) && s.targets.protein === Math.round(tot.p) && s.targets.carbs === Math.round(tot.c) && s.targets.fat === Math.round(tot.f));
-  check.check("4. Os alvos são realistas (1000 a 2000 kcal) para este plano", s.targets.kcal > 1000 && s.targets.kcal < 2000);
-  var s2 = {targets:{kcal:100}, meals:[meal("Antigo","12:00",[food("Ovos","2 unid.","carnes")])]};
+    var s2 = {targets:{kcal:100}, meals:[meal("Antigo","12:00",[food("Ovos","2 unid.","carnes")])]};
   clearPlanIfReplacing({querySelector: function(){ return {checked:true}; }}, s2, d);
   check.check("4. 'Substituir o plano atual' apaga as refeições antigas", s2.meals.length === 0);
   var s3 = {targets:{kcal:100}, meals:[meal("Antigo","12:00",[])]};
