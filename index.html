@@ -6640,8 +6640,6 @@ function tplEvolucaoAluno(s, opts){
 
   html += tplPhotosSection(s, opts);
 
-  if (opts.editable) html += tplWeightLogPhotosSection(s);
-
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adesão por semana</div>" +
     s.checkins.map(function(c){ return "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.adherence + "/10</span></div>"; }).join("") +
   "</div>";
@@ -7013,55 +7011,6 @@ function wirePhotoRemove(s, el, onDone){
     btn.addEventListener("click", function(){
       if (!window.confirm("Remover esta fotografia? Não é possível desfazer.")) return;
       removePhoto(s, parseInt(btn.getAttribute("data-idx"), 10), onDone);
-    });
-  });
-}
-
-// Fotos de pesagem (prints da balança/app) que o profissional carrega para
-// referência própria — nunca visíveis ao aluno. Servem para pedir à Claude,
-// no chat, que leia os valores e os adicione por data (fluxo manual, não
-// OCR automático dentro da app — ver decisão explícita do profissional).
-function tplWeightLogPhotosSection(s){
-  return "<div class=\"card\"><div class=\"eyebrow\">Fotos de pesagem (referência)</div>" +
-    "<p class=\"muted-p\" style=\"margin:6px 0 10px;\">Carrega aqui prints da balança ou da app — depois envia-os à Claude no chat para ler os valores e adicioná-los por data. Não são visíveis para o aluno.</p>" +
-    weightLogPhotoGridHtml(s) +
-    "<label class=\"btn-file\">Carregar foto de pesagem<input type=\"file\" accept=\"image/*\" id=\"weightLogUpload\" style=\"display:none;\"></label>" +
-  "</div>";
-}
-
-function weightLogPhotoGridHtml(s){
-  var list = s.weightLogPhotos || [];
-  if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:6px;\">Ainda sem fotos de pesagem carregadas.</p>";
-  return "<div class=\"photo-grid\">" + list.map(function(p, i){
-    return "<div class=\"photo-thumb\"><img src=\"" + photoUrl(p) + "\" alt=\"Foto de pesagem de " + fmtDatePt(p.date) + "\">" +
-      "<span class=\"pdate\">" + fmtDatePt(p.date) + "</span>" +
-      "<button type=\"button\" class=\"weightlog-photo-remove\" data-idx=\"" + i + "\" title=\"Remover foto\" aria-label=\"Remover foto\">✕</button></div>";
-  }).join("") + "</div>";
-}
-
-function removeWeightLogPhoto(s, idx, onDone){
-  var photo = (s.weightLogPhotos||[])[idx];
-  if (!photo) return;
-  var afterRemove = function(){
-    s.weightLogPhotos.splice(idx, 1);
-    persistStudent(s);
-    if (onDone) onDone();
-  };
-  if (photo.path && sbReady){
-    sb.storage.from("progress-photos").remove([photo.path]).then(function(res){
-      if (res.error){ showToast("⚠ Não foi possível remover a foto"); return; }
-      afterRemove();
-    }).catch(function(){ showToast("⚠ Não foi possível remover a foto"); });
-  } else {
-    afterRemove();
-  }
-}
-
-function wireWeightLogPhotoRemove(s, el, onDone){
-  el.querySelectorAll(".weightlog-photo-remove").forEach(function(btn){
-    btn.addEventListener("click", function(){
-      if (!window.confirm("Remover esta foto de pesagem?")) return;
-      removeWeightLogPhoto(s, parseInt(btn.getAttribute("data-idx"), 10), onDone);
     });
   });
 }
@@ -9649,39 +9598,6 @@ function wireProTab(s){
   });
   wirePhotoCompare(s, el);
   wirePhotoRemove(s, el, function(){ renderProTabContent(s); });
-  wireWeightLogPhotoRemove(s, el, function(){ renderProTabContent(s); });
-
-  var weightLogInput = el.querySelector("#weightLogUpload");
-  if (weightLogInput) weightLogInput.addEventListener("change", function(e){
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (!s.weightLogPhotos) s.weightLogPhotos = [];
-    if (sbReady && currentAuthUserId){
-      var uploadedPath;
-      resizeImageFile(file, 1280).then(function(blob){
-        uploadedPath = currentAuthUserId + "/weight-log/" + s.id + "/" + Date.now() + ".jpg";
-        return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
-      }).then(function(res){
-        if (res.error){ showToast("⚠ Falha ao enviar foto"); return; }
-        return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
-          var photo = { date: todayISO(), path: uploadedPath };
-          photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
-          s.weightLogPhotos.push(photo);
-          renderProTabContent(s);
-          persistStudent(s);
-        });
-      }).catch(function(){ showToast("⚠ Falha ao enviar foto"); });
-    } else {
-      var reader = new FileReader();
-      reader.onload = function(){
-        s.weightLogPhotos.push({date: todayISO(), dataUrl: reader.result});
-        renderProTabContent(s);
-        persistStudent(s);
-      };
-      reader.readAsDataURL(file);
-    }
-    weightLogInput.value = "";
-  });
 
   var toggleAll = el.querySelector("#assessToggleAll");
   if (toggleAll) toggleAll.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderProTabContent(s); });
