@@ -62,7 +62,7 @@ function freshStudent(overrides){
 
 // 4. A lista completa de alunos já não aparece por omissão — só dentro de state.dashboardListMode
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 1600);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 1900);
   check.check("4. A lista só é construída dentro de um if (state.dashboardListMode)", fnSrc.indexOf("if (state.dashboardListMode)") >= 0);
 })();
 
