@@ -35,7 +35,9 @@ function freshStudent(overrides){
   var withoutGoal = computeSuggestedTargets({sex:p.sex, weight:p.weight, height:p.height, age:p.age, trainingsPerWeek:p.trainingsPerWeek, goal:p.goal});
   var bmr = 10*70 + 6.25*175 - 5*28 + 5;
   var tdee = bmr * activityFromTrainings(4);
-  var expectedKcal = Math.round(tdee + (WEIGHT_GOAL_RATE_KG_PER_WEEK * KCAL_PER_KG) / 7);
+  // ganho: ritmo limitado a 0,4% do peso por semana e a +15% da manutenção
+  var rate = Math.min(WEIGHT_GOAL_RATE_KG_PER_WEEK, 70 * GAIN_PCT_PER_WEEK / 100);
+  var expectedKcal = Math.round(tdee + Math.min((rate * KCAL_PER_KG) / 7, tdee * MAX_SURPLUS_FRACTION));
   check.check("2. Com weightGoal de ganho, usa o excedente baseado no ritmo (não a % antiga)", withGoal.kcal === expectedKcal);
   check.check("2. Difere do cálculo sem weightGoal (não é coincidência)", withGoal.kcal !== withoutGoal.kcal);
 })();
@@ -85,8 +87,8 @@ function freshStudent(overrides){
 // 7. signalWeight já cobre exatamente o critério pedido: <0.3kg em 3 semanas, com objetivo de mudança
 (function(){
   check.check("7. SIGNAL_WEIGHT_TREND_WEEKS é 3 (janela de 2-3 semanas)", SIGNAL_WEIGHT_TREND_WEEKS === 3);
-  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("function signalWeight") + 1400);
-  check.check("7. Usa o limiar de 0.3kg para considerar estagnado", fnSrc.indexOf("0.3") >= 0);
+  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("function signalWeight") + 3200);
+  check.check("7. Usa o limiar de 0,3 kg em 3 semanas (0,1 kg/semana) para considerar estagnado", fnSrc.indexOf("0.1 * weeks") >= 0 && fnSrc.indexOf("0,3 kg em 3 semanas") >= 0);
   check.check("7. Só considera estagnação quando o objetivo implica mudança (perda/ganho), pela direção do objetivo", fnSrc.indexOf('dir === "perda"') >= 0 && fnSrc.indexOf('dir === "ganho"') >= 0);
 })();
 

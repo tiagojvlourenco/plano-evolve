@@ -50,7 +50,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 
 // ---- 4. Progressão ----
 (function(){
-  function hist(arr){ return arr.map(function(v, i){ return {date:daysAgo(60 - i * 7), est1RM:v}; }); }
+  function hist(arr){ return arr.map(function(v, i){ return {date:daysAgo(60 - i * 7), est1RM:v, score:v}; }); }
   check.check("4. Menos de 2 sessões → sem tendência", progressionStatus(hist([100])) === null);
   check.check("4. Novo máximo → progrediu", progressionStatus(hist([100, 100, 105])) === "progrediu");
   check.check("4. 3 sessões sem novo máximo (≥ 4 sessões) → estagnado", progressionStatus(hist([100, 100, 100, 99])) === "estagnado");
@@ -82,7 +82,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 
 // ---- 7. Persistência e migração ----
 (function(){
-  var s = {id:"x", name:"T", trainingProgram:{name:"P", days:[]}, workoutLogs:[{id:"w1"}], meals:[], checkins:[], weights:[], assessments:[], photos:[], weightLogPhotos:[], targets:{}};
+  var s = {id:"x", name:"T", trainingProgram:{name:"P", days:[]}, workoutLogs:[{id:"w1", date:"2026-01-02", entries:[]}], meals:[], checkins:[], weights:[], assessments:[], photos:[], weightLogPhotos:[], targets:{}};
   var row = studentToRow(s);
   check.check("7. A linha leva training_program e workout_logs", row.training_program && row.training_program.name === "P" && row.workout_logs.length === 1);
   var back = rowToStudent(Object.assign({}, row, {meals:[], checkins:[], weights:[], assessments:[], photos:[]}));

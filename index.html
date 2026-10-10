@@ -149,13 +149,20 @@
   #alunoApp.rt-open .aluno-tabs{padding-bottom:230px;}
   #restTimer{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(92px + env(safe-area-inset-bottom, 0px)); width:min(398px, calc(100% - 32px)); z-index:25; background:var(--surface-2); border:1px solid var(--accent); border-radius:18px; padding:12px 14px 14px; box-shadow:0 14px 34px -10px rgba(0,0,0,0.7);}
   #restTimer.hidden{display:none;}
-  #restTimer.done{border-color:var(--critical); animation:rtPulse 1s ease-in-out infinite;}
+  #restTimer.done{border-color:var(--critical); animation:rtPulse 1s ease-in-out 8;}
   @keyframes rtPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,0.0), 0 14px 34px -10px rgba(0,0,0,0.7);} 50%{box-shadow:0 0 0 6px rgba(255,80,80,0.35), 0 14px 34px -10px rgba(0,0,0,0.7);}}
   @media (prefers-reduced-motion:reduce){ #restTimer.done{animation:none;} }
   @media (min-width:760px){ #restTimer{width:min(560px, calc(100% - 32px));} }
+  @media (max-height:560px){
+    #restTimer{bottom:calc(76px + env(safe-area-inset-bottom, 0px)); padding:8px 12px 10px;}
+    #restTimer .rt-time{font-size:1.9rem; margin:0 0 4px;}
+    #restTimer .rt-status{display:none;}
+    #restTimer .rt-actions{margin-top:6px;}
+    #alunoApp.rt-open .aluno-tabs{padding-bottom:170px;}
+  }
   #restTimer .rt-head{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);}
   #restTimer .rt-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
-  #restTimer .rt-head button{background:transparent; border:none; color:var(--muted); font-size:1rem; min-width:44px; min-height:32px; cursor:pointer;}
+  #restTimer .rt-head button{background:transparent; border:none; color:var(--muted); font-size:1rem; min-width:44px; min-height:44px; margin:-8px -8px -8px 0; cursor:pointer; touch-action:manipulation;}
   #restTimer .rt-time{font-family:var(--display); font-weight:700; font-size:3rem; line-height:1.05; text-align:center; font-variant-numeric:tabular-nums; margin:2px 0 6px;}
   #restTimer .rt-time.over{color:var(--critical);}
   #restTimer .rt-bar{height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden;}
@@ -163,7 +170,7 @@
   #restTimer.done .rt-bar i{background:var(--critical);}
   #restTimer .rt-status{min-height:1.1em; text-align:center; font-size:0.8rem; font-weight:700; color:var(--critical); margin-top:6px;}
   #restTimer .rt-actions{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:8px;}
-  #restTimer .rt-actions button{min-height:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-size:0.74rem; font-weight:700; cursor:pointer;}
+  #restTimer .rt-actions button{touch-action:manipulation; min-height:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-size:0.74rem; font-weight:700; cursor:pointer;}
   #restTimer .rt-actions button:focus-visible, #restTimer .rt-head button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
   .rt-presets{display:grid; grid-template-columns:repeat(auto-fit,minmax(48px,1fr)); gap:6px; margin-top:8px;}
   .rt-presets button, .wl-rest{min-height:44px; min-width:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-size:0.8rem; font-weight:700; cursor:pointer; padding:0 4px;}
@@ -463,6 +470,8 @@
   }
   .wl-ex input[type=number]{width:100%; min-width:0; box-sizing:border-box; min-height:42px; border:1px solid var(--line-strong); border-radius:10px; padding:8px 10px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:0.95rem; text-align:center;}
   .wl-ex input[type=number]::placeholder{color:var(--muted-2);}
+  .wl-done{display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; cursor:pointer;}
+  .wl-done input{width:24px; height:24px; accent-color:var(--accent); cursor:pointer;}
   .onb-field{margin-bottom:14px; min-width:0;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
   .onb-field input, .onb-field select, .onb-field textarea{
@@ -5487,6 +5496,39 @@ function stripPhotoState(p){
   return c;
 }
 
+/* ---------- Dados vindos da base de dados: nunca confiar na forma (o aluno escreve nas suas próprias linhas) ----------
+   workout_logs e checkins são JSON que o aluno consegue acrescentar à mão: aqui ficam só campos conhecidos, com o tipo certo,
+   para um valor forjado (HTML no RPE, data inválida, entries em vez de array...) nunca chegar ao ecrã nem partir os cálculos. */
+function isIsoDate(v){ return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
+function finiteNum(v){ var n = typeof v === "number" ? v : (typeof v === "string" && v.trim() !== "" ? Number(v) : NaN); return isFinite(n) ? n : null; }
+function shortStr(v, max){ return typeof v === "string" ? v.slice(0, max) : ""; }
+function normalizeCheckins(arr){
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(function(c){ return c && typeof c === "object" && isIsoDate(c.date); }).map(function(c){
+    var out = {date: c.date, weight: finiteNum(c.weight) || 0, hunger: finiteNum(c.hunger) || 0, energy: finiteNum(c.energy) || 0,
+      adherence: finiteNum(c.adherence) || 0, workouts: finiteNum(c.workouts) || 0, mealsOff: finiteNum(c.mealsOff) || 0, notes: shortStr(c.notes, 2000)};
+    ["sleepHours", "stress", "recovery"].forEach(function(k){ var v = finiteNum(c[k]); if (v != null) out[k] = v; });
+    return out;
+  });
+}
+function normalizeWorkoutLogs(arr){
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(function(l){ return l && typeof l === "object" && isIsoDate(l.date); }).map(function(l){
+    var rpe = finiteNum(l.rpe);
+    return {
+      id: shortStr(l.id, 40) || uidShort("w"), date: l.date, dayId: shortStr(l.dayId, 40) || null, dayName: shortStr(l.dayName, 80),
+      rpe: rpe != null && rpe >= 1 && rpe <= 10 ? Math.round(rpe) : null, notes: shortStr(l.notes, 500),
+      entries: (Array.isArray(l.entries) ? l.entries : []).slice(0, 60).filter(function(e){ return e && typeof e === "object"; }).map(function(e){
+        return {exerciseId: shortStr(e.exerciseId, 40) || null, name: shortStr(e.name, 120),
+          sets: (Array.isArray(e.sets) ? e.sets : []).slice(0, 40).map(function(x){
+            var reps = finiteNum(x && x.reps), load = finiteNum(x && x.load);
+            return reps != null && reps >= 1 && reps <= 100 ? {reps: Math.round(reps), load: load != null && load > 0 && load <= 1000 ? load : 0} : null;
+          }).filter(Boolean)};
+      })
+    };
+  });
+}
+
 function studentToRow(s){
   var row = {
     id: s.id, initials: s.initials, name: s.name, age: s.age, sex: s.sex, height: s.height,
@@ -5511,9 +5553,11 @@ function studentToRow(s){
     weight_log_photos: (s.weightLogPhotos || []).map(stripPhotoState)
   };
   // colunas do módulo de treino (migração 0019): só se a base de dados já as tem
+  // Cada papel só escreve o que é seu (uma cópia antiga nunca apaga sessões novas nem choca com o programa mudado):
+  // o aluno envia as sessões e nunca o programa; o profissional envia o programa e nunca as sessões.
   if (trainingColumnsAvailable){
-    row.training_program = s.trainingProgram || null;
-    row.workout_logs = s.workoutLogs || [];
+    if (authRole !== "student") row.training_program = s.trainingProgram || null;
+    if (authRole !== "professional") row.workout_logs = s.workoutLogs || [];
   }
   return row;
 }
@@ -5530,7 +5574,7 @@ function rowToStudent(r){
     likes: r.likes || [], dislikes: r.dislikes || [], avoid: r.avoid || [], allergies: r.allergies || [],
     mealsPreferred: r.meals_preferred, budget: r.budget, cookTime: r.cook_time, work: r.work, weekendNote: r.weekend_note,
     targets: r.targets || {}, flexibility: r.flexibility, alerts: r.alerts || [], notes: r.notes || "",
-    meals: (r.meals || []).map(stripMealState), checkins: r.checkins || [], weights: r.weights || [], assessments: r.assessments || [],
+    meals: (r.meals || []).map(stripMealState), checkins: normalizeCheckins(r.checkins), weights: r.weights || [], assessments: r.assessments || [],
     allowPhotos: r.allow_photos, photos: r.photos || [], planHistory: r.plan_history || [],
     mealsDate: r.meals_date, fromOnboarding: !!r.from_onboarding, inviteEmail: r.invite_email || null,
     flexOverrides: r.flex_overrides || {}, flexHistory: r.flex_history || [], blockedFoods: r.blocked_foods || [],
@@ -5543,7 +5587,7 @@ function rowToStudent(r){
     physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
     weightLogPhotos: r.weight_log_photos || [],
     trainingProgram: r.training_program || null,
-    workoutLogs: r.workout_logs || []
+    workoutLogs: normalizeWorkoutLogs(r.workout_logs)
   };
 }
 
@@ -5597,7 +5641,7 @@ function insertStudent(s){
 }
 
 function flexZoneLabel(v){ return TIER_LABEL[flexTier(v)]; }
-function fmtDateFullPt(iso){ return iso.slice(8) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4); }
+function fmtDateFullPt(iso){ return isIsoDate(iso) ? iso.slice(8) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "—"; }
 function toggleAssessSort(key){
   var cur = state.assessSort || {key:"date", dir:"desc"};
   state.assessSort = cur.key === key ? {key:key, dir: cur.dir === "desc" ? "asc" : "desc"} : {key:key, dir:"desc"};
@@ -5721,6 +5765,8 @@ function computeMaintenanceKcal(s){
    - Gordura: pelo menos 0,6 g/kg do peso de referência (função hormonal). */
 var KCAL_FLOOR_BY_SEX = {"Feminino":1200, "Masculino":1500};
 var MAX_LOSS_PCT_PER_WEEK = 0.75;
+var GAIN_PCT_PER_WEEK = 0.4;
+var MAX_SURPLUS_FRACTION = 0.15;
 var FAT_MIN_G_PER_KG = 0.6;
 // massa magra (kg) da avaliação mais recente com peso e % de gordura; null se não há
 function latestLeanMass(s){
@@ -5731,9 +5777,12 @@ function latestLeanMass(s){
   }
   return null;
 }
-function kcalFloorFor(sex, bmr){
+function kcalFloorFor(sex, bmr, maintenance){
   var byBmr = bmr || 0;
   var bySex = KCAL_FLOOR_BY_SEX[sex] || 1200;
+  // pessoas muito pequenas/sedentárias têm manutenção abaixo do piso habitual: o piso nunca pode ficar acima da manutenção
+  // (senão uma meta de "perda" daria mais calorias do que manter), mas continua a não descer do metabolismo basal
+  if (maintenance > 0) bySex = Math.min(bySex, maintenance * 0.95);
   return Math.max(byBmr, bySex);
 }
 // peso a usar nos g/kg: o real, mas limitado ao peso a IMC 25 quando a altura é conhecida (e há excesso de peso)
@@ -5756,7 +5805,9 @@ function computeSuggestedTargets(p){
     var direction = p.weightGoal > p.weight ? 1 : -1;
     var rate = WEIGHT_GOAL_RATE_KG_PER_WEEK;
     if (direction < 0) rate = Math.min(rate, p.weight * MAX_LOSS_PCT_PER_WEEK / 100);
+    else rate = Math.min(rate, p.weight * GAIN_PCT_PER_WEEK / 100); // ganho magro: ≈ 0,4% do peso por semana
     var dailyAdjust = direction * (rate * KCAL_PER_KG) / 7;
+    if (direction > 0) dailyAdjust = Math.min(dailyAdjust, tdee * MAX_SURPLUS_FRACTION); // nunca mais de +15% da manutenção
     kcal = Math.max(0, Math.round(tdee + dailyAdjust));
     losing = direction < 0;
   } else {
@@ -5764,7 +5815,7 @@ function computeSuggestedTargets(p){
     kcal = Math.max(0, Math.round(tdee * (1 + adjust/100)));
     losing = adjust < 0;
   }
-  if (bmr && losing) kcal = Math.max(kcal, Math.round(kcalFloorFor(p.sex, bmr)));
+  if (bmr && losing) kcal = Math.max(kcal, Math.round(kcalFloorFor(p.sex, bmr, tdee)));
   var ref = referenceWeightKg(p.weight, p.height, p.leanMass);
   var protein = Math.round(2.0 * ref);
   var fat = Math.max(Math.round((kcal*0.27) / 9), Math.round(FAT_MIN_G_PER_KG * ref));
@@ -5782,7 +5833,7 @@ function nutritionSafetyWarnings(s, t){
   var maint = computeMaintenanceKcal(s);
   var carbs = t.carbs != null ? t.carbs : t.carbsMax, fat = t.fat != null ? t.fat : t.fatMax;
   if (bmr){
-    var floor = kcalFloorFor(s.sex, bmr);
+    var floor = kcalFloorFor(s.sex, bmr, maint);
     if (t.kcal < bmr) out.push({level:"critical", text:"Alvo de " + t.kcal + " kcal abaixo do metabolismo basal (" + bmr + " kcal): risco de perda de massa magra e de défice de micronutrientes."});
     else if (t.kcal < floor) out.push({level:"warn", text:"Alvo de " + t.kcal + " kcal abaixo do mínimo habitual (" + Math.round(floor) + " kcal) para " + (s.sex === "Masculino" ? "homens" : "mulheres") + "."});
   }
@@ -5791,7 +5842,7 @@ function nutritionSafetyWarnings(s, t){
     if (weeklyKg > weight * MAX_LOSS_PCT_PER_WEEK / 100 + 0.05) out.push({level:"warn", text:"Défice de " + (maint - t.kcal) + " kcal/dia ≈ " + weeklyKg.toFixed(2).replace(".", ",") + " kg/semana, acima de " + MAX_LOSS_PCT_PER_WEEK + "% do peso por semana."});
     if (t.kcal > maint * 1.2) out.push({level:"warn", text:"Excedente de " + (t.kcal - maint) + " kcal/dia (>" + "20% da manutenção): ganho de gordura provável."});
   }
-  var ref = referenceWeightKg(weight, s.height, s.leanMass);
+  var ref = referenceWeightKg(weight, s.height, null); // g/kg de peso corporal (limitado ao de IMC 25), tal como o texto dos avisos
   if (ref > 0){
     if (fat != null && fat < FAT_MIN_G_PER_KG * ref - 0.5) out.push({level:"warn", text:"Gordura de " + fat + " g (" + (fat / ref).toFixed(2).replace(".", ",") + " g/kg) abaixo do mínimo de " + FAT_MIN_G_PER_KG + " g/kg."});
     if (t.protein != null && t.protein > 2.6 * ref) out.push({level:"warn", text:"Proteína de " + t.protein + " g (" + (t.protein / ref).toFixed(1).replace(".", ",") + " g/kg) acima do necessário; ≈ 1,6–2,2 g/kg chega."});
@@ -6553,17 +6604,28 @@ function tplTrainingOverview(s){
 function fatMassKg(a){ return a && a.weight > 0 && a.bodyFat > 0 ? Math.round(a.weight * a.bodyFat) / 100 : null; }
 function leanMassKg(a){ var f = fatMassKg(a); return f == null ? null : Math.round((a.weight - f) * 10) / 10; }
 
+// as duas avaliações mais recentes em que a métrica foi medida (> 0): uma visita só com perímetros não conta
+function lastTwoWith(list, valueOf){
+  var out = [];
+  for (var i = 0; i < list.length && out.length < 2; i++){ var v = valueOf(list[i]); if (v != null && v > 0) out.push({a: list[i], v: v}); }
+  return out;
+}
 function tplAssessKpis(s){
-  var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
+  var list = (s.assessments||[]).slice().sort(function(x, y){ return compareAssessmentsDesc(x, y); });
   if (!list.length) return "";
-  var a = list[0], p = list[1] || {};
-  return "<div class=\"kpi-grid\">" +
-    kpiTile("Massa gorda", a.bodyFat, "%", p.bodyFat, "down", 1) +
-    kpiTile("Massa muscular", a.muscle, "kg", p.muscle, "up", 1) +
-    kpiTile("Visceral", a.visceral, "", p.visceral, "down", 0) +
-    kpiTile("Água", a.water, "%", p.water, "up", 1) +
-    (fatMassKg(a) != null ? kpiTile("Massa gorda (kg)", fatMassKg(a), "kg", fatMassKg(p), "down", 1) + kpiTile("Massa magra (kg)", leanMassKg(a), "kg", leanMassKg(p), "up", 1) : "") +
+  function tile(label, unit, good, digits, valueOf){
+    var two = lastTwoWith(list, valueOf);
+    return two.length ? kpiTile(label, two[0].v, unit, two[1] ? two[1].v : null, good, digits) : "";
+  }
+  var html = "<div class=\"kpi-grid\">" +
+    tile("Massa gorda", "%", "down", 1, function(a){ return a.bodyFat; }) +
+    tile("Massa muscular", "kg", "up", 1, function(a){ return a.muscle; }) +
+    tile("Visceral", "", "down", 0, function(a){ return a.visceral; }) +
+    tile("Água", "%", "up", 1, function(a){ return a.water; }) +
+    tile("Massa gorda (kg)", "kg", "down", 1, fatMassKg) +
+    tile("Massa magra (kg)", "kg", "up", 1, leanMassKg) +
   "</div>";
+  return html.indexOf("class=\"kpi\"") >= 0 ? html : "";
 }
 
 // Perímetros: tabela com variação face à medição anterior + razões de risco (cintura/anca, cintura/altura)
@@ -6604,7 +6666,7 @@ function tplAdherenceChart(s){
   return "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:4px;\">Adesão por semana</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:6px;\">Média " + avg.toFixed(1).replace(".", ",") + "/10 nos últimos " + list.length + " check-ins · a vermelho: abaixo de " + SIGNAL_LOW_ADHERENCE + "</p>" +
     "<div class=\"bars\">" + list.map(function(c){
-      var v = c.adherence || 0;
+      var v = Number(c.adherence) || 0;
       return "<div class=\"b\"><span>" + v + "</span><i style=\"height:" + Math.max(6, v * 10) + "%;" + (v < SIGNAL_LOW_ADHERENCE ? " background:var(--critical);" : "") + "\"></i></div>";
     }).join("") + "</div>" +
     "<div class=\"bar-labels\">" + list.map(function(c){ return "<span>" + fmtDatePt(c.date) + "</span>"; }).join("") + "</div></div>";
@@ -6909,19 +6971,23 @@ function removeProgramExercise(s, dayId, exId){
 function firstRepsOf(reps){ var m = String(reps || "").match(/\d+/); return m ? parseInt(m[0], 10) : 0; }
 function epley1RM(load, reps){
   if (!(load > 0) || !(reps > 0)) return 0;
+  reps = Math.min(reps, 12); // Epley só é fiável até ~12 repetições: séries de 30 repetições não "sobem" o máximo
   return Math.round((reps === 1 ? load : load * (1 + reps / 30)) * 10) / 10;
 }
 function workoutEntryStats(entry){
   var sets = ((entry && entry.sets) || []).filter(function(x){ return x.reps > 0; });
-  var best = null, volume = 0, topLoad = 0;
+  var best = null, volume = 0, topLoad = 0, topReps = 0;
   sets.forEach(function(x){
+    if (x.reps > topReps) topReps = x.reps;
     var load = x.load > 0 ? x.load : 0;
     volume += x.reps * load;
     if (load > topLoad) topLoad = load;
     var e = epley1RM(load, x.reps);
     if (!best || e > best.e1rm || (e === best.e1rm && x.reps > best.reps)) best = {load: load, reps: x.reps, e1rm: e};
   });
-  return {sets: sets.length, volume: Math.round(volume), topLoad: topLoad, est1RM: best ? best.e1rm : 0, topSet: best};
+  var est = best ? best.e1rm : 0;
+  // métrica de progressão: 1RM estimado; sem carga (peso do corpo) conta o máximo de repetições numa série
+  return {sets: sets.length, volume: Math.round(volume), topLoad: topLoad, est1RM: est, topReps: topReps, score: est > 0 ? est : topReps, topSet: best};
 }
 function exerciseHistory(s, exerciseId, name){
   var key = String(name || "").trim().toLowerCase();
@@ -6936,15 +7002,15 @@ function exerciseHistory(s, exerciseId, name){
 function progressionStatus(hist){
   if (!hist || hist.length < 2) return null;
   var last = hist[hist.length - 1];
-  var prior = hist.slice(0, -1).map(function(h){ return h.est1RM; });
+  var prior = hist.slice(0, -1).map(function(h){ return h.score; });
   var priorBest = Math.max.apply(null, prior);
-  if (last.est1RM > priorBest * 1.01) return "progrediu";
+  if (last.score > priorBest * 1.01) return "progrediu";
+  if (last.score < priorBest * 0.93) return "regrediu"; // queda clara: mais grave que estagnar
   if (hist.length >= 4){
-    var before = Math.max.apply(null, hist.slice(0, -3).map(function(h){ return h.est1RM; }));
-    var recent = Math.max.apply(null, hist.slice(-3).map(function(h){ return h.est1RM; }));
+    var before = Math.max.apply(null, hist.slice(0, -3).map(function(h){ return h.score; }));
+    var recent = Math.max.apply(null, hist.slice(-3).map(function(h){ return h.score; }));
     if (recent <= before * 1.005) return "estagnado";
   }
-  if (last.est1RM < priorBest * 0.93) return "regrediu";
   return "estável";
 }
 function sessionsInLastDays(s, days){
@@ -6978,6 +7044,7 @@ function fmtLoadSet(top){ return top ? (top.load > 0 ? String(top.load).replace(
    Usa o relógio (Date.now) e não "ticks", por isso continua certo se o ecrã apagar ou a página ficar em segundo plano. */
 var REST_PRESETS = [30, 45, 60, 90, 120, 180];
 var REST_DEFAULT_SECONDS = 90;
+var REST_AUTO_CLOSE_MS = 10 * 60 * 1000;
 var restTimer = null; // {total, endsAt, label, pausedLeft, notified}
 var restTimerInterval = null;
 var restAudioCtx = null;
@@ -7023,6 +7090,7 @@ function startRestTicker(){
 }
 function restTimerTick(now){
   if (!restTimer) return;
+  if (restTimer.pausedLeft == null && restTimerLeftMs(restTimer, now) < -REST_AUTO_CLOSE_MS){ restTimerStop(); return; } // esquecido há mais de 10 min
   if (restTimerLeftMs(restTimer, now) <= 0 && !restTimer.notified && restTimer.pausedLeft == null){
     restTimer.notified = true;
     restTimerAlert();
@@ -7059,13 +7127,18 @@ function restTimerHtml(now){
   var left = restTimerLeftMs(t, now);
   var over = left < 0;
   var secs = Math.ceil(Math.abs(left) / 1000);
-  var pct = over ? 100 : Math.min(100, Math.max(0, (1 - left / (t.total * 1000)) * 100));
+  var pct = restTimerProgress(t, left);
   var paused = t.pausedLeft != null;
   return `<div class="rt-head"><span class="rt-label">⏱ ${escapeHtml(t.label)}${paused ? " · em pausa" : ""}</span><button type="button" data-rt="close" aria-label="Fechar cronómetro">✕</button></div>` +
     `<div class="rt-time${over ? " over" : ""}" role="timer">${over ? "+" : ""}${fmtClock(secs)}</div>` +
     `<div class="rt-bar"><i style="width:${pct.toFixed(1)}%"></i></div>` +
     `<div class="rt-status" aria-live="polite">${over ? "Descanso terminado — próxima série!" : ""}</div>` +
     `<div class="rt-actions"><button type="button" data-rt="-15">−15 s</button><button type="button" data-rt="pause">${paused ? "Continuar" : "Pausa"}</button><button type="button" data-rt="+15">+15 s</button><button type="button" data-rt="restart">Reiniciar</button></div>`;
+}
+// Desenha o painel de raiz só quando a estrutura muda (início, pausa, fim, outro exercício); a cada "tick" só atualiza
+// o número e a barra no sítio — reconstruir os botões 4×/s fazia perder o foco e engolia cliques.
+function restTimerProgress(t, left){
+  return left < 0 ? 100 : Math.min(100, Math.max(0, (1 - left / (t.total * 1000)) * 100));
 }
 function renderRestTimer(now){
   var el = document.getElementById("restTimer");
@@ -7074,10 +7147,19 @@ function renderRestTimer(now){
   var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden"));
   el.classList.toggle("hidden", !visible);
   if (app) app.classList.toggle("rt-open", visible);
-  if (!visible){ el.innerHTML = ""; return; }
+  if (!visible){ el.innerHTML = ""; el._rtKey = null; return; }
   now = now == null ? Date.now() : now;
-  el.classList.toggle("done", restTimerLeftMs(restTimer, now) <= 0 && restTimer.pausedLeft == null);
-  el.innerHTML = restTimerHtml(now);
+  var left = restTimerLeftMs(restTimer, now), over = left < 0, paused = restTimer.pausedLeft != null;
+  el.classList.toggle("done", left <= 0 && !paused);
+  var key = [restTimer.label, paused, over].join("|");
+  if (el._rtKey !== key){
+    el.innerHTML = restTimerHtml(now);
+    el._rtKey = key;
+    return;
+  }
+  var timeEl = el.querySelector(".rt-time"), bar = el.querySelector(".rt-bar i");
+  if (timeEl) timeEl.textContent = (over ? "+" : "") + fmtClock(Math.ceil(Math.abs(left) / 1000));
+  if (bar) bar.style.width = restTimerProgress(restTimer, left).toFixed(1) + "%";
 }
 (function wireRestTimer(){
   var el = document.getElementById("restTimer");
@@ -7095,6 +7177,20 @@ function renderRestTimer(now){
 })();
 
 // ---------- Aluno: registar a sessão ----------
+// Rascunho do treino em curso: sobrevive a mudar de separador/re-desenhar e (se o browser deixar) a recarregar a página
+var WL_DRAFT_KEY = "evolve_wl_draft_v1";
+function wlDraftStore(){
+  if (!state.wlDraft){
+    state.wlDraft = {};
+    try { var raw = window.localStorage && window.localStorage.getItem(WL_DRAFT_KEY); if (raw) state.wlDraft = JSON.parse(raw) || {}; } catch (e) { state.wlDraft = {}; }
+  }
+  return state.wlDraft;
+}
+function wlDraftKey(s, dayId){ return String(s.id) + "|" + String(dayId); }
+function wlDraftGet(s, dayId){ var all = wlDraftStore(), k = wlDraftKey(s, dayId); if (!all[k]) all[k] = {sets: {}, rpe: null, notes: ""}; return all[k]; }
+function wlDraftSave(){ try { window.localStorage && window.localStorage.setItem(WL_DRAFT_KEY, JSON.stringify(wlDraftStore())); } catch (e) {} }
+function wlDraftClear(s, dayId){ delete wlDraftStore()[wlDraftKey(s, dayId)]; wlDraftSave(); }
+
 function tplWorkoutLogger(s){
   var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; });
   if (!days.length){
@@ -7102,13 +7198,15 @@ function tplWorkoutLogger(s){
   }
   var selected = days.filter(function(d){ return d.id === state.workoutDayId; })[0] || nextWorkoutDay(s) || days[0];
   if (days.indexOf(selected) < 0) selected = days[0];
+  var draft = wlDraftGet(s, selected.id);
   var html = `<div class="card"><div class="eyebrow">Registar treino</div>` +
     `<div class="checkin-field" style="margin-top:8px;"><label>Cronómetro de descanso</label><div class="rt-presets">` +
       REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
     `</div></div>` +
     `<div class="checkin-field" style="margin-top:8px;"><label for="wlDay">Treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
-    `</select></div>`;
+    `</select></div>` +
+    `<p class="muted-p" style="font-size:0.78rem; margin-top:4px;">Marca ✓ cada série que fizeste (ou toca em ⏱ ao terminá-la): só as séries marcadas ficam registadas.</p>`;
   selected.exercises.forEach(function(e){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
     var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
@@ -7118,18 +7216,21 @@ function tplWorkoutLogger(s){
       (e.notes ? `<div class="muted-p" style="font-size:0.76rem;">${escapeHtml(e.notes)}</div>` : "") +
       (last ? `<div class="muted-p" style="font-size:0.76rem; color:var(--accent-strong);">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
     var prefillLoad = last && last.topSet && last.topSet.load > 0 ? last.topSet.load : "";
+    var restSec = e.rest != null ? e.rest : REST_DEFAULT_SECONDS;
     for (var i = 0; i < e.sets; i++){
-      html += `<div style="display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) 44px; gap:8px; align-items:center; margin-top:6px;">` +
-        `<span class="muted-p" style="font-size:0.78rem;">${i + 1}.</span>` +
-        `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" data-wl-reps="${escapeHtml(e.id)}:${i}" value="${firstRepsOf(e.reps) || ""}">` +
-        `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" data-wl-load="${escapeHtml(e.id)}:${i}" value="${prefillLoad}">` +
-        `<button type="button" class="wl-rest" data-rest-start="${e.rest != null ? e.rest : REST_DEFAULT_SECONDS}" data-rest-label="${escapeHtml(e.name)}" aria-label="Iniciar descanso de ${e.rest != null ? e.rest : REST_DEFAULT_SECONDS} segundos">⏱</button>` +
+      var key = escapeHtml(e.id) + ":" + i, d = draft.sets[e.id + ":" + i] || {};
+      var repsVal = d.reps !== undefined ? d.reps : (firstRepsOf(e.reps) || ""), loadVal = d.load !== undefined ? d.load : prefillLoad;
+      html += `<div class="wl-set" style="display:grid; grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 44px; gap:8px; align-items:center; margin-top:6px;">` +
+        `<label class="wl-done"><input type="checkbox" data-wl-done="${key}" aria-label="Série ${i + 1} feita"${d.done ? " checked" : ""}></label>` +
+        `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" aria-label="Repetições da série ${i + 1}" data-wl-reps="${key}" value="${escapeHtml(repsVal)}">` +
+        `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Carga em kg da série ${i + 1}" data-wl-load="${key}" value="${escapeHtml(loadVal)}">` +
+        `<button type="button" class="wl-rest" data-wl-rest="${key}" data-rest-start="${restSec}" data-rest-label="${escapeHtml(e.name)}" aria-label="Série ${i + 1} feita: iniciar descanso de ${restSec} segundos">⏱</button>` +
       `</div>`;
     }
     html += `</div>`;
   });
-  html += `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", 7) + `</div>` +
-    `<div class="checkin-field"><label for="wlNotes">Como correu? (opcional)</label><textarea id="wlNotes" placeholder="Dores, sensações, o que mudar..."></textarea></div>` +
+  html += `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7) + `</div>` +
+    `<div class="checkin-field"><label for="wlNotes">Como correu? (opcional)</label><textarea id="wlNotes" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div>` +
     `<p class="muted-p" id="wlError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>` +
     `<button type="button" class="btn primary" id="wlSave" style="width:100%;">Guardar treino</button></div>`;
   return html;
@@ -7138,10 +7239,35 @@ function tplWorkoutLogger(s){
 function wireWorkoutLogger(s, el, rerender){
   var daySel = el.querySelector("#wlDay");
   if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
-  el.querySelectorAll("[data-rest-start]").forEach(function(b){
-    b.addEventListener("click", function(){ restTimerStart(parseInt(b.getAttribute("data-rest-start"), 10), b.getAttribute("data-rest-label")); });
-  });
   var save = el.querySelector("#wlSave");
+  var dayId = daySel ? daySel.value : null;
+  // cada alteração fica no rascunho (séries, esforço, notas) — sobrevive a mudar de separador
+  function recordDraft(target){
+    if (!dayId) return;
+    var draft = wlDraftGet(s, dayId);
+    var r = target.getAttribute && target.getAttribute("data-wl-reps"), l = target.getAttribute && target.getAttribute("data-wl-load"), d = target.getAttribute && target.getAttribute("data-wl-done");
+    if (r){ (draft.sets[r] = draft.sets[r] || {}).reps = target.value; }
+    else if (l){ (draft.sets[l] = draft.sets[l] || {}).load = target.value; }
+    else if (d){ (draft.sets[d] = draft.sets[d] || {}).done = !!target.checked; }
+    else if (target.id === "wlRpe") draft.rpe = parseInt(target.value, 10) || null;
+    else if (target.id === "wlNotes") draft.notes = target.value;
+    wlDraftSave();
+  }
+  // ligado a cada campo (o contentor #alunoTabContent é reutilizado entre desenhos: um listener nele acumular-se-ia)
+  el.querySelectorAll("[data-wl-reps], [data-wl-load], [data-wl-done], #wlRpe, #wlNotes").forEach(function(field){
+    ["input", "change"].forEach(function(evt){ field.addEventListener(evt, function(){ recordDraft(field); }); });
+  });
+  el.querySelectorAll("[data-rest-start]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var setKey = b.getAttribute("data-wl-rest");
+      if (setKey){ // ⏱ numa série = série feita
+        var box = el.querySelector('[data-wl-done="' + setKey + '"]');
+        if (box){ box.checked = true; recordDraft(box); }
+      }
+      var secs = parseInt(b.getAttribute("data-rest-start"), 10);
+      if (secs >= 5) restTimerStart(secs, b.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
+    });
+  });
   if (!save) return;
   var rpeInput = el.querySelector("#wlRpe");
   if (rpeInput) rpeInput.addEventListener("input", function(){ el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
@@ -7151,6 +7277,8 @@ function wireWorkoutLogger(s, el, rerender){
     var entries = day.exercises.map(function(e){
       var sets = [];
       for (var i = 0; i < e.sets; i++){
+        var box = el.querySelector('[data-wl-done="' + e.id + ':' + i + '"]');
+        if (!box || !box.checked) continue; // só as séries marcadas como feitas
         var r = parseFloat((el.querySelector('[data-wl-reps="' + e.id + ':' + i + '"]') || {}).value);
         var l = parseFloat((el.querySelector('[data-wl-load="' + e.id + ':' + i + '"]') || {}).value);
         if (r > 0) sets.push({reps: r, load: l > 0 ? l : 0});
@@ -7161,8 +7289,10 @@ function wireWorkoutLogger(s, el, rerender){
     var invalid = entries.some(function(e){ return e.sets.some(function(x){ return x.reps > 100 || x.load > 1000; }); });
     if (invalid){ err.textContent = "Verifica os valores: máx. 100 repetições e 1000 kg."; err.style.display = "block"; return; }
     var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
-    if (!log){ err.textContent = "Preenche pelo menos uma série (repetições)."; err.style.display = "block"; return; }
+    if (!log){ err.textContent = "Marca ✓ pelo menos uma série feita, com repetições."; err.style.display = "block"; return; }
     err.style.display = "none";
+    wlDraftClear(s, day.id);
+    restTimerStop(); // o treino acabou: o descanso já não faz sentido
     state.workoutDayId = null;
     persistStudent(s);
     showToast("✓ Treino guardado");
@@ -7205,14 +7335,14 @@ function tplProTreino(s){
   if (!rows.length) html += `<p class="muted-p">Ainda sem sessões registadas pelo aluno.</p>`;
   else {
     var pill = {"progrediu": "good", "estável": "", "estagnado": "warn", "regrediu": "critical"};
-    html += `<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Exercício</th><th>Última</th><th>1RM est.</th><th>Tendência</th></tr></thead><tbody>` + rows.map(function(r){
+    html += `<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Exercício</th><th>Última</th><th>1RM est. / reps</th><th>Tendência</th></tr></thead><tbody>` + rows.map(function(r){
       var last = r.h[r.h.length - 1];
-      return `<tr><td class="date-cell" style="white-space:normal;">${escapeHtml(r.n.name)}</td><td>${escapeHtml(fmtLoadSet(last.topSet))}</td><td>${last.est1RM > 0 ? last.est1RM + " kg" : "—"}</td><td>${r.status ? `<span class="pill ${pill[r.status]}">${r.status}</span>` : "—"}</td></tr>`;
+      return `<tr><td class="date-cell" style="white-space:normal;">${escapeHtml(r.n.name)}</td><td>${escapeHtml(fmtLoadSet(last.topSet))}</td><td>${last.est1RM > 0 ? last.est1RM + " kg" : (last.topReps > 0 ? last.topReps + " reps" : "—")}</td><td>${r.status ? `<span class="pill ${pill[r.status]}">${r.status}</span>` : "—"}</td></tr>`;
     }).join("") + `</tbody></table></div>`;
-    var chartRow = rows.filter(function(r){ return r.h.length >= 2 && r.h[r.h.length - 1].est1RM > 0; })[0];
-    html += `<div class="checkin-field" style="margin-top:12px;"><label for="exChartSel">Gráfico de carga estimada (1RM)</label><select id="exChartSel" class="mini-select" style="width:100%;">` +
+    var chartRow = rows.filter(function(r){ return r.h.length >= 2 && r.h[r.h.length - 1].score > 0; })[0];
+    html += `<div class="checkin-field" style="margin-top:12px;"><label for="exChartSel">Gráfico de progressão (1RM estimado; repetições se não há carga)</label><select id="exChartSel" class="mini-select" style="width:100%;">` +
       rows.map(function(r, i){ return `<option value="${i}"${chartRow && chartRow === r ? " selected" : ""}>${escapeHtml(r.n.name)}</option>`; }).join("") + `</select></div>` +
-      `<div id="exChart" class="weight-chart-wrap">${chartRow ? weightSvg(chartRow.h.map(function(h){ return {date: h.date, w: h.est1RM}; })) : weightSvg([])}</div>`;
+      `<div id="exChart" class="weight-chart-wrap">${chartRow ? weightSvg(chartRow.h.map(function(h){ return {date: h.date, w: h.score}; })) : weightSvg([])}</div>`;
   }
 
   // Sessões recentes e volume
@@ -7222,12 +7352,12 @@ function tplProTreino(s){
   if (!logs.length) html += `<p class="muted-p">Sem sessões registadas.</p>`;
   else {
     var sets7 = wk.reduce(function(a, l){ return a + (l.entries || []).reduce(function(b, e){ return b + (e.sets || []).length; }, 0); }, 0);
-    html += `<p class="muted-p" style="margin-bottom:8px;">Últimos 7 dias: ${wk.length}${s.trainingsPerWeek ? " de " + s.trainingsPerWeek + " previstas" : ""} sessões · ${sets7} séries.</p>`;
+    html += `<p class="muted-p" style="margin-bottom:8px;">Últimos 7 dias: ${wk.length} ${wk.length === 1 ? "sessão" : "sessões"}${s.trainingsPerWeek ? " (previstas: " + s.trainingsPerWeek + ")" : ""} · ${sets7} ${sets7 === 1 ? "série" : "séries"}.</p>`;
     logs.slice(0, 8).forEach(function(l){
-      html += `<div class="history-row" style="align-items:flex-start;"><div><div class="hlabel">${fmtDateFullPt(l.date)} · ${escapeHtml(l.dayName || "Treino")}</div>` +
+      html += `<div class="history-row" style="align-items:flex-start;"><div><div class="hlabel">${escapeHtml(fmtDateFullPt(l.date))} · ${escapeHtml(l.dayName || "Treino")}</div>` +
         (l.notes ? `<div class="muted-p">${escapeHtml(l.notes)}</div>` : "") +
         `<div class="muted-p" style="font-size:0.74rem;">${(l.entries || []).map(function(e){ var st = workoutEntryStats(e); return escapeHtml(e.name) + " " + escapeHtml(fmtLoadSet(st.topSet)); }).join(" · ")}</div></div>` +
-        `<div class="hval">${l.rpe ? "RPE " + l.rpe : "—"}</div></div>`;
+        `<div class="hval">${Number(l.rpe) > 0 ? "RPE " + Number(l.rpe) : "—"}</div></div>`;
     });
   }
   return html;
@@ -7270,7 +7400,7 @@ function wireProTreino(s, el){
     (s.workoutLogs || []).forEach(function(l){ (l.entries || []).forEach(function(e){ if (!names.some(function(n){ return n.key === String(e.name || "").toLowerCase(); })) names.push({key: String(e.name || "").toLowerCase(), id: e.exerciseId, name: e.name}); }); });
     var rows = names.filter(function(n){ return exerciseHistory(s, n.id, n.name).length; });
     var n = rows[parseInt(sel.value, 10)];
-    if (n) el.querySelector("#exChart").innerHTML = weightSvg(exerciseHistory(s, n.id, n.name).map(function(h){ return {date: h.date, w: h.est1RM}; }));
+    if (n) el.querySelector("#exChart").innerHTML = weightSvg(exerciseHistory(s, n.id, n.name).map(function(h){ return {date: h.date, w: h.score}; }));
   });
 }
 
@@ -7283,11 +7413,14 @@ function signalSessoes(s){
   return signal("sessoes", "Sessões de treino", week >= planned || !planned ? "positivo" : "atencao",
     "Últimos 7 dias: " + week + (planned ? " de " + planned + " sessões previstas" : " sessões") + ".", "Últimos 7 dias", "treino");
 }
+var SIGNAL_LOAD_WINDOW_DAYS = 56;
 function signalProgressaoCarga(s){
   if (!(s.workoutLogs || []).length) return signal("progressao_carga", "Progressão de carga", "insuficiente", "Sem sessões suficientes para avaliar a progressão.", "Sessões registadas", "treino");
   var seen = {}, stalled = [], progressed = 0, evaluated = 0;
   s.workoutLogs.forEach(function(l){ (l.entries || []).forEach(function(e){ var k = String(e.name || "").toLowerCase(); if (seen[k]) return; seen[k] = true;
-    var st = progressionStatus(exerciseHistory(s, e.exerciseId, e.name));
+    var h = exerciseHistory(s, e.exerciseId, e.name);
+    if (!h.length || daysSinceDate(h[h.length - 1].date) > SIGNAL_LOAD_WINDOW_DAYS) return; // exercícios antigos/abandonados não contam
+    var st = progressionStatus(h);
     if (!st) return; evaluated++;
     if (st === "estagnado" || st === "regrediu") stalled.push(e.name); else if (st === "progrediu") progressed++;
   }); });
@@ -9641,21 +9774,30 @@ function signalWeight(s){
     return signal("peso", "Peso", "insuficiente", "Sem dados suficientes para avaliar a tendência.",
       "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
   }
+  // o intervalo real entre as duas pesagens (pode ser bem menos que 3 semanas): limiares e texto escalam com ele
+  var spanDays = Math.round((new Date(change.to + "T00:00:00") - new Date(change.from + "T00:00:00")) / 86400000);
+  if (!(spanDays >= SIGNAL_WEIGHT_MIN_SPAN_DAYS)){
+    return signal("peso", "Peso", "insuficiente", "Pesagens com menos de " + SIGNAL_WEIGHT_MIN_SPAN_DAYS + " dias de intervalo: ainda cedo para avaliar a tendência.",
+      "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+  }
+  var weeks = spanDays / 7, nWeeks = Math.min(SIGNAL_WEIGHT_TREND_WEEKS, Math.max(1, Math.round(weeks)));
   var diffStr = (change.diff>=0?"+":"") + change.diff.toFixed(1).replace(".", ",");
-  var base = "Peso: " + diffStr + " kg nas últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas";
-  var period = "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas";
+  var base = "Peso: " + diffStr + " kg nas últimas " + nWeeks + " semanas";
+  var period = "Últimas " + nWeeks + " semanas";
   var dir = goalDirection(s), d = change.diff;
   var weight = s.weightCurrent || (s.weights && s.weights.length ? s.weights[s.weights.length - 1].w : 0);
-  var fastKg = weight ? weight * MAX_LOSS_PCT_PER_WEEK / 100 * SIGNAL_WEIGHT_TREND_WEEKS : 1.5;
+  var fastKg = weight ? weight * MAX_LOSS_PCT_PER_WEEK / 100 * weeks : 0.5 * weeks;
+  var stallKg = 0.1 * weeks;      // 0,3 kg em 3 semanas
+  var wrongKg = weeks / 3;        // 1 kg em 3 semanas: viragem clara no sentido contrário
   if (dir === "perda"){
-    if (d > 0.3) return signal("peso", "Peso", "atencao", base + " — o objetivo é perder peso e o peso subiu.", period, "evolucao", d > 1 ? "high" : "normal");
-    if (d > -0.3) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de perda.", period, "evolucao");
+    if (d > stallKg) return signal("peso", "Peso", "atencao", base + " — o objetivo é perder peso e o peso subiu.", period, "evolucao", d > wrongKg ? "high" : "normal");
+    if (d > -stallKg) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de perda.", period, "evolucao");
     if (-d > fastKg) return signal("peso", "Peso", "atencao", base + " — perda acima de " + MAX_LOSS_PCT_PER_WEEK + "% do peso por semana: confirma energia, fome e massa muscular.", period, "evolucao");
   } else if (dir === "ganho"){
-    if (d < -0.3) return signal("peso", "Peso", "atencao", base + " — o objetivo é ganhar massa e o peso desceu.", period, "evolucao", d < -1 ? "high" : "normal");
-    if (d < 0.3) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de ganho.", period, "evolucao");
+    if (d < -stallKg) return signal("peso", "Peso", "atencao", base + " — o objetivo é ganhar massa e o peso desceu.", period, "evolucao", -d > wrongKg ? "high" : "normal");
+    if (d < stallKg) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de ganho.", period, "evolucao");
     if (d > fastKg) return signal("peso", "Peso", "atencao", base + " — ganho rápido: possível excesso de gordura, revê o excedente calórico.", period, "evolucao");
-  } else if (Math.abs(d) > 1.5){
+  } else if (Math.abs(d) > 0.5 * weeks){
     return signal("peso", "Peso", "atencao", base + " — acima do esperado para manutenção.", period, "evolucao");
   }
   return signal("peso", "Peso", "positivo", base + ".", period, "evolucao");
@@ -9682,6 +9824,7 @@ function signalRecuperacao(s){
 
 // Inatividade: sem pesagem há muito tempo, ou duas semanas seguidas sem treinos registados
 var SIGNAL_WEIGH_LATE_DAYS = 21;
+var SIGNAL_WEIGHT_MIN_SPAN_DAYS = 10; // menos que isto é oscilação de água, não tendência
 function daysSinceDate(iso){
   if (!iso) return null;
   var d = new Date(iso + "T00:00:00");
@@ -9689,7 +9832,7 @@ function daysSinceDate(iso){
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
 }
 function signalPesagem(s){
-  var dates = (s.weights || []).map(function(w){ return w.date; }).concat((s.assessments || []).map(function(a){ return a.date; })).filter(Boolean).sort();
+  var dates = (s.weights || []).map(function(w){ return w.date; }).concat((s.assessments || []).filter(function(a){ return a.weight > 0; }).map(function(a){ return a.date; })).filter(Boolean).sort();
   if (!dates.length) return signal("pesagem", "Pesagem", "insuficiente", "Sem pesagens registadas.", "Desde sempre", "evolucao");
   var days = daysSinceDate(dates[dates.length - 1]);
   if (days >= SIGNAL_WEIGH_LATE_DAYS) return signal("pesagem", "Pesagem", "atencao", "Sem pesagem há " + days + " dias.", "Desde a última pesagem", "evolucao", days >= 42 ? "high" : "normal");
@@ -9779,21 +9922,26 @@ function signalPlanoAtivo(s){
   return signal("plano_ativo", "Plano ativo", "positivo", "Plano ativo com " + s.meals.length + " refeições definidas.", "Estado atual do plano", "plano");
 }
 
+// um indicador que rebente (dados antigos ou mal formados) nunca pode deitar abaixo o dashboard inteiro
+function safeSignal(fn, s){
+  try { return fn(s); }
+  catch (e) { return signal("erro", "Indicador indisponível", "insuficiente", "Não foi possível calcular este indicador com os dados registados.", "—", "perfil"); }
+}
 function computeStudentSignals(s){
   return [
-    signalCheckin(s),
-    signalPlanoAtivo(s),
-    signalAdherence(s),
-    signalWeight(s),
-    signalHungerEnergy(s),
-    signalTreinos(s),
-    signalPesagem(s),
-    signalInatividadeTreino(s),
-    signalRecuperacao(s),
-    signalSessoes(s),
-    signalProgressaoCarga(s),
-    signalMealsOff(s),
-    signalAdaptacoes(s)
+    safeSignal(signalCheckin, s),
+    safeSignal(signalPlanoAtivo, s),
+    safeSignal(signalAdherence, s),
+    safeSignal(signalWeight, s),
+    safeSignal(signalHungerEnergy, s),
+    safeSignal(signalTreinos, s),
+    safeSignal(signalPesagem, s),
+    safeSignal(signalInatividadeTreino, s),
+    safeSignal(signalRecuperacao, s),
+    safeSignal(signalSessoes, s),
+    safeSignal(signalProgressaoCarga, s),
+    safeSignal(signalMealsOff, s),
+    safeSignal(signalAdaptacoes, s)
   ];
 }
 
@@ -10484,7 +10632,9 @@ function wireProTab(s){
     }
     if (errEl) errEl.style.display = "none";
     if (!s.assessments) s.assessments = [];
-    var entry = {date:date, weight:weight||s.weightCurrent, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
+    var hasComposition = [weight,bodyFat,muscle,visceral,water].some(function(v){ return !isNaN(v); });
+    // só perímetros: não houve pesagem — não se inventa um peso (ficaria como medição e estragaria os indicadores)
+    var entry = {date:date, weight: hasComposition ? (weight||s.weightCurrent) : 0, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
     if (time) entry.time = time;
     Object.keys(perims).forEach(function(k){ entry[k] = perims[k]; });
     if (context) entry.context = context;
@@ -10517,6 +10667,8 @@ function wireProTab(s){
   if (addNote) addNote.addEventListener("click", function(){
     var text = el.querySelector("#proNoteNew").value.trim();
     if (!text) return;
+    var area = el.querySelector("#proNotes");
+    if (area) s.notes = area.value; // não perde o que já estava escrito e ainda não guardado
     s.notes = prependDatedNote(s.notes, text);
     persistStudent(s);
     renderProTabContent(s);
