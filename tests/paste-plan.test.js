@@ -71,4 +71,25 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   check.check("5. '1 YoPRO mirtilo' e '1 iogurte proteico YoPRO de mirtilo' → o produto, 120 g (não Mirtilos 100 g)", [matchDraftPhrase("1 YoPRO mirtilo"), matchDraftPhrase("1 Iogurte Proteico YoPRO de mirtilo")].every(function(r){ return r && r.name === n && r.qty === "120 g"; }));
   check.check("5. 'Iogurte proteico' sem sabor continua a ser o genérico", matchDraftPhrase("1 Iogurte Proteico com 10-15g de Proteína").name === "Iogurte proteico");
 })();
+// ---- 6. Sem desperdício: produtos que se estragam depois de abertos usam embalagens inteiras ----
+(function(){
+  var n = "Iogurte proteico de mirtilo (YoPro Danone)";
+  check.check("6. Iogurtes, queijo, leite, fiambre... contam como perecíveis depois de abertos", isPerishableAfterOpening("Iogurte skyr natural") && isPerishableAfterOpening("Queijo fresco magro") && isPerishableAfterOpening("Leite meio gordo") && !isPerishableAfterOpening("Arroz (cozido)"));
+  check.check("6. Copo de 120 g: 200 g deixa 40 g por consumir; 120 g e 240 g não deixam nada", packLeftover(n, "200 g") === 40 && packLeftover(n, "120 g") === 0 && packLeftover(n, "240 g") === 0);
+  check.check("6. Sem tamanho de embalagem conhecido não inventa desperdício", packLeftover("Iogurte skyr natural", "200 g") === 0);
+  check.check("6. snapToWholePacks: 200 g → 240 g (2 copos), 100 g → 120 g (nunca menos de 1 copo)", snapToWholePacks(n, 200) === 240 && snapToWholePacks(n, 100) === 120);
+  check.check("6. Texto '200 g de YoPRO mirtilo' vira embalagens inteiras (240 g), não 200 g", matchDraftPhrase("200g YoPRO mirtilo").qty === "240 g");
+  var hint = packWasteHint({name:n, qty:"200 g"});
+  check.check("6. O editor avisa do desperdício e sugere 120 g ou 240 g", /deixa 40 g por consumir/.test(hint) && /120 g ou 240 g/.test(hint) && packWasteHint({name:n, qty:"240 g"}) === "");
+  var s = {targets:{kcal:1400, protein:110, carbs:150, fat:40}, meals:[meal("Lanche","17:00",[food(n,"120 g","laticinios"), food("Frango (peito)","100 g","carnes"), food("Arroz (cozido)","70 g","cereais")])]};
+  autoAdjustPlanQuantities(s);
+  check.check("6. O 'Ajustar quantidades' nunca mexe numa embalagem fechada (continua 120 g)", s.meals[0].foods[0].qty === "120 g");
+  var real = {name:"Iogurte natural batido", brand:"Marca", food_group:"laticinios", kcal:60, protein:4, carbs:5, fat:3, package_quantity:125, package_unit:"g"};
+  mergeFoodProduct(real, []);
+  var nm = foodProductDisplayName(real, []);
+  check.check("6. Produtos do catálogo perecíveis com embalagem individual (≤ 350 g) passam a ter embalagem conhecida", packSizeOf(nm) === 125);
+  var multi = {name:"Iogurte pack família", brand:"Marca", food_group:"laticinios", kcal:60, protein:4, carbs:5, fat:3, package_quantity:480, package_unit:"g"};
+  mergeFoodProduct(multi, []);
+  check.check("6. Packs grandes (480 g = 4 copos) não são tratados como uma só embalagem", packSizeOf(foodProductDisplayName(multi, [])) === 0);
+})();
 check.summarize();

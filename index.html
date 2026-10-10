@@ -4187,6 +4187,9 @@ function mergeFoodProduct(row, retailers){
   var name = foodProductDisplayName(row, retailers);
   if (FOOD_DB[name]) return false; // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods)
   FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
+  if ((row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 350 && isPerishableAfterOpening(name)){
+    FOOD_PACKS[name] = row.package_quantity; // embalagem individual conhecida: o plano usa embalagens inteiras
+  }
   var group = FOOD_GROUPS[resolveGroup(row.food_group)];
   if (group && !group.some(function(o){ return o.name === name; })){
     // produtos de dose única (ex.: uma barra de 55 g) propõem a embalagem como quantidade-padrão
@@ -4298,6 +4301,41 @@ function priorityMacroForFood(name){
   return "c";
 }
 
+/* ---------- Sem desperdício: produtos que se estragam depois de abertos ----------
+   Iogurtes, queijo, leite, fiambre, bebidas vegetais, molhos... vendem-se em embalagens fechadas.
+   Se o plano pede 200 g de um iogurte de 300 g, sobram 100 g que o aluno não vai comer (e que estragam).
+   Por isso, quando se conhece o tamanho da embalagem (FOOD_PACKS), as quantidades são sempre embalagens inteiras. */
+var FOOD_PACKS = {
+  "Iogurte proteico de mirtilo (YoPro Danone)": 120
+};
+var PERISHABLE_AFTER_OPENING = /iogurte|skyr|leite|queijo|fiambre|presunto|peru fatiado|natas|requeij|bebida vegetal|kefir|sumo|molho|pudim|manteiga|margarina|húmus|hummus|paté/i;
+function isPerishableAfterOpening(name){ return PERISHABLE_AFTER_OPENING.test(name || ""); }
+function packSizeOf(name){ return FOOD_PACKS[name] > 0 ? FOOD_PACKS[name] : 0; }
+// gramas/ml que sobram (e se estragam) numa quantidade que não é um nº inteiro de embalagens; 0 se não há desperdício ou não se conhece a embalagem
+function packLeftover(name, qty){
+  var size = packSizeOf(name);
+  if (!size) return 0;
+  var a = parseQtyAmount(qty);
+  if (a.kind !== "g") return 0;
+  var rest = a.value % size;
+  return rest < 0.5 || size - rest < 0.5 ? 0 : Math.round(size - rest);
+}
+// arredonda para o nº de embalagens inteiras mais próximo (mínimo 1)
+function snapToWholePacks(name, grams){
+  var size = packSizeOf(name);
+  if (!size) return grams;
+  return Math.max(1, Math.round(grams / size)) * size;
+}
+
+// aviso no editor: "embalagem de 120 g — 200 g deixa 40 g por consumir"
+function packWasteHint(f){
+  var left = packLeftover(f.name, f.qty);
+  if (!left) return "";
+  var size = packSizeOf(f.name), amount = parseQtyAmount(f.qty).value;
+  var lower = Math.max(1, Math.floor(amount / size)) * size, upper = Math.ceil(amount / size) * size;
+  return "<span class=\"pack-waste\" style=\"display:block; font-size:0.74rem; color:var(--warn);\">⚠ Embalagem de " + size + " g: " + escapeHtml(f.qty) + " deixa " + left + " g por consumir (desperdício). Usa " + lower + " g ou " + upper + " g.</span>";
+}
+
 function scaleFoodQty(name, qty, scale){
   var db = FOOD_DB[name];
   var amt = parseQtyAmount(qty);
@@ -4370,6 +4408,7 @@ function autoAdjustPlanQuantities(s){
       var amt = parseQtyAmount(f.qty);
       if (!db || db.per === "fixed" || amt.kind === "fixed"){ untouched++; return; }
       if (db.kcal < 10){ untouched++; return; } // chá, café, água: sem energia, nunca se reescalam
+      if (packSizeOf(f.name)){ untouched++; return; } // embalagem fechada que se estraga: nunca se reescala (sem desperdício)
       var macroKey = priorityMacroForFood(f.name);
       if (!macroKey) return;
       buckets[macroKey].push(f);
@@ -4393,7 +4432,7 @@ function autoAdjustPlanQuantities(s){
     var fixedFoods = allFoods.filter(function(f){
       var db = FOOD_DB[f.name];
       var amt = parseQtyAmount(f.qty);
-      if (!db || db.per === "fixed" || amt.kind === "fixed" || db.kcal < 10) return true;
+      if (!db || db.per === "fixed" || amt.kind === "fixed" || db.kcal < 10 || packSizeOf(f.name)) return true;
       var macroKey = priorityMacroForFood(f.name);
       return !macroKey || !activeSet[macroKey];
     });
@@ -4901,7 +4940,7 @@ function resolveDraftQty(name, q){
     if (dq.kind === "g") grams = q.count * dq.value;
   }
   if (grams == null) return defaultQtyForFood(name);
-  return buildQtyString(name, Math.min(2000, Math.max(5, grams)));
+  return buildQtyString(name, snapToWholePacks(name, Math.min(2000, Math.max(5, grams))));
 }
 
 var _draftNoise = null;
@@ -8188,7 +8227,7 @@ function tplPlanoMealEditor(m, midx){
   // para reaproveitar a mesma pesquisa/wiring sem duplicar lógica.
   html += m.foods.map(function(f, fidx){
     return "<div class=\"food-item\" style=\"cursor:default;\">" +
-      "<span class=\"fname\">" + escapeHtml(f.name) + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + escapeHtml(groupLabel(f.group)) + ")</span>" : "") + "</span>" +
+      "<span class=\"fname\">" + escapeHtml(f.name) + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + escapeHtml(groupLabel(f.group)) + ")</span>" : "") + packWasteHint(f) + "</span>" +
       "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" +
         "<button type=\"button\" class=\"assess-del\" data-edit-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:8px;\" aria-label=\"Editar alimento\">✏️</button>" +
         "<button type=\"button\" class=\"assess-del\" data-del-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:4px;\" aria-label=\"Remover alimento\">✕</button>" +
