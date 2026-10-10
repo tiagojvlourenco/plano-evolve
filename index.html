@@ -394,6 +394,8 @@
   table.assess-table td.date-cell{font-family:var(--sans);}
   .assess-table-scroll{overflow-x:auto; margin-top:12px; -webkit-overflow-scrolling:touch;}
   .assess-table-scroll table.assess-table{margin-top:0;}
+  .sort-th{background:none; border:none; padding:0; margin:0; font:inherit; letter-spacing:inherit; text-transform:inherit; color:inherit; cursor:pointer; white-space:nowrap;}
+  .sort-th:hover, .sort-th.on{color:var(--accent);}
   .assess-delta{font-size:0.68rem; color:var(--muted-2); margin-left:3px;}
   .atime{color:var(--muted); white-space:nowrap;}
   .assess-form-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:10px; margin-top:12px; align-items:end;}
@@ -5432,6 +5434,11 @@ function insertStudent(s){
 }
 
 function flexZoneLabel(v){ return TIER_LABEL[flexTier(v)]; }
+function fmtDateFullPt(iso){ return iso.slice(8) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4); }
+function toggleAssessSort(key){
+  var cur = state.assessSort || {key:"date", dir:"desc"};
+  state.assessSort = cur.key === key ? {key:key, dir: cur.dir === "desc" ? "asc" : "desc"} : {key:key, dir:"desc"};
+}
 function fmtDatePt(iso){ var d=new Date(iso+"T00:00:00"); return d.toLocaleDateString("pt-PT",{day:"2-digit",month:"short"}); }
 
 function activityFromTrainings(n){
@@ -6877,12 +6884,24 @@ function tplAssessForm(s){
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
-  var html = "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th><th>Peso</th><th>M. gorda</th><th>M. muscular</th><th>Visceral</th><th>Água</th>" + (editable?"<th></th>":"") + "</tr></thead><tbody>";
+  // Ordenação por coluna (clicar no cabeçalho): data, peso, gordura, músculo, visceral, água.
+  // "list" fica sempre por data (mais recente primeiro): é daí que vêm a variação (▲▼) e o índice de apagar.
+  var sort = state.assessSort || {key:"date", dir:"desc"};
+  var COLS = [["date","Data"],["weight","Peso"],["bodyFat","M. gorda"],["muscle","M. muscular"],["visceral","Visceral"],["water","Água"]];
+  var shown = list.slice();
+  if (sort.key !== "date"){
+    shown.sort(function(a,b){ var d = (a[sort.key]||0) - (b[sort.key]||0); return sort.dir === "asc" ? d : -d; });
+  } else if (sort.dir === "asc") shown.reverse();
+  var html = "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr>" + COLS.map(function(c){
+    var on = sort.key === c[0];
+    return "<th" + (on ? " aria-sort=\"" + (sort.dir === "asc" ? "ascending" : "descending") + "\"" : "") + "><button type=\"button\" class=\"sort-th" + (on ? " on" : "") + "\" data-sort=\"" + c[0] + "\">" + c[1] + (on ? (sort.dir === "asc" ? " ▲" : " ▼") : "") + "</button></th>";
+  }).join("") + (editable?"<th></th>":"") + "</tr></thead><tbody>";
   var LIMIT = 10, collapsed = list.length > LIMIT && !state.assessShowAll;
-  (collapsed ? list.slice(0, LIMIT) : list).forEach(function(a, idx){
+  (collapsed ? shown.slice(0, LIMIT) : shown).forEach(function(a){
+    var idx = list.indexOf(a);
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDatePt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
+      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + "</td>" +
       "<td>" + a.weight.toFixed(1) + "kg" + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + a.bodyFat.toFixed(1) + "%" + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + a.muscle.toFixed(1) + "kg" + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -6894,7 +6913,7 @@ function tplAssessTable(s, editable){
   html += "</tbody></table></div>";
   if (list.length > LIMIT){
     html += "<button type=\"button\" class=\"btn btn-sm\" id=\"assessToggleAll\" style=\"margin-top:10px;\">" +
-      (collapsed ? "Mostrar todas (" + list.length + ")" : "Mostrar só as " + LIMIT + " mais recentes") + "</button>";
+      (collapsed ? "Mostrar todas (" + list.length + ")" : "Mostrar só as " + LIMIT + " primeiras") + "</button>";
   }
   return html;
 }
@@ -7467,6 +7486,7 @@ function wireAlunoTab(s){
   wirePhotoRemove(s, el, function(){ renderAlunoTab(s); });
   var toggleAllAluno = el.querySelector("#assessToggleAll");
   if (toggleAllAluno) toggleAllAluno.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderAlunoTab(s); });
+  el.querySelectorAll(".sort-th").forEach(function(b){ b.addEventListener("click", function(){ toggleAssessSort(b.getAttribute("data-sort")); renderAlunoTab(s); }); });
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
@@ -9665,6 +9685,7 @@ function wireProTab(s){
 
   var toggleAll = el.querySelector("#assessToggleAll");
   if (toggleAll) toggleAll.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderProTabContent(s); });
+  el.querySelectorAll(".sort-th").forEach(function(b){ b.addEventListener("click", function(){ toggleAssessSort(b.getAttribute("data-sort")); renderProTabContent(s); }); });
 
   var importPreviewBtn = el.querySelector("#importWeighPreview");
   if (importPreviewBtn) importPreviewBtn.addEventListener("click", function(){

@@ -21,7 +21,7 @@ function assess(over){ return Object.assign({date:"2026-09-01", weight:69, bodyF
 // ---- 2. Hora na tabela, a seguir à data ----
 (function(){
   var t = tplAssessTable({assessments:[assess({time:"08:30"})]}, false);
-  check.check("2. A tabela mostra a hora a seguir à data", /01\/09\s*<span class="atime">· 08:30<\/span>/.test(t));
+  check.check("2. A tabela mostra a hora a seguir à data", /01\/09\/2026\s*<span class="atime">· 08:30<\/span>/.test(t));
   var sem = tplAssessTable({assessments:[assess()]}, false);
   check.check("2. Avaliações antigas (sem hora) continuam a aparecer só com a data", sem.indexOf("atime") === -1 && sem.indexOf("01/09") >= 0);
   var xss = tplAssessTable({assessments:[assess({time:"<b>x</b>"})]}, false);
