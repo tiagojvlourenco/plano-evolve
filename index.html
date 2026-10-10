@@ -775,6 +775,7 @@ var FOOD_GROUPS = {
     {name:"Iogurte grego natural ligeiro (Continente Equilíbrio)", qty:"100 g"},
     {name:"Iogurte grego natural (Oikos)", qty:"100 g"},
     {name:"Iogurte proteico de baunilha (YoPro Danone)", qty:"100 g"},
+    {name:"Iogurte proteico de mirtilo (YoPro Danone)", qty:"120 g"},
     {name:"Iogurte proteico com manga e maracujá 0% (Mercadona)", qty:"100 g"},
     {name:"Iogurte com frutos do bosque (Mercadona)", qty:"100 g"},
     {name:"Iogurte 0% com fruta (Mercadona)", qty:"100 g"},
@@ -2635,6 +2636,7 @@ var FOOD_DB = {
   "Iogurte grego natural ligeiro (Continente Equilíbrio)": {per:"100g", kcal:55, p:5.3, c:3.9, f:2},
   "Iogurte grego natural (Oikos)": {per:"100g", kcal:62.7, p:3.4, c:4.4, f:7},
   "Iogurte proteico de baunilha (YoPro Danone)": {per:"100g", kcal:53.3, p:9.4, c:3.6, f:0.1},
+  "Iogurte proteico de mirtilo (YoPro Danone)": {per:"100g", kcal:54, p:9.4, c:3.7, f:0.1}, // copo de 120 g = 11 g de proteína; EAN 8410500030865
   "Iogurte proteico com manga e maracujá 0% (Mercadona)": {per:"100g", kcal:56.7, p:8.3, c:5.8, f:0.2},
   "Iogurte com frutos do bosque (Mercadona)": {per:"100g", kcal:98, p:3.7, c:13.7, f:3.2},
   "Iogurte 0% com fruta (Mercadona)": {per:"100g", kcal:45, p:4.5, c:6.5, f:0.1},
@@ -4684,6 +4686,8 @@ var DRAFT_DISPREFERRED_QUAL = {po:1, condensado:1, evaporado:1, seco:1, desidrat
 var DAILY_UNIT_GRAMS = {fatia:40, "colher de sopa":15, "colher de cha":5, "colher de sobremesa":10, colher:15, chavena:150, copo:200, prato:300, tigela:250, iogurte:125};
 var DAILY_FOOD_ALIASES = [
   // descrições genéricas do dia-a-dia que não são o nome de nenhum alimento da base
+  {words:["yopro","mirtilo"], food:"Iogurte proteico de mirtilo (YoPro Danone)", block:["liquido","bebivel"]},
+  {words:["iogurte","proteico","mirtilo"], food:"Iogurte proteico de mirtilo (YoPro Danone)", block:["liquido","bebivel"]},
   {words:["peixe","branco"], food:"Pescada"},
   {words:["carne","branca"], food:"Frango (peito)"},
   {words:["carne","vermelha"], food:"Carne vermelha magra"},
@@ -4888,6 +4892,8 @@ function resolveDraftQty(name, q){
   // "150g Iogurte Skyr com 15g de Proteína": a quantidade escrita manda; os gramas de proteína só servem quando não há quantidade
   if (q.grams != null) grams = q.grams;
   else if (q.proteinG && db.p >= 5) grams = Math.round(q.proteinG / db.p * 100 / 5) * 5;
+  else if (q.count != null && q.unit === "iogurte" && brandOfFoodName(name) && parseQtyAmount(defaultQtyForFood(name)).kind === "g")
+    grams = q.count * parseQtyAmount(defaultQtyForFood(name)).value; // "1 iogurte" de marca = 1 embalagem (ex.: copo YoPRO de 120 g)
   else if (q.count != null && q.unit && DAILY_UNIT_GRAMS[q.unit]) grams = q.count * DAILY_UNIT_GRAMS[q.unit];
   else if (q.count != null && !q.unit){
     // "1 barra", "2 maçãs": N vezes a dose-padrão do alimento
