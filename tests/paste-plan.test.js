@@ -61,4 +61,14 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   clearPlanIfReplacing({querySelector: function(){ return {checked:false}; }}, s3, d);
   check.check("4. Sem a opção, mantém as refeições", s3.meals.length === 1);
 })();
+// ---- 5. YoPRO de mirtilo (Danone, copo de 120 g, EAN 8410500030865: 54 kcal, 9,4 g proteína, 3,7 g hidratos, 0,1 g gordura por 100 g) ----
+(function(){
+  var n = "Iogurte proteico de mirtilo (YoPro Danone)";
+  check.check("5. Existe na base com os valores por 100 g do rótulo", FOOD_DB[n] && FOOD_DB[n].kcal === 54 && FOOD_DB[n].p === 9.4 && FOOD_DB[n].c === 3.7 && FOOD_DB[n].f === 0.1);
+  var copo = foodNutrition(n, "120 g");
+  check.check("5. Um copo (120 g) dá ≈ 11 g de proteína e 65 kcal", Math.abs(copo.p - 11) < 0.5 && copo.kcal === 65);
+  check.check("5. Está no grupo Lacticínios, com o copo de 120 g como quantidade-padrão", groupOfFood(n) === "laticinios" && defaultQtyForFood(n) === "120 g");
+  check.check("5. '1 YoPRO mirtilo' e '1 iogurte proteico YoPRO de mirtilo' → o produto, 120 g (não Mirtilos 100 g)", [matchDraftPhrase("1 YoPRO mirtilo"), matchDraftPhrase("1 Iogurte Proteico YoPRO de mirtilo")].every(function(r){ return r && r.name === n && r.qty === "120 g"; }));
+  check.check("5. 'Iogurte proteico' sem sabor continua a ser o genérico", matchDraftPhrase("1 Iogurte Proteico com 10-15g de Proteína").name === "Iogurte proteico");
+})();
 check.summarize();
