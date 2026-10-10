@@ -627,8 +627,8 @@
    templates do ecrã do profissional. Cada sítio deve usar escapeHtml, mas como defesa em profundidade TODO o HTML que a app
    escreve (innerHTML/outerHTML) passa por aqui: sem <script>/<iframe>/..., sem atributos on*="..." e sem javascript: URLs.
    Nenhum template da app usa handlers inline (todos os eventos são ligados com addEventListener), por isso nada legítimo muda. */
-var UNSAFE_TAGS = {SCRIPT:1, IFRAME:1, FRAME:1, FRAMESET:1, OBJECT:1, EMBED:1, LINK:1, META:1, BASE:1, APPLET:1};
-var URL_ATTRS = {href:1, src:1, action:1, formaction:1, "xlink:href":1, data:1, poster:1, background:1};
+var UNSAFE_TAGS = {SCRIPT:1, IFRAME:1, FRAME:1, FRAMESET:1, OBJECT:1, EMBED:1, LINK:1, META:1, BASE:1, APPLET:1, TEMPLATE:1, NOSCRIPT:1};
+var URL_ATTRS = {href:1, src:1, action:1, formaction:1, "xlink:href":1, data:1, poster:1, background:1, srcset:1};
 function sanitizeHtmlNodeTree(root){
   var all = root.querySelectorAll("*");
   for (var i = all.length - 1; i >= 0; i--){
@@ -643,24 +643,38 @@ function sanitizeHtmlNodeTree(root){
     });
   }
 }
+// Sem DOM utilizável (testes em Node): nunca devolve markup por sanitizar — tira as tags.
 function sanitizeHtmlString(html){
-  if (typeof html !== "string" || html.indexOf("<") === -1) return html;
-  try {
-    var t = document.createElement("template");
-    NATIVE_INNER_HTML.set.call(t, html);
-    sanitizeHtmlNodeTree(t.content);
-    return NATIVE_INNER_HTML.get.call(t);
-  } catch (e) { return html.replace(/<[^>]*>/g, ""); } // sem DOM utilizável: nunca devolve markup por sanitizar
+  if (typeof html !== "string") html = html == null ? "" : String(html);
+  if (html.indexOf("<") === -1) return html;
+  return html.replace(/<[^>]*>/g, "");
 }
 var NATIVE_INNER_HTML = null;
+// No browser: o HTML é lido para um <template> (inerte), limpo, e SÃO OS PRÓPRIOS NÓS LIMPOS que se inserem. Nunca se volta a serializar
+// e a ler (a releitura em contexto diferente é o que permite "mutation XSS": o que o parser lê de uma forma na 1.ª vez lê de outra na 2.ª).
+function parseSanitized(html){
+  var t = document.createElement("template");
+  NATIVE_INNER_HTML.set.call(t, html);
+  sanitizeHtmlNodeTree(t.content);
+  return t.content;
+}
 (function installHtmlGuard(){
   if (typeof Element === "undefined" || !Element.prototype) return;
   var d = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
   if (!d || !d.set || !d.get) return;
   NATIVE_INNER_HTML = d;
-  Object.defineProperty(Element.prototype, "innerHTML", {configurable: true, enumerable: d.enumerable, get: d.get, set: function(v){ d.set.call(this, sanitizeHtmlString(v)); }});
+  Object.defineProperty(Element.prototype, "innerHTML", {configurable: true, enumerable: d.enumerable, get: d.get, set: function(v){
+    var str = typeof v === "string" ? v : (v == null ? "" : String(v));
+    if (str.indexOf("<") === -1){ d.set.call(this, str); return; }
+    var frag = parseSanitized(str);
+    this.replaceChildren(frag);
+  }});
   var o = Object.getOwnPropertyDescriptor(Element.prototype, "outerHTML");
-  if (o && o.set && o.get) Object.defineProperty(Element.prototype, "outerHTML", {configurable: true, enumerable: o.enumerable, get: o.get, set: function(v){ o.set.call(this, sanitizeHtmlString(v)); }});
+  if (o && o.set && o.get) Object.defineProperty(Element.prototype, "outerHTML", {configurable: true, enumerable: o.enumerable, get: o.get, set: function(v){
+    var str = typeof v === "string" ? v : (v == null ? "" : String(v));
+    if (str.indexOf("<") === -1){ o.set.call(this, str); return; }
+    this.replaceWith(parseSanitized(str));
+  }});
 })();
 
 
@@ -5547,7 +5561,19 @@ function shortStr(v, max){ return typeof v === "string" ? v.slice(0, max) : ""; 
 function objectsOnly(arr){ return Array.isArray(arr) ? arr.filter(function(x){ return x && typeof x === "object" && !Array.isArray(x); }) : []; }
 function normalizeWeights(arr){ return objectsOnly(arr).filter(function(w){ return isIsoDate(w.date) && finiteNum(w.w) != null; }).map(function(w){ return Object.assign({}, w, {w: finiteNum(w.w)}); }); }
 function normalizePhotos(arr){ return objectsOnly(arr).filter(function(p){ return isIsoDate(p.date); }); }
-function normalizeMealState(v){ return v && typeof v === "object" && !Array.isArray(v) ? v : null; }
+function isPlainObject(v){ return !!v && typeof v === "object" && !Array.isArray(v); }
+function normalizeMealState(v){
+  if (!isPlainObject(v) || typeof v.date !== "string" || !isPlainObject(v.entries)) return null; // forma errada: o estado do dia reconstrói-se
+  var entries = {};
+  Object.keys(v.entries).forEach(function(k){
+    var e = v.entries[k];
+    if (!isPlainObject(e)) return;
+    var out = Object.assign({}, e);
+    out.substitutions = isPlainObject(e.substitutions) ? e.substitutions : {};
+    entries[k] = out;
+  });
+  return Object.assign({}, v, {entries: entries});
+}
 function normalizeCheckins(arr){
   if (!Array.isArray(arr)) return [];
   return arr.filter(function(c){ return c && typeof c === "object" && isIsoDate(c.date); }).map(function(c){
@@ -7030,22 +7056,23 @@ function epley1RM(load, reps){
 }
 function workoutEntryStats(entry){
   var sets = ((entry && entry.sets) || []).filter(function(x){ return x && x.reps > 0; });
-  var best = null, volume = 0, topLoad = 0, topReps = 0;
+  var best = null, bestRank = 0, volume = 0, topLoad = 0, topReps = 0;
   sets.forEach(function(x){
     if (x.reps > topReps) topReps = x.reps;
     var load = x.load > 0 ? x.load : 0;
     volume += x.reps * load;
     if (load > topLoad) topLoad = load;
     var e = epley1RM(load, x.reps);
-    // acima de 12 repetições o Epley deixa de subir: cada repetição a mais conta um pouco para a progressão (desempate)
+    if (!best || e > best.e1rm || (e === best.e1rm && x.reps > best.reps)) best = {load: load, reps: x.reps, e1rm: e};
+    // só para a progressão: acima de 12 repetições o Epley deixa de subir, e cada repetição a mais conta um pouco (desempate)
     var rank = x.reps > 12 ? e * (1 + 0.01 * (x.reps - 12)) : e;
-    if (!best || rank > best.rank || (rank === best.rank && x.reps > best.reps)) best = {load: load, reps: x.reps, e1rm: e, rank: rank};
+    if (rank > bestRank) bestRank = rank;
   });
   var est = best ? best.e1rm : 0;
   // métrica de progressão: 1RM estimado (kind "load"); sem carga (peso do corpo) conta o máximo de repetições numa série (kind "reps")
   var kind = est > 0 ? "load" : "reps";
   return {sets: sets.length, volume: Math.round(volume), topLoad: topLoad, est1RM: est, topReps: topReps, kind: kind,
-    score: kind === "load" ? Math.round(best.rank * 10) / 10 : topReps, topSet: best};
+    score: kind === "load" ? Math.round(bestRank * 10) / 10 : topReps, topSet: best};
 }
 function exerciseHistory(s, exerciseId, name){
   var key = String(name || "").trim().toLowerCase();
@@ -7097,8 +7124,13 @@ function logWorkout(s, data){
 }
 // Profissional a registar um treino (pré-visualização / o próprio profissional que treina): nunca envia a lista da sua cópia —
 // lê a lista atual do servidor, acrescenta esta sessão e grava (assim não apaga sessões que o aluno tenha registado entretanto)
+function undoWorkoutLog(s, log){
+  s.workoutLogs = (s.workoutLogs || []).filter(function(l){ return l !== log; });
+  if (Array.isArray(s.workoutLogsRaw)) s.workoutLogsRaw = s.workoutLogsRaw.filter(function(l){ return l !== log; });
+}
 function appendWorkoutLogAsPro(s, log){
-  if (!sbReady || !trainingColumnsAvailable) return Promise.resolve(true);
+  if (!sbReady) return Promise.resolve(true);
+  if (!trainingColumnsAvailable) return Promise.resolve(false);
   return sb.from("students").select("workout_logs").eq("id", s.id).single().then(function(res){
     if (res.error) throw res.error;
     var current = Array.isArray(res.data && res.data.workout_logs) ? res.data.workout_logs : [];
@@ -7273,7 +7305,12 @@ function wlDraftStore(){
   return state.wlDraft;
 }
 function wlDraftKey(s, dayId){ return String(s.id) + "|" + String(dayId); }
-function wlDraftGet(s, dayId){ var all = wlDraftStore(), k = wlDraftKey(s, dayId); if (!all[k]) all[k] = {sets: {}, rpe: null, notes: ""}; return all[k]; }
+function wlDraftGet(s, dayId){
+  var all = wlDraftStore(), k = wlDraftKey(s, dayId);
+  if (all[k] && all[k].savedAt && !(Date.now() - all[k].savedAt < WL_DRAFT_MAX_AGE_MS)) delete all[k]; // a página ficou aberta e o rascunho envelheceu
+  if (!all[k]) all[k] = {sets: {}, rpe: null, notes: ""};
+  return all[k];
+}
 function wlDraftSave(dayDraft){ if (dayDraft) dayDraft.savedAt = Date.now(); try { window.localStorage && window.localStorage.setItem(WL_DRAFT_KEY, JSON.stringify(wlDraftStore())); } catch (e) {} }
 function wlDraftClear(s, dayId){ delete wlDraftStore()[wlDraftKey(s, dayId)]; wlDraftSave(); }
 function wlDraftWipe(){ state.wlDraft = {}; try { window.localStorage && window.localStorage.removeItem(WL_DRAFT_KEY); } catch (e) {} }
@@ -7378,17 +7415,26 @@ function wireWorkoutLogger(s, el, rerender){
     var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
     if (!log){ err.textContent = "Marca ✓ pelo menos uma série feita, com repetições."; err.style.display = "block"; return; }
     err.style.display = "none";
-    wlDraftClear(s, day.id);
-    restTimerStop(); // o treino acabou: o descanso já não faz sentido
-    state.workoutDayId = null;
-    if (authRole === "professional" && sbReady){
-      appendWorkoutLogAsPro(s, log).then(function(){ showToast("✓ Treino guardado"); })
-        .catch(function(){ showToast("⚠ Não foi possível guardar o treino — verifica a tua ligação"); });
-    } else {
-      persistStudent(s);
-      showToast("✓ Treino guardado");
+    function finish(){
+      wlDraftClear(s, day.id);
+      restTimerStop(); // o treino acabou: o descanso já não faz sentido
+      state.workoutDayId = null;
+      rerender();
     }
-    rerender();
+    if (authRole === "professional" && sbReady){
+      // só se dá como guardado (e só se apaga o rascunho) depois de o servidor aceitar; se falhar, desfaz-se e o rascunho fica
+      appendWorkoutLogAsPro(s, log).then(function(ok){
+        if (!ok) throw new Error("columns");
+        showToast("✓ Treino guardado"); finish();
+      }).catch(function(e){
+        undoWorkoutLog(s, log);
+        showToast(e && e.message === "columns" ? "⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase." : "⚠ Não foi possível guardar o treino — verifica a tua ligação");
+      });
+      return;
+    }
+    persistStudent(s);
+    showToast("✓ Treino guardado");
+    finish();
   });
 }
 
@@ -7422,7 +7468,7 @@ function tplProTreino(s){
   var names = [];
   prog.days.forEach(function(d){ d.exercises.forEach(function(e){ if (!names.some(function(n){ return n.key === e.name.toLowerCase(); })) names.push({key: e.name.toLowerCase(), id: e.id, name: e.name}); }); });
   (s.workoutLogs || []).forEach(function(l){ (l.entries || []).forEach(function(e){ if (!names.some(function(n){ return n.key === String(e.name || "").toLowerCase(); })) names.push({key: String(e.name || "").toLowerCase(), id: e.exerciseId, name: e.name}); }); });
-  var rows = names.map(function(n){ var h = exerciseHistory(s, n.id, n.name); return {n: n, h: h, status: progressionStatus(h)}; }).filter(function(r){ return r.h.length; });
+  var rows = names.map(function(n){ var h = exerciseHistory(s, n.id, n.name); return {n: n, h: h, status: progressionStatus(baselineHistory(h))}; }).filter(function(r){ return r.h.length; });
   html += `<div class="eyebrow" style="margin:22px 0 8px;">Progressão de carga</div>`;
   if (!rows.length) html += `<p class="muted-p">Ainda sem sessões registadas pelo aluno.</p>`;
   else {
@@ -7431,7 +7477,7 @@ function tplProTreino(s){
       var last = r.h[r.h.length - 1];
       return `<tr><td class="date-cell" style="white-space:normal;">${escapeHtml(r.n.name)}</td><td>${escapeHtml(fmtLoadSet(last.topSet))}</td><td>${last.est1RM > 0 ? last.est1RM + " kg" : (last.topReps > 0 ? last.topReps + " reps" : "—")}</td><td>${r.status ? `<span class="pill ${pill[r.status]}">${r.status}</span>` : "—"}</td></tr>`;
     }).join("") + `</tbody></table></div>`;
-    var chartRow = rows.filter(function(r){ return r.h.length >= 2 && r.h[r.h.length - 1].score > 0; })[0];
+    var chartRow = rows.filter(function(r){ var k = sameKindHistory(r.h); return k.length >= 2 && k[k.length - 1].score > 0; })[0];
     html += `<div class="checkin-field" style="margin-top:12px;"><label for="exChartSel">Gráfico de progressão (1RM estimado; repetições se não há carga)</label><select id="exChartSel" class="mini-select" style="width:100%;">` +
       rows.map(function(r, i){ return `<option value="${i}"${chartRow && chartRow === r ? " selected" : ""}>${escapeHtml(r.n.name)}</option>`; }).join("") + `</select></div>` +
       `<div id="exChart" class="weight-chart-wrap">${chartRow ? weightSvg(sameKindHistory(chartRow.h).map(function(h){ return {date: h.date, w: h.score}; })) : weightSvg([])}</div>`;
@@ -7507,13 +7553,14 @@ function signalSessoes(s){
 }
 var SIGNAL_LOAD_WINDOW_DAYS = 56;
 var SIGNAL_LOAD_BASELINE_DAYS = 120;
+function baselineHistory(h){ return h.filter(function(x){ return daysSinceDate(x.date) <= SIGNAL_LOAD_BASELINE_DAYS; }); }
 function signalProgressaoCarga(s){
   if (!(s.workoutLogs || []).length) return signal("progressao_carga", "Progressão de carga", "insuficiente", "Sem sessões suficientes para avaliar a progressão.", "Sessões registadas", "treino");
   var seen = {}, stalled = [], progressed = 0, evaluated = 0;
   s.workoutLogs.forEach(function(l){ (l.entries || []).forEach(function(e){ var k = String(e.name || "").toLowerCase(); if (seen[k]) return; seen[k] = true;
     var h = exerciseHistory(s, e.exerciseId, e.name);
     if (!h.length || daysSinceDate(h[h.length - 1].date) > SIGNAL_LOAD_WINDOW_DAYS) return; // exercícios antigos/abandonados não contam
-    h = h.filter(function(x){ return daysSinceDate(x.date) <= SIGNAL_LOAD_BASELINE_DAYS; }); // quem está a recomeçar não é comparado com o recorde de há um ano
+    h = baselineHistory(h); // quem está a recomeçar não é comparado com o recorde de há um ano
     var st = progressionStatus(h);
     if (!st) return; evaluated++;
     if (st === "estagnado" || st === "regrediu") stalled.push(e.name); else if (st === "progrediu") progressed++;
@@ -9800,7 +9847,7 @@ function computeAdaptationSummary(s, days){
   var cutoffISO = cutoff.toISOString().slice(0,10);
   var counts = {};
   (s.adaptationHistory || []).forEach(function(e){
-    if (e.date < cutoffISO) return;
+    if (!e || typeof e.type !== "string" || typeof e.date !== "string" || e.date < cutoffISO) return;
     counts[e.type] = (counts[e.type] || 0) + 1;
   });
   return counts;
@@ -9879,6 +9926,17 @@ function signalWeight(s){
   if (!(spanDays >= SIGNAL_WEIGHT_MIN_SPAN_DAYS)){
     return signal("peso", "Peso", "insuficiente", "Pesagens com menos de " + SIGNAL_WEIGHT_MIN_SPAN_DAYS + " dias de intervalo: ainda cedo para avaliar a tendência.",
       "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+  }
+  if (spanDays > SIGNAL_WEIGHT_MAX_SPAN_DAYS){
+    // pesagem de referência antiga: tenta a mais antiga dentro da janela recente, se der pelo menos 14 dias de intervalo
+    var cutoffISO = new Date(Date.now() - SIGNAL_WEIGHT_MAX_SPAN_DAYS * 86400000).toISOString().slice(0, 10);
+    var inWin = (s.weights || []).filter(function(w){ return w.date >= cutoffISO && w.date < change.to; }).sort(function(a, b){ return a.date < b.date ? -1 : 1; })[0];
+    var lastW = (s.weights || []).filter(function(w){ return w.date === change.to; })[0];
+    var altSpan = inWin && lastW ? Math.round((new Date(change.to + "T00:00:00") - new Date(inWin.date + "T00:00:00")) / 86400000) : 0;
+    if (altSpan >= SIGNAL_WEIGHT_MIN_SPAN_DAYS){
+      change = {diff: lastW.w - inWin.w, from: inWin.date, to: change.to};
+      spanDays = altSpan;
+    }
   }
   if (spanDays > SIGNAL_WEIGHT_MAX_SPAN_DAYS){
     return signal("peso", "Peso", "insuficiente", "A pesagem anterior é de há " + spanDays + " dias: faltam pesagens regulares para avaliar a tendência recente.",
@@ -10168,7 +10226,7 @@ function tplProHistorico(s){
     html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adaptações — últimos 7 dias</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Ações que o próprio aluno registou (substituir, ignorar, reagendar, marcar flexível) — um autorrelato para perceberes o dia a dia, não uma auditoria nem um problema por si só.</p>" +
       summaryKeys.map(function(k){
-        return "<div class=\"history-row\"><div class=\"hlabel\">" + (ADAPTATION_TYPE_LABEL[k] || k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
+        return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(ADAPTATION_TYPE_LABEL[k] || k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
       }).join("") +
       "<div class=\"section-gap\"></div>";
   }

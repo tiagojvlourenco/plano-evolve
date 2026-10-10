@@ -59,7 +59,7 @@ var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
     return appendWorkoutLogAsPro(s, log);
   }).then(function(){
     check.check("2. Repetir o mesmo envio não duplica a sessão (id já existe)", serverLogs.length === 3);
-    check.check("2. O profissional só mostra 'guardado' depois de a escrita acabar", /appendWorkoutLogAsPro\(s, log\)\.then\(function\(\)\{ showToast\("✓ Treino guardado"\)/.test(appSource));
+    check.check("2. O profissional só mostra 'guardado' e só apaga o rascunho depois de a escrita acabar (falha: desfaz)", /appendWorkoutLogAsPro\(s, log\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);\s*showToast\("✓ Treino guardado"\); finish\(\);/.test(appSource) && /undoWorkoutLog\(s, log\)/.test(appSource));
     sb = realSb; sbReady = realReady;
   });
 })().then(function(){
@@ -90,7 +90,7 @@ var evil = '<img src=x onerror=alert(1)>';
   check.check("4. innerHTML/outerHTML passam por sanitizeHtmlString (instalado no arranque, só em browsers)", /Object\.defineProperty\(Element\.prototype, "innerHTML"/.test(appSource) && /Object\.defineProperty\(Element\.prototype, "outerHTML"/.test(appSource));
   check.check("4. Remove on*, javascript:, <script>/<iframe>... e data: que não seja imagem", /name\.indexOf\("on"\) === 0/.test(appSource) && /UNSAFE_TAGS = \{SCRIPT:1, IFRAME:1/.test(appSource) && /\^\(javascript\|vbscript\):/.test(appSource) && /data:image\\\/\(png\|jpe\?g\|gif\|webp\|avif\)/.test(appSource));
   check.check("4. Sem DOM utilizável nunca devolve markup por sanitizar (fallback: tira as tags)", sanitizeHtmlString('<b onclick="x">olá</b>') === "olá");
-  check.check("4. Texto sem '<' passa intacto", sanitizeHtmlString("a & b") === "a & b" && sanitizeHtmlString(42) === 42);
+  check.check("4. Texto sem '<' passa intacto", sanitizeHtmlString("a & b") === "a & b" && sanitizeHtmlString(42) === "42");
   check.check("4. A app não usa handlers inline (a rede de segurança não parte nada legítimo)", !/on(click|change|input|error|load|submit)=/.test(html.replace(/"use strict";[\s\S]{0,6000}?installHtmlGuard/, "")));
 })();
 
