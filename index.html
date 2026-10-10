@@ -447,6 +447,16 @@
   .onb-field input[type="date"], .onb-field input[type="time"]{
     -webkit-appearance:auto; appearance:auto; min-height:38px; color-scheme:dark;
   }
+  /* iOS Safari: <input type=time/date> com aspeto nativo tem largura mínima própria e saía do cartão
+     (campo da hora mais largo que o do nome da refeição). Sem aspeto nativo respeita a coluna; o
+     seletor de hora/data do sistema abre na mesma ao tocar. */
+  input[type="time"], input[type="date"]{
+    -webkit-appearance:none; appearance:none; display:block; box-sizing:border-box;
+    width:100%; min-width:0; max-width:100%; min-height:40px; margin:0; text-align:left;
+  }
+  input[type="time"]::-webkit-date-and-time-value, input[type="date"]::-webkit-date-and-time-value{text-align:left; min-width:0; margin:0;}
+  input[type="time"]::-webkit-datetime-edit, input[type="date"]::-webkit-datetime-edit{padding:0; min-width:0;}
+  .onb-row > *, .field-row > *, .macro-target-grid > *{min-width:0;}
   .onb-checkbox-row{display:flex; flex-wrap:wrap; gap:14px; align-items:center; font-size:0.88rem;}
   .onb-checkbox-row label{display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; text-transform:none; letter-spacing:normal; color:var(--ink);}
   .onb-checkbox-row input[type="text"]{width:140px; border:1px solid var(--line-strong); border-radius:8px; padding:5px 8px; background:var(--bg); font-size:0.85rem;}
@@ -5026,7 +5036,9 @@ function applyPreferredProducts(draft){
 
 function draftPlanFromDailyText(text){
   // Linhas de hidratação e notas manuscritas ("Hidratação → 3L Água...", "Leia: ...") não são alimentos de nenhuma refeição
-  text = String(text || "").replace(/^[ \t]*(?:hidrata[çc][ãa]o|leia|nota|notas|obs\.?|observa[çc][õo]es)\b.*$/gim, "");
+  // (da linha até à refeição seguinte ou ao fim: "Leia (caso seja preciso): ..." tem as linhas seguintes)
+  text = String(text || "").replace(/\blogurte/gi, "iogurte") // gralha comum ao copiar do papel: "I" maiúsculo lido como "l"
+    .replace(/^[ \t]*(?:hidrata[çc][ãa]o|leia|nota|notas|obs\.?|observa[çc][õo]es)\b[\s\S]*?(?=^[ \t]*refei[çc][ãa]o\b|(?![\s\S]))/gim, "");
   var segments = splitDailyTextByMeal(text);
   var draft = [];
   DAILY_DRAFT_MEALS.forEach(function(pair){
