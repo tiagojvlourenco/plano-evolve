@@ -92,4 +92,11 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("7. A migração acrescenta as colunas, deixa o aluno acrescentar workout_logs e exige append-only", /add column if not exists training_program jsonb/.test(sql) && /add column if not exists workout_logs jsonb/.test(sql) && /'workout_logs'/.test(sql) && /jsonb_array_is_append_only\(old\.workout_logs, new\.workout_logs\)/.test(sql));
   check.check("7. training_program NÃO está na lista de colunas que o aluno pode alterar", !/allowed_keys text\[\] := array\[[^\]]*training_program/.test(sql));
 })();
+// ---- 8. A migração valida o formato das sessões que o aluno acrescenta (testado também em PostgreSQL 16) ----
+(function(){
+  var sql = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "0019_training_program.sql"), "utf8");
+  check.check("8. O trigger rejeita sessões novas com data fora de AAAA-MM-DD, RPE fora de 1-10 ou entries que não seja lista", /create or replace function workout_log_is_valid/.test(sql) && /workout_logs_appended_are_valid\(old\.workout_logs, new\.workout_logs\)/.test(sql) && /between 1 and 10/.test(sql));
+  var log = logWorkout({workoutLogs: []}, {date:"2026-10-01", dayId:"d1", dayName:"A", rpe:"7", notes:"", entries:[{exerciseId:"e1", name:"Supino", sets:[{reps:8, load:50}]}]});
+  check.check("8. Uma sessão criada pela app cumpre o formato exigido pelo trigger", /^\d{4}-\d{2}-\d{2}$/.test(log.date) && Number.isInteger(log.rpe) && log.rpe >= 1 && log.rpe <= 10 && Array.isArray(log.entries) && typeof log.id === "string" && typeof log.notes === "string" && typeof log.dayName === "string");
+})();
 check.summarize();
