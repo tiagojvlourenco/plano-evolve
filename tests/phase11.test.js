@@ -120,49 +120,14 @@ function freshStudent(overrides){
   check.check("9. allowlist do aluno em 0004 não inclui colunas médicas (permanecem só-profissional)", trigger.indexOf("medical_conditions") === -1);
 })();
 
-// ---- 3. Fotos de pesagem de referência (Evolução) ----
+// ---- 3. Fotos de pesagem de referência: funcionalidade removida (os dados antigos ficam intactos) ----
 
-// 10. Secção só aparece na vista editável (profissional), nunca ao aluno
+// 10-14. Nem o profissional nem o aluno veem a secção, e o código de upload/remoção já não existe
 (function(){
   var s = freshStudent({weights:[{date:"2026-01-01", w:70}], weightInitial:70, weightCurrent:70, assessments:[], checkins:[], allowPhotos:false});
-  var proHtml = tplEvolucaoAluno(s, {editable:true});
-  var alunoHtml = tplEvolucaoAluno(s, {editable:false});
-  check.check("10. Vista do profissional mostra a secção de fotos de pesagem", proHtml.indexOf("Fotos de pesagem") >= 0);
-  check.check("10. Vista do aluno nunca mostra a secção de fotos de pesagem", alunoHtml.indexOf("Fotos de pesagem") === -1);
-})();
-
-// 11. Grelha vazia mostra mensagem; com fotos, mostra data e botão de remover
-(function(){
-  var vazio = freshStudent();
-  check.check("11. Sem fotos, mostra mensagem 'ainda sem'", weightLogPhotoGridHtml(vazio).indexOf("Ainda sem") >= 0);
-
-  var comFoto = freshStudent({weightLogPhotos:[{date:"2026-02-14", dataUrl:"data:image/jpeg;base64,xxx"}]});
-  var grid = weightLogPhotoGridHtml(comFoto);
-  check.check("11. Com foto, mostra a data formatada", grid.indexOf(fmtDatePt("2026-02-14")) >= 0);
-  check.check("11. Com foto, tem botão de remover com data-idx", grid.indexOf("weightlog-photo-remove") >= 0 && grid.indexOf("data-idx=\"0\"") >= 0);
-})();
-
-// 12. Upload não depende de position (diferente de PHOTO_POSITIONS/photos) — é um único input, sem posições
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function tplWeightLogPhotosSection"), appSource.indexOf("function tplWeightLogPhotosSection") + 1000);
-  check.check("12. Tem um único input de upload (id weightLogUpload)", fnSrc.indexOf("weightLogUpload") >= 0);
-  check.check("12. Não usa PHOTO_POSITIONS (sem frente/lado/costas)", fnSrc.indexOf("PHOTO_POSITIONS") === -1);
-})();
-
-// 13. wireProTab liga o upload à pasta do profissional (não do aluno) e inclui o id do aluno no caminho
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
-  check.check("13. Liga o input weightLogUpload", fnSrc.indexOf("weightLogUpload") >= 0);
-  check.check("13. Caminho de upload inclui '/weight-log/' + s.id", fnSrc.indexOf("/weight-log/\" + s.id") >= 0);
-  check.check("13. Usa currentAuthUserId (pasta do profissional) como raiz", /currentAuthUserId \+ "\/weight-log\//.test(fnSrc));
-  check.check("13. Faz fallback para dataUrl em modo local (sem sbReady)", fnSrc.indexOf("s.weightLogPhotos.push({date: todayISO(), dataUrl: reader.result})") >= 0);
-})();
-
-// 14. removeWeightLogPhoto apaga do Storage quando tem path, e sempre do array
-(function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function removeWeightLogPhoto"), appSource.indexOf("function removeWeightLogPhoto") + 700);
-  check.check("14. Usa o bucket progress-photos para remover", fnSrc.indexOf('"progress-photos"') >= 0);
-  check.check("14. Faz splice no array weightLogPhotos", fnSrc.indexOf("s.weightLogPhotos.splice") >= 0);
+  check.check("10. Vista do profissional já não mostra 'Fotos de pesagem'", tplEvolucaoAluno(s, {editable:true}).indexOf("Fotos de pesagem") === -1);
+  check.check("10. Vista do aluno também não", tplEvolucaoAluno(s, {editable:false}).indexOf("Fotos de pesagem") === -1);
+  check.check("11. O código de upload/remoção foi removido", appSource.indexOf("weightLogUpload") === -1 && appSource.indexOf("tplWeightLogPhotosSection") === -1 && appSource.indexOf("removeWeightLogPhoto") === -1);
 })();
 
 // 15. studentToRow/rowToStudent fazem round-trip de weightLogPhotos (via stripPhotoState, sem _resolvedUrl)

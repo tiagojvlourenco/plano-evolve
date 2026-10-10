@@ -127,11 +127,11 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   var t = tplAssessTable({assessments: lista}, true);
   check.check("5. Com mais de 10, mostra só as 10 mais recentes", (t.match(/<tr><td class="date-cell"/g) || []).length === 10);
   check.check("5. Oferece 'Mostrar todas (25)'", /id="assessToggleAll"[^>]*>Mostrar todas \(25\)/.test(t));
-  check.check("5. A mais recente (25/01) está primeiro e mostra a hora, sem 'jejum'", /25\/01 <span class="atime">· 07:00<\/span>/.test(t) && t.indexOf("jejum") === -1);
+  check.check("5. A mais recente (25/01) está primeiro e mostra a hora, sem 'jejum'", /25\/01\/2024 <span class="atime">· 07:00<\/span>/.test(t) && t.indexOf("jejum") === -1);
   check.check("5. Os índices de apagar continuam certos (0 a 9)", /data-idx="0"/.test(t) && /data-idx="9"/.test(t) && !/data-idx="10"/.test(t));
   state.assessShowAll = true;
   var todas = tplAssessTable({assessments: lista}, true);
-  check.check("5. 'Mostrar todas' mostra as 25 e oferece voltar a recolher", (todas.match(/<tr><td class="date-cell"/g) || []).length === 25 && /Mostrar só as 10 mais recentes/.test(todas));
+  check.check("5. 'Mostrar todas' mostra as 25 e oferece voltar a recolher", (todas.match(/<tr><td class="date-cell"/g) || []).length === 25 && /Mostrar só as 10 primeiras/.test(todas));
   state.assessShowAll = false;
   var poucas = tplAssessTable({assessments: lista.slice(0, 5)}, true);
   check.check("5. Com 10 ou menos não há botão", poucas.indexOf("assessToggleAll") === -1);
@@ -220,6 +220,34 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   var sem = parseWeighInNotes("01/02/2024\n60 kg\n\n03/02/2024 (jejum)\n61 kg").entries;
   check.check("9. Sem opção, mantém o comportamento anterior (sem hora; jejum = 06:00)", sem[0].time === "" && sem[1].time === "06:00");
   check.check("9. O formulário tem o campo 'hora por omissão'", /id="importWeighDefaultTime"/.test(tplImportWeighIns({id:"t", name:"A"})));
+})();
+
+// ---- 10. Ordenar a tabela por coluna (melhores/piores valores) e ano na data ----
+(function(){
+  var lista = [
+    {date:"2024-01-01", weight:70, bodyFat:20, muscle:50, visceral:3, water:55},
+    {date:"2024-02-01", weight:65, bodyFat:25, muscle:52, visceral:2, water:57},
+    {date:"2024-03-01", weight:68, bodyFat:15, muscle:48, visceral:4, water:60}
+  ];
+  function rows(t){ return (t.match(/<td class="date-cell">(\d{2}\/\d{2}\/\d{4})/g) || []).map(function(x){ return x.slice(-10); }); }
+  state.assessSort = null; state.assessShowAll = true;
+  var t = tplAssessTable({assessments: lista}, true);
+  check.check("10. A data mostra o ano (dd/mm/aaaa)", rows(t)[0] === "01/03/2024");
+  check.check("10. Por omissão: data, mais recente primeiro", rows(t).join() === "01/03/2024,01/02/2024,01/01/2024");
+  check.check("10. Cabeçalhos clicáveis para as 6 colunas", (t.match(/data-sort="/g) || []).length === 6);
+  toggleAssessSort("weight");
+  check.check("10. Peso: do maior para o menor", rows(tplAssessTable({assessments: lista}, true)).join() === "01/01/2024,01/03/2024,01/02/2024");
+  toggleAssessSort("weight");
+  var asc = tplAssessTable({assessments: lista}, true);
+  check.check("10. Segundo clique inverte (menor primeiro) e marca aria-sort", rows(asc)[0] === "01/02/2024" && /aria-sort="ascending"/.test(asc));
+  toggleAssessSort("bodyFat"); toggleAssessSort("bodyFat");
+  check.check("10. Massa gorda crescente: a melhor (15%) fica primeiro", rows(tplAssessTable({assessments: lista}, true))[0] === "01/03/2024");
+  toggleAssessSort("date"); toggleAssessSort("date");
+  check.check("10. Data crescente: a mais antiga primeiro", rows(tplAssessTable({assessments: lista}, true))[0] === "01/01/2024");
+  state.assessSort = {key:"weight", dir:"asc"};
+  var s2 = tplAssessTable({assessments: lista}, true);
+  check.check("10. Apagar usa sempre o índice por data (a linha de 65 kg, ordenada em 1.º, é a data-idx=1)", /data-idx="1"[\s\S]*$/.test(s2) && s2.indexOf('data-idx="1"') < s2.indexOf('data-idx="2"'));
+  state.assessSort = null;
 })();
 
 check.summarize();
