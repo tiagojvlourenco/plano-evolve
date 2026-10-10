@@ -72,4 +72,10 @@ var check = require("./check")();
   check.check("6. renderProShell usa stripPositions/stripScrollLeft e continua a usar scrollTo no contentor", /stripPositions\(container, activeNavItem\)/.test(appSource) && /stripScrollLeft\(pos, container\.clientWidth\)/.test(appSource) && /container\.scrollTo\(\{/.test(appSource));
 })();
 
+// ---- 7. iOS: campos com letra < 16px fazem zoom ao tocar e o ecrã fica ampliado depois do login ----
+(function(){
+  var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  check.check("7. Em ecrãs de toque, inputs/selects/textareas têm 16px (sem zoom automático do iOS)", /@media \(hover:none\) and \(pointer:coarse\)\{\s*input:not\(\[type=checkbox\]\)[^}]*select, textarea\{font-size:16px !important;\}/.test(html));
+  check.check("7. O zoom do utilizador não é bloqueado (acessibilidade): sem maximum-scale/user-scalable=no", !/maximum-scale|user-scalable\s*=\s*no/.test(html));
+})();
 check.summarize();
