@@ -60,7 +60,7 @@ var check = require("./check")();
 // 8. wireProTab liga um listener de "input" delegado (não um por cada campo,
 // que teria de ser religado sempre que a quantidade/grupo mudam)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 15000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 17000);
   check.check("8. Liga um listener de input em 'el' (delegado)", /el\.addEventListener\("input"/.test(fnSrc));
   check.check("8. O listener reconhece af-qty-num e ef-qty-num", fnSrc.indexOf("af-qty-num") >= 0 && fnSrc.indexOf("ef-qty-num") >= 0);
   check.check("8. O listener chama foodNutritionPreviewHtml para atualizar", fnSrc.indexOf("foodNutritionPreviewHtml(nameInput.value") >= 0);

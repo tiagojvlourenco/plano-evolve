@@ -189,4 +189,37 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   check.check("8. Sem histórico, o peso inicial passa a ser a primeira pesagem importada", sNone.weightInitial === 72.4);
 })();
 
+// ---- 9. Formato irregular (dados sintéticos): sem barras, datas com "-" e 2 dígitos, hora por omissão ----
+(function(){
+  var txt = [
+    "Aluna Teste",
+    "22/04/2021",
+    "60 kg / 40 kg / 30 % / GV 3 / H20 50 %",
+    "21/03-2025 - 9:00 (jejum)",
+    "55 kg / 39 kg / 25 % / GV 2 H2O 52 %",
+    "30/08/2024 - 8:00",
+    "54kg / 38.9kg / 24,1% / GV2.5/ H2O52.6%",
+    "54 38,9 24.2 2 53.2",
+    "24/11/25 - 8:15 (jejum)",
+    "53 kg / 27.9 kg / 23 % / GV 2 / H2O 52 %",
+    "21/06/2024 - 10:00 (jejum)",
+    "54.5 kg",
+    "23/10/2025",
+    "54 kg"
+  ].join("\n");
+  var r = parseWeighInNotes(txt, {defaultTime: "08:00"});
+  function e(d){ return r.entries.filter(function(x){ return x.date === d; })[0]; }
+  check.check("9. Aceita 'H20' (zero) e GV/H2O sem barra", e("2021-04-22").water === 50 && e("2025-03-21").visceral === 2 && e("2025-03-21").water === 52);
+  check.check("9. Aceita 21/03-2025 e anos com 2 dígitos", !!e("2025-03-21") && !!e("2025-11-24"));
+  check.check("9. Sem espaços (GV2.5, H2O52.6%) e vírgula decimal", e("2024-08-30").visceral === 2.5 && e("2024-08-30").water === 52.6 && e("2024-08-30").bodyFat === 24.1);
+  check.check("9. Sem hora → hora por omissão (08:00), com ou sem 'jejum'", e("2021-04-22").time === "08:00" && e("2025-10-23").time === "08:00");
+  check.check("9. Com hora escrita, mantém-na", e("2025-03-21").time === "09:00" && e("2025-11-24").time === "08:15" && e("2024-06-21").time === "10:00");
+  check.check("9. A linha só com números sem data não vira nota e dá aviso", r.warnings.some(function(w){ return /sem data nem unidades/.test(w); }) && !r.entries.some(function(x){ return /54 38/.test(x.note); }));
+  check.check("9. Massa muscular implausível (27.9 kg para 53 kg) dá aviso mas importa", r.warnings.some(function(w){ return /parece estranha/.test(w); }) && !!e("2025-11-24"));
+  check.check("9. Peso sem restantes medidas continua a funcionar", e("2024-06-21").weight === 54.5 && !e("2024-06-21").complete);
+  var sem = parseWeighInNotes("01/02/2024\n60 kg\n\n03/02/2024 (jejum)\n61 kg").entries;
+  check.check("9. Sem opção, mantém o comportamento anterior (sem hora; jejum = 06:00)", sem[0].time === "" && sem[1].time === "06:00");
+  check.check("9. O formulário tem o campo 'hora por omissão'", /id="importWeighDefaultTime"/.test(tplImportWeighIns({id:"t", name:"A"})));
+})();
+
 check.summarize();
