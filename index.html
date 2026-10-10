@@ -5667,24 +5667,91 @@ function computeMaintenanceKcal(s){
   return Math.round(bmr * activityFactor(s));
 }
 
+/* ---------- Limites de segurança dos alvos (prescrição) ----------
+   - Piso calórico: nunca abaixo do metabolismo basal nem de 1200 (F) / 1500 (M) kcal.
+   - Ritmo de perda: no máximo 0,5 kg/semana e 0,75% do peso corporal por semana (pessoas leves não perdem 0,5 kg/sem em segurança).
+   - Proteína: por kg de peso de referência (o peso real, mas no máximo o peso a IMC 25) — nunca 2 g/kg de 120 kg de peso total.
+   - Gordura: pelo menos 0,6 g/kg do peso de referência (função hormonal). */
+var KCAL_FLOOR_BY_SEX = {"Feminino":1200, "Masculino":1500};
+var MAX_LOSS_PCT_PER_WEEK = 0.75;
+var FAT_MIN_G_PER_KG = 0.6;
+// massa magra (kg) da avaliação mais recente com peso e % de gordura; null se não há
+function latestLeanMass(s){
+  var list = (s && s.assessments || []).slice().sort(function(x, y){ return compareAssessmentsDesc(x, y); });
+  for (var i = 0; i < list.length; i++){
+    var a = list[i];
+    if (a.weight > 0 && a.bodyFat > 0 && a.bodyFat < 70) return Math.round(a.weight * (1 - a.bodyFat / 100) * 10) / 10;
+  }
+  return null;
+}
+function kcalFloorFor(sex, bmr){
+  var byBmr = bmr || 0;
+  var bySex = KCAL_FLOOR_BY_SEX[sex] || 1200;
+  return Math.max(byBmr, bySex);
+}
+// peso a usar nos g/kg: o real, mas limitado ao peso a IMC 25 quando a altura é conhecida (e há excesso de peso)
+function referenceWeightKg(weight, height, leanMass){
+  if (leanMass > 0) return leanMass;
+  if (height > 0){
+    var upper = 25 * Math.pow(height/100, 2);
+    if (weight > upper) return Math.round(upper * 10) / 10;
+  }
+  return weight;
+}
+
 function computeSuggestedTargets(p){
   var bmr = computeBMR(p.sex, p.weight, p.height, p.age) || 0;
   var activity = activityFactor(p);
   var tdee = bmr * activity;
   var kcal;
+  var losing = false;
   if (p.weightGoal && Math.abs(p.weightGoal - p.weight) >= 0.5){
     var direction = p.weightGoal > p.weight ? 1 : -1;
-    var dailyAdjust = direction * (WEIGHT_GOAL_RATE_KG_PER_WEEK * KCAL_PER_KG) / 7;
+    var rate = WEIGHT_GOAL_RATE_KG_PER_WEEK;
+    if (direction < 0) rate = Math.min(rate, p.weight * MAX_LOSS_PCT_PER_WEEK / 100);
+    var dailyAdjust = direction * (rate * KCAL_PER_KG) / 7;
     kcal = Math.max(0, Math.round(tdee + dailyAdjust));
+    losing = direction < 0;
   } else {
     var adjust = GOAL_ADJUST[p.goal] || 0;
     kcal = Math.max(0, Math.round(tdee * (1 + adjust/100)));
+    losing = adjust < 0;
   }
-  var protein = Math.round(2.0 * p.weight);
-  var fat = Math.round((kcal*0.27) / 9);
+  if (bmr && losing) kcal = Math.max(kcal, Math.round(kcalFloorFor(p.sex, bmr)));
+  var ref = referenceWeightKg(p.weight, p.height, p.leanMass);
+  var protein = Math.round(2.0 * ref);
+  var fat = Math.max(Math.round((kcal*0.27) / 9), Math.round(FAT_MIN_G_PER_KG * ref));
   var carbsKcal = Math.max(0, kcal - protein*4 - fat*9);
   var carbs = Math.round(carbsKcal / 4);
   return {kcal:kcal, protein:protein, carbs:carbs, fat:fat};
+}
+
+// Avisos de prescrição para um conjunto de alvos (kcal/macros) de um aluno. Devolve [{level:"critical"|"warn", text}]
+function nutritionSafetyWarnings(s, t){
+  var out = [];
+  if (!s || !t || !(t.kcal > 0)) return out;
+  var weight = s.weightCurrent || s.weight || 0;
+  var bmr = computeBMR(s);
+  var maint = computeMaintenanceKcal(s);
+  var carbs = t.carbs != null ? t.carbs : t.carbsMax, fat = t.fat != null ? t.fat : t.fatMax;
+  if (bmr){
+    var floor = kcalFloorFor(s.sex, bmr);
+    if (t.kcal < bmr) out.push({level:"critical", text:"Alvo de " + t.kcal + " kcal abaixo do metabolismo basal (" + bmr + " kcal): risco de perda de massa magra e de défice de micronutrientes."});
+    else if (t.kcal < floor) out.push({level:"warn", text:"Alvo de " + t.kcal + " kcal abaixo do mínimo habitual (" + Math.round(floor) + " kcal) para " + (s.sex === "Masculino" ? "homens" : "mulheres") + "."});
+  }
+  if (maint && weight){
+    var weeklyKg = (maint - t.kcal) * 7 / KCAL_PER_KG;
+    if (weeklyKg > weight * MAX_LOSS_PCT_PER_WEEK / 100 + 0.05) out.push({level:"warn", text:"Défice de " + (maint - t.kcal) + " kcal/dia ≈ " + weeklyKg.toFixed(2).replace(".", ",") + " kg/semana, acima de " + MAX_LOSS_PCT_PER_WEEK + "% do peso por semana."});
+    if (t.kcal > maint * 1.2) out.push({level:"warn", text:"Excedente de " + (t.kcal - maint) + " kcal/dia (>" + "20% da manutenção): ganho de gordura provável."});
+  }
+  var ref = referenceWeightKg(weight, s.height, s.leanMass);
+  if (ref > 0){
+    if (fat != null && fat < FAT_MIN_G_PER_KG * ref - 0.5) out.push({level:"warn", text:"Gordura de " + fat + " g (" + (fat / ref).toFixed(2).replace(".", ",") + " g/kg) abaixo do mínimo de " + FAT_MIN_G_PER_KG + " g/kg."});
+    if (t.protein != null && t.protein > 2.6 * ref) out.push({level:"warn", text:"Proteína de " + t.protein + " g (" + (t.protein / ref).toFixed(1).replace(".", ",") + " g/kg) acima do necessário; ≈ 1,6–2,2 g/kg chega."});
+    if (t.protein != null && t.protein < 1.2 * ref) out.push({level:"warn", text:"Proteína de " + t.protein + " g (" + (t.protein / ref).toFixed(1).replace(".", ",") + " g/kg) abaixo de 1,2 g/kg: baixa para preservar massa magra."});
+  }
+  if (carbs != null && carbs < 50 && t.kcal > 0) out.push({level:"warn", text:"Hidratos de " + carbs + " g: muito baixos para treinar com qualidade."});
+  return out;
 }
 
 function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
@@ -8803,6 +8870,12 @@ function tplEditFoodForm(midx, fidx, f){
 // excedente/défice real): "+500 kcal" se o alvo está acima da manutenção
 // (fase de ganho), "-500 kcal" se está abaixo (fase de perda). Sem dados
 // suficientes no perfil (idade/sexo/altura/peso/treinos), fica em branco.
+// avisos de prescrição (piso calórico, défice excessivo, proteína/gordura fora de gama) como pílulas
+function safetyWarningsHtml(s, t){
+  var ws = nutritionSafetyWarnings(s ? Object.assign({}, s, {leanMass: latestLeanMass(s)}) : s, t);
+  return ws.map(function(w){ return "<div class=\"pill " + (w.level === "critical" ? "critical" : "warn") + "\" style=\"margin-top:8px; display:block; white-space:normal;\">" + (w.level === "critical" ? "⛔ " : "⚠ ") + escapeHtml(w.text) + "</div>"; }).join("");
+}
+
 function renderTargetWarning(el, s){
   var box = el.querySelector("#targetWarning");
   if (!box) return;
@@ -8837,6 +8910,7 @@ function renderTargetWarning(el, s){
   box.innerHTML = diffPct > 0.05
     ? "<div class=\"pill warn\" style=\"margin-top:10px;\">⚠ Estes macros correspondem a ~" + expected + " kcal, mas o alvo indicado é " + kcal + " kcal</div>"
     : "<div class=\"pill good\" style=\"margin-top:10px;\">✓ Macros coerentes com o alvo (~" + expected + " kcal)</div>";
+  box.innerHTML += safetyWarningsHtml(s, {kcal:kcal, protein:protein, carbs:carbs, fat:fat});
 }
 
 var FLEX_OVERRIDE_CHECKBOXES = [
@@ -9002,6 +9076,16 @@ function computeRecentWeightChange(weights, weeks){
   return { diff: last.w - first.w, from: first.date, to: last.date };
 }
 
+// direção pretendida: "perda" | "ganho" | "manutencao" — pelo peso objetivo, ou pelo objetivo escrito
+function goalDirection(s){
+  var cur = s.weightCurrent;
+  if (s.weightGoal && cur && Math.abs(s.weightGoal - cur) >= 0.5) return s.weightGoal < cur ? "perda" : "ganho";
+  var g = s.goal || "";
+  if (/perda|défice|emagrec|gordura/i.test(g) && !/ganho|aumento/i.test(g)) return "perda";
+  if (/ganho|aumento|hipertrofia|massa muscular/i.test(g)) return "ganho";
+  return "manutencao";
+}
+
 function signalWeight(s){
   var change = computeRecentWeightChange(s.weights, SIGNAL_WEIGHT_TREND_WEEKS);
   if (change == null){
@@ -9009,11 +9093,47 @@ function signalWeight(s){
       "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
   }
   var diffStr = (change.diff>=0?"+":"") + change.diff.toFixed(1).replace(".", ",");
-  var goalImpliesChange = /perda|ganho/i.test(s.goal || "");
-  var stalled = goalImpliesChange && Math.abs(change.diff) < 0.3;
-  return signal("peso", "Peso", stalled ? "atencao" : "positivo",
-    "Peso: " + diffStr + " kg nas últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas.",
-    "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+  var base = "Peso: " + diffStr + " kg nas últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas";
+  var period = "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas";
+  var dir = goalDirection(s), d = change.diff;
+  var weight = s.weightCurrent || (s.weights && s.weights.length ? s.weights[s.weights.length - 1].w : 0);
+  var fastKg = weight ? weight * MAX_LOSS_PCT_PER_WEEK / 100 * SIGNAL_WEIGHT_TREND_WEEKS : 1.5;
+  if (dir === "perda"){
+    if (d > 0.3) return signal("peso", "Peso", "atencao", base + " — o objetivo é perder peso e o peso subiu.", period, "evolucao", d > 1 ? "high" : "normal");
+    if (d > -0.3) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de perda.", period, "evolucao");
+    if (-d > fastKg) return signal("peso", "Peso", "atencao", base + " — perda acima de " + MAX_LOSS_PCT_PER_WEEK + "% do peso por semana: confirma energia, fome e massa muscular.", period, "evolucao");
+  } else if (dir === "ganho"){
+    if (d < -0.3) return signal("peso", "Peso", "atencao", base + " — o objetivo é ganhar massa e o peso desceu.", period, "evolucao", d < -1 ? "high" : "normal");
+    if (d < 0.3) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de ganho.", period, "evolucao");
+    if (d > fastKg) return signal("peso", "Peso", "atencao", base + " — ganho rápido: possível excesso de gordura, revê o excedente calórico.", period, "evolucao");
+  } else if (Math.abs(d) > 1.5){
+    return signal("peso", "Peso", "atencao", base + " — acima do esperado para manutenção.", period, "evolucao");
+  }
+  return signal("peso", "Peso", "positivo", base + ".", period, "evolucao");
+}
+
+// Inatividade: sem pesagem há muito tempo, ou duas semanas seguidas sem treinos registados
+var SIGNAL_WEIGH_LATE_DAYS = 21;
+function daysSinceDate(iso){
+  if (!iso) return null;
+  var d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+function signalPesagem(s){
+  var dates = (s.weights || []).map(function(w){ return w.date; }).concat((s.assessments || []).map(function(a){ return a.date; })).filter(Boolean).sort();
+  if (!dates.length) return signal("pesagem", "Pesagem", "insuficiente", "Sem pesagens registadas.", "Desde sempre", "evolucao");
+  var days = daysSinceDate(dates[dates.length - 1]);
+  if (days >= SIGNAL_WEIGH_LATE_DAYS) return signal("pesagem", "Pesagem", "atencao", "Sem pesagem há " + days + " dias.", "Desde a última pesagem", "evolucao", days >= 42 ? "high" : "normal");
+  return signal("pesagem", "Pesagem", "positivo", "Última pesagem " + daysAgoLabel(days) + ".", "Desde a última pesagem", "evolucao");
+}
+function signalInatividadeTreino(s){
+  var recent = recentCheckins(s, 2);
+  if (recent.length < 2 || !s.trainingsPerWeek) return signal("inatividade_treino", "Inatividade de treino", "insuficiente", "Sem check-ins suficientes para avaliar inatividade.", "Últimos 2 check-ins", "checkins");
+  var parado = recent.every(function(c){ return !(c.workouts > 0); });
+  return signal("inatividade_treino", "Inatividade de treino", parado ? "atencao" : "positivo",
+    parado ? "Sem treinos registados nos últimos 2 check-ins." : "Treinos registados nos últimos 2 check-ins.",
+    "Últimos 2 check-ins", "checkins", parado ? "high" : "normal");
 }
 
 function signalAdherence(s){
@@ -9099,6 +9219,8 @@ function computeStudentSignals(s){
     signalWeight(s),
     signalHungerEnergy(s),
     signalTreinos(s),
+    signalPesagem(s),
+    signalInatividadeTreino(s),
     signalMealsOff(s),
     signalAdaptacoes(s)
   ];
@@ -9196,6 +9318,8 @@ function setTargetsFromPlanIfAsked(el, s){
   logTargetsChange(s, s.targets, newTargets);
   s.targets = newTargets;
   s.fromOnboarding = false;
+  var ws = nutritionSafetyWarnings(Object.assign({}, s, {leanMass: latestLeanMass(s)}), newTargets);
+  if (ws.length) showToast((ws[0].level === "critical" ? "⛔ " : "⚠ ") + ws[0].text);
 }
 
 function logTargetsChange(s, oldTargets, newTargets){
@@ -9684,7 +9808,8 @@ function wireProTab(s){
     s.weightGoal = newGoal;
     var suggested = computeSuggestedTargets({
       sex: s.sex, weight: s.weightCurrent, height: s.height, age: s.age,
-      trainingsPerWeek: s.trainingsPerWeek, activityLevel: s.activityLevel, goal: s.goal, weightGoal: s.weightGoal
+      trainingsPerWeek: s.trainingsPerWeek, activityLevel: s.activityLevel, goal: s.goal, weightGoal: s.weightGoal,
+      leanMass: null
     });
     var newTargets = {kcal:suggested.kcal, protein:suggested.protein, carbs:suggested.carbs, fat:suggested.fat};
     logTargetsChange(s, s.targets, newTargets);

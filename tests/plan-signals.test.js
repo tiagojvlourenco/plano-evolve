@@ -209,7 +209,7 @@ function freshStudent(overrides){
 (function(){
   var maria = findStudent("maria");
   var signals = computeStudentSignals(maria);
-  check.check("28. Devolve exatamente 8 indicadores", signals.length === 8);
+  check.check("28. Devolve exatamente 10 indicadores (8 + pesagem + inatividade de treino)", signals.length === 10);
   check.check("28. Todos têm os campos obrigatórios (estado, texto, período, separador)",
     signals.every(function(sig){ return sig.status && sig.text && sig.period && sig.tab; }));
   check.check("28. Todos os estados são válidos", signals.every(function(sig){ return ["atencao","positivo","insuficiente"].indexOf(sig.status) >= 0; }));

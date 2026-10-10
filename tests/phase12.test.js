@@ -85,9 +85,9 @@ function freshStudent(overrides){
 // 7. signalWeight já cobre exatamente o critério pedido: <0.3kg em 3 semanas, com objetivo de mudança
 (function(){
   check.check("7. SIGNAL_WEIGHT_TREND_WEEKS é 3 (janela de 2-3 semanas)", SIGNAL_WEIGHT_TREND_WEEKS === 3);
-  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("function signalWeight") + 700);
+  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("function signalWeight") + 1400);
   check.check("7. Usa o limiar de 0.3kg para considerar estagnado", fnSrc.indexOf("0.3") >= 0);
-  check.check("7. Só considera estagnação quando o objetivo implica mudança (perda/ganho)", fnSrc.indexOf("goalImpliesChange") >= 0);
+  check.check("7. Só considera estagnação quando o objetivo implica mudança (perda/ganho), pela direção do objetivo", fnSrc.indexOf('dir === "perda"') >= 0 && fnSrc.indexOf('dir === "ganho"') >= 0);
 })();
 
 // ---- 4. Copiar respostas do questionário (Plano) ----
