@@ -44,12 +44,12 @@ function loadProducts(dir){
   fs.readdirSync(dir).filter(f => /^lista-.*\.csv$/.test(f)).sort().forEach(file => {
     const rows = parseCsv(fs.readFileSync(path.join(dir, file), "utf8"));
     const head = rows[0] || [];
-    const iEan = head.findIndex(h => /^EAN/i.test(h)), iName = 1, iBrand = 2, iPack = head.findIndex(h => /Embalagem/i.test(h)), iKcal = head.findIndex(h => /^kcal/i.test(h));
+    const iEan = head.findIndex(h => /^EAN/i.test(h)), iName = 1, iBrand = 2, iPack = head.findIndex(h => /Embalagem/i.test(h)), iKcal = head.findIndex(h => /^kcal/i.test(h)), iGroup = head.findIndex(h => /^Grupo/i.test(h));
     if (iEan < 0 || iPack < 0) return;
     rows.slice(1).forEach(r => {
       const ean = normalizeEan(r[iEan]);
       const kcal = iKcal >= 0 ? parseFloat(String(r[iKcal] || "").replace(",", ".")) : NaN;
-      if (ean) out.push({file, ean, name: (r[iName] || "").trim(), brand: (r[iBrand] || "").trim(), embalagem: (r[iPack] || "").trim(), kcal: isFinite(kcal) ? kcal : NaN});
+      if (ean) out.push({file, ean, name: (r[iName] || "").trim(), brand: (r[iBrand] || "").trim(), embalagem: (r[iPack] || "").trim(), kcal: isFinite(kcal) ? kcal : NaN, group: iGroup >= 0 ? (r[iGroup] || "").trim() : ""});
     });
   });
   return out;
@@ -58,11 +58,11 @@ function loadProducts(dir){
 // nomes tal como ficaram no catálogo (os output-import-*.sql traduzem e corrigem os nomes das listas): é nesses que a app procura "iogurte", "queijo"...
 function loadDbNames(dir){
   const names = new Map();
-  const re = /^insert into food_products \(ean, name, brand, food_group[^)]*\) values \('([^']*)', '((?:[^']|'')*)', '((?:[^']|'')*)'/;
+  const re = /^insert into food_products \(ean, name, brand, food_group[^)]*\) values \('([^']*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '([a-z]*)'/;
   fs.readdirSync(dir).filter(f => /^output-(import|migrate)-.*\.sql$/.test(f)).sort().forEach(file => {
     fs.readFileSync(path.join(dir, file), "utf8").split("\n").forEach(line => {
       const m = re.exec(line);
-      if (m) names.set(m[1], m[2].replace(/''/g, "'"));
+      if (m) names.set(m[1], {name: m[2].replace(/''/g, "'"), group: m[4]});
     });
   });
   return names;
@@ -73,9 +73,9 @@ function run(dir){
   const dbNames = loadDbNames(dir);
   const byEan = new Map();
   products.forEach(p => {
-    const dbName = dbNames.get(p.ean) || null;
-    const d = packForProduct(dbName || p.name, p.embalagem, p.kcal, p.ean);
-    const rec = {ean: p.ean, name: dbName || p.name, listName: p.name, brand: p.brand, file: p.file, embalagem: p.embalagem, decision: d};
+    const db = dbNames.get(p.ean) || null, dbName = db ? db.name : null;
+    const d = packForProduct(dbName || p.name, p.embalagem, p.kcal, p.ean, (db && db.group) || p.group);
+    const rec = {ean: p.ean, name: dbName || p.name, listName: p.name, brand: p.brand, file: p.file, embalagem: p.embalagem, group: (db && db.group) || p.group, decision: d};
     const prev = byEan.get(p.ean);
     if (!prev){ byEan.set(p.ean, rec); return; }
     // mesmo EAN em várias listas: se concordam, fica um; se não, não se escreve nada (decidir à mão)

@@ -4305,7 +4305,7 @@ function mergeFoodProduct(row, retailers){
   var name = foodProductDisplayName(row, retailers);
   if (FOOD_DB[name]) return false; // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods)
   FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
-  if ((row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 350 && isPerishableAfterOpening(name)){
+  if ((row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 350 && hasWholePackFood(row, name)){
     FOOD_PACKS[name] = row.package_quantity; // embalagem individual conhecida: o plano usa embalagens inteiras
   }
   var group = FOOD_GROUPS[resolveGroup(row.food_group)];
@@ -4429,13 +4429,21 @@ var FOOD_PACKS = {
   "Queijo fresco light (Hacendado)": 62.5 // 2 unidades por embalagem (62,5 g cada, como o Natural do Hacendado)
 };
 // o produto aparece nas 3 primeiras palavras do nome ("Mythos Iogurte Estilo Grego", "100% Sumo de Pera"); uma palavra de sabor mais à frente ("Nachos sabor a Queijo", "Chocolate de Leite") não conta
-var PERISHABLE_AFTER_OPENING = /^(?:\S+\s+){0,2}(?:iogurte|yogurte|skyr|quark|kefir|pudim|flan|leite|bebida vegetal|queijo|requeij|cottage|mozzarella|mozarela|burrata|ricotta|feta|camembert|brie|natas|fiambre|peru fatiado|presunto|paté|húmus|hummus|tofu|tempeh|seitan|sumo|margarina|manteiga|molho)/i;
+var PERISHABLE_AFTER_OPENING = /^(?:\S+\s+){0,2}(?:iogurte|yogurte|yogurt|yogur|skyr|quark|kefir|bifidus|petit[ -](?:suisse|queijinho|gervais)|estilo grego|pudim|pudding|flan|sobremesa|mousse|leite|bebida (?:vegetal|de |l[áa]ctea|[àa] base|biol[óo]gica)|batido|n[ée]ctar|nectar[íi]ssimo|queijo|requeij|cottage|moz{1,2}arel{1,2}a|burrata|ricotta|feta|camembert|brie|natas|fiambre|peru fatiado|presunto|paté|húmus|hummus|tofu|tempeh|seitan|sumo|margarina|manteiga|molho)/i;
 // produtos que não se estragam depois de abertos, ainda que a palavra apareça ao início: "Pão de Leite", "Bolachas com manteiga", "Brioche de leite"
 var NOT_PERISHABLE_HEAD = /^(?:\S+\s+)?(?:bolacha|biscoito|biscuit|batata|bolo|wafer|chocolate|p[ãa]o|brioche|barra|snack|tosta|gelado|doce|feij|cereais|granola|muesli|pastilha|caramelo|compota|cacau|palitos|palets)/i;
 var NOT_PERISHABLE_ANYWHERE = /(?:manteiga|pasta|creme) de amendoim|leite de coco|leite condensado|leite em p[óo]|molho de soja|tempero|piri-?piri|pesto/i;
+// se o nome COMEÇA pelo produto, a 2.ª palavra é sabor e não anula nada: "Iogurte Cereais", "Leite Chocolate", "Iogurte Biscuit"
+var LEADS_WITH_PRODUCT = /^(?:iogurte|yogurte|yogurt|yogur|skyr|quark|kefir|leite|bebida|batido|queijo|pudim|pudding|flan|sumo)(?![a-zà-ú])/i;
 function isPerishableAfterOpening(name){
   name = String(name || "");
-  return PERISHABLE_AFTER_OPENING.test(name) && !NOT_PERISHABLE_HEAD.test(name) && !NOT_PERISHABLE_ANYWHERE.test(name);
+  if (!PERISHABLE_AFTER_OPENING.test(name) || NOT_PERISHABLE_ANYWHERE.test(name)) return false;
+  return LEADS_WITH_PRODUCT.test(name) || !NOT_PERISHABLE_HEAD.test(name);
+}
+// laticínios cujo nome é só o sabor ("Natural", "Morango", "Sem Lactose Magro") valem como doses individuais, salvo se forem queijo, manteiga, natas, molhos, pastas ou produtos em pó
+var DAIRY_NOT_PACK = /queijo|requeij|manteiga|natas|creme|cremos|barrar|cunha|fatia|ralad|curad|por[çc]|portion|babybel|philadelphia|molho|pesto|tempero|pasta|em p[óo]|condensado|coco|gelado/i;
+function hasWholePackFood(row, displayName){
+  return isPerishableAfterOpening(displayName) || (resolveGroup(row.food_group) === "laticinios" && !DAIRY_NOT_PACK.test(String(row.name || "")) && !NOT_PERISHABLE_ANYWHERE.test(String(row.name || "")));
 }
 function packSizeOf(name){ return FOOD_PACKS[name] > 0 ? FOOD_PACKS[name] : 0; }
 // gramas/ml que sobram (e se estragam) numa quantidade que não é um nº inteiro de embalagens; 0 se não há desperdício ou não se conhece a embalagem

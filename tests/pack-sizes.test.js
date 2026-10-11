@@ -51,6 +51,15 @@ var G = require("../scripts/generate-pack-sizes.js");
   check.check("2. A nutrição incoerente com a categoria (leite com 346 kcal, iogurte com 400 kcal) é recusada; sem kcal conhecido decide só o nome", d("Iogurte Natural", "125 g", 400) === "–" && d("Iogurte Natural", "125 g", NaN) === "125g" && d("Iogurte Natural", "125 g", undefined) === "125g");
   check.check("2. 'Iogurte com chocolate' e 'Iogurte com cereais' continuam a contar (a palavra de sabor não manda); 'Mythos Iogurte' e 'Sem Lactose Iogurte' também (iogurte na 2.ª/3.ª palavra)", ["Iogurte com chocolate", "Iogurte com cereais", "Mythos Iogurte Estilo Grego", "Sem Lactose Iogurte Natural"].every(function(n){ return d(n, "125 g", 90) === "125g"; }));
   check.check("2. Pudim, flan, skyr, quark e kefir contam como iogurte", ["Pudim Flan de Baunilha", "Skyr natural", "Quark natural", "Kefir natural", "Flan Baunilha"].every(function(n){ return d(n, "100 g", 100) === "100g"; }));
+  // segunda auditoria: recall e precisão
+  function dg(name, emb, kcal, group){ var r = P.packForProduct(name, emb, kcal, null, group); return r.ok ? r.packageQuantity + r.packageUnit : "–"; }
+  check.check("2. A palavra de sabor logo depois do produto não anula: 'Iogurte cereais', 'Iogurte Biscuit', 'Leite chocolate'", d("Iogurte cereais mel e frutos secos", "125 g", 110) === "125g" && d("Iogurte Biscuit", "4 x 125 g", 120) === "125g" && d("Leite chocolate", "200 ml", 75) === "200ml");
+  check.check("2. Grafias e linhas de produto: Yogurt, Pudding, Estilo Grego, Bifidus, Petit Suisse, Sobremesa láctea, Mousse", [["Yogurt natural", "125 g"], ["Pudding de baunilha", "4 x 100 g"], ["Estilo Grego Natural", "4 x 115 g"], ["Bifidus Morango", "4 x 125 g"], ["Petit Suisse Morango", "6 x 55 g"], ["Sobremesa láctea proteica", "4 x 200 g"], ["Mousse de chocolate", "4 x 60 g"]].every(function(c){ return d(c[0], c[1], 100) !== "–"; }));
+  check.check("2. 'Petit Beurre' (bolacha) não é iogurte; palitos de queijo mozzarella não são queijo fresco", d("Petit Beurre", "150 g", 440) === "–" && d("Queijo Mozzarella Palitos de Queijo", "4 x 20 g", 300) === "–");
+  check.check("2. Iogurte líquido escolhe os ml quando a embalagem os indica ('160 g / 150 ml' → 150 ml)", d("Iogurte líquido morango", "160 g / 150 ml", 70) === "150ml");
+  check.check("2. Mozzarella e burrata '125 g (210 g)': a unidade é a bola de 125 g; para o iogurte o parêntesis continua ambíguo", d("Mozzarella Bola", "125 g (210 g)", 250) === "125g" && d("Burrata", "125 g (210 g)", 270) === "125g" && d("Iogurte", "125 g (210 g)", 60) === "–");
+  check.check("2. Bebidas vegetais e néctares pequenos contam; bebida energética e embalagem de 1 l não", d("Bebida de aveia", "250 ml", 45) === "250ml" && d("Néctar de pêssego", "200 ml", 50) === "200ml" && d("Batido de morango", "200 ml", 75) === "200ml" && d("Bebida energética", "250 ml", 45) === "–" && d("Bebida de aveia", "1 l", 45) === "–");
+  check.check("2. Nome só com o sabor ('Natural', 'Líquido Morango'): só em laticínios e só em copos de pack ou garrafas pequenas; nunca queijo ralado nem outros grupos", dg("Natural", "720 g (6 x 120 g)", 70, "laticinios") === "120g" && dg("Líquido Morango", "4 x 150 ml", 70, "laticinios") === "150ml" && dg("Natural", "720 g (6 x 120 g)", 70, "cereais") === "–" && dg("Natural", "120 g", 70, "laticinios") === "–" && dg("Queijo ralado", "4 x 50 g", 300, "laticinios") === "–" && dg("Magro Framboesa & Piri-Piri", "4 x 125 g", 90, "laticinios") === "–");
   check.check("2. Peso variável, ambíguo ou sem embalagem → nada a preencher", d("Queijo fresco", "Variável, ~0,180 kg", 100) === "–" && d("Iogurte", "125 g (210 g)", 60) === "–" && d("Iogurte", "", 60) === "–");
 })();
 
@@ -58,7 +67,7 @@ var G = require("../scripts/generate-pack-sizes.js");
 (function(){
   var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   function literal(src, varName){ var m = new RegExp("var " + varName + " = (/.*/i?);").exec(src); return m && m[1]; }
-  ["PERISHABLE_AFTER_OPENING", "NOT_PERISHABLE_HEAD", "NOT_PERISHABLE_ANYWHERE"].forEach(function(v){
+  ["PERISHABLE_AFTER_OPENING", "LEADS_WITH_PRODUCT", "DAIRY_NOT_PACK", "NOT_PERISHABLE_HEAD", "NOT_PERISHABLE_ANYWHERE"].forEach(function(v){
     var lib = literal(fs.readFileSync(path.join(__dirname, "..", "scripts", "lib", "pack-size.js"), "utf8"), v);
     check.check("3. " + v + " é igual na app e no gerador de SQL", !!lib && lib === literal(html, v));
   });
@@ -76,6 +85,10 @@ var G = require("../scripts/generate-pack-sizes.js");
   ];
   rows.forEach(function(r){ mergeFoodProduct(r, []); });
   check.check("4. Iogurte de 125 g e iogurte líquido de 170 ml do catálogo passam a ter embalagem conhecida", packSizeOf("Iogurte Natural (TesteA)") === 125 && packSizeOf("Iogurte Líquido (TesteB)") === 170);
+  mergeFoodProduct({name: "Natural", brand: "TesteE", food_group: "laticinios", kcal: 60, protein: 4, carbs: 5, fat: 2, package_quantity: 120, package_unit: "g"}, []);
+  mergeFoodProduct({name: "Mistura láctea em pó", brand: "TesteF", food_group: "laticinios", kcal: 380, protein: 25, carbs: 50, fat: 8, package_quantity: 200, package_unit: "g"}, []);
+  mergeFoodProduct({name: "Natural", brand: "TesteG", food_group: "cereais", kcal: 350, protein: 7, carbs: 78, fat: 1, package_quantity: 120, package_unit: "g"}, []);
+  check.check("4. Laticínio cujo nome é só o sabor ('Natural') com embalagem do catálogo passa a ter embalagem inteira; produtos em pó e outros grupos não", packSizeOf("Natural (TesteE)") === 120 && packSizeOf("Mistura láctea em pó (TesteF)") === 0 && packSizeOf("Natural (TesteG)") === 0);
   check.check("4. Bolachas com manteiga e arroz não ficam presos a embalagens inteiras (não se estragam depois de abertos)", packSizeOf("Bolachas com Manteiga (TesteC)") === 0 && packSizeOf("Arroz (TesteD)") === 0);
   check.check("4. O plano arredonda para embalagens inteiras: 100 g → 125 g; 250 g de iogurte líquido → 255 ml (1 e 2 embalagens de 170)", snapToWholePacks("Iogurte Natural (TesteA)", 100) === 125 && snapToWholePacks("Iogurte Líquido (TesteB)", 250) === 340 || snapToWholePacks("Iogurte Líquido (TesteB)", 250) === 170);
   check.check("4. O editor do catálogo explica que se indica o tamanho de UMA unidade de um pack", /Tamanho de uma embalagem individual/.test(appSource) && /UMA unidade/.test(appSource));
@@ -115,10 +128,10 @@ var G = require("../scripts/generate-pack-sizes.js");
 (function(){
   var recs = G.run(path.join(__dirname, "..", "scripts"));
   var ok = recs.filter(function(r){ return r.decision.ok; });
-  check.check("6. Das listas do repositório saem centenas de embalagens (≥ 200), todas entre 10 e 250 g/ml, de categorias iogurte, bebida ou queijo fresco", ok.length >= 200 && ok.every(function(r){ return r.decision.packageQuantity >= 10 && r.decision.packageQuantity <= 250 && (r.decision.packageUnit === "g" || r.decision.packageUnit === "ml") && ["iogurte", "bebida", "queijo fresco"].indexOf(r.decision.category) >= 0; }));
-  check.check("6. Nenhuma embalagem de queijo fresco passa de 125 g nem de bebida de 250 ml; nenhum nome tem ralado, fatias, curado, snack ou chocolate de leite (o 'molho de caramelo' de um pudim não conta)", ok.every(function(r){ var c = r.decision; return !(c.category === "queijo fresco" && c.packageQuantity > 125) && !(c.category === "bebida" && (c.packageQuantity > 250 || c.packageUnit !== "ml")) && (c.category === "iogurte" || !/ralad|fatia|curad|molho|snack|nachos|chocolate de leite/i.test(r.name)) && !/ralad|fatia|curad|snack|nachos|chocolate de leite/i.test(r.name); }));
+  check.check("6. Das listas do repositório saem centenas de embalagens (≥ 200), todas entre 10 e 250 g/ml, de categorias iogurte, bebida ou queijo fresco", ok.length >= 200 && ok.every(function(r){ return r.decision.packageQuantity >= 10 && r.decision.packageQuantity <= 250 && (r.decision.packageUnit === "g" || r.decision.packageUnit === "ml") && ["iogurte", "bebida", "queijo fresco"].indexOf(r.decision.category.replace(/ \(nome só com o sabor\)$/, "")) >= 0; }));
+  check.check("6. Nenhuma embalagem de queijo fresco passa de 125 g nem de bebida de 250 ml; nenhum nome tem ralado, fatias, curado, snack ou chocolate de leite (o 'molho de caramelo' de um pudim não conta)", ok.every(function(r){ var c = r.decision; return !(/^queijo fresco/.test(c.category) && c.packageQuantity > 125) && !(/^bebida/.test(c.category) && (c.packageQuantity > 250 || c.packageUnit !== "ml")) && (/^iogurte/.test(c.category) || !/ralad|fatia|curad|molho|snack|nachos|chocolate de leite/i.test(r.name)) && !/ralad|fatia|curad|snack|nachos|chocolate de leite/i.test(r.name); }));
   check.check("6. Nenhum EAN repetido nem vazio", new Set(ok.map(function(r){ return r.ean; })).size === ok.length && ok.every(function(r){ return /^\d+$/.test(r.ean); }));
-  check.check("6. Todos os produtos escolhidos são reconhecidos como perecíveis pela app", ok.every(function(r){ return isPerishableAfterOpening(r.name); }));
+  check.check("6. Todos os produtos escolhidos são reconhecidos como perecíveis pela app", ok.every(function(r){ return hasWholePackFood({name: r.name, food_group: r.group}, r.name + " (" + r.brand + ")") && P.hasWholePackFood(r.name, r.group); }));
   var sql = fs.readFileSync(path.join(__dirname, "..", "scripts", "output-pack-sizes.sql"), "utf8");
   var lines = sql.split("\n").filter(function(l){ return l && l.indexOf("--") !== 0; });
   check.check("6. O ficheiro SQL tem só UPDATEs com 'package_quantity is null' (nunca sobrescreve) e um por produto escolhido", lines.length === ok.length && lines.every(function(l){ return /^update food_products set package_quantity = [\d.]+, package_unit = '(g|ml)' where ean = '\d+' and package_quantity is null;/.test(l); }));
