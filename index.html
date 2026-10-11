@@ -6749,7 +6749,7 @@ function tplPerimetersCard(s){
   // os limiares da OMS/IDF e do NICE são para adultos: nos menores de 18 anos só se mostram os números; sem o sexo, não se classifica a cintura nem a razão cintura/anca
   var age = ageAtDate(s, todayISO()), adult = !(age > 0) || age >= 18;
   var noClass = !adult ? "classificação só para adultos (≥ 18 anos)" : null;
-  var noSexClass = noClass || (!sexKey ? "indica o sexo para classificar" : null);
+  var noSexClass = noClass || (!sexKey ? "classificação indisponível sem o sexo definido" : null); // neutro: nem o aluno nem o profissional podem alterar o sexo depois do registo
   var tiles = [];
   var forWaist = latestAssessmentWith(list, ["waist"]);
   if (forWaist){
@@ -6834,7 +6834,7 @@ function tplSkinfoldsCard(s, opts){
     tiles.push(kpiTile("Área de gordura do braço", cur.fat, "cm²", prevArea ? prevArea.fat : null, "down", 1, true));
   }
   var html = "<div class=\"card\"><div class=\"eyebrow\">Dobras cutâneas</div>";
-  if (r0.protocol) html += "<p class=\"muted-p\" style=\"margin-top:6px;\">Protocolo: <b>" + r0.label + "</b>" + (opts && opts.editable && r0.bodyFat != null && bodyFatCategory(sexKey, r0.bodyFat) ? " · " + bodyFatCategory(sexKey, r0.bodyFat) + " (ACE)" : "") /* a categoria é para o profissional: ao aluno mostram-se os números e a tendência */ + "</p>";
+  if (r0.protocol) html += "<p class=\"muted-p\" style=\"margin-top:6px;\">Protocolo: <b>" + r0.label + "</b>" + (opts && opts.editable && r0.bodyFat != null && r0.age >= 18 && bodyFatCategory(sexKey, r0.bodyFat) ? " · " + bodyFatCategory(sexKey, r0.bodyFat) + " (ACE)" : "") /* a categoria é para o profissional: ao aluno mostram-se os números e a tendência */ + "</p>";
   if (tiles.length) html += "<div class=\"kpi-grid\">" + tiles.join("") + "</div>";
   if (opts && opts.editable) r0.warnings.forEach(function(w){ html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--warn);\">⚠ " + escapeHtml(w) + "</p>"; }); // avisos de método: para quem mede
   var cols = list.slice(0, 4), rows = SKINFOLD_SITES.filter(function(site){ return cols.some(function(a){ return posNum(a.skinfolds[site[0]]) > 0; }); });

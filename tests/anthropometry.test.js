@@ -110,7 +110,7 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var minor = tplPerimetersCard({sex: "Feminino", age: 14, height: 160, assessments: [{date: "2026-09-15", waist: 84, hip: 97}]});
   check.check("5. Menores de 18 anos: só os números, com a nota 'classificação só para adultos', sem vermelho nem 'risco'", /só para adultos/.test(minor) && !/risco aumentado/.test(minor) && !/adiposidade central/.test(minor) && !/class="d bad"/.test(minor));
   var noSex = tplPerimetersCard({sex: "Prefiro não dizer", age: 30, height: 160, assessments: [{date: "2026-09-15", waist: 92, hip: 104}]});
-  check.check("5. Sem sexo definido não classifica nem a cintura nem a razão cintura/anca (já não usa o limiar feminino em silêncio); a cintura/altura classifica-se", (noSex.match(/indica o sexo para classificar/g) || []).length === 2 && /adiposidade central aumentada/.test(noSex));
+  check.check("5. Sem sexo definido não classifica nem a cintura nem a razão cintura/anca (já não usa o limiar feminino em silêncio); a cintura/altura classifica-se", (noSex.match(/classificação indisponível sem o sexo definido/g) || []).length === 2 && !/indica o sexo/.test(noSex) && /adiposidade central aumentada/.test(noSex));
   var legacy = tplPerimetersCard({sex: "Feminino", height: 160, assessments: [{date: "2026-09-15", weight: 60, waist: 84, hip: 96, chest: 90, arm: 28, thigh: 55}]});
   check.check("5. Avaliações antigas (waist, hip, chest, arm, thigh) continuam a aparecer, com o lado direito indicado", /Braço relaxado \(D\)/.test(legacy) && /Coxa \(D\)/.test(legacy) && /Peito/.test(legacy));
   var levels = [0.38, 0.45, 0.55, 0.65].map(function(r){ return tplPerimetersCard({sex: "Masculino", height: 100, assessments: [{date: "2026-09-15", waist: r * 100}]}); });
@@ -135,6 +135,8 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var r1 = skinfoldResult(s, s.assessments[0]), r2 = skinfoldResult(s, s.assessments[1]);
   check.check("5b. A variação compara com a medição anterior do MESMO protocolo (JP3 de 10/09, não o D-W4 de agosto)", r1.protocol === "jp3" && r2.protocol === "jp3" && /▼ 4,0|▼ 4\.0 mm/.test(h.replace(/<[^>]+>/g, " ")) || /▼ 4\.0/.test(h));
   var hPro = tplSkinfoldsCard(s, {editable: true});
+  var teen = tplSkinfoldsCard({sex: "Masculino", age: 16, assessments: [{date: "2026-10-10", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}, sfProtocol: "dw4"}]}, {editable: true});
+  check.check("5b. A categoria ACE (bandas de adultos) não aparece para menores de 18 anos, nem no cartão do profissional", !/\(ACE\)/.test(teen) && /\(ACE\)/.test(tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [{date: "2026-10-10", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}, sfProtocol: "dw4"}]}, {editable: true})));
   check.check("5b. A categoria ACE só aparece ao profissional (o aluno vê os números e a tendência); o aviso do erro aparece a ambos", /\(ACE\)/.test(hPro) && !/\(ACE\)/.test(h) && /±3–4 %/.test(h) && /±3–4 %/.test(hPro));
   check.check("5b. A tabela tem as dobras medidas e as datas", /Tricipital/.test(h) && /Peitoral/.test(h) && /Bicipital/.test(h) && /10\/10\/2026/.test(h));
   check.check("5b. Com perímetro do braço e tricipital na mesma avaliação mostra as áreas do braço", /Área muscular do braço/.test(h) && /Área de gordura do braço/.test(h));
