@@ -4300,6 +4300,7 @@ function foodProductDisplayName(row, retailers){
   return base;
 }
 
+var CATALOG_MERGED = {}; // nomes que vieram do catálogo (duas linhas com o mesmo nome e marca não se misturam)
 function mergeFoodProduct(row, retailers){
   if (!row || !row.name || !row.brand) return false;
   var name = foodProductDisplayName(row, retailers);
@@ -4307,10 +4308,19 @@ function mergeFoodProduct(row, retailers){
   var hasPack = (unit === "g" || unit === "ml") && row.package_quantity > 0;
   var wholePack = hasPack && row.package_quantity <= 350 && hasWholePackFood(row, name);
   if (FOOD_DB[name]){
-    // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods); só acrescenta o tamanho da embalagem se ainda não se conhecia
-    if (wholePack && !(FOOD_PACKS[name] > 0)) FOOD_PACKS[name] = row.package_quantity;
+    // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods); a um alimento da app (não de outra linha do catálogo)
+    // só acrescenta o tamanho da embalagem se ainda não se conhecia, e a quantidade-padrão passa a ser a embalagem
+    if (wholePack && !CATALOG_MERGED[name] && !(FOOD_PACKS[name] > 0)){
+      FOOD_PACKS[name] = row.package_quantity;
+      Object.keys(FOOD_GROUPS).forEach(function(g){
+        FOOD_GROUPS[g].forEach(function(o){
+          if (o.name === name && /^100 (g|ml)$/.test(o.qty)) o.qty = qtyStringWithBeverageUnit(name, row.package_quantity + " g");
+        });
+      });
+    }
     return false;
   }
+  CATALOG_MERGED[name] = true;
   FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
   if (wholePack) FOOD_PACKS[name] = row.package_quantity; // embalagem individual conhecida: o plano usa embalagens inteiras
   var group = FOOD_GROUPS[resolveGroup(row.food_group)];
@@ -6781,7 +6791,7 @@ function tplPerimetersCard(s){
   var tiles = [];
   var forWaist = latestAssessmentWith(list, ["waist"]);
   if (forWaist){
-    var wc = posNum(forWaist.waist), risk = noSexClass ? null : waistRiskLevel(sexKey, wc);
+    var wc = posNum(forWaist.waist), risk = noSexClass ? null : waistRiskLevel(sexKey, roundReading(wc)); // classifica o valor que se mostra (1 casa)
     tiles.push(kpiTileText("Cintura", ptNum(wc, 1) + "<small> cm</small>", risk == null ? "flat" : (risk === 0 ? "good" : "bad"),
       risk == null ? noSexClass : (risk === 0 ? "sem risco acrescido" : (risk === 1 ? "risco aumentado" : "risco substancialmente aumentado"))));
   }

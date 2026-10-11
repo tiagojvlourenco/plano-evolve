@@ -26,7 +26,7 @@ var CATEGORIES = [
   // copos de iogurte e semelhantes (também líquidos): até 200 g/ml (garrafas de iogurte líquido, até 250)
   {key: "iogurte", head: new RegExp(HEAD3 + "iogurte|yogurte|yogurt|yogur|skyr|quark|kefir|bifidus|petit[ -](?:suisse|queijinho|gervais)|estilo grego|pudim|pudding|flan|sobremesa|mousse)", "i"), max: 200, maxLiquid: 250, kcalMax: 250},
   // unidades individuais de queijo fresco (2 x 62,5 g...) e cottage, requeijão, burrata, mozzarella fresca
-  {key: "queijo fresco", head: new RegExp(HEAD3 + "queijo fresco|queijo (?:de \\S+ )?fresco|queijo cottage|cottage|requeij|burrata|ricotta|moz{1,2}arel{1,2}a)", "i"), max: 125, kcalMax: 350,
+  {key: "queijo fresco", head: new RegExp(HEAD3 + "queijo fresco|queijo (?:de \\S+ )?fresco|queijo (?:quark|skyr|grego|estilo grego)|queijo cottage|cottage|requeij|burrata|ricotta|moz{1,2}arel{1,2}a)", "i"), max: 125, kcalMax: 350,
     exclude: /ralad|fatiad|fatias|pizza|gratinar|massas|mexicano|culin|barrar|cremos|creme|cremette|mousse|curad|palitos/i},
   // leite, bebidas vegetais, batidos, néctares e sumos em pacote pequeno
   {key: "bebida", head: new RegExp(HEAD3 + "leite|bebida (?:vegetal|de |l[áa]ctea|[àa] base|biol[óo]gica)|batido|n[ée]ctar|nectar[íi]ssimo|sumo)", "i"), max: 250, kcalMax: 120, unit: "ml"}
@@ -116,7 +116,7 @@ function servingCategory(name, kcalPer100){
   for (var i = 0; i < CATEGORIES.length; i++){
     var c = CATEGORIES[i];
     if (!c.head.test(name)) continue;
-    if (c.key === "iogurte" && SAVORY.test(name)) return null;
+    if (c.key === "iogurte" && SAVORY.test(name)) continue; // "Mousse de queijo com alho" não é iogurte; "Queijo fresco estilo grego" ainda pode ser queijo fresco
     if (c.key !== "iogurte" && NEVER.test(name)) return null;   // um iogurte pode ter "chocolate" no sabor: só os outros têm de passar pelas exclusões
     if (c.exclude && c.exclude.test(name)) return null;
     if (isFinite(kcalPer100) && kcalPer100 > c.kcalMax) return null; // nutrição incoerente com a categoria: "leite" que é pó de sobremesa, "presunto" que é snack...

@@ -62,7 +62,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 2024060091516,Bebida proteica sabor baunilha,Milsani,lista-aldi.csv,332 ml / 350 g,ignorar,,,,código de peso variável (EAN 2...)
 2014000068180,Bebida láctea fermentada Mazada,Milsani,lista-aldi.csv,484 ml,ignorar,,,,código de peso variável (EAN 2...)
 4068428038698,Iogurte proteico de morango,Milsani,lista-aldi.csv,200 gram,preencher,200,g,iogurte,embalagem individual
-4061458032247,Queijo quark 40% gordura,Milsani,lista-aldi.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4061458032247,Queijo quark 40% gordura,Milsani,lista-aldi.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de queijo fresco
 2014060091517,Bebida proteica sabor chocolate,Milsani,lista-aldi.csv,332 ml / 350 g,ignorar,,,,código de peso variável (EAN 2...)
 2024000009014,Leite condensado magro,Milsani,lista-aldi.csv,450 g,ignorar,,,,código de peso variável (EAN 2...)
 4068264002587,Leite UHT meio-gordo,Milsani,lista-aldi.csv,,ignorar,,,,sem embalagem
@@ -1817,7 +1817,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8480000114433,Quema Grasas,Hacendado,lista-mercadona.csv,"30 g (20 x 1,5 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000682987,Gelatina sabor mirtilo,Hacendado,lista-mercadona.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000514035,Queijo flamengo,Hacendado,lista-mercadona.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8480000512291,Queijo fresco quark,Hacendado,lista-mercadona.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+8480000512291,Queijo fresco quark,Hacendado,lista-mercadona.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de queijo fresco
 8480000682918,Gelatina sabor morango,Hacendado,lista-mercadona.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000657381,Calendário de advento de chocolate de leite,Hacendado,lista-mercadona.csv,75 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000211989,Iogurtes sabor banana,Hacendado,lista-mercadona.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
@@ -1972,7 +1972,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607778000949,Queijo fresco de cabra,Campainha,lista-outros-supermercados-2.csv,130 g,ignorar,,,,embalagem grande (130 g): não é uma dose individual de queijo fresco
 3523230038720,Queijo de cabra e vaca em rolo (duo),Soignon,lista-outros-supermercados-2.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5609494000029,Queijo fresco de ovelha,Queijaria das Romãs,lista-outros-supermercados-2.csv,,ignorar,,,,sem embalagem
-4036303138481,Queijo quark (Speisequark),Milram,lista-outros-supermercados-2.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4036303138481,Queijo quark (Speisequark),Milram,lista-outros-supermercados-2.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de queijo fresco
 5603722520570,Quark proteico natural,Mimosa,lista-outros-supermercados-2.csv,280 g (2 x 140 g),preencher,140,g,iogurte,unidade de um pack de 2
 8012900008125,Mascarpone,Solo Italia,lista-outros-supermercados-2.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604156000089,Requeijão de ovelha pasteurizado,Lactiser,lista-outros-supermercados-2.csv,~250 g,ignorar,,,,peso variável

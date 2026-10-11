@@ -191,6 +191,11 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   check.check("8. A média arredonda os empates sempre para cima (binário não manda): 12,1+12,2 → 12,2; 10,1+10,2 → 10,2; 40+40,1 → 40,1; 10,1+11,2 → 10,7", combineReadings([12.1, 12.2], 5).value === 12.2 && combineReadings([10.1, 10.2], 5).value === 10.2 && combineReadings([40, 40.1], 5).value === 40.1 && combineReadings([10.1, 11.2], 5).value === 10.7);
   check.check("8. Uma única leitura guarda-se tal como foi escrita (sem arredondar a 0,1): 12,25 e 82,25 ficam iguais", combineReadings([12.25], 5).value === 12.25 && readSkinfoldSet(fakeForm({sfTriceps: "12.25", sfSubscapular: "10.04"}, false, false)).values.triceps === 12.25 && readPerimeterSet(fakeForm({asWaist: "82.25"}, false, false)).values.waist === 82.25);
 
+  // a classificação da cintura usa o valor que se mostra (1 casa): 87,98 cm aparece como 88,0 e classifica como 88
+  function waistTile(sex, w){ return tplPerimetersCard({sex: sex, height: 175, age: 30, assessments: [{date: "2026-10-10", waist: w}]}).replace(/<[^>]+>/g, " "); }
+  check.check("8. Cintura de 87,98 cm (mostrada como 88,0) classifica como risco substancialmente aumentado na mulher; 93,98 cm (94,0) como risco aumentado no homem", /88,0[^]*risco substancialmente aumentado/.test(waistTile("Feminino", 87.98)) && /94,0[^]*risco aumentado/.test(waistTile("Masculino", 93.98)));
+  check.check("8. O mesmo valor mostrado dá a mesma classe: homem com 94 e com 93,98 (ambos 94,0 cm)", (waistTile("Masculino", 94).match(/risco aumentado|sem risco acrescido|risco substancialmente aumentado/) || [])[0] === (waistTile("Masculino", 93.98).match(/risco aumentado|sem risco acrescido|risco substancialmente aumentado/) || [])[0]);
+
   // leitura do formulário (campo falso): o modo de 2–3 leituras liga as caixas _2 e _3
   function fakeForm(map, multiPerim, multiSkin){
     return {querySelector: function(sel){
