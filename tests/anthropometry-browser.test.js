@@ -80,7 +80,7 @@ if (!pw || !chromiumPath){
   check.check("5. Aparece o cartão de perímetros com as zonas e a diferença D/E", titles5.indexOf("Perímetros") >= 0 && /Pescoço/.test(body) && /Braço relaxado \(D\)/.test(body) && /Diferença entre o lado direito e o esquerdo/.test(body));
   check.check("5. Aparece o cartão de dobras com o protocolo, a soma e a % de gordura", titles5.indexOf("Dobras cutâneas") >= 0 && /Jackson-Pollock 7 dobras/.test(body) && /Σ 7 dobras/i.test(body) && /% gordura \(dobras\)/i.test(body));
   check.check("5. Sem peso, não aparecem massas em kg (não se inventa peso)", !/Massa gorda \(dobras\)/i.test(body));
-  check.check("5. A tabela de avaliações marca a visita com 'perímetros' e 'dobras'", /· perímetros/.test(body) && /· dobras/.test(body));
+  check.check("5. A tabela de avaliações marca a visita com 'perímetros' e 'dobras'", /perímetros · dobras/.test(body));
   check.check("5. Cintura 82 cm (mulher: ≥ 80) aparece como risco aumentado, se a aluna for mulher; ou sem risco, se homem", /risco aumentado|sem risco acrescido/.test(body));
 
   // 6. protocolo explícito sem as dobras todas
@@ -103,7 +103,7 @@ if (!pw || !chromiumPath){
   // 8. apagar a visita
   await page.click('#modeSwitch button[data-mode="pro"]');
   await page.click('#proApp .pro-nav-item[data-t="evolucao"]');
-  var proRows = page.locator("#proTabContent table.assess-table tbody tr").filter({hasText: "· dobras"});
+  var proRows = page.locator("#proTabContent table.assess-table tbody tr").filter({hasText: "perímetros · dobras"});
   var dels = await page.locator("#proTabContent .assess-del").count();
   var rowText = await proRows.first().innerText();
   await proRows.first().locator(".assess-del").click();

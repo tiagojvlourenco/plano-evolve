@@ -42,7 +42,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
     {date:"2026-08-15", weight:62, waist:88, hip:97, chest:91, arm:28.5, thigh:56}
   ]};
   var h = tplPerimetersCard(s);
-  check.check("4. Mostra a tabela de perímetros com variação e as razões", /Perímetros/.test(h) && /Cintura \/ anca/.test(h) && /Cintura \/ altura/.test(h) && /▼ 4\.0/.test(h));
+  check.check("4. Mostra a tabela de perímetros com variação e as razões", /Perímetros/.test(h) && /Cintura \/ anca/.test(h) && /Cintura \/ altura/.test(h) && /▼ 4,0/.test(h));
   check.check("4. Cintura/altura 84/160 = 0,53 → adiposidade central aumentada; cintura/anca 0,88 ≥ 0,85 (mulher) → risco aumentado", /adiposidade central aumentada/.test(h) && /a partir de 0,85: risco aumentado/.test(h));
   check.check("4. Sem perímetros, o cartão não aparece", tplPerimetersCard({assessments:[{date:"2026-09-01", weight:60, bodyFat:20}]}) === "");
 })();

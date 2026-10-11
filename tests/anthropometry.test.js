@@ -58,10 +58,13 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var byBirth = skinfoldResult({sex: "Masculino", age: 99, birthDate: "1990-06-15"}, {date: "2026-06-14", skinfolds: all7});
   check.check("2. A idade vem da data de nascimento na data da avaliação (35, não a idade guardada)", byBirth.age === 35 && skinfoldResult({sex: "Masculino", age: 41}, {date: "2026-06-14", skinfolds: all7}).age === 41);
   // validade das equações
-  var young = skinfoldResult({sex: "Masculino", age: 16}, {date: "2026-10-01", skinfolds: all7}), old = skinfoldResult({sex: "Masculino", age: 70}, {date: "2026-10-01", skinfolds: all7});
-  check.check("2. Fora da idade de validação (JP 18–61) avisa mas calcula", /fora do intervalo/.test(young.warnings.join(" ")) && young.bodyFat != null && /fora do intervalo/.test(old.warnings.join(" ")));
+  var young = skinfoldResult({sex: "Masculino", age: 16}, {date: "2026-10-01", skinfolds: all7, sfProtocol: "jp7"}), old = skinfoldResult({sex: "Masculino", age: 70}, {date: "2026-10-01", skinfolds: all7, sfProtocol: "jp7"});
+  check.check("2. Um protocolo JP escolhido à mão fora da idade de validação (18–61) avisa mas calcula", /fora do intervalo/.test(young.warnings.join(" ")) && young.bodyFat != null && /fora do intervalo/.test(old.warnings.join(" ")));
+  var autoYoung = skinfoldResult({sex: "Masculino", age: 16}, {date: "2026-10-01", skinfolds: all7}), autoOld = skinfoldResult({sex: "Masculino", age: 70}, {date: "2026-10-01", skinfolds: all7}), autoMid = skinfoldResult({sex: "Masculino", age: 35}, {date: "2026-10-01", skinfolds: all7});
+  check.check("2. O automático prefere a equação validada para a idade: D-W4 aos 16 e aos 70 anos (JP7 só aos 18–61), JP7 aos 35", autoYoung.protocol === "dw4" && autoOld.protocol === "dw4" && autoMid.protocol === "jp7" && autoYoung.warnings.length === 0);
+  check.check("2. Se só há dobras de um protocolo fora da idade, usa-o mesmo assim (com aviso)", skinfoldResult({sex: "Masculino", age: 66}, {date: "2026-10-01", skinfolds: {chest: 10, abdominal: 20, thigh: 15}}).protocol === "jp3" && /fora do intervalo/.test(skinfoldResult({sex: "Masculino", age: 66}, {date: "2026-10-01", skinfolds: {chest: 10, abdominal: 20, thigh: 15}}).warnings.join(" ")));
   check.check("2. D-W aceita 16 e 72 anos sem avisar", skinfoldResult({sex: "Masculino", age: 16}, {date: "2026-10-01", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}}).warnings.length === 0 && skinfoldResult({sex: "Feminino", age: 72}, {date: "2026-10-01", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}}).warnings.length === 0);
-  check.check("2. Mulheres com mais de 40 anos em JP: aviso de menor fiabilidade", /mais de 40/.test(skinfoldResult({sex: "Feminino", age: 45}, {date: "2026-10-01", skinfolds: {triceps: 18, suprailiac: 15, thigh: 25}}).warnings.join(" ")));
+  check.check("2. Mulheres com mais de 40 anos em JP: aviso de menor fiabilidade", /a partir dos 40/.test(skinfoldResult({sex: "Feminino", age: 45}, {date: "2026-10-01", skinfolds: {triceps: 18, suprailiac: 15, thigh: 25}}).warnings.join(" ")));
   var implausible = skinfoldResult(M, {date: "2026-10-01", skinfolds: {chest: 1, abdominal: 1, thigh: 1}});
   check.check("2. Resultado implausível (< 2 %) não é apresentado como % de gordura e avisa", implausible.bodyFat === null && /não é plausível/.test(implausible.warnings.join(" ")));
 })();
@@ -84,7 +87,8 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var w = anthroPlausibilityWarnings({neck: 60, wrist: 11}, {triceps: 2, biceps: 70}, 170).join(" | ");
   check.check("4. Perímetros e dobras invulgares avisam (pescoço 60, punho 11, tricipital 2, bicipital 70)", /Pescoço 60,0 cm é muito alto/.test(w) && /Punho 11,0 cm é muito baixo/.test(w) && /tricipital de 2,0 mm é muito baixa/.test(w) && /bicipital de 70,0 mm é muito alta/.test(w));
   check.check("4. Braço contraído menor do que o relaxado, ou 13 cm maior, avisa", anthroPlausibilityWarnings({arm: 32, armFlexed: 30}, {}, 170).length === 1 && anthroPlausibilityWarnings({arm: 28, armFlexed: 42}, {}, 170).length === 1 && anthroPlausibilityWarnings({arm: 28, armFlexed: 33}, {}, 170).length === 0);
-  check.check("4. Anca muito menor do que a cintura, pescoço ≥ cintura, tornozelo ≥ gémeo, gémeo ≥ coxa avisam", anthroPlausibilityWarnings({waist: 100, hip: 90}, {}, 0).some(function(x){ return /anca/.test(x); }) && anthroPlausibilityWarnings({neck: 60, waist: 58}, {}, 0).some(function(x){ return /pescoço/.test(x); }) && anthroPlausibilityWarnings({ankle: 30, calf: 28}, {}, 0).some(function(x){ return /tornozelo/.test(x); }) && anthroPlausibilityWarnings({calf: 50, thigh: 48}, {}, 0).some(function(x){ return /gémeo é maior/.test(x); }));
+  check.check("4. Cintura maior do que a anca NÃO avisa (é frequente na obesidade central): só uma razão cintura/anca fora de 0,55–1,30", anthroPlausibilityWarnings({waist: 112, hip: 105}, {}, 0).length === 0 && anthroPlausibilityWarnings({waist: 140, hip: 90}, {}, 0).some(function(x){ return /cintura\/anca/.test(x); }));
+  check.check("4. Pescoço ≥ cintura, tornozelo ≥ gémeo, gémeo ≥ coxa avisam", anthroPlausibilityWarnings({neck: 60, waist: 58}, {}, 0).some(function(x){ return /pescoço/.test(x); }) && anthroPlausibilityWarnings({ankle: 30, calf: 28}, {}, 0).some(function(x){ return /tornozelo/.test(x); }) && anthroPlausibilityWarnings({calf: 50, thigh: 48}, {}, 0).some(function(x){ return /gémeo é maior/.test(x); }));
   check.check("4. Razão cintura/altura invulgar (0,25) avisa", anthroPlausibilityWarnings({waist: 45}, {}, 180).some(function(x){ return /cintura\/altura/.test(x); }));
   check.check("4. Os limites rígidos de cada perímetro cobrem valores reais de punho e tornozelo (a antiga regra 20–250 cm rejeitava-os)", perimeterField("wrist")[4] <= 14 && perimeterField("ankle")[4] <= 18 && perimeterField("neck")[4] < 30);
   check.check("4. Cada limite está ordenado: rejeitar-min < avisar-min < avisar-max < rejeitar-max", PERIMETER_FIELDS.every(function(f){ return f[4] < f[6] && f[6] < f[7] && f[7] < f[5]; }));
@@ -100,9 +104,13 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var h = tplPerimetersCard(s);
   check.check("5. Mostra as zonas do corpo e só os perímetros medidos", /Tronco/.test(h) && /Membros superiores/.test(h) && /Membros inferiores/.test(h) && /Pescoço/.test(h) && /Gémeo \(D\)/.test(h) && !/Ombros/.test(h) && !/Punho/.test(h));
   check.check("5. Mostra as últimas medições em colunas, da mais recente para a mais antiga", h.indexOf("10/10/2026") < h.indexOf("10/09/2026") && h.indexOf("10/09/2026") < h.indexOf("10/08/2026"));
-  check.check("5. A variação é face à medição anterior DESSE perímetro (cintura 92 vs 95 = ▼ 3,0; anca 100 vs 101 — a visita de 10/09 não a mediu)", /▼ 3\.0/.test(h) && /▼ 1\.0/.test(h));
+  check.check("5. A variação é face à medição anterior DESSE perímetro (cintura 92 vs 95 = ▼ 3,0; anca 100 vs 101 — a visita de 10/09 não a mediu)", /▼ 3,0/.test(h) && /▼ 1,0/.test(h) && !/▼ 3\.0/.test(h));
   check.check("5. Cintura 92 cm (homem) → sem risco acrescido; razão cintura/anca 0,92 → risco; cintura/altura 0,51 → aumentada", /sem risco acrescido/.test(h) && /a partir de 0,90: risco aumentado/.test(h) && /adiposidade central aumentada/.test(h));
   check.check("5. Mostra a diferença D/E da última medição (braço 1,0 cm; coxa 1,5 cm)", /Braço relaxado 1,0 cm/.test(h) && /Coxa 1,5 cm/.test(h));
+  var minor = tplPerimetersCard({sex: "Feminino", age: 14, height: 160, assessments: [{date: "2026-09-15", waist: 84, hip: 97}]});
+  check.check("5. Menores de 18 anos: só os números, com a nota 'classificação só para adultos', sem vermelho nem 'risco'", /só para adultos/.test(minor) && !/risco aumentado/.test(minor) && !/adiposidade central/.test(minor) && !/class="d bad"/.test(minor));
+  var noSex = tplPerimetersCard({sex: "Prefiro não dizer", age: 30, height: 160, assessments: [{date: "2026-09-15", waist: 92, hip: 104}]});
+  check.check("5. Sem sexo definido não classifica nem a cintura nem a razão cintura/anca (já não usa o limiar feminino em silêncio); a cintura/altura classifica-se", (noSex.match(/indica o sexo para classificar/g) || []).length === 2 && /adiposidade central aumentada/.test(noSex));
   var legacy = tplPerimetersCard({sex: "Feminino", height: 160, assessments: [{date: "2026-09-15", weight: 60, waist: 84, hip: 96, chest: 90, arm: 28, thigh: 55}]});
   check.check("5. Avaliações antigas (waist, hip, chest, arm, thigh) continuam a aparecer, com o lado direito indicado", /Braço relaxado \(D\)/.test(legacy) && /Coxa \(D\)/.test(legacy) && /Peito/.test(legacy));
   var levels = [0.38, 0.45, 0.55, 0.65].map(function(r){ return tplPerimetersCard({sex: "Masculino", height: 100, assessments: [{date: "2026-09-15", waist: r * 100}]}); });
@@ -133,13 +141,23 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   check.check("5b. A massa em kg usa o peso da avaliação, ou a pesagem desse dia (81 kg a 10/09)", weightForAssessment(s, s.assessments[0]) === 80 && weightForAssessment(s, s.assessments[1]) === 81 && weightForAssessment(s, {date: "2000-01-01"}) === null);
   var small = tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [
     {date: "2026-10-10", skinfolds: {chest: 10, abdominal: 20, thigh: 15}, sfProtocol: "jp3"}, {date: "2026-09-10", skinfolds: {chest: 10.5, abdominal: 20, thigh: 15}, sfProtocol: "jp3"}]});
-  check.check("5b. Variação da % de gordura inferior a 2 pontos: avisa que está dentro do erro do método", /dentro do erro do método/.test(small));
+  check.check("5b. Soma das dobras com variação inferior a 5 %: avisa que pode ser só erro de medição", /variou menos de 5 %/.test(small));
+  var big = tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [
+    {date: "2026-10-10", skinfolds: {chest: 9, abdominal: 18, thigh: 13.5}, sfProtocol: "jp3"}, {date: "2026-09-10", skinfolds: {chest: 10, abdominal: 20, thigh: 15}, sfProtocol: "jp3"}]});
+  check.check("5b. Uma descida de 10 % em todas as dobras (soma 45 → 40,5) não é apresentada como ruído", !/variou menos de 5 %/.test(big));
   check.check("5b. Sem pesagem não inventa kg (apenas % e soma)", !/Massa gorda \(dobras\)/.test(small) && /% gordura \(dobras\)/.test(small));
   check.check("5b. Sem dobras, nada; protocolo desconhecido e texto malicioso não entram no HTML", tplSkinfoldsCard({assessments: [{date: "2026-09-01", weight: 60}]}) === "" && tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [{date: "2026-09-01", skinfolds: {chest: 10, abdominal: 20, thigh: 15}, sfProtocol: "<img src=x onerror=1>", sfSex: "<b>"}]}).indexOf("<img") === -1);
-  var junk = tplSkinfoldsCard({sex: "Feminino", age: "x", assessments: [{date: "2026-09-01", skinfolds: {triceps: "12", suprailiac: "abc", thigh: null}}, {date: "2026-08-01", skinfolds: null}, null]});
+  var junk = tplSkinfoldsCard({sex: "Feminino", age: "x", assessments: [{date: "2026-09-01", skinfolds: {triceps: "12", suprailiac: "abc", thigh: null}}, {date: "2026-08-01", skinfolds: null}, null]}, {editable: true});
   check.check("5b. Valores inválidos (texto, null) não rebentam: ficam só as dobras válidas e o aviso de que faltam dobras", /Tricipital/.test(junk) && /Faltam dobras/.test(junk) && !/abc/.test(junk));
   var noAge = skinfoldResult({sex: "Feminino", age: "x"}, {date: "2026-09-01", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}});
-  check.check("5b. Idade desconhecida: não calcula e avisa que falta a idade", noAge.bodyFat === null && /idade/.test(noAge.warnings.join(" ")) && /idade/.test(tplSkinfoldsCard({sex: "Feminino", age: "x", assessments: [{date: "2026-09-01", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}}]})));
+  check.check("5b. Idade desconhecida: não calcula e avisa que falta a idade", noAge.bodyFat === null && /idade/.test(noAge.warnings.join(" ")) && /idade/.test(tplSkinfoldsCard({sex: "Feminino", age: "x", assessments: [{date: "2026-09-01", skinfolds: {biceps: 6, triceps: 10, subscapular: 14, suprailiac: 12}}]}, {editable: true})));
+  var stuView = tplSkinfoldsCard({sex: "Feminino", age: 70, assessments: [{date: "2026-09-01", skinfolds: {triceps: 18, suprailiac: 15, thigh: 25}, sfProtocol: "jp3"}]});
+  check.check("5b. O aluno não vê avisos de método (idade fora do intervalo, falta de sexo...) nem conselhos de medição; vê uma nota curta e neutra", !/⚠/.test(stuView) && !/mesma pessoa/.test(stuView) && /margem de erro de ±3–4 %/.test(stuView) && /⚠/.test(tplSkinfoldsCard({sex: "Feminino", age: 70, assessments: [{date: "2026-09-01", skinfolds: {triceps: 18, suprailiac: 15, thigh: 25}, sfProtocol: "jp3"}]}, {editable: true})));
+  // alunos com sexo diferente nas equações (sexo 'Outro'): não se compara a tendência entre equações e dobras diferentes
+  var mixed = tplSkinfoldsCard({sex: "Outro", age: 30, assessments: [
+    {date: "2026-10-10", skinfolds: {chest: 8, abdominal: 14, thigh: 12}, sfProtocol: "jp3", sfSex: "M"},
+    {date: "2026-09-01", skinfolds: {triceps: 18, suprailiac: 15, thigh: 25}, sfProtocol: "jp3", sfSex: "F"}]});
+  check.check("5b. Visitas de sexos diferentes nas equações (sexo 'Outro') não geram variação entre si", /Σ 3 dobras/.test(mixed) && !/▼|▲/.test(mixed.replace(/<table[\s\S]*<\/table>/, "")));
 })();
 
 // ---- 7. Formulário e tabela de avaliações ----
@@ -149,7 +167,8 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   check.check("7. Quando o sexo é conhecido não pergunta de que sexo aplicar as equações", f.indexOf('id="sfSex"') === -1 && tplAssessForm({sex: "Outro"}).indexOf('id="sfSex"') >= 0 && tplAssessForm({}).indexOf('id="sfSex"') >= 0);
   check.check("7. O protocolo oferece Automático, JP7, JP3 e D-W4", /value="auto"/.test(f) && /value="jp7"/.test(f) && /value="jp3"/.test(f) && /value="dw4"/.test(f));
   var t = tplAssessTable({assessments: [{date: "2026-09-15", weight: 0, waist: 80}, {date: "2026-09-16", weight: 0, skinfolds: {triceps: 10}}, {date: "2026-09-17", weight: 60, bodyFat: 20}]}, true);
-  check.check("7. A tabela de avaliações indica quando uma visita tem perímetros ou dobras", /· perímetros/.test(t) && /· dobras/.test(t) && (t.match(/· perímetros/g) || []).length === 1);
+  check.check("7. A tabela de avaliações indica quando uma visita tem perímetros ou dobras, numa segunda linha (não alarga a coluna da data)", /<br><span class="atime">perímetros<\/span>/.test(t) && /<br><span class="atime">dobras<\/span>/.test(t) && (t.match(/perímetros/g) || []).length === 1);
+  check.check("7. Uma visita com perímetros e dobras junta as duas etiquetas na mesma linha", /<br><span class="atime">perímetros · dobras<\/span>/.test(tplAssessTable({assessments: [{date: "2026-09-15", weight: 0, waist: 80, skinfolds: {triceps: 10}}]}, true)));
   check.check("7. Os cartões entram no separador de avaliação do profissional e do aluno", /html \+= tplPerimetersCard\(s\);\s*html \+= tplSkinfoldsCard\(s, opts\);/.test(appSource));
 })();
 check.summarize();
