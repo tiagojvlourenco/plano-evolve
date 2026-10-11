@@ -180,7 +180,7 @@
     background:var(--surface); border:1px solid var(--line-strong); border-radius:18px; display:flex; box-shadow:0 12px 30px -10px rgba(0,0,0,0.5); z-index:20;
     padding:6px;
   }
-  .tabbar button{flex:1; min-height:52px; background:transparent; border:none; color:var(--muted); padding:8px 2px; border-radius:14px; font-size:0.62rem; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:var(--sans); letter-spacing:0.02em; transition:background .15s,color .15s;}
+  .tabbar button{flex:1; min-height:52px; background:transparent; border:none; color:var(--muted); padding:8px 2px; border-radius:14px; font-size:0.74rem; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:var(--sans); letter-spacing:0.02em; transition:background .15s,color .15s;}
   .tabbar button svg{width:20px; height:20px; flex:none;}
   .tabbar button:hover{color:var(--ink);}
   .tabbar button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
@@ -328,6 +328,17 @@
 
   .detail-header{display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap;}
   .detail-header .sname{font-family:var(--display); font-size:1.5rem; font-weight:800;}
+  .pro-back{min-height:44px; min-width:44px; padding:0; font-size:1.2rem; flex-shrink:0;}
+  .detail-header{flex-wrap:nowrap; margin-bottom:12px;}
+  .detail-header > div:last-child{min-width:0;}
+  .detail-header .sname{font-size:1.3rem;}
+  .quick-actions, .pro-subtabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .chip{min-height:44px; padding:0 14px; border:1px solid var(--line-strong); border-radius:999px; background:var(--surface); color:var(--ink); font-size:0.78rem; font-weight:700; cursor:pointer; font-family:var(--sans); touch-action:manipulation;}
+  .chip:hover{border-color:var(--accent);}
+  .chip.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .chip:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
+  .pro-subtabs .chip{min-height:40px;}
+  .sr-badges{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
 
   /* Menu lateral persistente (Profissional) */
   .pro-shell{display:flex; align-items:flex-start; gap:24px;}
@@ -341,6 +352,7 @@
     text-align:left; border:none; background:transparent; padding:10px 12px; border-radius:10px; cursor:pointer;
     font-size:0.72rem; font-weight:600; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;
   }
+  .pro-nav-item{min-height:44px;}
   .pro-nav-item.active{background:var(--accent); color:var(--accent-ink);}
   .pro-sidebar-divider{height:1px; background:var(--line); margin:10px 4px;}
   .pro-sidebar-student{display:flex; align-items:center; gap:8px; padding:4px 12px 8px; font-size:0.78rem; font-weight:600; color:var(--ink);}
@@ -355,7 +367,12 @@
     .pro-sidebar-divider{width:1px; height:24px; margin:0 4px;}
     .pro-sidebar-student{padding:4px 10px; white-space:nowrap;}
     .pro-nav-item{white-space:nowrap; flex-shrink:0;}
-    .pro-stat-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .pro-sidebar-student-open{gap:4px; padding:8px; overflow-x:visible;}
+    .pro-sidebar-student-open .pro-nav-item{flex:1 1 0; min-width:0; padding:10px 2px; font-size:0.62rem; text-align:center; letter-spacing:0.01em;}
+    .pro-stat-row{grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px;}
+    .pro-stat-card{padding:10px 8px;}
+    .pro-stat-card .v{font-size:1.35rem;}
+    .pro-stat-card .l{font-size:0.64rem; line-height:1.2;}
   }
 
   .field-row{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px 18px; margin-top:6px;}
@@ -477,10 +494,77 @@
   @media (hover:none) and (pointer:coarse){
     input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea{font-size:16px !important;}
   }
-  .wl-ex input[type=number]{width:100%; min-width:0; box-sizing:border-box; min-height:42px; border:1px solid var(--line-strong); border-radius:10px; padding:8px 10px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:0.95rem; text-align:center;}
-  .wl-ex input[type=number]::placeholder{color:var(--muted-2);}
-  .wl-done{display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; cursor:pointer;}
-  .wl-done input{width:24px; height:24px; accent-color:var(--accent); cursor:pointer;}
+  .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
+
+  /* ---------- Ação do Dia (aluno) ---------- */
+  .btn.big{width:100%; min-height:56px; font-size:0.95rem; border-radius:14px; letter-spacing:0.04em;}
+  .today-workout{display:flex; flex-direction:column; gap:10px;}
+  .today-workout .tw-name, .wl-progress .tw-name{font-family:var(--display); font-weight:700; font-size:1.7rem; line-height:1.1; letter-spacing:-0.01em;}
+  .today-workout .muted-p{margin:0;}
+  .today-workout.live{border-color:var(--accent);}
+  .today-workout.complete{border-color:var(--good); background:var(--good-soft);}
+  .today-workout.complete .tw-name{color:var(--good);}
+  .today-workout.rest .tw-name{color:var(--muted);}
+  .tw-tick{display:inline-grid; place-items:center; width:1.5rem; height:1.5rem; margin-right:10px; border-radius:50%; background:var(--good); color:var(--good-soft); font-size:0.9rem; vertical-align:middle;}
+  .tw-progress{display:flex; align-items:center; gap:12px;}
+  .tw-progress .bar-track{flex:1;}
+  .tw-progress .num{font-size:0.82rem; font-weight:700; white-space:nowrap;}
+  .today-meals .tm-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  .tm-count{font-size:0.8rem; font-weight:700; color:var(--accent-strong);}
+  .tm-kcal{display:flex; align-items:baseline; gap:8px; margin:10px 0 8px;}
+  .tm-kcal .num{font-family:var(--display); font-size:2.2rem; font-weight:700; line-height:1;}
+  .tm-kcal .tm-of{color:var(--muted); font-weight:600; font-size:0.9rem;}
+  .tm-list{margin-top:6px;}
+  .today-meals .meal-row{padding:10px 0; cursor:pointer;}
+  .meal-row.next .name{color:var(--accent-strong);}
+  .tm-next{color:var(--accent-strong); font-weight:700;}
+  button.check-circle{padding:0; font:inherit; color:var(--ink);}
+  .meal-row .check-circle{width:48px; height:48px; font-size:1.3rem;}
+  .check-circle:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
+  .soft-details{margin-top:12px; border-top:1px solid var(--line); padding-top:10px;}
+  .soft-details summary{cursor:pointer; color:var(--muted); font-size:0.8rem; font-weight:600; min-height:36px; display:flex; align-items:center;}
+  .help-link{width:100%; color:var(--muted); font-size:0.78rem; text-transform:none; letter-spacing:0; min-height:44px;}
+  .treino-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .treino-head .btn{min-height:44px;}
+  .wl-progress{display:flex; flex-direction:column; gap:10px;}
+  .prog-day{border-top:1px solid var(--line); padding-top:12px; margin-top:12px;}
+  .pd-row{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .pd-name{font-weight:700;} .pd-meta{font-size:0.78rem; color:var(--muted);}
+  .pd-ex{margin:6px 0 0; padding-left:18px; font-size:0.84rem; color:var(--muted);}
+  .prog-day .btn{min-height:44px;}
+  .seg{display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; border:1px solid var(--line-strong); border-radius:14px; background:var(--surface);}
+  .seg button{min-height:44px; border:none; border-radius:10px; background:transparent; color:var(--muted); font-size:0.82rem; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .seg button.on{background:var(--accent); color:var(--accent-ink);}
+  .seg button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  .ci-nudge{display:flex; align-items:center; justify-content:space-between; gap:14px; border-color:var(--accent);}
+  .ci-nudge .btn{min-height:48px; min-width:84px;}
+  @media (min-width:1100px){ .aluno-tabs > .seg{column-span:all;} }
+  .ci-card > summary{list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:44px;}
+  .ci-card > summary::-webkit-details-marker{display:none;}
+  @media (min-width:1100px){ .aluno-tabs > .treino-head, .aluno-tabs > .wl-progress{column-span:all;} }
+
+  /* ---------- Registo de treino: inputs grandes, − / + e um ✓ grande por série ---------- */
+  .wl-card .wl-hint{font-size:0.78rem; margin:0 0 4px;}
+  .wl-ex{border-top:1px solid var(--line); padding-top:14px; margin-top:14px;}
+  .wl-ex-name{font-family:var(--display); font-weight:700; font-size:1.15rem;}
+  .wl-ex-presc, .wl-ex-note{font-size:0.8rem; margin:2px 0 0;}
+  .wl-ex-last{font-size:0.78rem; color:var(--accent-strong); margin-top:2px;}
+  .wl-set{display:grid; grid-template-columns:minmax(0,1fr) 68px; gap:8px; align-items:stretch; margin-top:10px; padding:8px; border:1px solid var(--line); border-radius:16px; background:var(--surface-2);}
+  .wl-set.done{border-color:var(--accent); background:var(--accent-soft);}
+  .wl-fields{display:flex; flex-direction:column; gap:6px; min-width:0;}
+  .wl-field{display:grid; grid-template-columns:34px 44px minmax(0,1fr) 44px; gap:4px; align-items:center;}
+  .wl-lbl{font-family:var(--mono); font-size:0.66rem; text-transform:uppercase; color:var(--muted); letter-spacing:0.06em;}
+  .wl-step{min-height:48px; min-width:44px; padding:0; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-size:1.4rem; font-weight:700; line-height:1; cursor:pointer; touch-action:manipulation;}
+  .wl-step:active{background:var(--surface-3);}
+  .wl-step:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  #alunoApp .wl-field input[type=number]{width:100%; min-width:0; min-height:48px; padding:0 4px; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:1.35rem !important; font-weight:700; text-align:center;}
+  #alunoApp .wl-field input[type=number]::placeholder{color:var(--muted-2); font-weight:500;}
+  .wl-done{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:100px; border-radius:14px; cursor:pointer;}
+  .wl-done input{position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer;}
+  .wl-tick{display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:2px solid var(--line-strong); background:var(--bg); color:transparent; font-size:1.4rem; font-weight:700;}
+  .wl-done small{font-size:0.62rem; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.05em;}
+  .wl-done input:checked ~ .wl-tick{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .wl-done input:focus-visible ~ .wl-tick{outline:2px solid var(--accent-strong); outline-offset:2px;}
   .onb-field{margin-bottom:14px; min-width:0;}
   .onb-field label{display:block; font-size:0.72rem; font-weight:600; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;}
   .onb-field input, .onb-field select, .onb-field textarea{
@@ -560,7 +644,7 @@
     <button type="button" class="btn btn-sm hidden" id="signOutBtn">Sair</button>
   </div>
 
-  <div class="proto-ribbon">
+  <div class="proto-ribbon" id="protoRibbon">
     <span>Evolve Nutrition · protótipo <span class="dim" id="dbStatusLabel">· a verificar ligação...</span></span>
   </div>
 
@@ -5994,7 +6078,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", proView:"dashboard", showDemoStudents:false, dashboardListMode:null };
+var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"leitura", proView:"dashboard", showDemoStudents:false, dashboardListMode:"active", planoSection:"alimentacao", ciOpen:false };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -6612,30 +6696,35 @@ function renderAlunoShell(){
   if (!s) return;
   ensureFreshDay(s);
   var showSwitcher = authRole !== "student";
-  var optsHtml = showSwitcher ? STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + st.name + "</option>"; }).join("") : "";
-  var trainingToday = isTrainingDayToday(s);
-  var trainingLine = trainingToday==null ? "" :
-    (trainingToday ? "<div class=\"sub\" style=\"margin-top:2px; color:var(--accent-strong);\">Treino hoje" + (s.trainingTime && s.trainingTime!=="—" ? " · " + s.trainingTime : "") + "</div>"
-                   : "<div class=\"sub\" style=\"margin-top:2px;\">Dia de descanso</div>");
+  var optsHtml = showSwitcher ? STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + escapeHtml(st.name) + "</option>"; }).join("") : "";
+  var dateLine = "";
+  try { dateLine = new Date().toLocaleDateString("pt-PT", {weekday: "long", day: "numeric", month: "long"}); dateLine = dateLine.charAt(0).toUpperCase() + dateLine.slice(1); } catch (e) { dateLine = ""; }
+  // o ecrã de treino é uma etapa de "Hoje": o separador Hoje fica aceso
+  var activeTab = state.alunoTab === "treino" ? "hoje" : state.alunoTab;
+  var icon = function(paths){ return "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" + paths + "</svg>"; };
   alunoRoot.innerHTML =
     "<div class=\"phone-header\">" +
-      "<div><div class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</div><div class=\"sub\">" + escapeHtml(s.goal) + "</div>" + trainingLine + "</div>" +
+      "<div><div class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</div>" + (dateLine ? "<div class=\"sub\">" + escapeHtml(dateLine) + "</div>" : "") + "</div>" +
       (showSwitcher ? "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" : "") +
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
     "<div class=\"tabbar\">" +
-      "<button data-tab=\"hoje\" aria-label=\"Resumo\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"9\" rx=\"2\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"5\" rx=\"2\"/><rect x=\"14\" y=\"12\" width=\"7\" height=\"9\" rx=\"2\"/><rect x=\"3\" y=\"16\" width=\"7\" height=\"5\" rx=\"2\"/></svg><span>Resumo</span></button>" +
-      "<button data-tab=\"plano\" aria-label=\"Alimentação\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 3v8a2 2 0 0 0 2 2v8M11 3v6a2 2 0 0 1-2 2M17 21V3c-2 1-3.5 3.5-3.5 7 0 2 1 3 3.5 3\"/></svg><span>Alimentação</span></button>" +
-      "<button data-tab=\"checkin\" aria-label=\"Treino\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12\"/></svg><span>Treino</span></button>" +
-      "<button data-tab=\"evolucao\" aria-label=\"Avaliação\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"5\" r=\"2\"/><path d=\"M5 9l7 2 7-2M12 11v5M9 21l3-5 3 5\"/></svg><span>Avaliação</span></button>" +
+      "<button data-tab=\"hoje\" aria-label=\"Hoje\">" + icon("<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>") + "<span>Hoje</span></button>" +
+      "<button data-tab=\"plano\" aria-label=\"Plano de alimentação e treino\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
+      "<button data-tab=\"evolucao\" aria-label=\"Progresso\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Progresso</span></button>" +
     "</div>";
   var switcherEl = document.getElementById("alunoStudentSwitch");
   if (switcherEl) switcherEl.addEventListener("change", function(e){
     state.alunoStudentId = e.target.value; renderAlunoShell();
   });
   alunoRoot.querySelectorAll(".tabbar button").forEach(function(btn){
-    if (btn.getAttribute("data-tab")===state.alunoTab) btn.classList.add("active");
-    btn.addEventListener("click", function(){ state.alunoTab = btn.getAttribute("data-tab"); renderAlunoShell(); });
+    if (btn.getAttribute("data-tab")===activeTab) btn.classList.add("active");
+    btn.addEventListener("click", function(){
+      state.alunoTab = btn.getAttribute("data-tab");
+      state.ciOpen = false;
+      renderAlunoShell();
+      try { window.scrollTo(0, 0); } catch (e) {}
+    });
   });
   renderAlunoTab(s);
 }
@@ -6644,9 +6733,9 @@ function renderAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
   if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
-  else if (state.alunoTab==="plano") el.innerHTML = tplPlano(sv);
-  else if (state.alunoTab==="checkin") el.innerHTML = tplCheckin(sv);
-  else el.innerHTML = tplEvolucaoAluno(sv, {editable:false});
+  else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
+  else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
+  else el.innerHTML = tplCheckin(sv) + tplEvolucaoAluno(sv, {editable:false}); // Progresso: check-in da semana + evolução
   wireAlunoTab(s); // escrita: sempre sobre o student real, nunca sobre a vista
 }
 
@@ -6913,103 +7002,115 @@ function tplAdherenceChart(s){
     "<div class=\"bar-labels\">" + list.map(function(c){ return "<span>" + fmtDatePt(c.date) + "</span>"; }).join("") + "</div></div>";
 }
 
+/* ===================== AÇÃO DO DIA (aluno) =====================
+   Ao abrir a app o aluno vê só o que tem para fazer hoje: o treino (Iniciar / Continuar / Feito) e as refeições, que se marcam com um toque. */
+function workoutDaysWithExercises(s){ return trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; }); }
+// treino proposto: o escolhido (state.workoutDayId) ou o que segue na rotação
+function workoutDayFor(s){
+  var days = workoutDaysWithExercises(s);
+  if (!days.length) return null;
+  var selected = days.filter(function(d){ return d.id === state.workoutDayId; })[0] || nextWorkoutDay(s) || days[0];
+  return days.indexOf(selected) < 0 ? days[0] : selected;
+}
+function workoutSetCount(day){ return day.exercises.reduce(function(a, e){ return a + (parseInt(e.sets, 10) || 0); }, 0); }
+function workoutDraftDone(s, day){
+  var d = wlDraftGet(s, day.id), n = 0;
+  day.exercises.forEach(function(e){ for (var i = 0; i < e.sets; i++){ var x = d.sets[e.id + ":" + i]; if (x && x.done) n++; } });
+  return n;
+}
+// treino começado e por terminar (séries marcadas no rascunho): o mais recente
+function workoutInProgress(s){
+  var best = null;
+  workoutDaysWithExercises(s).forEach(function(d){
+    var n = workoutDraftDone(s, d), at = wlDraftGet(s, d.id).savedAt || 0;
+    if (n > 0 && (!best || at > best.savedAt)) best = {day: d, done: n, savedAt: at};
+  });
+  return best;
+}
+function workoutLogsToday(s){ var t = todayISO(); return (s.workoutLogs || []).filter(function(l){ return l && l.date === t; }); }
+
+function tplTodayWorkout(s){
+  var inProg = workoutInProgress(s), day = inProg ? inProg.day : workoutDayFor(s);
+  if (!day){
+    return `<div class="card"><div class="eyebrow">Treino</div><p class="muted-p" style="margin-top:6px;">O teu programa de treino ainda está a ser preparado pelo profissional.</p></div>`;
+  }
+  var total = workoutSetCount(day), dayAttr = `data-day="${escapeHtml(day.id)}"`;
+  if (inProg){
+    return `<div class="card today-workout live"><div class="eyebrow">Treino em curso</div>` +
+      `<div class="tw-name">${escapeHtml(day.name)}</div>` +
+      `<div class="tw-progress"><div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, Math.round(inProg.done / total * 100))}%"></div></div><span class="num">${inProg.done}/${total} séries</span></div>` +
+      `<button type="button" class="btn primary big" id="startWorkout" ${dayAttr}>Continuar treino</button></div>`;
+  }
+  var logged = workoutLogsToday(s);
+  if (logged.length){
+    var last = logged[logged.length - 1], sets = (last.entries || []).reduce(function(a, e){ return a + ((e && e.sets) || []).length; }, 0);
+    return `<div class="card today-workout complete"><div class="eyebrow">Treino de hoje</div>` +
+      `<div class="tw-name"><span class="tw-tick" aria-hidden="true">✓</span>Feito${last.dayName ? " · " + escapeHtml(last.dayName) : ""}</div>` +
+      `<p class="muted-p">${sets} séries registadas${last.rpe ? " · esforço " + last.rpe + "/10" : ""}. Bom trabalho!</p>` +
+      `<button type="button" class="btn" id="startWorkout" ${dayAttr}>Registar outro treino</button></div>`;
+  }
+  if (isTrainingDayToday(s) === false){
+    return `<div class="card today-workout rest"><div class="eyebrow">Hoje</div><div class="tw-name">Dia de descanso</div>` +
+      `<p class="muted-p">Hoje não tens treino marcado. Recupera bem. Próximo treino: <b>${escapeHtml(day.name)}</b>.</p>` +
+      `<button type="button" class="btn" id="startWorkout" ${dayAttr}>Treinar mesmo assim</button></div>`;
+  }
+  var time = s.trainingTime && s.trainingTime !== "—" ? escapeHtml(s.trainingTime) : "";
+  return `<div class="card today-workout"><div class="eyebrow">Treino de hoje${time ? " · " + time : ""}</div>` +
+    `<div class="tw-name">${escapeHtml(day.name)}</div>` +
+    `<p class="muted-p">${day.exercises.length} ${day.exercises.length === 1 ? "exercício" : "exercícios"} · ${total} séries</p>` +
+    `<button type="button" class="btn primary big" id="startWorkout" ${dayAttr}>Iniciar treino</button></div>`;
+}
+
+// refeições por ordem de hora, cada uma com um botão grande para marcar como feita; a próxima fica destacada
+function tplTodayMeals(s){
+  var t = s.targets || {}, totals = consumedTotals(s);
+  var order = s.meals.map(function(m, i){ return i; }).sort(function(a, b){
+    return (toMinutes(effectiveMealTime(s.meals[a])) || 0) - (toMinutes(effectiveMealTime(s.meals[b])) || 0) || a - b;
+  });
+  var planned = s.meals.filter(function(m){ return m.status !== "skipped"; });
+  var doneN = planned.filter(mealCountsToday).length;
+  var nextIdx = -1;
+  for (var k = 0; k < order.length; k++){
+    var mm = s.meals[order[k]];
+    if (!mealCountsToday(mm) && mm.status !== "skipped"){ nextIdx = order[k]; break; }
+  }
+  var pct = t.kcal ? Math.min(100, Math.round((totals.kcal / t.kcal) * 100)) : 0;
+  var html = `<div class="card today-meals"><div class="tm-head"><div class="eyebrow">Refeições de hoje</div><span class="tm-count num">${doneN}/${planned.length} feitas</span></div>`;
+  if (t.kcal){
+    html += `<div class="tm-kcal"><span class="num">${totals.kcal}</span><span class="tm-of">/ ${t.kcal} kcal</span></div>` +
+      `<div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>`;
+  }
+  html += `<div class="tm-list">` + order.map(function(idx){
+    var m = s.meals[idx], mt = resolvedMealTotals(s, m), icon = mealStatusIcon(m), counted = mealCountsToday(m);
+    return `<div class="meal-row${idx === nextIdx ? " next" : ""}" data-midx="${idx}">` +
+      `<button type="button" class="check-circle${m.done ? " done" : ""}${m.adapted ? " adapted" : ""}" data-circle="${idx}" aria-pressed="${counted ? "true" : "false"}" aria-label="${escapeHtml(m.name)}: marcar como feita">${icon}</button>` +
+      `<div class="info"><div class="name">${escapeHtml(m.name)}</div><div class="time">${escapeHtml(effectiveMealTime(m))}${escapeHtml(mealRowSuffix(m))}${idx === nextIdx ? ` · <b class="tm-next">próxima</b>` : ""}</div></div>` +
+      `<div class="kcal">${mt.kcal} kcal</div></div>`;
+  }).join("") + `</div>`;
+  html += `<details class="soft-details"><summary>Macros de hoje</summary><div class="macro-mini">` +
+    macroMiniRow("Proteína", totals.p, t.protein, t.proteinMin, t.proteinMax) +
+    macroMiniRow("Hidratos", totals.c, t.carbs, t.carbsMin, t.carbsMax) +
+    macroMiniRow("Gordura", totals.f, t.fat, t.fatMin, t.fatMax) +
+  `</div></details></div>`;
+  return html;
+}
+
 function tplHoje(s){
+  var html = tplTodayWorkout(s);
   if (!s.meals.length){
-    return "<div class=\"card\" style=\"text-align:center;\">" +
-      "<div class=\"eyebrow\">Hoje</div>" +
-      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.1rem; margin-top:8px;\">O teu plano está a ser preparado</div>" +
-      "<p class=\"muted-p\" style=\"margin-top:8px;\">O teu profissional já tem o teu questionário e vai definir o teu plano em breve.</p>" +
-    "</div>";
+    return html + `<div class="card" style="text-align:center;">` +
+      `<div class="eyebrow">Alimentação</div>` +
+      `<div style="font-family:var(--display); font-weight:700; font-size:1.1rem; margin-top:8px;">O teu plano está a ser preparado</div>` +
+      `<p class="muted-p" style="margin-top:8px;">O teu profissional já tem o teu questionário e vai definir o teu plano em breve.</p>` +
+    `</div>`;
   }
-  var totals = consumedTotals(s);
-  var pct = s.targets.kcal ? Math.min(100, Math.round((totals.kcal / s.targets.kcal) * 100)) : 0;
-  var nm = getNextMeal(s);
-  var html = tplProgressHero(s);
-
-  html += "<div class=\"card\">" +
-    "<div class=\"kcal-ring-wrap\">" +
-      "<div class=\"stat-block\">" +
-        "<div class=\"eyebrow\">Calorias hoje</div>" +
-        "<div style=\"font-family:var(--display); font-size:2.9rem; line-height:1.05; font-weight:700; margin-top:4px; letter-spacing:-0.01em;\" class=\"num\">" + totals.kcal + " <span style=\"font-size:1rem; color:var(--muted); font-weight:600;\">/ " + s.targets.kcal + " kcal</span></div>" +
-        "<div class=\"bar-track\" style=\"margin-top:10px;\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div>" +
-      "</div>" +
-    "</div>" +
-    "<div class=\"macro-mini\">" +
-      macroMiniRow("Proteína", totals.p, s.targets.protein, s.targets.proteinMin, s.targets.proteinMax) +
-      macroMiniRow("Hidratos", totals.c, s.targets.carbs, s.targets.carbsMin, s.targets.carbsMax) +
-      macroMiniRow("Gordura", totals.f, s.targets.fat, s.targets.fatMin, s.targets.fatMax) +
-    "</div>" +
-  "</div>";
-
-  var hasSkipped = s.meals.some(function(m){ return m.status === "skipped"; });
-  if (hasSkipped){
-    var remaining = s.meals.filter(function(m){ return m.status !== "skipped" && !mealCountsToday(m); });
-    html += "<div class=\"card\">" +
-      "<div class=\"eyebrow\" style=\"margin-bottom:4px;\">O teu dia mudou</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Sem problema — vamos continuar a partir daqui.</p>" +
-      (remaining.length ?
-        "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Restante do dia</div>" +
-        remaining.map(function(m){ return "<div class=\"checkin-history-row\"><span>" + escapeHtml(m.name) + "</span><span class=\"num\">" + escapeHtml(effectiveMealTime(m)) + "</span></div>"; }).join("")
-        : "<p class=\"muted-p\">Já não há mais refeições previstas para hoje.</p>") +
-    "</div>";
+  html += tplTodayMeals(s);
+  var ciDays = computeLastCheckinDaysAgo(s);
+  if (ciDays >= 7){
+    html += `<div class="card ci-nudge"><div><div class="eyebrow">Check-in semanal</div><p class="muted-p" style="margin:4px 0 0;">${ciDays === 999 ? "Ainda não enviaste nenhum." : "O último foi " + daysAgoLabel(ciDays) + "."} Demora um minuto.</p></div>` +
+      `<button type="button" class="btn" id="goCheckin">Fazer</button></div>`;
   }
-
-  html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Refeições de hoje</div>" +
-    s.meals.map(function(m, idx){
-      var mt = resolvedMealTotals(s, m);
-      var icon = mealStatusIcon(m);
-      return "<div class=\"meal-row\" data-midx=\"" + idx + "\" style=\"cursor:pointer;\">" +
-        "<div class=\"check-circle" + (m.done?" done":"") + (m.adapted?" adapted":"") + "\" data-circle=\"" + idx + "\">" + icon + "</div>" +
-        "<div class=\"info\"><div class=\"name\">" + escapeHtml(m.name) + "</div><div class=\"time\">" + escapeHtml(effectiveMealTime(m)) + escapeHtml(mealRowSuffix(m)) + "</div></div>" +
-        "<div class=\"kcal\">" + mt.kcal + " kcal</div>" +
-      "</div>";
-    }).join("") +
-  "</div>";
-
-  if (nm){
-    var mt2 = resolvedMealTotals(s, nm.meal);
-    var profileNm = computeFlexibilityProfile(s);
-    var nmIdx = s.meals.indexOf(nm.meal);
-    var nmHasGroupFood = nm.meal.foods.some(function(f){ return f.group; });
-    html += "<div class=\"next-meal-card\">" +
-      "<div class=\"eyebrow\">Próxima refeição" + (nm.tomorrow ? " · amanhã" : "") + " · " + escapeHtml(nm.meal.time) + "</div>" +
-      "<div style=\"font-family:var(--display); font-weight:700; font-size:1.15rem; margin-top:4px;\">" + escapeHtml(nm.meal.name) + "</div>" +
-      "<div class=\"foods\">" + nm.meal.foods.map(function(f){ return escapeHtml(f.name) + " (" + escapeHtml(f.qty) + ")"; }).join(", ") + "</div>" +
-      "<div class=\"foods\" style=\"margin-top:2px;\">" + mt2.kcal + " kcal · P " + mt2.p + "g · H " + mt2.c + "g · G " + mt2.f + "g</div>" +
-      "<div style=\"display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;\">" +
-        "<button type=\"button\" class=\"btn primary btn-sm\" id=\"goToMeal\" data-midx=\"" + nmIdx + "\">Ver refeição</button>" +
-        (profileNm.substitutionsEnabled && nmHasGroupFood ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmSubstitute\" data-midx=\"" + nmIdx + "\">Substituir</button>" : "") +
-        (profileNm.freeMealEnabled ? "<button type=\"button\" class=\"btn btn-sm\" id=\"nmAdapt\" data-midx=\"" + nmIdx + "\">Adaptar</button>" : "") +
-      "</div>" +
-    "</div>";
-  }
-
-  html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Flexibilidade atual</div>" +
-    "<div style=\"display:flex; justify-content:space-between; align-items:baseline; margin:8px 0 10px;\">" +
-      "<span style=\"font-family:var(--display); font-weight:700; font-size:1.05rem;\">" + flexZoneLabel(s.flexibility) + "</span>" +
-      "<span class=\"num\" style=\"color:var(--muted); font-size:0.85rem;\">" + s.flexibility + " / 100</span>" +
-    "</div>" +
-    "<div class=\"flex-gauge\"><div class=\"zones\"><div class=\"zone\"></div><div class=\"zone\"></div><div class=\"zone\"></div></div><div class=\"marker\" style=\"left:" + s.flexibility + "%;\"></div></div>" +
-    "<p class=\"muted-p\" style=\"margin-top:12px;\">Definido pelo teu profissional. Quanto mais alto, maior a tua liberdade para escolher dentro do plano.</p>" +
-  "</div>";
-
-  var adh = computeAdherence(s);
-  html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Consistência esta semana</div>" +
-    (adh==null ?
-      "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem check-ins suficientes para calcular.</p>" :
-      "<div style=\"display:flex; align-items:center; gap:10px; margin-top:10px;\">" +
-        "<div class=\"bar-track\" style=\"flex:1;\"><div class=\"bar-fill\" style=\"width:" + Math.round(adh*100) + "%\"></div></div>" +
-        "<span class=\"num\" style=\"font-weight:700;\">" + Math.round(adh*100) + "%</span>" +
-      "</div>"
-    ) +
-    "<p class=\"muted-p\" style=\"margin-top:10px;\">A consistência ao longo do tempo importa mais do que um único dia.</p>" +
-  "</div>";
-
-  html += "<button type=\"button\" class=\"btn primary\" id=\"openAssistant\" style=\"width:100%;\">Precisas de ajuda com a alimentação?</button>";
-
+  html += `<button type="button" class="btn ghost help-link" id="openAssistant">Precisas de ajuda com a alimentação?</button>`;
   return html;
 }
 
@@ -7156,28 +7257,87 @@ function tplMealBuilder(m, idx, s){
 }
 
 function tplCheckin(s){
-  var html = tabHead("Treino e aderência", "Acompanha a tua semana e envia o check-in.") + tplTrainingOverview(s) + tplWorkoutLogger(s) + "<div class=\"card\">" +
-    "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Check-in semanal</div>" +
-    "<div class=\"checkin-field\"><label for=\"ciWeight\">Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"ciWeight\" value=\"" + s.weightCurrent + "\"></div>" +
+  var days = computeLastCheckinDaysAgo(s), due = days >= 7;
+  // treinos realizados: os registados nos últimos 7 dias (se ainda não há registos, o previsto no plano)
+  var sessions7 = (s.workoutLogs || []).length ? sessionsInLastDays(s, 7).length : (s.trainingsPerWeek || 0);
+  var html = "<details class=\"card ci-card\" id=\"ciDetails\"" + (state.ciOpen ? " open" : "") + ">" +
+    "<summary class=\"ci-summary\"><span class=\"eyebrow\">Check-in semanal</span>" +
+      (due ? "<span class=\"pill warn\">" + (days === 999 ? "Ainda por fazer" : "Por fazer") + "</span>" : "<span class=\"pill good\">Em dia</span>") + "</summary>" +
+    "<div class=\"checkin-field\" style=\"margin-top:14px;\"><label for=\"ciWeight\">Peso atual (kg)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"ciWeight\" value=\"" + s.weightCurrent + "\"></div>" +
     rangeField("ciHunger","Fome (1-10)",5) +
     rangeField("ciEnergy","Energia (1-10)",7) +
     rangeField("ciAdherence","Adesão ao plano (1-10)",8) +
     "<div class=\"checkin-field\"><label for=\"ciSleep\">Sono: horas por noite (média da semana)</label><input type=\"number\" step=\"0.5\" min=\"0\" max=\"14\" id=\"ciSleep\" value=\"7\"></div>" +
     rangeField("ciStress","Stress (1-10)",4) +
     rangeField("ciRecovery","Recuperação / dores musculares (1 = muito cansado, 10 = ótima)",7) +
-    "<div class=\"checkin-field\"><label for=\"ciWorkouts\">Treinos realizados</label><input type=\"number\" min=\"0\" id=\"ciWorkouts\" value=\"" + s.trainingsPerWeek + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ciWorkouts\">Treinos realizados</label><input type=\"number\" min=\"0\" id=\"ciWorkouts\" value=\"" + sessions7 + "\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciMealsOff\">Refeições fora do plano</label><input type=\"number\" min=\"0\" id=\"ciMealsOff\" value=\"0\"></div>" +
     "<div class=\"checkin-field\"><label for=\"ciNotes\">Dificuldades / observações</label><textarea id=\"ciNotes\" maxlength=\"2000\" placeholder=\"Opcional\"></textarea></div>" +
     "<p class=\"muted-p\" id=\"checkinError\" style=\"color:var(--critical); display:none; margin-bottom:10px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"submitCheckin\" style=\"width:100%;\">Enviar check-in</button>" +
-  "</div>";
+    "<button type=\"button\" class=\"btn primary big\" id=\"submitCheckin\">Enviar check-in</button>";
+  var recent = (s.checkins || []).slice(-4).reverse();
+  if (recent.length){
+    html += "<div class=\"eyebrow\" style=\"margin:18px 0 8px;\">Últimos check-ins</div>";
+    recent.forEach(function(c){
+      html += "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.weight + " kg · adesão " + c.adherence + "/10</span></div>";
+    });
+  }
+  return html + "</details>";
+}
 
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Check-ins anteriores</div>";
-  s.checkins.slice().reverse().forEach(function(c){
-    html += "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.weight + " kg · adesão " + c.adherence + "/10</span></div>";
+// Plano: Alimentação | Treino (o seletor só aparece se há programa de treino)
+function tplPlanoTabs(s){
+  var hasProgram = workoutDaysWithExercises(s).length > 0;
+  var sec = hasProgram && state.planoSection === "treino" ? "treino" : "alimentacao";
+  var seg = hasProgram ? "<div class=\"seg\" role=\"tablist\">" +
+    "<button type=\"button\" role=\"tab\" data-plano-sec=\"alimentacao\" aria-selected=\"" + (sec === "alimentacao") + "\" class=\"" + (sec === "alimentacao" ? "on" : "") + "\">Alimentação</button>" +
+    "<button type=\"button\" role=\"tab\" data-plano-sec=\"treino\" aria-selected=\"" + (sec === "treino") + "\" class=\"" + (sec === "treino" ? "on" : "") + "\">Treino</button></div>" : "";
+  return seg + (sec === "treino" ? tplTrainingProgramCard(s) : tplPlano(s));
+}
+
+// Plano > Treino: o programa da semana, com um botão para iniciar qualquer dia
+function tplTrainingProgramCard(s){
+  var days = workoutDaysWithExercises(s);
+  if (!days.length) return "";
+  var names = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"], hasDays = !!(s.trainingDays && s.trainingDays.length);
+  return "<div class=\"card\"><div class=\"eyebrow\">Programa de treino</div>" +
+    (hasDays ? "<div class=\"week-chips\">" + [1,2,3,4,5,6,0].map(function(d){ return "<div class=\"week-chip" + (s.trainingDays.indexOf(d) !== -1 ? " on" : "") + "\">" + names[d] + "<i></i></div>"; }).join("") + "</div>" : "") +
+    days.map(function(d){
+      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(d.name) + "</div><div class=\"pd-meta\">" + d.exercises.length + " exercícios · " + workoutSetCount(d) + " séries</div></div>" +
+        "<button type=\"button\" class=\"btn btn-sm\" data-start-day=\"" + escapeHtml(d.id) + "\">Iniciar</button></div>" +
+        "<details class=\"soft-details\"><summary>Ver exercícios</summary><ul class=\"pd-ex\">" + d.exercises.map(function(e){ return "<li>" + escapeHtml(e.name) + " <span class=\"num\">" + escapeHtml(String(e.sets)) + " × " + escapeHtml(String(e.reps)) + "</span></li>"; }).join("") + "</ul></details></div>";
+    }).join("") + "</div>";
+}
+
+// ecrã de treino: um passo de "Hoje" (volta atrás com ← Hoje), com o progresso das séries no topo
+function tplTreinoScreen(s){
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Hoje</button><div class=\"eyebrow\">Treino</div></div>";
+  var day = workoutDayFor(s);
+  if (!day) return head + tplWorkoutLogger(s);
+  var total = workoutSetCount(day), done = workoutDraftDone(s, day);
+  return head + "<div class=\"wl-progress\"><div class=\"tw-name\">" + escapeHtml(day.name) + "</div>" +
+    "<div class=\"tw-progress\"><div class=\"bar-track\"><div class=\"bar-fill\" id=\"wlProgressFill\" style=\"width:" + (total ? Math.round(done / total * 100) : 0) + "%\"></div></div><span class=\"num\" id=\"wlProgressText\">" + done + "/" + total + " séries</span></div></div>" +
+    tplWorkoutLogger(s);
+}
+
+// ligações entre "Hoje", "Plano" e o ecrã de treino
+function wireTrainingNav(s, el){
+  function go(tab, dayId){
+    if (dayId) state.workoutDayId = dayId;
+    state.alunoTab = tab;
+    renderAlunoShell();
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  var start = el.querySelector("#startWorkout");
+  if (start) start.addEventListener("click", function(){ go("treino", start.getAttribute("data-day")); });
+  el.querySelectorAll("[data-start-day]").forEach(function(b){ b.addEventListener("click", function(){ go("treino", b.getAttribute("data-start-day")); }); });
+  var back = el.querySelector("#backToHoje");
+  if (back) back.addEventListener("click", function(){ go("hoje"); });
+  el.querySelectorAll("[data-plano-sec]").forEach(function(b){
+    b.addEventListener("click", function(){ state.planoSection = b.getAttribute("data-plano-sec"); renderAlunoTab(s); });
   });
-  html += "</div>";
-  return html;
+  var ci = el.querySelector("#goCheckin");
+  if (ci) ci.addEventListener("click", function(){ state.ciOpen = true; go("evolucao"); });
 }
 
 /* ===================== TREINO: programa, registo por sessão e progressão de carga =====================
@@ -7477,47 +7637,52 @@ function wlDraftClear(s, dayId){ delete wlDraftStore()[wlDraftKey(s, dayId)]; wl
 function wlDraftWipe(){ state.wlDraft = {}; try { window.localStorage && window.localStorage.removeItem(WL_DRAFT_KEY); } catch (e) {} }
 
 function tplWorkoutLogger(s){
-  var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; });
+  var days = workoutDaysWithExercises(s);
   if (!days.length){
     return `<div class="card"><div class="eyebrow">Treino</div><p class="muted-p" style="margin-top:6px;">O teu programa de treino ainda está a ser preparado pelo profissional.</p></div>`;
   }
-  var selected = days.filter(function(d){ return d.id === state.workoutDayId; })[0] || nextWorkoutDay(s) || days[0];
-  if (days.indexOf(selected) < 0) selected = days[0];
+  var selected = workoutDayFor(s);
   var draft = wlDraftGet(s, selected.id);
-  var html = `<div class="card"><div class="eyebrow">Registar treino</div>` +
-    `<div class="checkin-field" style="margin-top:8px;"><label>Cronómetro de descanso</label><div class="rt-presets">` +
-      REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
-    `</div></div>` +
-    `<div class="checkin-field" style="margin-top:8px;"><label for="wlDay">Treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
+  var html = `<div class="card wl-card">` +
+    `<div class="checkin-field"${days.length < 2 ? " hidden" : ""}><label for="wlDay">Mudar de treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
     `</select></div>` +
-    `<p class="muted-p" style="font-size:0.78rem; margin-top:4px;">Marca ✓ cada série que fizeste (ou toca em ⏱ ao terminá-la): só as séries marcadas ficam registadas.</p>`;
+    `<p class="muted-p wl-hint">Toca em ✓ ao acabar cada série: o descanso começa sozinho.</p>`;
   selected.exercises.forEach(function(e){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
     var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
-    html += `<div class="wl-ex" data-ex="${escapeHtml(e.id)}" style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px;">` +
-      `<div style="font-weight:700;">${escapeHtml(e.name)}</div>` +
-      `<div class="muted-p" style="font-size:0.78rem;">${presc}</div>` +
-      (e.notes ? `<div class="muted-p" style="font-size:0.76rem;">${escapeHtml(e.notes)}</div>` : "") +
-      (last ? `<div class="muted-p" style="font-size:0.76rem; color:var(--accent-strong);">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
+    html += `<div class="wl-ex" data-ex="${escapeHtml(e.id)}">` +
+      `<div class="wl-ex-name">${escapeHtml(e.name)}</div>` +
+      `<div class="muted-p wl-ex-presc">${presc}</div>` +
+      (e.notes ? `<div class="muted-p wl-ex-note">${escapeHtml(e.notes)}</div>` : "") +
+      (last ? `<div class="wl-ex-last">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
     var prefillLoad = last && last.topSet && last.topSet.load > 0 ? last.topSet.load : "";
     var restSec = e.rest != null ? e.rest : REST_DEFAULT_SECONDS;
     for (var i = 0; i < e.sets; i++){
       var key = escapeHtml(e.id) + ":" + i, d = draft.sets[e.id + ":" + i] || {};
       var repsVal = d.reps !== undefined ? d.reps : (firstRepsOf(e.reps) || ""), loadVal = d.load !== undefined ? d.load : prefillLoad;
-      html += `<div class="wl-set" style="display:grid; grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 44px; gap:8px; align-items:center; margin-top:6px;">` +
-        `<label class="wl-done"><input type="checkbox" data-wl-done="${key}" aria-label="Série ${i + 1} feita"${d.done ? " checked" : ""}></label>` +
-        `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" aria-label="Repetições da série ${i + 1}" data-wl-reps="${key}" value="${escapeHtml(repsVal)}">` +
-        `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Carga em kg da série ${i + 1}" data-wl-load="${key}" value="${escapeHtml(loadVal)}">` +
-        `<button type="button" class="wl-rest" data-wl-rest="${key}" data-rest-start="${restSec}" data-rest-label="${escapeHtml(e.name)}" aria-label="Série ${i + 1} feita: iniciar descanso de ${restSec} segundos">⏱</button>` +
+      var step = function(kind, delta, label){ return `<button type="button" class="wl-step" data-step-kind="${kind}" data-step-key="${key}" data-step-delta="${delta}" aria-label="${label} na série ${i + 1}">${delta < 0 ? "−" : "+"}</button>`; };
+      html += `<div class="wl-set${d.done ? " done" : ""}">` +
+        `<div class="wl-fields">` +
+          `<div class="wl-field"><span class="wl-lbl">kg</span>` + step("load", -2.5, "Menos 2,5 kg") +
+            `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Carga em kg da série ${i + 1}" data-wl-load="${key}" value="${escapeHtml(loadVal)}">` +
+            step("load", 2.5, "Mais 2,5 kg") + `</div>` +
+          `<div class="wl-field"><span class="wl-lbl">reps</span>` + step("reps", -1, "Menos uma repetição") +
+            `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" aria-label="Repetições da série ${i + 1}" data-wl-reps="${key}" value="${escapeHtml(repsVal)}">` +
+            step("reps", 1, "Mais uma repetição") + `</div>` +
+        `</div>` +
+        `<label class="wl-done"><input type="checkbox" data-wl-done="${key}" data-rest-start="${restSec}" data-rest-label="${escapeHtml(e.name)}" aria-label="Série ${i + 1} feita"${d.done ? " checked" : ""}><span class="wl-tick" aria-hidden="true">✓</span><small>Série ${i + 1}</small></label>` +
       `</div>`;
     }
     html += `</div>`;
   });
-  html += `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7) + `</div>` +
-    `<div class="checkin-field"><label for="wlNotes">Como correu? (opcional)</label><textarea id="wlNotes" maxlength="500" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div>` +
+  html += `<details class="soft-details wl-timer"><summary>Cronómetro de descanso livre</summary><div class="rt-presets">` +
+      REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
+    `</div></details>` +
+    `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7) + `</div>` +
+    `<details class="soft-details"${draft.notes ? " open" : ""}><summary>Como correu? (opcional)</summary><div class="checkin-field" style="margin-top:8px;"><label for="wlNotes" class="sr-only">Como correu?</label><textarea id="wlNotes" maxlength="500" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div></details>` +
     `<p class="muted-p" id="wlError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>` +
-    `<button type="button" class="btn primary" id="wlSave" style="width:100%;">Guardar treino</button></div>`;
+    `<button type="button" class="btn primary big" id="wlSave">Terminar treino</button></div>`;
   return html;
 }
 
@@ -7543,15 +7708,41 @@ function wireWorkoutLogger(s, el, rerender){
   el.querySelectorAll("[data-wl-reps], [data-wl-load], [data-wl-done], #wlRpe, #wlNotes").forEach(function(field){
     ["input", "change"].forEach(function(evt){ field.addEventListener(evt, function(){ recordDraft(field); }); });
   });
-  el.querySelectorAll("[data-rest-start]").forEach(function(b){
+  // o tamanho da série muda com os botões − / + (carga de 2,5 em 2,5 kg; repetições de 1 em 1) e fica no rascunho
+  el.querySelectorAll("[data-step-key]").forEach(function(b){
     b.addEventListener("click", function(){
-      var setKey = b.getAttribute("data-wl-rest");
-      if (setKey){ // ⏱ numa série = série feita
-        var box = el.querySelector('[data-wl-done="' + setKey + '"]');
-        if (box){ box.checked = true; recordDraft(box); }
-      }
+      var kind = b.getAttribute("data-step-kind"), key = b.getAttribute("data-step-key"), delta = parseFloat(b.getAttribute("data-step-delta"));
+      var input = el.querySelector('[data-wl-' + kind + '="' + key + '"]');
+      if (!input || !isFinite(delta)) return;
+      var cur = parseFloat(input.value), next = Math.max(0, Math.round(((isFinite(cur) ? cur : 0) + delta) * 10) / 10);
+      if (kind === "reps") next = Math.min(100, Math.round(next));
+      input.value = String(next);
+      recordDraft(input);
+    });
+  });
+  // ✓ numa série: marca-a, avança o progresso e começa sozinho o descanso prescrito (desmarcar não faz nada)
+  function updateProgress(){
+    var boxes = el.querySelectorAll("[data-wl-done]"), n = 0;
+    boxes.forEach(function(b){ if (b.checked) n++; });
+    var fill = el.querySelector("#wlProgressFill"), txt = el.querySelector("#wlProgressText");
+    if (fill) fill.style.width = (boxes.length ? Math.round(n / boxes.length * 100) : 0) + "%";
+    if (txt) txt.textContent = n + "/" + boxes.length + " séries";
+  }
+  el.querySelectorAll("[data-wl-done]").forEach(function(box){
+    box.addEventListener("change", function(){
+      var row = box.closest ? box.closest(".wl-set") : null;
+      if (row) row.classList.toggle("done", !!box.checked);
+      updateProgress();
+      if (!box.checked) return;
+      var secs = parseInt(box.getAttribute("data-rest-start"), 10);
+      if (secs >= 5) restTimerStart(secs, box.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
+    });
+  });
+  // atalhos do cronómetro livre (30 s a 3 min)
+  el.querySelectorAll("button[data-rest-start]").forEach(function(b){
+    b.addEventListener("click", function(){
       var secs = parseInt(b.getAttribute("data-rest-start"), 10);
-      if (secs >= 5) restTimerStart(secs, b.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
+      if (secs >= 5) restTimerStart(secs, b.getAttribute("data-rest-label"));
     });
   });
   if (!save) return;
@@ -7583,7 +7774,11 @@ function wireWorkoutLogger(s, el, rerender){
       restTimerStop(); // o treino acabou: o descanso já não faz sentido
       state.workoutDayId = null;
       // o pedido é assíncrono (profissional): só se redesenha se este aluno e este separador ainda estiverem no ecrã
-      if (state.alunoTab === "checkin" && (authRole !== "professional" || !state.alunoStudentId || String(state.alunoStudentId) === String(s.id))) rerender();
+      if (state.alunoTab === "treino" && (authRole !== "professional" || !state.alunoStudentId || String(state.alunoStudentId) === String(s.id))){
+        state.alunoTab = "hoje"; // terminado: volta a "Hoje", onde aparece "Treino feito"
+        try { window.scrollTo(0, 0); } catch (e) {}
+        rerender();
+      }
     }
     if (authRole === "professional" && sbReady){
       // só se dá como guardado (e só se apaga o rascunho) depois de o servidor aceitar; se falhar, desfaz-se e o rascunho fica
@@ -8698,6 +8893,7 @@ function weightSvg(weights){
 function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
+  wireTrainingNav(s, el);
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
     row.addEventListener("click", function(){
@@ -8869,6 +9065,7 @@ function wireAlunoTab(s){
     });
     s.weights.push({date: today, w: w});
     s.weightCurrent = w;
+    state.ciOpen = false;
     renderAlunoTab(s);
     persistStudent(s);
     showToast("✓ Check-in enviado");
@@ -8912,20 +9109,25 @@ function renderProShell(){
   // PRO_TABS (esses são por aluno) nem entra na página principal, como
   // pedido. Só um de "Dashboard"/"Catálogo" fica ativo de cada vez, e
   // qualquer aluno selecionado tem sempre prioridade sobre os dois.
-  var sidebar = "<div class=\"pro-sidebar\">" +
-    "<button type=\"button\" class=\"pro-nav-item" + (!selected && state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Dashboard</button>" +
-    "<button type=\"button\" class=\"pro-nav-item" + (!selected && state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
-  if (selected){
-    sidebar += "<div class=\"pro-sidebar-divider\"></div>" +
-      "<div class=\"pro-sidebar-student\"><div class=\"avatar\" style=\"width:28px; height:28px; font-size:0.66rem;\">" + selected.initials + "</div><span>" + selected.name + "</span></div>" +
-      PRO_TABS.map(function(t){ return "<button type=\"button\" class=\"pro-nav-item" + (state.proTab===t[0]?" active":"") + "\" data-t=\"" + t[0] + "\">" + t[1] + "</button>"; }).join("");
+  var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
+  if (!selected){
+    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
+  } else {
+    // com um aluno aberto o menu são só as 5 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
+    var curGroup = proNavGroupOf(state.proTab);
+    sidebar += PRO_NAV.map(function(g){
+      var on = g === curGroup;
+      return "<button type=\"button\" class=\"pro-nav-item" + (on ? " active" : "") + "\" data-t=\"" + (on ? state.proTab : g.tabs[0]) + "\">" + g.label + "</button>";
+    }).join("");
   }
   sidebar += "</div>";
 
   proRoot.innerHTML = "<div class=\"pro-shell\">" + sidebar + "<div class=\"pro-main\" id=\"proMain\"></div></div>";
 
-  document.getElementById("navDashboard").addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
-  document.getElementById("navCatalog").addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
+  var navDash = document.getElementById("navDashboard"), navCat = document.getElementById("navCatalog");
+  if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
+  if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
@@ -8984,13 +9186,13 @@ function renderProDashboardMain(){
   var visible = visibleStudentsForDashboard();
   var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
   var activeStudents = visible.filter(isStudentActive);
-  var pendingCheckins = visible.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
-  var alertCount = visible.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
+  var pendingCheckins = activeStudents.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
+  var alertCount = activeStudents.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
     proStat(activeStudents.length, "Alunos ativos", "active") +
-    proStat(pendingCheckins, "Check-ins", null) +
-    proStat(alertCount, "Alertas", null) +
+    proStat(pendingCheckins, "Check-ins", "checkins") +
+    proStat(alertCount, "Alertas", "alerts") +
     proStat(visible.length, "Total de alunos", "total") +
   "</div>";
 
@@ -8999,34 +9201,46 @@ function renderProDashboardMain(){
     "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\" style=\"flex:1 1 150px; min-height:44px;\">+ Convidar aluno</button>" +
   "</div>";
 
-  // A lista completa (com pesagem/adesão/alertas por aluno) só aparece a
-  // pedido, ao tocar num dos dois blocos de contagem de alunos — o dashboard
-  // por omissão mostra só os números. "Alunos ativos" mostra só quem está
-  // ativo; "Total de alunos" mostra todos (incluindo inativos, para poderes
-  // reativar alguém), sempre com o interruptor ativo/inativo.
+  // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
+  // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
+  // (incluindo inativos, para poderes reativar alguém); cada linha tem o interruptor ativo/inativo.
   if (state.dashboardListMode){
-    var listStudents = state.dashboardListMode === "active" ? activeStudents : visible;
-    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + (state.dashboardListMode === "active" ? "Alunos ativos" : "Todos os alunos") + "</div>";
+    var mode = state.dashboardListMode;
+    var listStudents = mode === "total" ? visible : activeStudents.filter(function(st){
+      if (mode === "checkins") return computeLastCheckinDaysAgo(st) >= 7;
+      if (mode === "alerts") return computeDashboardAlerts(st).length > 0;
+      return true;
+    });
+    var rows = listStudents.map(function(st){
+      var al = computeDashboardAlerts(st);
+      return {s: st, alerts: al, crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st)};
+    }).sort(function(a, b){ return (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
+    var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
+    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
     html += "<div class=\"student-list\">";
-    listStudents.forEach(function(s){
-      html += "<div class=\"card student-row\" data-id=\"" + s.id + "\">" +
-        "<div class=\"student-row-main\" data-open=\"" + s.id + "\">" +
-          "<div class=\"avatar\">" + s.initials + "</div>" +
-          "<div><div class=\"sname\">" + escapeHtml(s.name) + (s.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + escapeHtml(s.goal) + "</div></div>" +
+    rows.forEach(function(r){
+      var st = r.s;
+      var badges = (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
+        (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "");
+      html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
+        "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
+          "<div class=\"avatar\">" + escapeHtml(st.initials) + "</div>" +
+          "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + escapeHtml(st.goal) + "</div>" +
+          (badges ? "<div class=\"sr-badges\">" + badges + "</div>" : "") + "</div>" +
         "</div>" +
-        "<label class=\"switch\" title=\"" + (isStudentActive(s) ? "Ativo" : "Inativo") + "\">" +
-          "<input type=\"checkbox\" data-active-toggle=\"" + s.id + "\"" + (isStudentActive(s) ? " checked" : "") + ">" +
+        "<label class=\"switch\" title=\"" + (isStudentActive(st) ? "Ativo" : "Inativo") + "\">" +
+          "<input type=\"checkbox\" data-active-toggle=\"" + st.id + "\"" + (isStudentActive(st) ? " checked" : "") + ">" +
           "<span class=\"switch-track\"><span class=\"switch-thumb\"></span></span>" +
         "</label>" +
       "</div>";
     });
-    if (!listStudents.length) html += "<p class=\"muted-p\">Nenhum aluno " + (state.dashboardListMode === "active" ? "ativo" : "") + " para mostrar.</p>";
+    if (!rows.length) html += "<p class=\"muted-p\">Nenhum aluno para mostrar.</p>";
     html += "</div>";
   }
 
   main.innerHTML = html;
   main.querySelectorAll("[data-open]").forEach(function(el){
-    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="perfil"; renderProShell(); });
+    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); });
   });
   main.querySelectorAll("[data-active-toggle]").forEach(function(input){
     input.addEventListener("click", function(e){ e.stopPropagation(); });
@@ -9041,7 +9255,7 @@ function renderProDashboardMain(){
   main.querySelectorAll("[data-stat-key]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var key = btn.getAttribute("data-stat-key");
-      state.dashboardListMode = state.dashboardListMode === key ? null : key;
+      state.dashboardListMode = key; // os blocos filtram a lista; ficam sempre com um selecionado
       renderProDashboardMain();
     });
   });
@@ -9299,16 +9513,60 @@ function proStat(v, l, key){
 // Fase 25: o separador chama-se "Nutrição" na interface, mas a key interna
 // continua "plano" (routing/estado e todo o resto do código já dependem
 // dela) — só o rótulo visível muda, pedido explícito.
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Evolução"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+// Navegação do profissional por aluno: cinco entradas (cada separador continua a ter a sua key; os de uma mesma entrada ficam juntos em atalhos)
+var PRO_NAV = [
+  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins"]},
+  {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
+  {id: "treino", label: "Treino", tabs: ["treino"]},
+  {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]},
+  {id: "ficha", label: "Ficha", tabs: ["perfil", "notas", "historico"]}
+];
+function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
+function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
+  var group = proNavGroupOf(state.proTab);
+  var subtabs = group.tabs.length > 1 ? "<div class=\"pro-subtabs\" role=\"tablist\">" + group.tabs.map(function(k){
+    return "<button type=\"button\" role=\"tab\" class=\"chip" + (k === state.proTab ? " on" : "") + "\" data-sub=\"" + k + "\" aria-selected=\"" + (k === state.proTab) + "\">" + proTabLabel(k) + "</button>";
+  }).join("") + "</div>" : "";
   main.innerHTML = "<div class=\"detail-header\">" +
-    "<div class=\"avatar\">" + s.initials + "</div>" +
-    "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
-  "</div>" +
-  "<div id=\"proTabContent\" class=\"card\"></div>";
+      "<button type=\"button\" class=\"btn pro-back\" id=\"proBack\" aria-label=\"Voltar à lista de alunos\">←</button>" +
+      "<div class=\"avatar\">" + escapeHtml(s.initials) + "</div>" +
+      "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
+    "</div>" +
+    "<div class=\"quick-actions\">" +
+      "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
+      "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>" +
+      "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
+    "</div>" + subtabs +
+    "<div id=\"proTabContent\" class=\"card\"></div>";
+  wireProDetailNav(main);
   renderProTabContent(s);
+}
+
+// voltar à lista, atalhos de ação e separadores da mesma área
+function wireProDetailNav(main){
+  var back = main.querySelector("#proBack");
+  if (back) back.addEventListener("click", function(){ state.proSelectedId = null; state.proView = "dashboard"; renderProShell(); });
+  main.querySelectorAll("[data-sub]").forEach(function(b){
+    b.addEventListener("click", function(){ state.proTab = b.getAttribute("data-sub"); renderProShell(); });
+  });
+  main.querySelectorAll("[data-qa]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var act = b.getAttribute("data-qa");
+      if (act === "aluno"){ setMode("aluno"); return; }
+      state.proTab = act === "avaliar" ? "evolucao" : "plano";
+      renderProShell();
+      // leva o ecrã até ao formulário (sem scrollIntoView: nos telemóveis arrastava a página inteira)
+      setTimeout(function(){
+        var target = document.getElementById(act === "avaliar" ? "asWeight" : "tKcal");
+        if (!target) return;
+        window.scrollTo({top: Math.max(0, target.getBoundingClientRect().top + (window.pageYOffset || 0) - 90), behavior: "smooth"});
+      }, 60);
+    });
+  });
 }
 
 function renderProTabContent(s){
@@ -11513,6 +11771,7 @@ function handleSession(session){
         document.getElementById("alunoApp").classList.remove("hidden");
         state.alunoStudentId = STUDENTS[0].id;
         state.mode = "aluno";
+        document.getElementById("protoRibbon").classList.add("hidden"); // o aluno não precisa do aviso de protótipo
         renderAlunoShell();
       } else {
         authRole = null;

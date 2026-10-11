@@ -49,7 +49,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   var h = tplWorkoutLogger(s);
   check.check("2. Cada série tem uma caixa ✓ (desmarcada por omissão) — só as marcadas contam", (h.match(/data-wl-done=/g) || []).length === 2 && !/data-wl-done="[^"]*"[^>]* checked/.test(h));
   check.check("2. Os campos de série têm nome acessível", /aria-label="Repetições da série 1"/.test(h) && /aria-label="Carga em kg da série 1"/.test(h) && /aria-label="Série 1 feita"/.test(h));
-  check.check("2. O ⏱ de cada série marca-a como feita", /el\.querySelector\('\[data-wl-done="' \+ setKey \+ '"\]'\)/.test(appSource) && /box\.checked = true/.test(appSource));
+  check.check("2. Marcar ✓ numa série começa o descanso dessa série (o tempo e o nome do exercício vêm da própria caixa) e desmarcar não faz nada", /box\.addEventListener\("change"/.test(appSource) && /if \(!box\.checked\) return;/.test(appSource) && /restTimerStart\(secs, box\.getAttribute\("data-rest-label"\)\)/.test(appSource) && /data-wl-done="e1:0" data-rest-start="60" data-rest-label="Supino"/.test(h));
   check.check("2. O envio só lê séries com ✓ e dá erro claro se nenhuma", /if \(!box \|\| !box\.checked\) continue/.test(appSource) && /Marca ✓ pelo menos uma série feita/.test(appSource));
   var d = wlDraftGet(s, "d1");
   d.sets["e1:0"] = {done:true, reps:"10", load:"62.5"}; d.rpe = 9; d.notes = "ombro a doer";
