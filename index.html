@@ -5562,15 +5562,32 @@ function objectsOnly(arr){ return Array.isArray(arr) ? arr.filter(function(x){ r
 function normalizeWeights(arr){ return objectsOnly(arr).filter(function(w){ return isIsoDate(w.date) && finiteNum(w.w) != null; }).map(function(w){ return Object.assign({}, w, {w: finiteNum(w.w)}); }); }
 function normalizePhotos(arr){ return objectsOnly(arr).filter(function(p){ return isIsoDate(p.date); }); }
 function isPlainObject(v){ return !!v && typeof v === "object" && !Array.isArray(v); }
+var MEAL_STATUSES = ["planned", "skipped", "rescheduled", "flexible"];
+// estado do dia: reconstrói cada entrada só com os campos e tipos que a app escreve (o aluno pode escrever o que quiser na sua linha)
 function normalizeMealState(v){
   if (!isPlainObject(v) || typeof v.date !== "string" || !isPlainObject(v.entries)) return null; // forma errada: o estado do dia reconstrói-se
   var entries = {};
   Object.keys(v.entries).forEach(function(k){
     var e = v.entries[k];
     if (!isPlainObject(e)) return;
-    var out = Object.assign({}, e);
-    out.substitutions = isPlainObject(e.substitutions) ? e.substitutions : {};
-    entries[k] = out;
+    var subs = {};
+    if (isPlainObject(e.substitutions)) Object.keys(e.substitutions).forEach(function(i){
+      var x = e.substitutions[i];
+      if (!/^\d{1,3}$/.test(i) || !isPlainObject(x) || typeof x.name !== "string" || !x.name) return;
+      var qty = typeof x.qty === "string" ? x.qty : (typeof x.qty === "number" && isFinite(x.qty) ? String(x.qty) : "");
+      subs[i] = {name: x.name.slice(0, 160), qty: qty.slice(0, 60)};
+    });
+    var live = null;
+    if (isPlainObject(e.liveChoice)){
+      live = {};
+      Object.keys(e.liveChoice).forEach(function(g){ var n = e.liveChoice[g]; if (typeof n === "number" && isFinite(n) && Math.floor(n) === n && n >= -1 && n < 100) live[g] = n; });
+    }
+    entries[k] = {
+      done: e.done === true, adapted: e.adapted === true,
+      status: MEAL_STATUSES.indexOf(e.status) >= 0 ? e.status : "planned",
+      rescheduledTime: typeof e.rescheduledTime === "string" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(e.rescheduledTime) ? e.rescheduledTime : null,
+      liveChoice: live, substitutions: subs
+    };
   });
   return Object.assign({}, v, {entries: entries});
 }
@@ -5998,7 +6015,7 @@ function openSubstitution(f, onConfirm, s, meal){
       var badge = priorityKey ? "≈ mesma " + PRIORITY_LABEL[priorityKey] : "";
       return "<div class=\"food-item\" data-idx=\"" + idx + "\" style=\"cursor:pointer;\">" +
         "<span class=\"fname\">" + o.name + "</span>" +
-        "<span><span class=\"fqty\">" + o.qty + "</span>" + (badge ? "<span class=\"swap-hint\">" + badge + "</span>" : "") + "</span>" +
+        "<span><span class=\"fqty\">" + escapeHtml(o.qty) + "</span>" + (badge ? "<span class=\"swap-hint\">" + badge + "</span>" : "") + "</span>" +
       "</div>";
     }).join("");
     if (indices.length > shown.length) html += "<p class=\"muted-p\" style=\"margin:4px 0;\">+" + (indices.length - shown.length) + " mais — continua a escrever para afinar</p>";
@@ -6046,9 +6063,9 @@ function openSubstitution(f, onConfirm, s, meal){
   function renderConfirm(chosen){
     var html = "<div class=\"mtitle\">Substituir " + escapeHtml(f.name) + " por " + escapeHtml(chosen.name) + "?</div>" +
       "<div style=\"display:flex; align-items:center; gap:10px; margin:18px 0;\">" +
-        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--line); border-radius:10px; padding:10px;\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>" +
+        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--line); border-radius:10px; padding:10px;\"><span class=\"fname\">" + escapeHtml(f.name) + "</span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span></div>" +
         "<span style=\"color:var(--muted); font-weight:700;\">→</span>" +
-        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--accent); border-radius:10px; padding:10px;\"><span class=\"fname\">" + chosen.name + "</span><span class=\"fqty\">" + chosen.qty + "</span></div>" +
+        "<div class=\"food-item\" style=\"flex:1; border:1px solid var(--accent); border-radius:10px; padding:10px;\"><span class=\"fname\">" + escapeHtml(chosen.name) + "</span><span class=\"fqty\">" + escapeHtml(chosen.qty) + "</span></div>" +
       "</div>" +
       "<button type=\"button\" class=\"btn primary\" id=\"confirmSub\" style=\"width:100%; margin-bottom:8px;\">Confirmar</button>" +
       "<button type=\"button\" class=\"btn\" id=\"cancelSub\" style=\"width:100%;\">Cancelar</button>";
@@ -6075,7 +6092,7 @@ function openMealOptionPicker(options, onPick){
     var shown = indices.slice(0, FOOD_SEARCH_RENDER_CAP);
     var listHtml = shown.map(function(oi){
       var o = options[oi];
-      return "<div class=\"food-item\" data-oi=\"" + oi + "\" style=\"cursor:pointer;\"><span class=\"fname\">" + o.name + "</span><span class=\"fqty\">" + o.qty + "</span></div>";
+      return "<div class=\"food-item\" data-oi=\"" + oi + "\" style=\"cursor:pointer;\"><span class=\"fname\">" + escapeHtml(o.name) + "</span><span class=\"fqty\">" + escapeHtml(o.qty) + "</span></div>";
     }).join("");
     if (indices.length > shown.length) listHtml += "<p class=\"muted-p\">+" + (indices.length - shown.length) + " mais — continua a escrever para afinar</p>";
     if (!indices.length) listHtml += "<p class=\"muted-p\">Sem alimentos com esse nome.</p>";
@@ -6399,7 +6416,7 @@ function openMealDetail(s, idx){
           var canSwap = f.group && profile.substitutionsEnabled;
           return "<div class=\"food-item\"" + (canSwap ? " data-fidx=\"" + fi + "\" style=\"cursor:pointer;\"" : "") + ">" +
             "<span class=\"fname\">" + escapeHtml(f.name) + "</span>" +
-            "<span><span class=\"fqty\">" + f.qty + "</span>" + (canSwap ? "<span class=\"swap-hint\">não tenho isto</span>" : "") + "</span>" +
+            "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" + (canSwap ? "<span class=\"swap-hint\">não tenho isto</span>" : "") + "</span>" +
           "</div>";
         }).join("") +
       "</div>" +
@@ -6901,7 +6918,7 @@ function tplMealFixed(m, idx, s){
     var swappable = f.group && canSwap;
     return "<div class=\"food-item\"" + (swappable ? " data-midx=\"" + idx + "\" data-fidx=\"" + fi + "\"" : "") + ">" +
       "<span class=\"fname\">" + escapeHtml(f.name) + "</span>" +
-      "<span><span class=\"fqty\">" + f.qty + "</span>" + (swappable ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
+      "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" + (swappable ? "<span class=\"swap-hint\">trocar</span>" : "") + "</span>" +
     "</div>";
   }).join("") + "</div>";
 }
@@ -6919,7 +6936,7 @@ function tplMealChoice(m, idx, s){
   var html = "";
   m.foods.forEach(function(f){
     if (!f.group){
-      html += "<div class=\"food-item\"><span class=\"fname\">" + f.name + "</span><span class=\"fqty\">" + f.qty + "</span></div>";
+      html += "<div class=\"food-item\"><span class=\"fname\">" + escapeHtml(f.name) + "</span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span></div>";
       return;
     }
     if (locked){
@@ -6941,7 +6958,7 @@ function tplMealChoice(m, idx, s){
     shownIndices.forEach(function(oi){
       var o = options[oi];
       var sel = selIdx===oi;
-      html += "<div class=\"builder-opt" + (sel?" sel":"") + "\" data-midx=\"" + idx + "\" data-group=\"" + f.group + "\" data-oi=\"" + oi + "\"><span class=\"radio\"></span><span>" + o.name + " <span class=\"num\" style=\"color:var(--muted);\">(" + o.qty + ")</span></span></div>";
+      html += "<div class=\"builder-opt" + (sel?" sel":"") + "\" data-midx=\"" + idx + "\" data-group=\"" + f.group + "\" data-oi=\"" + oi + "\"><span class=\"radio\"></span><span>" + escapeHtml(o.name) + " <span class=\"num\" style=\"color:var(--muted);\">(" + escapeHtml(o.qty) + ")</span></span></div>";
     });
     if (f.required===false){
       var noneSel = selIdx===-1;
@@ -7360,6 +7377,7 @@ function tplWorkoutLogger(s){
   return html;
 }
 
+var wlSaving = {}; // alunos com uma gravação de treino em curso (id → true): impede duplo toque enquanto o pedido está a meio
 function wireWorkoutLogger(s, el, rerender){
   var daySel = el.querySelector("#wlDay");
   if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
@@ -7396,6 +7414,8 @@ function wireWorkoutLogger(s, el, rerender){
   var rpeInput = el.querySelector("#wlRpe");
   if (rpeInput) rpeInput.addEventListener("input", function(){ el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
   save.addEventListener("click", function(){
+    var err = el.querySelector("#wlError");
+    if (wlSaving[s.id]){ err.textContent = "A guardar o treino… aguarda um instante."; err.style.display = "block"; return; } // duplo toque / formulário reconstruído durante o pedido
     var day = trainingProgramOf(s).days.filter(function(d){ return d.id === daySel.value; })[0];
     if (!day) return;
     var entries = day.exercises.map(function(e){
@@ -7409,7 +7429,6 @@ function wireWorkoutLogger(s, el, rerender){
       }
       return {exerciseId: e.id, name: e.name, sets: sets};
     });
-    var err = el.querySelector("#wlError");
     var invalid = entries.some(function(e){ return e.sets.some(function(x){ return x.reps > 100 || x.load > 1000; }); });
     if (invalid){ err.textContent = "Verifica os valores: máx. 100 repetições e 1000 kg."; err.style.display = "block"; return; }
     var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
@@ -7419,15 +7438,21 @@ function wireWorkoutLogger(s, el, rerender){
       wlDraftClear(s, day.id);
       restTimerStop(); // o treino acabou: o descanso já não faz sentido
       state.workoutDayId = null;
-      rerender();
+      // o pedido é assíncrono (profissional): só se redesenha se este aluno e este separador ainda estiverem no ecrã
+      if (state.alunoTab === "checkin" && (authRole !== "professional" || !state.alunoStudentId || String(state.alunoStudentId) === String(s.id))) rerender();
     }
     if (authRole === "professional" && sbReady){
       // só se dá como guardado (e só se apaga o rascunho) depois de o servidor aceitar; se falhar, desfaz-se e o rascunho fica
-      appendWorkoutLogAsPro(s, log).then(function(ok){
+      var idleLabel = save.textContent;
+      wlSaving[s.id] = true; save.disabled = true; save.textContent = "A guardar…";
+      Promise.resolve().then(function(){ return appendWorkoutLogAsPro(s, log); }).then(function(ok){
         if (!ok) throw new Error("columns");
+        delete wlSaving[s.id];
         showToast("✓ Treino guardado"); finish();
       }).catch(function(e){
+        delete wlSaving[s.id];
         undoWorkoutLog(s, log);
+        save.disabled = false; save.textContent = idleLabel;
         showToast(e && e.message === "columns" ? "⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase." : "⚠ Não foi possível guardar o treino — verifica a tua ligação");
       });
       return;
@@ -9845,7 +9870,7 @@ function computeAdaptationSummary(s, days){
   var cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   var cutoffISO = cutoff.toISOString().slice(0,10);
-  var counts = {};
+  var counts = Object.create(null); // sem protótipo: um tipo forjado como "constructor" ou "__proto__" é só mais uma chave
   (s.adaptationHistory || []).forEach(function(e){
     if (!e || typeof e.type !== "string" || typeof e.date !== "string" || e.date < cutoffISO) return;
     counts[e.type] = (counts[e.type] || 0) + 1;
@@ -9891,10 +9916,14 @@ function signalCheckin(s){
   return signal("checkin", "Check-in", "positivo", "Último check-in " + daysAgoLabel(days) + ".", "Desde o último check-in", "checkins");
 }
 
+// por data; no mesmo dia mantém a ordem de inserção (a última pesagem do dia é a que conta, como em weightCurrent)
+function sortWeightsStable(weights){
+  return weights.map(function(w, i){ return {w: w, i: i}; }).sort(function(a, b){ return a.w.date < b.w.date ? -1 : (a.w.date > b.w.date ? 1 : a.i - b.i); }).map(function(x){ return x.w; });
+}
 function computeRecentWeightChange(weights, weeks){
   weeks = weeks || SIGNAL_WEIGHT_TREND_WEEKS;
   if (!weights || weights.length < 2) return null;
-  var sorted = weights.slice().sort(function(a,b){ return a.date<b.date?-1:1; });
+  var sorted = sortWeightsStable(weights);
   var last = sorted[sorted.length-1];
   var cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - weeks*7);
@@ -9930,8 +9959,10 @@ function signalWeight(s){
   if (spanDays > SIGNAL_WEIGHT_MAX_SPAN_DAYS){
     // pesagem de referência antiga: tenta a mais antiga dentro da janela recente, se der pelo menos 14 dias de intervalo
     var cutoffISO = new Date(Date.now() - SIGNAL_WEIGHT_MAX_SPAN_DAYS * 86400000).toISOString().slice(0, 10);
-    var inWin = (s.weights || []).filter(function(w){ return w.date >= cutoffISO && w.date < change.to; }).sort(function(a, b){ return a.date < b.date ? -1 : 1; })[0];
-    var lastW = (s.weights || []).filter(function(w){ return w.date === change.to; })[0];
+    var sortedW = sortWeightsStable(s.weights || []);
+    var win = sortedW.filter(function(w){ return w.date >= cutoffISO && w.date < change.to; });
+    var inWin = win.length ? win.filter(function(w){ return w.date === win[0].date; }).pop() : null; // várias no mesmo dia: a última, como no cálculo principal
+    var lastW = sortedW.filter(function(w){ return w.date === change.to; }).pop();
     var altSpan = inWin && lastW ? Math.round((new Date(change.to + "T00:00:00") - new Date(inWin.date + "T00:00:00")) / 86400000) : 0;
     if (altSpan >= SIGNAL_WEIGHT_MIN_SPAN_DAYS){
       change = {diff: lastW.w - inWin.w, from: inWin.date, to: change.to};
@@ -10226,7 +10257,7 @@ function tplProHistorico(s){
     html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Adaptações — últimos 7 dias</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Ações que o próprio aluno registou (substituir, ignorar, reagendar, marcar flexível) — um autorrelato para perceberes o dia a dia, não uma auditoria nem um problema por si só.</p>" +
       summaryKeys.map(function(k){
-        return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(ADAPTATION_TYPE_LABEL[k] || k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
+        return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(Object.prototype.hasOwnProperty.call(ADAPTATION_TYPE_LABEL, k) ? ADAPTATION_TYPE_LABEL[k] : k) + "</div><div class=\"hval\">" + summary[k] + "</div></div>";
       }).join("") +
       "<div class=\"section-gap\"></div>";
   }

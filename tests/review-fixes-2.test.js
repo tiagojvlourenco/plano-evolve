@@ -59,7 +59,7 @@ var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
     return appendWorkoutLogAsPro(s, log);
   }).then(function(){
     check.check("2. Repetir o mesmo envio não duplica a sessão (id já existe)", serverLogs.length === 3);
-    check.check("2. O profissional só mostra 'guardado' e só apaga o rascunho depois de a escrita acabar (falha: desfaz)", /appendWorkoutLogAsPro\(s, log\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);\s*showToast\("✓ Treino guardado"\); finish\(\);/.test(appSource) && /undoWorkoutLog\(s, log\)/.test(appSource));
+    check.check("2. O profissional só mostra 'guardado' e só apaga o rascunho depois de a escrita acabar (falha: desfaz)", /appendWorkoutLogAsPro\(s, log\); \}\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);\s*delete wlSaving\[s\.id\];\s*showToast\("✓ Treino guardado"\); finish\(\);/.test(appSource) && /undoWorkoutLog\(s, log\)/.test(appSource));
     sb = realSb; sbReady = realReady;
   });
 })().then(function(){

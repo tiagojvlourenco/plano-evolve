@@ -17,14 +17,27 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("1. O tipo forjado aparece escapado no HTML do profissional", out.indexOf("<img src=x") < 0 && out.indexOf("&lt;img src=x") >= 0);
 })();
 
-// ---- 2. Estado das refeições: valida em profundidade (data, entradas e substituições) ----
+// ---- 2. Estado das refeições: reconstruído só com os campos e tipos que a app escreve ----
 (function(){
   check.check("2. Sem data em texto → null (reconstrói-se)", normalizeMealState({date: 20260101, entries: {}}) === null && normalizeMealState({entries: {}}) === null);
   check.check("2. entries que não é objeto → null", normalizeMealState({date: "2026-01-01", entries: []}) === null && normalizeMealState({date: "2026-01-01", entries: "x"}) === null && normalizeMealState(null) === null && normalizeMealState([]) === null);
-  var ok = normalizeMealState({date: "2026-01-01", entries: {m1: {status: "done", substitutions: {a: {x: 1}}}, m2: "lixo", m3: null, m4: {status: "skipped", substitutions: "lixo"}, m5: {status: "pending", substitutions: [1, 2]}}});
+  var ok = normalizeMealState({date: "2026-01-01", entries: {m1: {status: "flexible", done: true, substitutions: {"0": {name: "Ovo", qty: "2 un"}, a: {name: "x", qty: "1"}, "1": {name: 5, qty: "1"}, "2": "lixo"}}, m2: "lixo", m3: null, m4: {status: "skipped", substitutions: "lixo"}, m5: {status: "pending", substitutions: [1, 2]}}});
   check.check("2. Entradas que não são objetos são descartadas", Object.keys(ok.entries).join() === "m1,m4,m5");
-  check.check("2. Substituições inválidas (texto/lista) passam a {} e as válidas ficam", ok.entries.m1.substitutions.a.x === 1 && JSON.stringify(ok.entries.m4.substitutions) === "{}" && JSON.stringify(ok.entries.m5.substitutions) === "{}");
-  check.check("2. Estado legítimo mantém-se intacto (os outros campos incluídos)", (function(){ var v = {date: "2026-01-02", extra: 7, entries: {m1: {status: "done", note: "n", substitutions: {}}}}; return JSON.stringify(normalizeMealState(v)) === JSON.stringify(v); })());
+  check.check("2. Só ficam substituições com índice numérico, nome em texto e quantidade em texto", JSON.stringify(ok.entries.m1.substitutions) === JSON.stringify({"0": {name: "Ovo", qty: "2 un"}}) && JSON.stringify(ok.entries.m4.substitutions) === "{}" && JSON.stringify(ok.entries.m5.substitutions) === "{}");
+  check.check("2. Estado desconhecido volta a 'planned'; flexível mantém-se", ok.entries.m5.status === "planned" && ok.entries.m1.status === "flexible" && ok.entries.m4.status === "skipped");
+  var t1 = normalizeMealState({date: "d", entries: {a: {rescheduledTime: "13:30"}, b: {rescheduledTime: "<img src=x>"}, c: {rescheduledTime: "25:99"}, d: {rescheduledTime: 1330}, e: {rescheduledTime: "9:05"}}}).entries;
+  check.check("2. rescheduledTime só aceita horas HH:MM (senão null — não rebenta toMinutes nem entra no HTML)", t1.a.rescheduledTime === "13:30" && t1.b.rescheduledTime === null && t1.c.rescheduledTime === null && t1.d.rescheduledTime === null && t1.e.rescheduledTime === "9:05");
+  var lc = normalizeMealState({date: "d", entries: {a: {liveChoice: {prot: 1, carb: "x", fat: -1, bad: 1.5, huge: 1e9}}, b: {liveChoice: "lixo"}, c: {}}}).entries;
+  check.check("2. liveChoice: só índices inteiros pequenos; o resto cai (ou null)", JSON.stringify(lc.a.liveChoice) === JSON.stringify({prot: 1, fat: -1}) && lc.b.liveChoice === null && lc.c.liveChoice === null);
+  var legit = {date: "2026-01-02", entries: {m1: {done: true, adapted: true, status: "rescheduled", rescheduledTime: "18:00", liveChoice: {prot: 0}, substitutions: {"1": {name: "Frango", qty: "120 g"}}}}};
+  check.check("2. Estado legítimo mantém-se igual", JSON.stringify(normalizeMealState(legit)) === JSON.stringify(legit));
+  // texto forjado: nunca chega ao HTML do profissional/aluno sem escape
+  var evilQty = '<form action="https://evil.example/login"><input type=password></form><style>*{display:none}</style>';
+  var s = rowToStudent({id: "z", name: "T", meals: [{name: "Almoço", time: "13:00", foods: [{name: "Arroz", qty: "100 g", group: "carb", required: false}, {name: "Frango", qty: "120 g", group: "prot", required: false}]}], weights: [], assessments: [], photos: [],
+    meals_date: todayISO(), meal_daily_state: {date: todayISO(), entries: {"Almoço@13:00": {substitutions: {"0": {name: "Ovo <b>x</b>", qty: evilQty}}}}}});
+  var sv = studentView(s);
+  var html = tplPlano(sv) + tplHoje(sv);
+  check.check("2. Nome/quantidade de uma substituição forjada aparecem escapados em Plano e Hoje", html.indexOf("<form action") < 0 && html.indexOf("<style>*") < 0 && html.indexOf("&lt;form action") >= 0);
 })();
 
 // ---- 3. Progressão: topSet / 1RM com Epley simples; a bonificação de repetições só entra na pontuação ----
@@ -80,7 +93,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
     check.check("6. undoWorkoutLog remove a sessão das duas listas", s.workoutLogs.length === 1 && s.workoutLogsRaw.length === 1 && s.workoutLogs[0].id === "a" && s.workoutLogsRaw[0].id === "a");
     trainingColumnsAvailable = realCols; sb = realSb; sbReady = realReady;
     var src = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
-    check.check("6. O guardar do profissional só dá 'guardado' depois da escrita e repõe o registo se falhar (rascunho mantido)", /appendWorkoutLogAsPro\(s, log\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);/.test(src) && /catch\(function\([a-z]*\)\{[^}]*undoWorkoutLog\(s, log\)/.test(src.replace(/\n/g, " ")));
+    check.check("6. O guardar do profissional só dá 'guardado' depois da escrita e repõe o registo se falhar (rascunho mantido)", /appendWorkoutLogAsPro\(s, log\); \}\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);/.test(src) && /catch\(function\([a-z]*\)\{[^}]*undoWorkoutLog\(s, log\)/.test(src.replace(/\n/g, " ")));
     // rotas de leitura da tabela/gráfico do profissional usam o histórico dentro da linha de base e do mesmo tipo
     check.check("6. Tabela do profissional usa baselineHistory e o gráfico só histórico do mesmo tipo", /progressionStatus\(baselineHistory\(h\)\)/.test(src) && /sameKindHistory\(/.test(src));
   });
