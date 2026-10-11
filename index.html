@@ -5575,12 +5575,12 @@ function normalizeMealState(v){
       var x = e.substitutions[i];
       if (!/^\d{1,3}$/.test(i) || !isPlainObject(x) || typeof x.name !== "string" || !x.name) return;
       var qty = typeof x.qty === "string" ? x.qty : (typeof x.qty === "number" && isFinite(x.qty) ? String(x.qty) : "");
-      subs[i] = {name: x.name.slice(0, 160), qty: qty.slice(0, 60)};
+      subs[i] = {name: x.name.slice(0, 400), qty: qty.slice(0, 120)}; // tetos só contra abuso: há nomes do catálogo com ~200 caracteres e cortá-los perde a informação nutricional
     });
     var live = null;
     if (isPlainObject(e.liveChoice)){
       live = {};
-      Object.keys(e.liveChoice).forEach(function(g){ var n = e.liveChoice[g]; if (typeof n === "number" && isFinite(n) && Math.floor(n) === n && n >= -1 && n < 100) live[g] = n; });
+      Object.keys(e.liveChoice).forEach(function(g){ var n = e.liveChoice[g]; if (typeof n === "number" && isFinite(n) && Math.floor(n) === n && n >= -1 && n <= 100000) live[g] = n; }); // índice em optionsFor(): os grupos grandes passam das 600 opções
     }
     entries[k] = {
       done: e.done === true, adapted: e.adapted === true,
@@ -9929,7 +9929,8 @@ function computeRecentWeightChange(weights, weeks){
   cutoff.setDate(cutoff.getDate() - weeks*7);
   if (new Date(last.date+"T00:00:00") < cutoff) return null; // sem registos de peso dentro da janela
   var before = sorted.filter(function(w){ return new Date(w.date+"T00:00:00") <= cutoff; });
-  var first = before.length ? before[before.length-1] : sorted[0];
+  // sem pesagem antes da janela: a mais antiga que existe (várias nesse dia: a última, como em 'last' e em weightCurrent)
+  var first = before.length ? before[before.length-1] : sorted.filter(function(w){ return w.date === sorted[0].date; }).pop();
   if (first === last) return null; // só há um ponto disponível — nada para comparar
   return { diff: last.w - first.w, from: first.date, to: last.date };
 }

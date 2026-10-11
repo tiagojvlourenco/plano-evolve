@@ -27,8 +27,16 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("2. Estado desconhecido volta a 'planned'; flexível mantém-se", ok.entries.m5.status === "planned" && ok.entries.m1.status === "flexible" && ok.entries.m4.status === "skipped");
   var t1 = normalizeMealState({date: "d", entries: {a: {rescheduledTime: "13:30"}, b: {rescheduledTime: "<img src=x>"}, c: {rescheduledTime: "25:99"}, d: {rescheduledTime: 1330}, e: {rescheduledTime: "9:05"}}}).entries;
   check.check("2. rescheduledTime só aceita horas HH:MM (senão null — não rebenta toMinutes nem entra no HTML)", t1.a.rescheduledTime === "13:30" && t1.b.rescheduledTime === null && t1.c.rescheduledTime === null && t1.d.rescheduledTime === null && t1.e.rescheduledTime === "9:05");
-  var lc = normalizeMealState({date: "d", entries: {a: {liveChoice: {prot: 1, carb: "x", fat: -1, bad: 1.5, huge: 1e9}}, b: {liveChoice: "lixo"}, c: {}}}).entries;
-  check.check("2. liveChoice: só índices inteiros pequenos; o resto cai (ou null)", JSON.stringify(lc.a.liveChoice) === JSON.stringify({prot: 1, fat: -1}) && lc.b.liveChoice === null && lc.c.liveChoice === null);
+  var lc = normalizeMealState({date: "d", entries: {a: {liveChoice: {prot: 1, carb: "x", fat: -1, bad: 1.5, huge: 1e9, big: 625, mid: 178, neg: -2}}, b: {liveChoice: "lixo"}, c: {}}}).entries;
+  check.check("2. liveChoice: índices inteiros (incluindo 178 e 625 do 'Ver mais alimentos'); o resto cai (ou null)", JSON.stringify(lc.a.liveChoice) === JSON.stringify({prot: 1, fat: -1, big: 625, mid: 178}) && lc.b.liveChoice === null && lc.c.liveChoice === null);
+  // a escolha feita no 'Ver mais alimentos' sobrevive a gravar → recarregar (era perdida acima do índice 99)
+  var pick = rowToStudent({id: "p", name: "T", meals: [], weights: [], assessments: [], photos: [], meals_date: todayISO(), meal_daily_state: {date: todayISO(), entries: {"Almoço@13:00": {done: true, liveChoice: {carnes: 380, cereais: 21}}}}});
+  var back = rowToStudent(JSON.parse(JSON.stringify(studentToRow(pick))));
+  check.check("2. liveChoice 380 (carnes) mantém-se depois de gravar e recarregar", back.mealDailyState.entries["Almoço@13:00"].liveChoice.carnes === 380 && back.mealDailyState.entries["Almoço@13:00"].liveChoice.cereais === 21);
+  var longName = "Leite fermentado (Bifidus) sem lactose enriquecido com fibra, magro, " + new Array(130).join("x");
+  var ln = normalizeMealState({date: "d", entries: {a: {substitutions: {"0": {name: longName, qty: "100 g"}}}}}).entries.a.substitutions["0"];
+  check.check("2. Nomes do catálogo com ~200 caracteres não são cortados", ln.name === longName && ln.name.length === longName.length && longName.length > 195 && ln.qty === "100 g");
+  check.check("2. Todos os nomes do catálogo cabem no limite (nenhum é cortado)", Object.keys(FOOD_GROUPS).every(function(g){ return FOOD_GROUPS[g].every(function(o){ return o.name.length <= 400 && String(o.qty).length <= 120; }); }));
   var legit = {date: "2026-01-02", entries: {m1: {done: true, adapted: true, status: "rescheduled", rescheduledTime: "18:00", liveChoice: {prot: 0}, substitutions: {"1": {name: "Frango", qty: "120 g"}}}}};
   check.check("2. Estado legítimo mantém-se igual", JSON.stringify(normalizeMealState(legit)) === JSON.stringify(legit));
   // texto forjado: nunca chega ao HTML do profissional/aluno sem escape

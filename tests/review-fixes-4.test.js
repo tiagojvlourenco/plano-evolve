@@ -107,5 +107,10 @@ function tick(){ return new Promise(function(r){ setTimeout(r, 5); }); }
   check.check("5. Se a última do dia for outra, o sinal acompanha-a (−2,0 kg)", /-2,0 kg|−2,0 kg/.test(signalWeight(rev).text));
   check.check("5. computeRecentWeightChange: dentro do mesmo dia ganha a última inserida", computeRecentWeightChange(noOld.weights, 3).diff.toFixed(1) === "0.2");
 
+  // sem referência anterior à janela e com duas pesagens no dia mais antigo: conta a última desse dia (como no resto)
+  var early = [{date: daysAgo(20), w: 82}, {date: daysAgo(20), w: 80}, {date: daysAgo(1), w: 79}];
+  var ch = computeRecentWeightChange(early, 3);
+  check.check("5. Dia mais antigo com 2 pesagens e sem referência: parte da última (80), não da primeira (82)", ch.from === daysAgo(20) && Math.abs(ch.diff - (79 - 80)) < 1e-9);
+
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e); process.exit(1); });
