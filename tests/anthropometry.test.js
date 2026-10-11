@@ -173,4 +173,57 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   check.check("7. Uma visita com perímetros e pregas junta as duas etiquetas na mesma linha", /<br><span class="atime">perímetros · pregas<\/span>/.test(tplAssessTable({assessments: [{date: "2026-09-15", weight: 0, waist: 80, skinfolds: {triceps: 10}}]}, true)));
   check.check("7. Os cartões entram no separador de avaliação do profissional e do aluno", /html \+= tplPerimetersCard\(s\);\s*html \+= tplSkinfoldsCard\(s, opts\);/.test(appSource));
 })();
+
+// ---- 8. Várias leituras por local (ISAK): média de 2, mediana de 3 ----
+(function(){
+  var one = combineReadings([82.4], 1), two = combineReadings([82.0, 82.4], 1), three = combineReadings([82.0, 83.6, 82.4], 1);
+  check.check("8. Uma leitura fica como está; duas dão a média; três dão a mediana (não a média)", one.value === 82.4 && one.method === "única" && two.value === 82.2 && two.method === "média" && three.value === 82.4 && three.method === "mediana" && three.n === 3);
+  check.check("8. A média arredonda a 0,1: 12,2 e 12,3 → 12,3; 10 e 11 → 10,5", combineReadings([12.2, 12.3], 5).value === 12.3 && combineReadings([10, 11], 5).value === 10.5);
+  check.check("8. Perímetros (1 %): 2 leituras que diferem 0,5 % não pedem 3.ª; 82 e 83 (1,2 %) pedem", combineReadings([82, 82.4], 1).needsThird === false && combineReadings([82, 83], 1).needsThird === true);
+  check.check("8. Pregas (5 %): 12 e 12,5 (4 %) não pedem 3.ª; 12 e 14 (15 %) pedem", combineReadings([12, 12.5], 5).needsThird === false && combineReadings([12, 14], 5).needsThird === true);
+  check.check("8. Com 3 leituras já não pede outra, mas assinala dispersão acima do dobro da tolerância", combineReadings([12, 14, 13], 5).needsThird === false && combineReadings([12, 14, 13], 5).scattered === true && combineReadings([12, 12.4, 12.2], 5).scattered === false);
+  check.check("8. Ignora texto, NaN, zero e negativos; sem leituras válidas devolve null; mais de 3 só usa as 3 primeiras", combineReadings(["12", "abc", NaN, 0, -3], 5).value === 12 && combineReadings([NaN, 0], 5) === null && combineReadings([], 5) === null && combineReadings(null, 5) === null && combineReadings([10, 20, 30, 1000], 5).value === 20);
+  check.check("8. A dispersão é (máx − mín) / média × 100", combineReadings([12, 14], 5).spreadPct === 15.4);
+
+  // revisão adversarial: fronteiras exatas, empates e leitura única
+  check.check("8. Fronteira exata da tolerância não pede a 3.ª (erro de vírgula flutuante): 11,7/12,3 a 5 %, 79,6/80,4 e 19,9/20,1 a 1 %", combineReadings([11.7, 12.3], 5).needsThird === false && combineReadings([42.9, 45.1], 5).needsThird === false && combineReadings([79.6, 80.4], 1).needsThird === false && combineReadings([19.9, 20.1], 1).needsThird === false);
+  check.check("8. A decisão usa a percentagem que a mensagem mostra: 19,4/20,4 (5,0 %) não pede; 19,4/20,5 (5,5 %) pede, e a mensagem nunca diz 'diferem 5,0 % (mais de 5 %)'", combineReadings([19.4, 20.4], 5).needsThird === false && combineReadings([19.4, 20.5], 5).needsThird === true && !/diferem 5,0 % \(mais de 5 %\)/.test(readSkinfoldSet(fakeForm({sfTriceps: 19.4, sfTriceps_2: 20.4}, false, true)).issues.join(" ")));
+  check.check("8. A média arredonda os empates sempre para cima (binário não manda): 12,1+12,2 → 12,2; 10,1+10,2 → 10,2; 40+40,1 → 40,1; 10,1+11,2 → 10,7", combineReadings([12.1, 12.2], 5).value === 12.2 && combineReadings([10.1, 10.2], 5).value === 10.2 && combineReadings([40, 40.1], 5).value === 40.1 && combineReadings([10.1, 11.2], 5).value === 10.7);
+  check.check("8. Uma única leitura guarda-se tal como foi escrita (sem arredondar a 0,1): 12,25 e 82,25 ficam iguais", combineReadings([12.25], 5).value === 12.25 && readSkinfoldSet(fakeForm({sfTriceps: "12.25", sfSubscapular: "10.04"}, false, false)).values.triceps === 12.25 && readPerimeterSet(fakeForm({asWaist: "82.25"}, false, false)).values.waist === 82.25);
+
+  // a classificação da cintura usa o valor que se mostra (1 casa): 87,98 cm aparece como 88,0 e classifica como 88
+  function waistTile(sex, w){ return tplPerimetersCard({sex: sex, height: 175, age: 30, assessments: [{date: "2026-10-10", waist: w}]}).replace(/<[^>]+>/g, " "); }
+  check.check("8. Cintura de 87,98 cm (mostrada como 88,0) classifica como risco substancialmente aumentado na mulher; 93,98 cm (94,0) como risco aumentado no homem", /88,0[^]*risco substancialmente aumentado/.test(waistTile("Feminino", 87.98)) && /94,0[^]*risco aumentado/.test(waistTile("Masculino", 93.98)));
+  check.check("8. O mesmo valor mostrado dá a mesma classe: homem com 94 e com 93,98 (ambos 94,0 cm)", (waistTile("Masculino", 94).match(/risco aumentado|sem risco acrescido|risco substancialmente aumentado/) || [])[0] === (waistTile("Masculino", 93.98).match(/risco aumentado|sem risco acrescido|risco substancialmente aumentado/) || [])[0]);
+
+  // leitura do formulário (campo falso): o modo de 2–3 leituras liga as caixas _2 e _3
+  function fakeForm(map, multiPerim, multiSkin){
+    return {querySelector: function(sel){
+      if (sel === "#mrPerim") return {checked: !!multiPerim};
+      if (sel === "#mrSkin") return {checked: !!multiSkin};
+      var id = sel.replace(/^#/, "");
+      return id in map ? {value: String(map[id])} : null;
+    }};
+  }
+  var map = {asWaist: 82, asWaist_2: 82.4, asWaist_3: 83.6, asNeck: 34, sfTriceps: 12, sfTriceps_2: 14};
+  var off = readPerimeterSet(fakeForm(map, false, false));
+  check.check("8. Com o interruptor desligado só conta o 1.º campo (as leituras extra são ignoradas)", off.values.waist === 82 && off.reads.waist.length === 1 && off.values.neck === 34 && off.issues.length === 0);
+  var on = readPerimeterSet(fakeForm(map, true, false));
+  check.check("8. Com o interruptor ligado a cintura é a mediana de 82, 82,4 e 83,6 = 82,4 e guarda as 3 leituras", on.values.waist === 82.4 && on.reads.waist.join() === "82,82.4,83.6" && on.values.neck === 34 && on.reads.neck.length === 1);
+  var sk = readSkinfoldSet(fakeForm(map, false, true));
+  check.check("8. Duas pregas que diferem mais de 5 % pedem a 3.ª medição (aviso com a percentagem)", sk.values.triceps === 13 && /3\.ª medição/.test(sk.issues.join(" ")) && /15,4 %/.test(sk.issues.join(" ")));
+  var raw = readPerimeterSet(fakeForm({asWaist: 0, asHip: -5}, false, false));
+  check.check("8. Zero ou negativo continuam a chegar à validação (valor recusado ao guardar) em vez de desaparecerem", raw.values.waist === 0 && raw.values.hip === -5);
+  check.check("8. readPerimeterInputs / readSkinfoldInputs devolvem só os valores finais (compatibilidade)", JSON.stringify(readPerimeterInputs(fakeForm(map, true, false))) === JSON.stringify({neck: 34, waist: 82.4}) && readSkinfoldInputs(fakeForm(map, false, true)).triceps === 13);
+
+  // formulário e cartões
+  var f = tplAssessForm({sex: "Masculino"});
+  check.check("8. O formulário tem os campos extra (_2, _3) para todos os locais e o interruptor de cada secção", PERIMETER_FIELDS.every(function(fl){ return f.indexOf('id="as' + fl[2] + '_2"') >= 0 && f.indexOf('id="as' + fl[2] + '_3"') >= 0; }) && SKINFOLD_SITES.every(function(site){ return f.indexOf('id="sf' + site[2] + '_3"') >= 0; }) && /id="mrPerim"/.test(f) && /id="mrSkin"/.test(f) && (f.match(/class="meas-grid"/g) || []).length === 2);
+  check.check("8. Cada 2.ª/3.ª leitura tem o nome do local no aria-label (leitores de ecrã distinguem os 27 campos)", /id="asWaist_2"[^>]*aria-label="Cintura[^"]*, 2\.ª leitura"/.test(f) && /id="sfTriceps_3"[^>]*aria-label="Tricipital, 3\.ª leitura"/.test(f) && !/aria-label="2\.ª leitura"/.test(f));
+  var noteP = tplPerimetersCard({sex: "Masculino", height: 180, age: 30, assessments: [{date: "2026-10-10", waist: 82.4, reads: {waist: [82, 82.4, 83.6]}}]});
+  var noNoteP = tplPerimetersCard({sex: "Masculino", height: 180, age: 30, assessments: [{date: "2026-10-10", waist: 82.4}]});
+  check.check("8. O cartão de perímetros explica que há valores de várias leituras, só quando existem", /média de 2 ou a mediana de 3/.test(noteP) && !/média de 2 ou a mediana de 3/.test(noNoteP));
+  var noteS = tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [{date: "2026-10-10", skinfolds: {chest: 10, abdominal: 20, thigh: 15}, sfProtocol: "jp3", sfReads: {chest: [10, 10.2]}}]});
+  check.check("8. O mesmo no cartão de pregas; leituras malformadas (texto, array vazio) não rebentam", /média de 2 ou a mediana de 3/.test(noteS) && tplSkinfoldsCard({sex: "Masculino", age: 30, assessments: [{date: "2026-10-10", skinfolds: {chest: 10, abdominal: 20, thigh: 15}, sfProtocol: "jp3", sfReads: "lixo"}]}).indexOf("média de 2 ou a mediana") === -1 && tplPerimetersCard({sex: "Masculino", age: 30, assessments: [{date: "2026-10-10", waist: 80, reads: null}]}).length > 0);
+})();
 check.summarize();
