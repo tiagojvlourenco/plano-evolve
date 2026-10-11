@@ -6796,13 +6796,13 @@ function tplPerimetersCard(s){
   return html + "</div>";
 }
 
-// Dobras cutâneas: % de gordura pelo protocolo escolhido, massa gorda/magra, soma das dobras e tabela por prega (as últimas 4 medições)
+// Pregas cutâneas: % de gordura pelo protocolo escolhido, massa gorda/magra, soma das pregas e tabela por prega (as últimas 4 medições)
 function tplSkinfoldsCard(s, opts){
   var list = (s.assessments || []).filter(function(a){ return a && skinfoldValuesOf(a); }).sort(function(x, y){ return compareAssessmentsDesc(x, y); });
   if (!list.length) return "";
   var results = list.map(function(a){ return skinfoldResult(s, a); });
   var r0 = results[0], sexKey = r0.sexKey;
-  // só se compara com medições feitas com o mesmo protocolo (e, por isso, as mesmas dobras)
+  // só se compara com medições feitas com o mesmo protocolo (e, por isso, as mesmas pregas)
   function prevSame(valueOf){
     for (var j = 1; j < list.length; j++) if (results[j] && results[j].protocol === r0.protocol && results[j].sexKey === r0.sexKey){ var v = valueOf(list[j], results[j]); if (v != null) return v; }
     return null;
@@ -6814,13 +6814,13 @@ function tplSkinfoldsCard(s, opts){
     return lean ? Math.round((w - fat) * 10) / 10 : fat;
   }
   var tiles = [];
-  if (r0.protocol && r0.sum != null) tiles.push(kpiTile("Σ " + r0.sites.length + " dobras", r0.sum, "mm", prevSame(function(a, r){ return r.sum; }), "down", 1, true));
+  if (r0.protocol && r0.sum != null) tiles.push(kpiTile("Σ " + r0.sites.length + " pregas", r0.sum, "mm", prevSame(function(a, r){ return r.sum; }), "down", 1, true));
   if (r0.bodyFat != null){
-    tiles.push(kpiTile("% gordura (dobras)", r0.bodyFat, "%", prevSame(function(a, r){ return r.bodyFat; }), "down", 1, true));
+    tiles.push(kpiTile("% gordura (pregas)", r0.bodyFat, "%", prevSame(function(a, r){ return r.bodyFat; }), "down", 1, true));
     var fat0 = kgOf(list[0], r0, false), lean0 = kgOf(list[0], r0, true);
     if (fat0 != null){
-      tiles.push(kpiTile("Massa gorda (dobras)", fat0, "kg", prevSame(function(a, r){ return kgOf(a, r, false); }), "down", 1, true));
-      tiles.push(kpiTile("Massa magra (dobras)", lean0, "kg", prevSame(function(a, r){ return kgOf(a, r, true); }), "up", 1, true));
+      tiles.push(kpiTile("Massa gorda (pregas)", fat0, "kg", prevSame(function(a, r){ return kgOf(a, r, false); }), "down", 1, true));
+      tiles.push(kpiTile("Massa magra (pregas)", lean0, "kg", prevSame(function(a, r){ return kgOf(a, r, true); }), "up", 1, true));
     }
   }
   // áreas do braço: precisam do perímetro do braço relaxado e da tricipital na mesma avaliação
@@ -6833,12 +6833,12 @@ function tplSkinfoldsCard(s, opts){
     tiles.push(kpiTile("Área muscular do braço", cur.muscle, "cm²", prevArea ? prevArea.muscle : null, "up", 1, true));
     tiles.push(kpiTile("Área de gordura do braço", cur.fat, "cm²", prevArea ? prevArea.fat : null, "down", 1, true));
   }
-  var html = "<div class=\"card\"><div class=\"eyebrow\">Dobras cutâneas</div>";
+  var html = "<div class=\"card\"><div class=\"eyebrow\">Pregas cutâneas</div>";
   if (r0.protocol) html += "<p class=\"muted-p\" style=\"margin-top:6px;\">Protocolo: <b>" + r0.label + "</b>" + (opts && opts.editable && r0.bodyFat != null && r0.age >= 18 && bodyFatCategory(sexKey, r0.bodyFat) ? " · " + bodyFatCategory(sexKey, r0.bodyFat) + " (ACE)" : "") /* a categoria é para o profissional: ao aluno mostram-se os números e a tendência */ + "</p>";
   if (tiles.length) html += "<div class=\"kpi-grid\">" + tiles.join("") + "</div>";
   if (opts && opts.editable) r0.warnings.forEach(function(w){ html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--warn);\">⚠ " + escapeHtml(w) + "</p>"; }); // avisos de método: para quem mede
   var cols = list.slice(0, 4), rows = SKINFOLD_SITES.filter(function(site){ return cols.some(function(a){ return posNum(a.skinfolds[site[0]]) > 0; }); });
-  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Dobra (mm)</th>" + cols.map(function(a){ return "<th>" + fmtDateFullPt(a.date) + "</th>"; }).join("") + "</tr></thead><tbody>";
+  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Prega (mm)</th>" + cols.map(function(a){ return "<th>" + fmtDateFullPt(a.date) + "</th>"; }).join("") + "</tr></thead><tbody>";
   rows.forEach(function(site){
     html += "<tr><td class=\"date-cell\">" + site[1] + "</td>" + cols.map(function(a, i){
       var v = posNum(a.skinfolds[site[0]]);
@@ -6847,11 +6847,11 @@ function tplSkinfoldsCard(s, opts){
     }).join("") + "</tr>";
   });
   html += "</tbody></table></div>";
-  // o erro de medição de cada dobra ronda os 5 %: uma soma que varia menos do que isso pode ser só ruído
+  // o erro de medição de cada prega ronda os 5 %: uma soma que varia menos do que isso pode ser só ruído
   var prevSum = prevSame(function(a, r){ return r.sum; });
-  if (r0.sum != null && prevSum > 0 && Math.abs(r0.sum - prevSum) / prevSum < 0.05) html += "<p class=\"muted-p\" style=\"margin-top:10px;\">A soma das dobras variou menos de 5 %: pode ser apenas erro de medição, não uma mudança real.</p>";
+  if (r0.sum != null && prevSum > 0 && Math.abs(r0.sum - prevSum) / prevSum < 0.05) html += "<p class=\"muted-p\" style=\"margin-top:10px;\">A soma das pregas variou menos de 5 %: pode ser apenas erro de medição, não uma mudança real.</p>";
   html += "<p class=\"muted-p\" style=\"margin-top:10px;\">" + (opts && opts.editable
-    ? "Estimativa com erro típico de ±3–4 % de gordura: compara sempre medições do mesmo protocolo, feitas pela mesma pessoa e com o mesmo adipómetro. O que conta é a tendência, sobretudo a soma das dobras."
+    ? "Estimativa com erro típico de ±3–4 % de gordura: compara sempre medições do mesmo protocolo, feitas pela mesma pessoa e com o mesmo adipómetro. O que conta é a tendência, sobretudo a soma das pregas."
     : "Estimativa com margem de erro de ±3–4 %: o que conta é a tendência ao longo do tempo.") + "</p>";
   return html + "</div>";
 }
@@ -7970,7 +7970,7 @@ function tplImportPreview(s, parsed, plan){
   return html;
 }
 
-// ---------- Antropometria: perímetros e dobras cutâneas ----------
+// ---------- Antropometria: perímetros e pregas cutâneas ----------
 // Perímetros em cm: [chave, rótulo, sufixo do id, grupo, mínimo, máximo]. Mede-se o lado direito (ISAK); "(E)" é o esquerdo, para ver assimetrias.
 // As chaves antigas (waist, hip, chest, arm, thigh) mantêm-se, por isso as avaliações já gravadas continuam a aparecer.
 var PERIMETER_GROUPS = ["Tronco", "Membros superiores", "Membros inferiores"];
@@ -7998,7 +7998,7 @@ var PERIMETER_FIELDS = [
 var PERIMETER_PAIRS = [["arm", "armL", "Braço relaxado"], ["armFlexed", "armFlexedL", "Braço contraído"], ["forearm", "forearmL", "Antebraço"], ["thigh", "thighL", "Coxa"], ["calf", "calfL", "Gémeo"]];
 function perimeterField(key){ return PERIMETER_FIELDS.filter(function(f){ return f[0] === key; })[0] || null; }
 
-// Dobras cutâneas em mm: [chave, rótulo, sufixo do id, onde medir]
+// Pregas cutâneas em mm: [chave, rótulo, sufixo do id, onde medir]
 var SKINFOLD_SITES = [
   ["triceps", "Tricipital", "Triceps", "vertical, face posterior do braço, a meio entre o acrómio e o olécrano, braço relaxado", 55],
   ["biceps", "Bicipital", "Biceps", "vertical, face anterior do braço sobre o bíceps, ao nível da tricipital", 45],
@@ -8013,11 +8013,11 @@ var SKINFOLD_SITES = [
 var SKINFOLD_MIN_MM = 1, SKINFOLD_MAX_MM = 80, SKINFOLD_SOFT_MIN_MM = 2.5; // fora disto é gralha ou unidade errada; entre o aviso e o limite só se avisa
 // Equações de densidade corporal → % de gordura pela equação de Siri. Idades de validação: Jackson-Pollock 18–61 (homens) e 18–55 (mulheres); Durnin-Womersley 16–72.
 var SKINFOLD_PROTOCOLS = {
-  jp7: {label: "Jackson-Pollock 7 dobras", short: "JP7", sites: ["chest", "midaxillary", "triceps", "subscapular", "abdominal", "suprailiac", "thigh"], ages: {M: [18, 61], F: [18, 55]}},
-  jp3: {label: "Jackson-Pollock 3 dobras", short: "JP3", sites: {M: ["chest", "abdominal", "thigh"], F: ["triceps", "suprailiac", "thigh"]}, ages: {M: [18, 61], F: [18, 55]}},
-  dw4: {label: "Durnin-Womersley 4 dobras", short: "D-W4", sites: ["biceps", "triceps", "subscapular", "suprailiac"], ages: {M: [16, 72], F: [16, 72]}}
+  jp7: {label: "Jackson-Pollock 7 pregas", short: "JP7", sites: ["chest", "midaxillary", "triceps", "subscapular", "abdominal", "suprailiac", "thigh"], ages: {M: [18, 61], F: [18, 55]}},
+  jp3: {label: "Jackson-Pollock 3 pregas", short: "JP3", sites: {M: ["chest", "abdominal", "thigh"], F: ["triceps", "suprailiac", "thigh"]}, ages: {M: [18, 61], F: [18, 55]}},
+  dw4: {label: "Durnin-Womersley 4 pregas", short: "D-W4", sites: ["biceps", "triceps", "subscapular", "suprailiac"], ages: {M: [16, 72], F: [16, 72]}}
 };
-var SKINFOLD_PROTOCOL_ORDER = ["jp7", "jp3", "dw4"]; // "automático": a mais completa que as dobras medidas permitirem
+var SKINFOLD_PROTOCOL_ORDER = ["jp7", "jp3", "dw4"]; // "automático": a mais completa que as pregas medidas permitirem
 // Durnin-Womersley (1974): D = c − m·log10(Σ4); [idade mínima, c, m] por escalão (a partir de 17; aos 16 usa-se o primeiro)
 var DURNIN_WOMERSLEY = {
   M: [[0, 1.1620, 0.0630], [20, 1.1631, 0.0632], [30, 1.1422, 0.0544], [40, 1.1620, 0.0700], [50, 1.1715, 0.0779]],
@@ -8037,7 +8037,7 @@ function skinfoldSum(sf, sites){
   for (var i = 0; i < sites.length; i++){ var v = posNum(sf[sites[i]]); if (!v) return null; sum += v; }
   return sum;
 }
-// densidade corporal (g/mL) a partir da soma das dobras; null se a combinação não existir
+// densidade corporal (g/mL) a partir da soma das pregas; null se a combinação não existir
 function bodyDensityFromSkinfolds(protocol, sexKey, age, sum){
   if (!(sum > 0) || !sexKey || !(age > 0)) return null;
   if (protocol === "jp3") return sexKey === "M"
@@ -8072,7 +8072,7 @@ function skinfoldValuesOf(a){
   SKINFOLD_SITES.forEach(function(site){ var v = posNum(sf[site[0]]); if (v) { out[site[0]] = v; any = true; } });
   return any ? out : null;
 }
-// protocolo usado: o escolhido (se as dobras o permitirem) ou o mais completo possível
+// protocolo usado: o escolhido (se as pregas o permitirem) ou o mais completo possível
 function resolveSkinfoldProtocol(sf, sexKey, wanted, age){
   if (wanted && wanted !== "auto" && skinfoldSum(sf, skinfoldSitesOf(wanted, sexKey)) != null) return wanted;
   var first = null;
@@ -8086,7 +8086,7 @@ function resolveSkinfoldProtocol(sf, sexKey, wanted, age){
   }
   return first;
 }
-// resultado das dobras de uma avaliação: {protocol, label, short, sites, sum, density, bodyFat, warnings}; null sem dobras
+// resultado das pregas de uma avaliação: {protocol, label, short, sites, sum, density, bodyFat, warnings}; null sem pregas
 function skinfoldResult(s, a, wantedProtocol){
   var sf = skinfoldValuesOf(a);
   if (!sf) return null;
@@ -8095,7 +8095,7 @@ function skinfoldResult(s, a, wantedProtocol){
   var protocol = resolveSkinfoldProtocol(sf, sexKey, wantedProtocol || a.sfProtocol, age);
   var res = {protocol: protocol, label: null, short: null, sites: null, sum: null, density: null, bodyFat: null, warnings: [], sexKey: sexKey, age: age};
   if (!protocol){
-    res.warnings.push(sexKey ? "Faltam dobras para calcular a % de gordura (JP7: 7, JP3: 3, D-W4: 4)." : "Indica o sexo para aplicar as equações.");
+    res.warnings.push(sexKey ? "Faltam pregas para calcular a % de gordura (JP7: 7, JP3: 3, D-W4: 4)." : "Indica o sexo para aplicar as equações.");
     return res;
   }
   var p = SKINFOLD_PROTOCOLS[protocol];
@@ -8134,8 +8134,8 @@ function anthroPlausibilityWarnings(perims, sfs, heightCm){
   SKINFOLD_SITES.forEach(function(site){
     var v = sfs[site[0]];
     if (v == null) return;
-    if (v < SKINFOLD_SOFT_MIN_MM) out.push("Dobra " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito baixa: confirma a leitura.");
-    else if (v > site[4]) out.push("Dobra " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito alta: confirma a leitura.");
+    if (v < SKINFOLD_SOFT_MIN_MM) out.push("Prega " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito baixa: confirma a leitura.");
+    else if (v > site[4]) out.push("Prega " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito alta: confirma a leitura.");
   });
   return out;
 }
@@ -8197,8 +8197,8 @@ function tplAssessForm(s){
         "</select></div>" +
       "</div>" +
     "</details>" +
-    "<details class=\"assess-extra\" style=\"grid-column:1/-1;\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">Dobras cutâneas (mm) (opcional)</summary>" +
-      "<p class=\"muted-p\" style=\"margin-top:8px;\">Mede do lado direito com o adipómetro, ao fim de cerca de 2 s depois de largar a pressão, e regista a média de 2 medições por dobra; se diferirem mais de 5 %, mede uma terceira e usa a mediana das três. As equações dão uma estimativa da % de gordura (erro típico de ±3–4 %): o importante é medir sempre da mesma forma.</p>" +
+    "<details class=\"assess-extra\" style=\"grid-column:1/-1;\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">Pregas cutâneas (mm) (opcional)</summary>" +
+      "<p class=\"muted-p\" style=\"margin-top:8px;\">Mede do lado direito com o adipómetro, ao fim de cerca de 2 s depois de largar a pressão, e regista a média de 2 medições por prega; se diferirem mais de 5 %, mede uma terceira e usa a mediana das três. As equações dão uma estimativa da % de gordura (erro típico de ±3–4 %): o importante é medir sempre da mesma forma.</p>" +
       "<details class=\"assess-howto\"><summary>Onde medir</summary><ul>" + SKINFOLD_SITES.map(function(site){ return "<li><b>" + site[1] + ":</b> " + escapeHtml(site[3]) + "</li>"; }).join("") + "</ul></details>" +
       "<div style=\"display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px;\">" +
         SKINFOLD_SITES.map(function(site){ return "<div class=\"f\"><label for=\"sf" + site[2] + "\">" + site[1] + "</label><input type=\"number\" inputmode=\"decimal\" step=\"0.5\" min=\"0\" id=\"sf" + site[2] + "\" placeholder=\"mm\"></div>"; }).join("") +
@@ -8235,7 +8235,7 @@ function tplAssessTable(s, editable){
     var idx = list.indexOf(a);
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + (function(){ var tags = []; if (PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; })) tags.push("perímetros"); if (skinfoldValuesOf(a)) tags.push("dobras"); return tags.length ? "<br><span class=\"atime\">" + tags.join(" · ") + "</span>" : ""; })() + "</td>" +
+      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + (function(){ var tags = []; if (PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; })) tags.push("perímetros"); if (skinfoldValuesOf(a)) tags.push("pregas"); return tags.length ? "<br><span class=\"atime\">" + tags.join(" · ") + "</span>" : ""; })() + "</td>" +
       "<td>" + fmtPos(a.weight, 1, "kg") + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + fmtPos(a.bodyFat, 1, "%") + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + fmtPos(a.muscle, 1, "kg") + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -10601,7 +10601,7 @@ function tplProHistorico(s){
   return html;
 }
 
-// lê as dobras do formulário (só as preenchidas)
+// lê as pregas do formulário (só as preenchidas)
 function readSkinfoldInputs(el){
   var out = {};
   SKINFOLD_SITES.forEach(function(site){ var inp = el.querySelector("#sf" + site[2]); var v = inp ? parseFloat(inp.value) : NaN; if (!isNaN(v)) out[site[0]] = v; });
@@ -11187,7 +11187,7 @@ function wireProTab(s){
     }
     var badSkin = SKINFOLD_SITES.filter(function(site){ return sfs[site[0]] != null && (sfs[site[0]] < SKINFOLD_MIN_MM || sfs[site[0]] > SKINFOLD_MAX_MM); })[0];
     if (badSkin){
-      errEl.textContent = "Dobra " + badSkin[1].toLowerCase() + ": o valor tem de estar entre " + SKINFOLD_MIN_MM + " e " + SKINFOLD_MAX_MM + " mm.";
+      errEl.textContent = "Prega " + badSkin[1].toLowerCase() + ": o valor tem de estar entre " + SKINFOLD_MIN_MM + " e " + SKINFOLD_MAX_MM + " mm.";
       errEl.style.display = "block";
       return;
     }
@@ -11203,7 +11203,7 @@ function wireProTab(s){
       }
       var missing = need.filter(function(k){ return !(sfs[k] > 0); });
       if (missing.length){
-        errEl.textContent = SKINFOLD_PROTOCOLS[sfWanted].label + ": faltam as dobras " + missing.map(function(k){ return SKINFOLD_SITES.filter(function(x){ return x[0] === k; })[0][1].toLowerCase(); }).join(", ") + ".";
+        errEl.textContent = SKINFOLD_PROTOCOLS[sfWanted].label + ": faltam as pregas " + missing.map(function(k){ return SKINFOLD_SITES.filter(function(x){ return x[0] === k; })[0][1].toLowerCase(); }).join(", ") + ".";
         errEl.style.display = "block";
         return;
       }
@@ -11218,7 +11218,7 @@ function wireProTab(s){
     if (errEl) errEl.style.display = "none";
     if (!s.assessments) s.assessments = [];
     var hasComposition = [weight,bodyFat,muscle,visceral,water].some(function(v){ return !isNaN(v); });
-    // só perímetros/dobras: não houve pesagem — não se inventa um peso (ficaria como medição e estragaria os indicadores)
+    // só perímetros/pregas: não houve pesagem — não se inventa um peso (ficaria como medição e estragaria os indicadores)
     var entry = {date:date, weight: hasComposition ? (weight||s.weightCurrent) : 0, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
     if (time) entry.time = time;
     Object.keys(perims).forEach(function(k){ entry[k] = perims[k]; });
