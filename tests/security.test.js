@@ -33,10 +33,11 @@ var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8"
 
 // ---- 3. photoUrl(): ordem de resolução e nunca produz undefined/null no HTML ----
 (function(){
-  check.check("3. Prioriza o URL assinado (_resolvedUrl) sobre tudo o resto", photoUrl({_resolvedUrl:"assinado", url:"antigo", dataUrl:"local"}) === "assinado");
-  check.check("3. Sem URL assinado, usa o URL antigo (compatibilidade retroativa)", photoUrl({url:"antigo", dataUrl:"local"}) === "antigo");
-  check.check("3. Sem URL nenhum, usa o fallback local em base64", photoUrl({dataUrl:"local"}) === "local");
-  check.check("3. Sem nenhum dos três, devolve string vazia (nunca undefined/null no <img src>)", photoUrl({}) === "");
+  check.check("3. Prioriza o URL assinado (_resolvedUrl) sobre tudo o resto", photoUrl({_resolvedUrl:"https://s/assinado", url:"https://s/antigo", dataUrl:"data:image/png;base64,AA"}) === "https://s/assinado");
+  check.check("3. Sem URL assinado, usa o URL antigo (compatibilidade retroativa)", photoUrl({url:"https://s/antigo", dataUrl:"data:image/png;base64,AA"}) === "https://s/antigo");
+  check.check("3. Sem URL nenhum, usa o fallback local em base64", photoUrl({dataUrl:"data:image/jpeg;base64,AA"}) === "data:image/jpeg;base64,AA");
+  check.check("3. Sem nenhum dos três, devolve string vazia (nunca undefined/null no <img src>)", photoUrl({}) === "" && photoUrl(null) === "");
+  check.check("3. Só aceita https/http/blob/data:image — javascript:, data:text/html e lixo ficam vazios", photoUrl({url:"javascript:alert(1)"}) === "" && photoUrl({url:"data:text/html;base64,AA"}) === "" && photoUrl({url:'x" onerror="1'}) === "" && photoUrl({url:42}) === "");
 })();
 
 // ---- 4. resolvePhotoUrls(): não tenta rede sem ligação, nunca rebenta ----

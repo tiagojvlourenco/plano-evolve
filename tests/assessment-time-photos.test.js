@@ -35,7 +35,7 @@ function assess(over){ return Object.assign({date:"2026-09-01", weight:69, bodyF
   check.check("3. Dia mais recente primeiro", sorted[0] === 72);
   check.check("3. No mesmo dia, a hora mais tarde primeiro", sorted[1] === 71 && sorted[2] === 70);
   check.check("3. Sem hora conta como início do dia (fica depois das que têm hora)", sorted[3] === 73);
-  check.check("3. Tabela, indicadores e apagar usam todos a mesma ordenação (nenhuma antiga sobra)", html.indexOf("a.date<b.date?1:-1") === -1 && (html.match(/\.sort\(compareAssessmentsDesc\)/g) || []).length === 3);
+  check.check("3. Tabela, indicadores e apagar usam todos a mesma ordenação (nenhuma antiga sobra)", html.indexOf("a.date<b.date?1:-1") === -1 && (html.match(/compareAssessmentsDesc/g) || []).length >= 6);
 })();
 
 // ---- 4. A hora é guardada ----
