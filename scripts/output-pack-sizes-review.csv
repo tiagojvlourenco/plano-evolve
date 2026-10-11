@@ -58,11 +58,11 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4068706999079,Almôndegas em molho de tomate,Aldi,lista-aldi.csv,540 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4068263012778,Mexilhões em escabeche,Aldi,lista-aldi.csv,111 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4065019005541,Preparado lácteo de framboesa e romã,Milsani,lista-aldi.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4068263007156,Queijo fresco,Milsani,lista-aldi.csv,,ignorar,,,,sem embalagem
+4068263007156,Queijo fresco em salmoura,Milsani,lista-aldi.csv,,ignorar,,,,sem embalagem
 2024060091516,Bebida proteica sabor baunilha,Milsani,lista-aldi.csv,332 ml / 350 g,ignorar,,,,código de peso variável (EAN 2...)
 2014000068180,Bebida láctea fermentada Mazada,Milsani,lista-aldi.csv,484 ml,ignorar,,,,código de peso variável (EAN 2...)
 4068428038698,Iogurte proteico de morango,Milsani,lista-aldi.csv,200 gram,preencher,200,g,iogurte,embalagem individual
-4061458032247,Queijo quark 40% gordura,Milsani,lista-aldi.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de iogurte
+4061458032247,Queijo quark 40% gordura,Milsani,lista-aldi.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2014060091517,Bebida proteica sabor chocolate,Milsani,lista-aldi.csv,332 ml / 350 g,ignorar,,,,código de peso variável (EAN 2...)
 2024000009014,Leite condensado magro,Milsani,lista-aldi.csv,450 g,ignorar,,,,código de peso variável (EAN 2...)
 4068264002587,Leite UHT meio-gordo,Milsani,lista-aldi.csv,,ignorar,,,,sem embalagem
@@ -84,7 +84,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8436019097045,Bebida de aveia,Auchan,lista-auchan.csv,1 L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 8432022001710,Queijo fresco cottage,Auchan,lista-auchan.csv,200g,ignorar,,,,embalagem grande (200 g): não é uma dose individual de queijo fresco
 3596710508549,Muesli crocante,Auchan,lista-auchan.csv,0.375 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-3596710520435,Duo choco caramelo,Auchan,lista-auchan.csv,0.375 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+3596710520435,Cereais duo choco caramelo,Auchan,lista-auchan.csv,0.375 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 3596710440634,Mozzarella,Auchan,lista-auchan.csv,0.125 kg,preencher,125,g,queijo fresco,embalagem individual
 8432022001574,Queijo fresco batido,Auchan,lista-auchan.csv,500 g,ignorar,,,,embalagem grande (500 g): não é uma dose individual de queijo fresco
 3596710433513,"Molho de pimentos, tomate cereja, piri-piri e cebola roxa",Auchan,lista-auchan.csv,0.366 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -111,7 +111,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8420690001248,Soja texturizada,Auchan,lista-auchan.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 3596710515813,Esparguete,Auchan,lista-auchan.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002124098,Queijo fresco para barrar,Auchan,lista-auchan.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-3596710523047,Arroz com coco,Auchan,lista-auchan.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+3596710523047,Bebida de arroz com coco,Auchan,lista-auchan.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601002111685,Tortitas de arroz,Auchan,lista-auchan.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002091918,Batatas fritas em azeite,Auchan,lista-auchan.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002057631,Batatas fritas sabor presunto,Auchan,lista-auchan.csv,185g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -132,7 +132,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002093073,Natas culinárias,Auchan,lista-auchan.csv,200 ml / 202 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8432022001703,Skyr de morango,Auchan,lista-auchan.csv,150 g,preencher,150,g,iogurte,embalagem individual
 5601002105981,Arroz agulha extra longo,Auchan,lista-auchan.csv,1kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601002121585,Déliform chocolate negro,Auchan,lista-auchan.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601002121585,Cereais Déliform de chocolate negro,Auchan,lista-auchan.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002121332,Queijo emmental ralado,Auchan,lista-auchan.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8436019091869,Bebida de aveia barista UHT,Auchan,lista-auchan.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 8410191787192,Barra proteica,Auchan,lista-auchan.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -151,7 +151,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002114631,Requeijão de ovelha de Seia,Auchan,lista-auchan.csv,200 g,ignorar,,,,embalagem grande (200 g): não é uma dose individual de queijo fresco
 5601002106940,Ketchup,Auchan,lista-auchan.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002105844,Queijo fresco meio-gordo sem lactose,Auchan,lista-auchan.csv,"125 g (2 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 2
-5601002108029,Gelatina,Auchan,lista-auchan.csv,400 g (4x100g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601002108029,Gelatina pronta a consumir,Auchan,lista-auchan.csv,400 g (4x100g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002111678,Tortitas de arroz,Auchan,lista-auchan.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002113207,Natas culinárias sem lactose,Auchan,lista-auchan.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002118219,Queijo flamengo,Auchan,lista-auchan.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -167,7 +167,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002005014,Arroz agulha,Auchan,lista-auchan.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002085580,Pedaços de ananás,Auchan,lista-auchan.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002089113,Cookies,Auchan,lista-auchan.csv,150g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8435130100412,Mini sandwich,Auchan,lista-auchan.csv,324 g (6 x 54 g) / 510 ml (6 x 85 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+8435130100412,Gelado mini sandwich,Auchan,lista-auchan.csv,324 g (6 x 54 g) / 510 ml (6 x 85 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002111104,Néctar de laranja,Auchan,lista-auchan.csv,1 L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 8410379913887,Queijo para barrar sem lactose,Auchan,lista-auchan.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002108470,Fiambre da perna extra fatias finas,Auchan,lista-auchan.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -185,7 +185,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002055422,Feijão-frade cozido,Auchan,lista-auchan.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2120014000068,Bola Tigre (pão de trigo 50 g),Auchan,lista-auchan.csv,,ignorar,,,,código de peso variável (EAN 2...)
 5601002116901,Farinha de trigo do Alentejo tipo 65,Auchan,lista-auchan.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601002060105,Atum posta em óleo vegetal,Auchan,lista-auchan.csv,120 g (78 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601002060105,Atum em posta em óleo vegetal,Auchan,lista-auchan.csv,120 g (78 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002113979,Leite meio-gordo,Auchan,lista-auchan.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601002110114,Queijo de cabra atabafado,Auchan,lista-auchan.csv,~150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002114921,Doce extra de ameixa-mirabela,Auchan,lista-auchan.csv,360 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -209,7 +209,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 3596710147724,Biscoito de caramelo e chocolate de leite,Auchan,lista-auchan.csv,0.3 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002009012,Chocolate negro amargo,Auchan,lista-auchan.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002032874,Tostas de trigo integral,Auchan,lista-auchan.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601002046116,Atum posta em óleo vegetal,Auchan,lista-auchan.csv,110 g (72 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601002046116,Atum em posta em óleo vegetal,Auchan,lista-auchan.csv,110 g (72 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002081612,Chocolate de leite com passas e amêndoas,Auchan,lista-auchan.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002066701,Queijo flamengo fatias,Auchan,lista-auchan.csv,275 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002094575,Creme culinário,Auchan,lista-auchan.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -227,7 +227,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8435177051319,Tâmaras inteiras,Auchan,lista-auchan.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410707003396,Néctar de pêssego light,Auchan,lista-auchan.csv,2 L,ignorar,,,,embalagem grande (2000 ml): não é uma dose individual de bebida
 8410069180049,Ravioli de queijos,Auchan,lista-auchan.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8435177055669,Mistura Paixão,Auchan,lista-auchan.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+8435177055669,Mistura de frutos secos (Mistura Paixão),Auchan,lista-auchan.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8411555068001,Sardinhas em óleo de girassol,Auchan,lista-auchan.csv,88 g (65 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410376038156,Aros de chocolate negro,Auchan,lista-auchan.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002055873,Maionese light,Auchan,lista-auchan.csv,450 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -272,7 +272,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002114549,Natas culinárias,Auchan,lista-auchan.csv,200ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002069306,4 hambúrgueres de frango,Auchan,lista-auchan.csv,320 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2983281014806,Queijo flamengo,Auchan,lista-auchan.csv,,ignorar,,,,código de peso variável (EAN 2...)
-5601002085627,Aroma de baunilha,Auchan,lista-auchan.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601002085627,Iogurte aroma baunilha,Auchan,lista-auchan.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601002105530,Leite meio-gordo,Auchan,lista-auchan.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601002033420,Leite meio-gordo,Auchan,lista-auchan.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601002108463,Fiambre da perna extra fatias,Auchan,lista-auchan.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -294,7 +294,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312101062,Cereais,Continente,lista-continente.csv,300 g (6 x 50 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077657,Corn Flakes,Continente,lista-continente.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954501629,Tortitas de Milho com Sal,Continente,lista-continente.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312069652,Crunchy Muesli Frutos Secos,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312069652,Muesli crunchy de frutos secos,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312069645,Muesli Crunchy Chocolate,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074601,Crunchy muesli,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078081,Tortitas de Arroz,Continente,lista-continente.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -309,7 +309,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312182887,Pão de Forma Clássico,Continente,lista-continente.csv,820 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514954,Leite Aveia,Continente,lista-continente.csv,1 litro,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312507628,Iogurte Natural Meio-Gordo,Continente,lista-continente.csv,1000 g (8 x 125 g),preencher,125,g,iogurte,unidade de um pack de 8
-5601312511939,Iogurte Morango Sabor +Proteína,Continente,lista-continente.csv,280 g / 267 ml,ignorar,,,,embalagem grande (280 g): não é uma dose individual de iogurte
+5601312511939,Iogurte líquido +Proteína de morango,Continente,lista-continente.csv,280 g / 267 ml,ignorar,,,,embalagem grande (267 ml): não é uma dose individual de iogurte
 5601312510666,Bebida de Aveia,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312061397,Mel de Flores,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312182955,Pão de Forma Centeio,Continente,lista-continente.csv,600 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -349,9 +349,9 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312105794,Tortilhas de Trigo,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312000006,Clássica,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312502586,Natural,Continente,lista-continente.csv,720 g (6 x 120 g),preencher,120,g,iogurte (nome só com o sabor),unidade de um pack de 6
-5601312047995,Azeite,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312047995,Batatas fritas lisas em azeite,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078883,Barras cruas avelã & cacau,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312100485,Cereais e Leite,Continente,lista-continente.csv,300 g (6 x 50 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312100485,Bolacha de cereais e leite,Continente,lista-continente.csv,300 g (6 x 50 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514084,Bebida Vegetal De Avelã,Continente,lista-continente.csv,1L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312108641,Shape & Go caramelo salgado,Continente,lista-continente.csv,6 x 22 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312881421,Uva passa durada,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -372,15 +372,15 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312078548,Maçã & Banana,Continente,lista-continente.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312185451,Pão Rústico Centeio,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312515456,Leite Cacau,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
-5601312000013,Onduladas,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312000013,Batatas fritas onduladas,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312062028,Biscuits à la canelle,Continente,lista-continente.csv,470 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312070382,Stevia,Continente,lista-continente.csv,40 g (40 x 1 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312075127,Bolacha Maria,Continente,lista-continente.csv,800 g (4 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502138,Puff de Trigo,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954501254,Barras crocantes Sementes de Sésamo,Continente,lista-continente.csv,75 g (3 x 25 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502145,Flocos de Milho,Continente,lista-continente.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312040231,Laminados Cogumelos,Continente,lista-continente.csv,185 g (355 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312306641,Peito Frango Forno de Lenha,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312040231,Cogumelos laminados,Continente,lista-continente.csv,185 g (355 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312306641,Peito de frango fumado fatiado (forno de lenha),Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306610,Peito Peru,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312070443,Fusilli de Trigo Integral,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312102342,Mel de Flores 100% Português,Continente,lista-continente.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -414,7 +414,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312150046,Queijo Flamengo Fatiado -30% Gordura* Pack Familiar 450 g (2x 225 g),Continente,lista-continente.csv,450 g (2 x 225 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312105343,Cereais Estrelas de Manga e Abóbora Biológicos,Continente,lista-continente.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312507512,Creme Vegetal,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312090892,Sumo Laranja,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
+5601312090892,Sumo de laranja,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312108313,Gelatina sabor a Mirtilo 0% Açúcar,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312047834,Chocolate Negro 70% Cacau,Continente,lista-continente.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312507697,Nata para Culinária,Continente,lista-continente.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -433,7 +433,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312178934,Mini Tostas Integrais,Continente,lista-continente.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502107,Flocos de Aveia Integral Finos,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074311,Lentilhas,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312061977,Bolachas Digestive,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312061977,Bolachas digestivas,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312510901,+ Proteína Aroma Baunilha,Continente,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312070429,Esparguete de Trigo Integral,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306917,Edam,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -497,8 +497,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312514152,+Protein Chocolate E Nata,Continente,lista-continente.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312513469,+ Proteína Mouse sabor Chocolate,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312106692,Milk Crockers,Continente,lista-continente.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312101048,Batata Doce,Continente,lista-continente.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312107712,Abóbora,Continente,lista-continente.csv,450 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312101048,Batata-doce frita,Continente,lista-continente.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312107712,"Doce de abóbora, laranja e canela",Continente,lista-continente.csv,450 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312094685,Gasocarbónica sabor a Limão,Continente,lista-continente.csv,75 cl,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312307471,Presunto Serrano,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312107972,Pétalas de Chocolate,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -506,7 +506,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312094869,100% sumo maçã,Continente,lista-continente.csv,1 litro,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312106746,Achocolatado Instantâneo,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312009054,Grão de bico,Continente,lista-continente.csv,420gr,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312048978,Sabor a Receita Camponesa,Continente,lista-continente.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312048978,"Batatas fritas lisas sabor tomate, vegetais e especiarias",Continente,lista-continente.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312090861,Jus d'orange,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312067269,Bolachas,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954500417,Bebida biológica arroz,Continente,lista-continente.csv,200 ml,preencher,200,ml,bebida,embalagem individual
@@ -521,7 +521,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312303657,Queijo Fresco,Continente,lista-continente.csv,"125 g (2 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 2
 5601312067221,Shortcake de chocolate,Continente,lista-continente.csv,185 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312303503,Queijo Flamengo Fatiado,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312093961,8 Frutos,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312093961,Sumo 8 frutos,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312307174,Queijo Flamengo Fatiado Produzido nos Açores,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514459,+ Proteína Aroma Manga,Continente,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077312,Azeite,Continente,lista-continente.csv,750ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -543,7 +543,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312110149,Bolachas Favoritas,Continente,lista-continente.csv,220g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514930,Bebida de arroz,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312876564,Mistura de sementes,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312106753,Achocolatado Instantâneo,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312106753,Bebida achocolatada instantânea,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312002208,Doce extra 4 Frutos Vermelhos,Continente,lista-continente.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312028024,Iced Tea Manga,Continente,lista-continente.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312041139,Estrelas de Mel,Continente,lista-continente.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -557,7 +557,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312076841,Chocolate Negro,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312076315,Agulha,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312509318,Gelado manga,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312077053,Ketchup,Continente,lista-continente.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312077053,Batatas fritas onduladas sabor ketchup,Continente,lista-continente.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312090120,Iced Tea Pêssego,Continente,lista-continente.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306863,Queijo Cheddar,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312079736,Cereais Estrelas de Mel,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -580,8 +580,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312103639,Pasta Mix Frutos Secos,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306825,Queijo Emmental,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312067252,Tomate Triturado,Continente,lista-continente.csv,390 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312512455,Manga Papaia,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504559,Frutos Vermelhos,Continente,lista-continente.csv,640 g (4 x 160 g) / 620 ml (4 x 155 ml),preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601312512455,Iogurte líquido magro de manga e papaia,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
+5601312504559,Leite fermentado líquido magro de frutos vermelhos,Continente,lista-continente.csv,640 g (4 x 160 g) / 620 ml (4 x 155 ml),preencher,155,ml,bebida,unidade de um pack de 4
 5601312101666,Pate de noix de cajou,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306382,Fiambre Pá,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312507642,Mix Mediterranean,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -602,7 +602,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312005247,Letras,Continente,lista-continente.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954501575,Chocolate negro 74% de cacau,Continente,lista-continente.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312063278,Biscoitos com Manteiga e Amêndoa,Continente,lista-continente.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312070078,Bolacha Baunilha,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312070078,Bolachas recheadas de baunilha,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312092131,Néctar,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312090854,100% Sumo Pêssego e Uva,Continente,lista-continente.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
 5601312503958,Mythos Sensação Iogurte estilo Grego Stracciatella,Continente,lista-continente.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
@@ -617,7 +617,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312047827,Chocolate de Leite,Continente,lista-continente.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312079101,Atum em Posta Óleo Vegetal,Continente,lista-continente.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078418,Batatas em Palitos Finos,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312074694,Pipocas doces,Continente,lista-continente.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312074694,Pipocas doces (balde),Continente,lista-continente.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312079279,Virgin Olive Oil,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312103110,Maçã & Pera,Continente,lista-continente.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312304982,Queijo fresco Natural,Continente,lista-continente.csv,"250 g (4 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 4
@@ -631,13 +631,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312100928,Farinha Aveia Manga Banana,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312880578,Preparado de Carne de Bovino,Continente,lista-continente.csv,900 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312182924,Pão Hambúrguer Maxi,Continente,lista-continente.csv,300g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312502555,Coco Morango Aroma,Continente,lista-continente.csv,750 g (6 x 125 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312502555,Iogurte magro aromatizado de coco e morango,Continente,lista-continente.csv,750 g (6 x 125 g),preencher,125,g,iogurte,unidade de um pack de 6
 5601312078562,Maçã e Morango,Continente,lista-continente.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312512462,Manga Papaia,Continente,lista-continente.csv,640 g (4 x 160 g),preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601312512462,Iogurte líquido magro de manga e papaia,Continente,lista-continente.csv,640 g (4 x 160 g),preencher,160,g,iogurte,unidade de um pack de 4
 5601312075134,Polpa de Tomate com Manjericão e Orégãos,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312184515,Pão Especial De Trigo Com Vitamina D,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312507253,Cuscuz com Quinoa e Vegetais,Continente,lista-continente.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312094517,Frutos Vermelhos,Continente,lista-continente.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312094517,"Sumo de uva, morango e groselha",Continente,lista-continente.csv,750 ml,ignorar,,,,embalagem grande (750 ml): não é uma dose individual de bebida
 5601312073239,Abóbora com Noz Serra da Estrela,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312000303,Cotovelinhos,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954500936,Sementes de Abóbora,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -665,7 +665,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312179900,Sopa de Feijão Verde com legumes frescos,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312185796,Pizza Pepperoni,Continente,lista-continente.csv,430 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312516439,Iogurte 0% Frutos Tropicais,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
-5601312105732,Pepino en vinagre,Continente,lista-continente.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312105732,Pepino em vinagre,Continente,lista-continente.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312006251,Grão de Bico,Continente,lista-continente.csv,540gr,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312024941,Ice tea peach,Continente,lista-continente.csv,"1,5L",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312040866,Atum em Posta Azeite,Continente,lista-continente.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -683,7 +683,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312305958,Queijo Brie,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312065500,Palitos de Chocolate de Leite,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312090205,Iced Tea Manga,Continente,lista-continente.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312002833,Presunto,Continente,lista-continente.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312002833,Batatas fritas onduladas sabor presunto,Continente,lista-continente.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312091752,100% Sumo Pera Rocha,Continente,lista-continente.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
 5601312179962,Sopa de Agrião,Continente,lista-continente.csv,800,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074908,Mel Flocos,Continente,lista-continente.csv,750 g (2 x 375 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -697,7 +697,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312303954,Queijo da Ilha Ralado,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312100393,Chocolat au lait,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312046776,Maionese,Continente,lista-continente.csv,419 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504733,Morango,Continente,lista-continente.csv,160 g / 153 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312504733,Iogurte líquido meio-gordo de morango,Continente,lista-continente.csv,160 g / 153 ml,preencher,153,ml,iogurte,embalagem individual
 5601312100669,Bolachas com Sementes e Chocolate,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312102328,Ketchup,Continente,lista-continente.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312101789,"Pepitas de Coco, Chocolate Negro",Continente,lista-continente.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -746,12 +746,12 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312078593,"Maçã, Pera & Cenoura",Continente,lista-continente.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312157823,Mini Picos Azeite,Continente,lista-continente.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077619,Infusão Maçã e Canela,Continente,lista-continente.csv,45g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312107729,Equilíbrio Morango (Preparado),Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312107729,Preparado de morango Equilíbrio,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312108962,Cacau E Avelã Duo Creme Para Barrar,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312307297,Beira Baixa Presunto,Continente,lista-continente.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312100652,Salsichas de Aves Cocktail,Continente,lista-continente.csv,"21 x 8,5g",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312071280,Inteiros Cogumelos,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312512271,Amora Framboesa Pedaços,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312071280,Cogumelos inteiros,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312512271,Iogurte batido magro de amora e framboesa,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312107491,Nutchoc Cookies,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312108702,Pasta 100% Avelã,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312179870,Creme de Cenoura,Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -799,7 +799,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312182696,Lasanha Bolonhesa,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954500974,Linhaça dourada moída biológica,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312092513,Iced Tea Manga,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312078142,Pêssego,Continente,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312078142,Preparado de pêssego,Continente,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312305361,Alheira de Mirandela - IGP,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312503590,Iogurte Aroma Coco,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312091806,100% Sumo Pera Rocha,Continente,lista-continente.csv,200 ml,preencher,200,ml,bebida,embalagem individual
@@ -814,7 +814,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312101253,Bolacha coberta com Chocolate Negro,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312306252,Mozzarella di Bufala Campana D.O.P. Mini,Continente,lista-continente.csv,125 g,preencher,125,g,queijo fresco,embalagem individual
 5601312304524,Queijo Mozzarella -30% Gordura*,Continente,lista-continente.csv,125 g (210 g),preencher,125,g,queijo fresco,embalagem individual
-5601312508311,Morango,Continente,lista-continente.csv,550 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312508311,Gelado de morango,Continente,lista-continente.csv,550 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312076810,Chocolate de Leite Passas e Avelãs Inteiras,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312882589,Miolo de Castanha Maranhão,Continente,lista-continente.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312510314,Dairy-Free Brownie e Caramelo,Continente,lista-continente.csv,500 ml / 330 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -830,7 +830,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312101536,Bacalhau em Azeite e Alho,Continente,lista-continente.csv,85 g (120 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312307075,Queijo Fresco Tradicional Meio-Gordo,Continente,lista-continente.csv,80 g,preencher,80,g,queijo fresco,embalagem individual
 5601312079545,Napolitanas Baunilha,Continente,lista-continente.csv,270 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312512141,Frutos Vermelhos Magro,Continente,lista-continente.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312512141,Iogurte batido magro com pedaços de frutos vermelhos,Continente,lista-continente.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601312507796,Leite dos Açores Magro,Continente,lista-continente.csv,1 L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312078531,Maçã & Ananás,Continente,lista-continente.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312511915,"Curgete, Beringela e Pimentos",Continente,lista-continente.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -877,7 +877,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312144700,Crème Fraîche,Continente,lista-continente.csv,200 ml / 197 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312994077,Miolo Dr Camarão Selvagem 10/30,Continente,lista-continente.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312182252,Lasanha Bolonhesa,Continente,lista-continente.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504214,Morango,Continente,lista-continente.csv,640 g (4 x 160 g) / 620 ml (4 x 155 ml),preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601312504214,Iogurte líquido magro de morango,Continente,lista-continente.csv,640 g (4 x 160 g) / 620 ml (4 x 155 ml),preencher,155,ml,iogurte,unidade de um pack de 4
 5601312078333,Puré de Fruta Maçã & Manga,Continente,lista-continente.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312510055,Ligeiro Natural Iogurte estilo Grego,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312508724,"Iogurte Cereais, Mel e Frutos Secos",Continente,lista-continente.csv,,ignorar,,,,sem embalagem
@@ -906,7 +906,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312077244,Farinha de Trigo Integral,Continente,lista-continente.csv,1000g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312516194,Nutsy caramelt down,Continente,lista-continente.csv,418 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514992,Chocolate soja,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312516187,Nuts for cups,Continente,lista-continente.csv,500ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312516187,Gelado Nuts for Cups,Continente,lista-continente.csv,500ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312186304,Salada de Atum,Continente,lista-continente.csv,257 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312877332,Mixed Ground Meat (Beef And Pork),Continente,lista-continente.csv,465g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312095569,Maracujá Nectar,Continente,lista-continente.csv,1L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -932,17 +932,17 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312304012,Queijo Ralado Clássico,Continente,lista-continente.csv,80 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312502456,Gelatina sabor Ananás,Continente,lista-continente.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312502944,Lait,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504306,Morango,Continente,lista-continente.csv,160 g / 155 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312504306,Iogurte líquido magro de morango,Continente,lista-continente.csv,160 g / 155 ml,preencher,155,ml,iogurte,embalagem individual
 5601312000396,Bolachas recheadas com cacau,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312503354,Grego Natural Açucarado,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312043218,Framboesa,Continente,lista-continente.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312043218,Biscoito recheado de framboesa com cobertura de chocolate,Continente,lista-continente.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312065098,Pipocas doces,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312025009,Iced tea Peach,Continente,lista-continente.csv,20 cl,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312504443,"Bebida à base de Soja, 30% menos Açúcar",Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
-5601312090960,Néctar Uva Merlot do Mediterrâneo,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
+5601312090960,Néctar de uva Merlot,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312092148,"Néctar, Ananás, Gengibre e Ácido Fólico",Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5600954500585,Bebida à base de Amêndoa,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
-5601312502135,Tartíssima,Continente,lista-continente.csv,525 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312502135,Gelado de nata e morango,Continente,lista-continente.csv,525 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312171423,Hambúrguer de Vaca,Continente,lista-continente.csv,220 g (2 x 110 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954500677,Bebida de Arroz e Coco,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312025290,Néctar Frutos Vermelhos Clássico,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -956,7 +956,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5600954502053,Esparguete,Continente,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312504436,Bebida de Soja,Continente,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312881964,Miolo de Amendoim,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312503569,Aroma Tutti-Frutti,Continente,lista-continente.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312503569,Iogurte meio-gordo de tutti-frutti,Continente,lista-continente.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601312064503,Farfalle,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312882121,Pistácio Torrado,Continente,lista-continente.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502916,Amêndoas,Continente,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -983,7 +983,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312108689,Mini Bolachas Aveia e Canela,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312076452,Especial Silhueta Sabor Original,Continente Equilíbrio,lista-continente.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312109044,Manteiga 100% Amendoim,Continente Equilíbrio,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312100522,5 Cereais e Framboesa Mini Bolachas,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312100522,Bolacha 5 cereais e framboesa,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312070337,Tortitas de Arroz Integral,Continente Equilíbrio,lista-continente.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312178590,Tostas Integrais Extrafinas com Sementes de Sésamo,Continente Equilíbrio,lista-continente.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514947,Mandeldrink,Continente Equilíbrio,lista-continente.csv,1 L,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -994,7 +994,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312512011,Skyr Natural,Continente Equilíbrio,lista-continente.csv,400 g,ignorar,,,,embalagem grande (400 g): não é uma dose individual de iogurte
 5601312073994,Bran Flakes,Continente Equilíbrio,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078135,Quatro Frutos,Continente Equilíbrio,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312509578,Skyr Mirtilo,Continente Equilíbrio,lista-continente.csv,150 g,preencher,150,g,iogurte,embalagem individual
+5601312509578,Iogurte skyr de mirtilo,Continente Equilíbrio,lista-continente.csv,150 g,preencher,150,g,iogurte,embalagem individual
 5601312108771,Bran sticks,Continente Equilíbrio,lista-continente.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312509622,SKYR Coco (Alto teor em proteína),Continente Equilíbrio,lista-continente.csv,150 g,preencher,150,g,iogurte,embalagem individual
 5601312507994,Leite Magro,Continente Equilíbrio,lista-continente.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -1003,13 +1003,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312076520,Especial Silhueta Sabor Original,Continente Equilíbrio,lista-continente.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312307440,Queijo para Pizza -30% Gordura Mozzarella,Continente Equilíbrio,lista-continente.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312508083,Skyr Banana Canela,Continente Equilíbrio,lista-continente.csv,100 g,preencher,100,g,iogurte,embalagem individual
-5601312504337,Frutos Vermelhos,Continente Equilíbrio,lista-continente.csv,155 ml,preencher,155,ml,bebida (nome só com o sabor),embalagem individual
+5601312504337,Leite fermentado líquido magro de frutos vermelhos,Continente Equilíbrio,lista-continente.csv,155 ml,preencher,155,ml,bebida,embalagem individual
 5601312108306,Cereais Estrelas de Morango,Continente Equilíbrio,lista-continente.csv,375g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312515449,Skyr Morango Banana,Continente Equilíbrio,lista-continente.csv,150 g,preencher,150,g,iogurte,embalagem individual
 5601312106883,Flocos de Aveia Integral Finos,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078098,Mini Tortitas de Milho,Continente Equilíbrio,lista-continente.csv,200 g (8 x 25 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312108528,Tortitas de Arroz Integral,Continente Equilíbrio,lista-continente.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312516316,Super Breakfast Frutos Vermelhos Muesli Chia,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312516316,"Iogurte com pedaços Super Breakfast de frutos vermelhos, muesli e chia",Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312515029,Bebida Vegetal Soja,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312078159,Geleia abóbora equilíbrio,Continente Equilíbrio,lista-continente.csv,280g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312094876,100% Sumo de Maçã,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,sem embalagem
@@ -1018,7 +1018,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312095392,"Sumo Natural Ananás, Banana e Coco",Continente Equilíbrio,lista-continente.csv,750 ml,ignorar,,,,embalagem grande (750 ml): não é uma dose individual de bebida
 5601312514961,Bebida de Soja,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312106890,Flocos de Aveia Integral Grossos,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504368,Limão,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312504368,Iogurte líquido magro de limão,Continente Equilíbrio,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312079231,Salmão em Posta ao Natural,Continente Equilíbrio,lista-continente.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312513537,Skyr Aroma Banana,Continente Equilíbrio,lista-continente.csv,170 g / 160 ml,preencher,170,g,iogurte,embalagem individual
 5601312513834,Hambúrguer de Bovino com Legumes,Continente Equilíbrio,lista-continente.csv,360 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1048,13 +1048,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312079064,Atum em Posta ao Natural,Continente,lista-continente.csv,270 g (385 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078289,Fusilli Grão-de-Bico,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312178156,Creme de Brócolos e Espinafres,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312509103,Framboesa Líchia,Continente,lista-continente.csv,160 g / 155 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312509103,Iogurte líquido magro de framboesa e líchia,Continente,lista-continente.csv,160 g / 155 ml,preencher,155,ml,iogurte,embalagem individual
 5601312101154,Bolacha Maria,Continente,lista-continente.csv,600 g (3 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078296,Penne Rigate Lentilha Vermelha,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312509042,Melancia,Continente,lista-continente.csv,160 g / 155 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312509042,Iogurte líquido magro de melancia,Continente,lista-continente.csv,160 g / 155 ml,preencher,155,ml,iogurte,embalagem individual
 5601312078166,Doce manga maracuja,Continente,lista-continente.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312090175,Néctar Manga e Laranja,Continente,lista-continente.csv,20 cl,preencher,200,ml,bebida,embalagem individual
-5601312509127,"Limão, Gengibre e Canela",Continente,lista-continente.csv,160 g (155 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312509127,"Iogurte líquido magro de limão, gengibre e canela",Continente,lista-continente.csv,160 g (155 ml),preencher,160,g,iogurte,embalagem individual
 5601312510468,Veggie Meal Lentilhas e Legumes,Continente,lista-continente.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078890,Barras Cruas Coco & Amêndoa,Continente,lista-continente.csv,3 x 35 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312512325,Mix Frutas Açaí e Sementes de Linhaça,Continente,lista-continente.csv,450 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1121,7 +1121,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312106975,Azeite de Moura DOP,Continente,lista-continente.csv,3 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312515111,Batata Duchesse,Continente,lista-continente.csv,650 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312992974,Miolo de Vieira Ultracongelado,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312105398,Limão,Continente,lista-continente.csv,320 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312105398,Creme de limão,Continente,lista-continente.csv,320 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312109471,Doce Extra Goiaba,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312300113,Requeijão Serra da Estrela DOP,Continente,lista-continente.csv,,ignorar,,,,sem embalagem
 5601312126461,Queijo de Cabra Curado,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1150,7 +1150,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312106241,Pesto Trufa,Continente,lista-continente.csv,135 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312104971,Hummus Beterraba e Hortelã,Continente,lista-continente.csv,249 g / 250 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312512561,Fondant Chocolate,Continente,lista-continente.csv,2 x 90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312105244,Paté Morcela da Beira e Maçã Reineta,Continente,lista-continente.csv,110 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312105244,Patê de morcela da Beira e maçã Reineta,Continente,lista-continente.csv,110 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312303985,Queijo São Jorge DOP 4 Meses de Cura,Continente,lista-continente.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312150114,Queijo da Beira Baixa DOP Castelo Branco,Continente,lista-continente.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312992905,Bife de Atum,Continente,lista-continente.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1191,7 +1191,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5604260283828,Atum posta em óleo vegetal,Top Budget,lista-intermarche.csv,110 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604260129409,Queijo Gouda,Top Budget,lista-intermarche.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604260167029,Queijo flamengo fatiado,Top Budget,lista-intermarche.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-3564700838952,Cappuccino sabor baunilha latte,Marque Repère,lista-intermarche.csv,310 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+3564700838952,Cappuccino instantâneo sabor baunilha (pó),Marque Repère,lista-intermarche.csv,310 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 3564700883013,Mini sablés de cereais,Marque Repère,lista-intermarche.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 3564700415085,Pote de creme de chocolate,Marque Repère,lista-intermarche.csv,800 g (8 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 0560590243466,Ravioli de 4 queijos,Marque Repère,lista-intermarche.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1209,7 +1209,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20005719,Pistácios da Califórnia,Alesto,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20005733,Miolo de noz,Alesto,lista-lidl.csv,200 gram,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20013677,Salsichas de fiambre,Dulano,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20020026,Golden Sun Suriname,Lidl,lista-lidl.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20020026,Arroz agulha extra Suriname,Lidl,lista-lidl.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20024666,Camembert,Milbona,lista-lidl.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20026653,Leite português magro,Milbona,lista-lidl.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 20026684,Leite português meio-gordo,Milbona,lista-lidl.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -1222,7 +1222,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20029890,Bolacha integral,Sondey,lista-lidl.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20035532,Sumo de pêssego e uva,Solevita,lista-lidl.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
 20041656,Atum bonito do norte em azeite,Lidl,lista-lidl.csv,73 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20042387,Tostas,Sondey,lista-lidl.csv,800 g (4 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20042387,Bolachas torradas,Sondey,lista-lidl.csv,800 g (4 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20043933,Fusilli,Combino,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20046088,Wafers recheados de avelã,Sondey,lista-lidl.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20047214,Mozzarella ralada,Milbona,lista-lidl.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1238,7 +1238,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20101411,Queijo fresco natural,Milbona,lista-lidl.csv,160 g,ignorar,,,,embalagem grande (160 g): não é uma dose individual de queijo fresco
 20103286,Queijo creme gordo,Milbona,lista-lidl.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20103958,Pastilhas de mentol e eucalipto extra forte,Lidl,lista-lidl.csv,96 g (3 x 32 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20121976,Freeway,Lidl,lista-lidl.csv,"1,5Lt",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20121976,Refrigerante Freeway,Lidl,lista-lidl.csv,"1,5Lt",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20128623,Feijão-frade,Lidl,lista-lidl.csv,400 g (540 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20128821,Polpa de tomate com cebola e alho,Lidl,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20128838,Mistura de pickles,Freshona,lista-lidl.csv,210 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1273,13 +1273,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20468828,Queijo flamengo dos Açores ralado,Milbona,lista-lidl.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20469214,Pipocas doces,Lidl,lista-lidl.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20470142,Espaguete di Gragnano IGP,Lidl,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20477660,Laranja,Lidl,lista-lidl.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20477660,Refrigerante de laranja zero,Lidl,lista-lidl.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20513306,Esparguete integral,Combino,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20548308,Bebida Línea sabor morango,Milbona,lista-lidl.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20548308,Iogurte líquido magro de morango (Línea),Milbona,lista-lidl.csv,750 g,ignorar,,,,embalagem grande (750 g): não é uma dose individual de iogurte
 20550848,Atum posta ao natural,Lidl,lista-lidl.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20573737,Atum em azeite,Lidl,lista-lidl.csv,900 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20575403,Cheddar inglês picante,Deluxe,lista-lidl.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20602949,Coco,Lidl,lista-lidl.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20602949,Pastilhas de coco com chocolate negro,Lidl,lista-lidl.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20610920,Farinha com fermento super fina,Belbake,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20611019,Macarrão de sêmola de trigo-duro,Combino,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20621483,Special Flakes Bran Flakes,Crownfield,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1309,7 +1309,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20921873,6 ovos frescos M/L,Bio Organic,lista-lidl.csv,328 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20922474,Queijo flamengo dos Açores formato familiar,Milbona,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20922580,Queijo curado com pimentão doce e tomate e manjericão,Milbona,lista-lidl.csv,(3),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20944339,Light*,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20944339,Queijo fundido light em fatias,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20945787,Queijo manchego,Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20968236,Iogurtes de sabores,Milbona,lista-lidl.csv,2 kg,ignorar,,,,embalagem grande (2000 g): não é uma dose individual de iogurte
 20971236,Mozzarella di bufala campana DOP,Milbona,lista-lidl.csv,125 g (250 g),preencher,125,g,queijo fresco,embalagem individual
@@ -1326,7 +1326,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 40875040,Skyr to go mirtilo,Milbona,lista-lidl.csv,400 g (4 x 100 g),preencher,100,g,iogurte,unidade de um pack de 4
 40881348,Iogurte líquido açucarado de morango e banana,Milbona,lista-lidl.csv,170g,preencher,170,g,iogurte,embalagem individual
 40881362,Iogurte magro,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
-40881409,Manga,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+40881409,Iogurte líquido magro de manga,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
 40881447,Iogurte cremoso stracciatella,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
 40881454,Iogurte líquido,Milbona,lista-lidl.csv,170 g (159 ml),preencher,170,g,iogurte,embalagem individual
 40881577,Cookie,Sondey,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1347,7 +1347,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489149996,Sardinhas em molho de tomate,Lidl,lista-lidl.csv,2 x 125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489090069,Iogurte natural açucarado sem lactose,Milbona,lista-lidl.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
 4334035238340,Azeite virgem extra,Lidl,lista-lidl.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489963103,Extra Crunch Gourmet,Lidl,lista-lidl.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489963103,Batatas fritas Extra Crunch Gourmet,Lidl,lista-lidl.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489199809,Leite gordo,Lidl,lista-lidl.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 4056489516040,Iogurte de morango,Milbona,lista-lidl.csv,150 g,preencher,150,g,iogurte,embalagem individual
 4056489573739,Sumo de laranja do Algarve,Solevita,lista-lidl.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -1390,7 +1390,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489409960,Bolacha Maria sem glúten,Sondey,lista-lidl.csv,380 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489011828,Iogurte natural açucarado sem lactose,Milbona,lista-lidl.csv,170 g (159 ml),preencher,170,g,iogurte,embalagem individual
 4056489197379,Rebuçados,Lidl,lista-lidl.csv,25 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489516071,Manga,Milbona,lista-lidl.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489516071,Iogurte com manga,Milbona,lista-lidl.csv,150 g,preencher,150,g,iogurte,embalagem individual
 4056489199915,Filetes de cavala,Lidl,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489747017,Bolacha digestiva,Sondey,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489287407,Queijo flamengo dos Açores fatiado,Lidl,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1412,7 +1412,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489723233,Bebida proteica de morango,Milbona,lista-lidl.csv,350 gram,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489187813,Queijo cottage biológico,Milbona,lista-lidl.csv,200g,ignorar,,,,embalagem grande (200 g): não é uma dose individual de queijo fresco
 4056489098591,Mascarpone,Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489920014,Food in a bottle banana,Milbona,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489920014,Bebida láctea completa sabor banana,Milbona,lista-lidl.csv,500 g,ignorar,,,,embalagem grande (500 g): não é uma dose individual de bebida
 4056489406839,Pudim proteico de chocolate XXL,Milbona,lista-lidl.csv,400 g,ignorar,,,,embalagem grande (400 g): não é uma dose individual de iogurte
 4056489127253,Feta,Milbona,lista-lidl.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489406846,Pudim proteico de baunilha,Milbona,lista-lidl.csv,400 g,ignorar,,,,embalagem grande (400 g): não é uma dose individual de iogurte
@@ -1435,15 +1435,15 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489122395,Queijinhos light,Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489036432,Mozzarella ralada,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489451273,Queijo de pastor proteico com jalapeño,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489339625,Queijo,Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489339625,Queijo curado em salmoura (tipo feta),Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4335619111332,Skyr de baunilha (squeeze),Milbona,lista-lidl.csv,400 gram,ignorar,,,,embalagem grande (400 g): não é uma dose individual de iogurte
 4056489695486,Queijo flamengo,Milbona,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489098607,Mascarpone sem lactose,Milbona,lista-lidl.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489687795,Iogurte magro 0% de romã,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
 4056489687801,Iogurte 0% de romã,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
-4056489689126,Multifrutas tutti frutti,Milbona,lista-lidl.csv,600 g (6 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489689126,Sobremesa de gelatina multifrutos,Milbona,lista-lidl.csv,600 g (6 x 100 g),preencher,100,g,iogurte,unidade de um pack de 6
 4056489109839,Iogurte grego,Milbona,lista-lidl.csv,,ignorar,,,,sem embalagem
-4056489202110,Bebida láctea com açúcar de cana natural,Milbona,lista-lidl.csv,1 kg / 938 ml,ignorar,,,,embalagem grande (938 ml): não é uma dose individual de bebida
+4056489202110,Iogurte líquido com açúcar de cana,Milbona,lista-lidl.csv,1 kg / 938 ml,ignorar,,,,embalagem grande (938 ml): não é uma dose individual de iogurte
 4335619155367,Queijo flamengo dos Açores ralado,Milbona,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4335619175174,Espresso macchiato,Milbona,lista-lidl.csv,330 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489490609,Queijo cremoso,Milbona,lista-lidl.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1467,8 +1467,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489206842,Massa de grão-de-bico,Combino,lista-lidl.csv,250 gram,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601055024017,Chocolate Pantagruel,Combino,lista-lidl.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489127451,Molho à bolonhesa,Combino,lista-lidl.csv,420g (400ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4335619175822,Cereais proteicos Drelli,Combino,lista-lidl.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489998143,Combino,Combino,lista-lidl.csv,1000g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4335619175822,Cereais proteicos Drelli (High Protein),Combino,lista-lidl.csv,250g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489998143,Massa Combino,Combino,lista-lidl.csv,1000g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489687344,Muesli crocante,Crownfield,lista-lidl.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489030317,Muesli crocante proteico com frutos secos,Crownfield,lista-lidl.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489536284,Flocos de aveia instantâneos,Crownfield,lista-lidl.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1488,7 +1488,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489266853,Bolachas de aveia (Havrekakor),Sondey,lista-lidl.csv,630g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4560281411026,Grandino de chocolate negro,Sondey,lista-lidl.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489315063,Focaccia de alecrim,Chef Select,lista-lidl.csv,2 x 150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-4056489800002,Pepperoni,Chef Select,lista-lidl.csv,410,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4056489800002,Pizza pepperoni,Chef Select,lista-lidl.csv,410,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489872054,Pizza fresca de fiambre e queijo,Chef Select,lista-lidl.csv,415 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489219286,Hambúrguer vegetariano de cogumelos,Chef Select,lista-lidl.csv,2 x 80 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4335619026414,Pizza romana,Chef Select,lista-lidl.csv,430 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1549,7 +1549,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8480000223975,Pãezinhos especiais para pizza,Hacendado,lista-mercadona.csv,80 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000103765,Natas de soja,Hacendado,lista-mercadona.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000614162,Batata em gomos rústicos,Hacendado,lista-mercadona.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8480000511676,Mousse de queijo com alho e ervas finas,Hacendado,lista-mercadona.csv,150 g,preencher,150,g,iogurte,embalagem individual
+8480000511676,Mousse de queijo com alho e ervas finas,Hacendado,lista-mercadona.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8402001034961,Bolacha Marinheiras com chia,Hacendado,lista-mercadona.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000173621,Molho teriyaki,Hacendado,lista-mercadona.csv,250 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8402001034114,Batatas fritas sabor queijo e cebola,Hacendado,lista-mercadona.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -1817,7 +1817,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8480000114433,Quema Grasas,Hacendado,lista-mercadona.csv,"30 g (20 x 1,5 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000682987,Gelatina sabor mirtilo,Hacendado,lista-mercadona.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000514035,Queijo flamengo,Hacendado,lista-mercadona.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8480000512291,Queijo fresco quark,Hacendado,lista-mercadona.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de iogurte
+8480000512291,Queijo fresco quark,Hacendado,lista-mercadona.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000682918,Gelatina sabor morango,Hacendado,lista-mercadona.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000657381,Calendário de advento de chocolate de leite,Hacendado,lista-mercadona.csv,75 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000211989,Iogurtes sabor banana,Hacendado,lista-mercadona.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
@@ -1935,7 +1935,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8410376009415,Bolachas Zero Chip de chocolate,GALLETAS GULLON S.A.,lista-outros-supermercados-2.csv,Peso neto 150g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601151981283,Néctar light de manga e maracujá,Compal,lista-outros-supermercados-2.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5603722504945,Nata culinária light (-70% gordura),Mimosa,lista-outros-supermercados-2.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601001003769,Clássico,Nestlé,lista-outros-supermercados-2.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601001003769,Café solúvel clássico (preparado),Nestlé,lista-outros-supermercados-2.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601286223784,Massa Cotovelos GR,Milaneza,lista-outros-supermercados-2.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601050206791,"Iogurte de banana, morango e tutti frutti",Danone,lista-outros-supermercados-2.csv,960 g (8 x 120 g),preencher,120,g,iogurte,unidade de um pack de 8
 5603722492068,Leite de crescimento (a partir dos 3 anos),Mimosa,lista-outros-supermercados-2.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -1963,7 +1963,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5000116109128,Hambúrguer grande de carne de vaca,Iglo,lista-outros-supermercados-2.csv,227 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601141080910,Wafer de baunilha,Paupério,lista-outros-supermercados-2.csv,35 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410014344403,Bolachas Ricanela,Cuétara,lista-outros-supermercados-2.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8423915008671,BabiFresh,Mandul,lista-outros-supermercados-2.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+8423915008671,Madalena com recheio de morango,Mandul,lista-outros-supermercados-2.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480017736833,Arroz extra longo agulha,Vale Velho,lista-outros-supermercados-2.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480017210692,Iogurte líquido de ananás e coco,Dia Láctea,lista-outros-supermercados-2.csv,1 kg / 950 ml,ignorar,,,,embalagem grande (950 ml): não é uma dose individual de iogurte
 8480017175892,Queijo fresco sem lactose,Dia Láctea,lista-outros-supermercados-2.csv,"250 g (4 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 4
@@ -1972,7 +1972,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607778000949,Queijo fresco de cabra,Campainha,lista-outros-supermercados-2.csv,130 g,ignorar,,,,embalagem grande (130 g): não é uma dose individual de queijo fresco
 3523230038720,Queijo de cabra e vaca em rolo (duo),Soignon,lista-outros-supermercados-2.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5609494000029,Queijo fresco de ovelha,Queijaria das Romãs,lista-outros-supermercados-2.csv,,ignorar,,,,sem embalagem
-4036303138481,Queijo quark (Speisequark),Milram,lista-outros-supermercados-2.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de iogurte
+4036303138481,Queijo quark (Speisequark),Milram,lista-outros-supermercados-2.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5603722520570,Quark proteico natural,Mimosa,lista-outros-supermercados-2.csv,280 g (2 x 140 g),preencher,140,g,iogurte,unidade de um pack de 2
 8012900008125,Mascarpone,Solo Italia,lista-outros-supermercados-2.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604156000089,Requeijão de ovelha pasteurizado,Lactiser,lista-outros-supermercados-2.csv,~250 g,ignorar,,,,peso variável
@@ -1989,7 +1989,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5600445614692,Chocolate preto 100% cacau biológico,Celeiro,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600445608448,Tahini (creme de sésamo) biológico,Naturefoods,lista-outros-supermercados-2.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600445610489,Galetes de arroz com cobertura de alfarroba biológicas,Naturefoods,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-7640161877023,Croco Coco,Holle,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+7640161877023,Alimento infantil Croco Coco (a partir dos 8 meses),Holle,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600445611721,Chocolate preto 70% cacau com flor de sal biológico,Celeiro,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600445614296,Kefir de cabra biológico,Celeiro,lista-outros-supermercados-2.csv,420 g,ignorar,,,,embalagem grande (420 g): não é uma dose individual de iogurte
 5600445611448,Creme de soja para barrar e cozinhar biológico,Naturefoods,lista-outros-supermercados-2.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2036,7 +2036,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8433329130776,Pipocas doces para micro-ondas,El Corte Inglés,lista-outros-supermercados-2.csv,300 g (3 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8433329145367,Queijo mozzarella fatiado,El Corte Inglés,lista-outros-supermercados-2.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601018003400,Leite meio-gordo,Matinal,lista-outros-supermercados-2.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
-5606436200080,Aveia do Museu,Museu do Pão,lista-outros-supermercados-2.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5606436200080,Pão especial de aveia,Museu do Pão,lista-outros-supermercados-2.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4000446001780,Pão fitness integral,Mestemacher,lista-outros-supermercados-2.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410740903479,Chocolate negro 70% cacau,Lacasa,lista-outros-supermercados-2.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602353903349,Biscoitos de espelta e azeite,Seara,lista-outros-supermercados-2.csv,220 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2177,7 +2177,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227012354,Bolacha integral,Amanhecer,lista-outros-supermercados.csv,200 g (4 x 50 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227018684,Sal de mesa,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227025767,Big cookies,Amanhecer,lista-outros-supermercados.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227025279,Crocantes,Amanhecer,lista-outros-supermercados.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227025279,Cereais crocantes,Amanhecer,lista-outros-supermercados.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227017328,Esparguete,Amanhecer,lista-outros-supermercados.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227043709,Gasosa,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227024401,Ice tea de manga,Amanhecer,lista-outros-supermercados.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2210,7 +2210,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227036350,Leite magro,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,sem embalagem
 5601227026511,Batatas fritas palha,Amanhecer,lista-outros-supermercados.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227028218,Croutons com azeite e alho,Amanhecer,lista-outros-supermercados.csv,100g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227013900,Aroma,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227013900,Iogurte aroma banana,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,sem embalagem
 5601227032543,Cereais recheados de chocolate e avelã,Amanhecer,lista-outros-supermercados.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227039764,Bolachas de pequeno-almoço,Amanhecer,lista-outros-supermercados.csv,6 x 50 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227048193,Queijo fresco meio-gordo sem lactose,Amanhecer,lista-outros-supermercados.csv,"125 g (2 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 2
@@ -2233,8 +2233,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227016598,Cereais Estrelinhas,Amanhecer,lista-outros-supermercados.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227034509,Puré de multifrutos,Amanhecer,lista-outros-supermercados.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227016154,Cream crackers,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227029444,Líquido,Amanhecer,lista-outros-supermercados.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227017694,Líquido,Amanhecer,lista-outros-supermercados.csv,170 g / 158 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227029444,Iogurte líquido de frutos vermelhos,Amanhecer,lista-outros-supermercados.csv,170 g,preencher,170,g,iogurte,embalagem individual
+5601227017694,Iogurte líquido aroma morango meio-gordo,Amanhecer,lista-outros-supermercados.csv,170 g / 158 ml,preencher,158,ml,iogurte,embalagem individual
 5601227018745,Queijo fresco light,Amanhecer,lista-outros-supermercados.csv,"125 g (2 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 2
 5601227038446,Tarteletes de morango,Amanhecer,lista-outros-supermercados.csv,96 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227043051,Chocolate preto 72% cacau,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2247,7 +2247,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227028713,Bolacha Maria dourada,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227031188,Tortelloni de ricotta e espinafres,Amanhecer,lista-outros-supermercados.csv,250 g,ignorar,,,,embalagem grande (250 g): não é uma dose individual de queijo fresco
 5601227033946,Bolachas de pequeno-almoço de chocolate,Amanhecer,lista-outros-supermercados.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227034523,Chocoleo,Amanhecer,lista-outros-supermercados.csv,220 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227034523,Bolacha de cacau recheada,Amanhecer,lista-outros-supermercados.csv,220 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227012477,Leite com Chocolate,Amanhecer,lista-outros-supermercados.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227019285,Bolacha Maria,Amanhecer,lista-outros-supermercados.csv,5 x 200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227016697,Mel,Amanhecer,lista-outros-supermercados.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2268,7 +2268,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227031911,Cone de gelado de limão,Amanhecer,lista-outros-supermercados.csv,720 ml (6 x 120 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227039122,Sumo 8 frutos,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,sem embalagem
 5601227032239,Bolacha Maria,Amanhecer,lista-outros-supermercados.csv,5 x 200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227032567,Chocoleo,Amanhecer,lista-outros-supermercados.csv,4 x 44 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227032567,Bolacha de cacau recheada,Amanhecer,lista-outros-supermercados.csv,4 x 44 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227040388,Bolachas digestive de aveia,Amanhecer,lista-outros-supermercados.csv,425 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227029130,Sumo de pera 100%,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,sem embalagem
 5601227041552,Muesli crocante de frutos secos,Amanhecer,lista-outros-supermercados.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2298,9 +2298,9 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227044669,Queijo ralado quatro queijos,Amanhecer,lista-outros-supermercados.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227043983,Bolachas Zoolachas,Amanhecer,lista-outros-supermercados.csv,"330 g (8 x 41,2 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227017830,Cone de gelado de morango,Amanhecer,lista-outros-supermercados.csv,"720 ml (6 x 120 ml) / 399 g (6 x 66,5 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227025781,Gold & Crash,Amanhecer,lista-outros-supermercados.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227025781,Cereais Gold & Crash,Amanhecer,lista-outros-supermercados.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227037845,Wafer de baunilha,Amanhecer,lista-outros-supermercados.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227030747,Ácidas,Amanhecer,lista-outros-supermercados.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227030747,Gomas ácidas (sortido),Amanhecer,lista-outros-supermercados.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227036091,Chouriço de porco preto,Amanhecer,lista-outros-supermercados.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227033991,Batatas fritas caseiras,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227017250,Batatas fritas lisas,Amanhecer,lista-outros-supermercados.csv,45 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2315,14 +2315,14 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601227043716,Pizza deep pan de queijo cheddar e mozzarella,Amanhecer,lista-outros-supermercados.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227016826,Pizza de pepperoni,Amanhecer,lista-outros-supermercados.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227032963,Iogurte grego natural,Amanhecer,lista-outros-supermercados.csv,500 g,ignorar,,,,embalagem grande (500 g): não é uma dose individual de iogurte
-5601227033342,Grego,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227032727,Magro aroma,Amanhecer,lista-outros-supermercados.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227033342,Iogurte grego açucarado,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,sem embalagem
+5601227032727,Iogurte líquido magro de frutos tropicais,Amanhecer,lista-outros-supermercados.csv,170 g,preencher,170,g,iogurte,embalagem individual
 5601227027952,Cereais Choco Cookies,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227033908,Muesli crocante de chocolate,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227025385,Chouriço Preto,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227025880,Chocolate branco,Amanhecer,lista-outros-supermercados.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227033021,Queijo para barrar light,Amanhecer,lista-outros-supermercados.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601227050875,Chocoleo,Amanhecer,lista-outros-supermercados.csv,220,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601227050875,Bolacha de cacau recheada,Amanhecer,lista-outros-supermercados.csv,220,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227051124,Ananás em rodelas,Amanhecer,lista-outros-supermercados.csv,490g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601227053463,Ice tea de manga,Amanhecer,lista-outros-supermercados.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8422823436033,Pizza ao forno 4 estações,Coviran,lista-outros-supermercados.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2392,7 +2392,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047019481,Queijo Flamengo Light#,Pingo Doce,lista-pendentes-106.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 7622210353184,Trident - 60 minutes of freshness - Peppermint flavour,Trident,lista-pendentes-106.csv,80g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8001665124133,Salsa Fresca Pesto con Albahaca,Giovanni Rana,lista-pendentes-106.csv,140 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-84164773,Halls Citrus Mix,Halls,lista-pendentes-106.csv,32 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+84164773,Mistura de citrinos,Halls,lista-pendentes-106.csv,32 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8480000060198,Sumo maçã,Refresco,lista-pendentes-106.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
 8480000198174,Stevia,Mercadona,lista-pendentes-106.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047006795,Muesli Crunchy Frutos Secos,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2424,7 +2424,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047015766,Estilo Grego natural ligeiro,Pingo Doce,lista-pingo-doce.csv,1 kg,ignorar,,,,embalagem grande (1000 g): não é uma dose individual de iogurte
 5607047012604,Crackers com Farinha de Quinoa e Sementes de Chia,Pingo Doce,lista-pingo-doce.csv,"250 g (6 x 41,7 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047024188,Grego natural ligeiro,Pingo Doce,lista-pingo-doce.csv,1kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009963744,Fruta e Fibra,Pingo Doce,lista-pingo-doce.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009963744,Flocos de trigo integral com frutos secos (Fruta e Fibra),Pingo Doce,lista-pingo-doce.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009990214,"Chocolocos Cereais de Trigo Integral, Trigo e Milho, com Cacau",Pingo Doce,lista-pingo-doce.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009957453,Azeite Virgem Extra,Pingo Doce,lista-pingo-doce.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009993666,Fruta & Aveia,Pingo Doce,lista-pingo-doce.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2476,7 +2476,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009935963,Batatas Fritas Light,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009110353,Tosta de Trigo Integral,Pingo Doce,lista-pingo-doce.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009943180,Atum Posta em Óleo de Girassol,Pingo Doce,lista-pingo-doce.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009970537,Morango,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009970537,Doce de morango,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009995868,Bebida de Chá Fermentado Kombucha Vivo Framboesa,Pingo Doce,lista-pingo-doce.csv,370 ml,ignorar,,,,embalagem grande (370 ml): não é uma dose individual de bebida
 5607047006733,Crunchy muesly,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047009437,"Creme para Barrar Avelã, Amendoim e Cacau",Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2489,7 +2489,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047000915,Sardinhas em Azeite,Pingo Doce,lista-pingo-doce.csv,120 g (85 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009932580,Pão de Forma Branco,Pingo Doce,lista-pingo-doce.csv,450 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009984947,Actimel,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009993642,Maçã Morango Mirtilo,Pingo Doce,lista-pingo-doce.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009993642,"Puré de maçã, morango e mirtilo",Pingo Doce,lista-pingo-doce.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047009345,Pão crocante trigo,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009991686,Chocolate Negro para Culinária 70% Cacau,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009936724,Óleo Alimentar,Pingo Doce,lista-pingo-doce.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2528,7 +2528,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009150076,Salsichas Franckfurt,Pingo Doce,lista-pingo-doce.csv,8pcs,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009943647,Queijo Mozzarella Pingo Doce de Leite de Búfala,Pingo Doce,lista-pingo-doce.csv,125 g (250 g),preencher,125,g,queijo fresco,embalagem individual
 5601009993475,Leite Chocolate,Pingo Doce,lista-pingo-doce.csv,200 ml,preencher,200,ml,bebida,embalagem individual
-5601009110629,Grão,Pingo Doce,lista-pingo-doce.csv,400 g (540 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009110629,Grão-de-bico,Pingo Doce,lista-pingo-doce.csv,400 g (540 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009975297,Biscoito Tradicional Integral Canela,Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047002971,100% Fruta Espremida Laranja,Pingo Doce,lista-pingo-doce.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047005958,Aveia Instantânea,Pingo Doce,lista-pingo-doce.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2588,7 +2588,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047020012,Bolacha Morena com Cacau,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047023266,Cereais Avela E Cacau Sem Gluten,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047015285,Basmatic Rice,Pingo Doce,lista-pingo-doce.csv,1.250kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009110346,Toest,Pingo Doce,lista-pingo-doce.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009110346,Tostas de trigo (Toest),Pingo Doce,lista-pingo-doce.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009975853,Cereais Recheados Recheados de Leite,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009921799,"Petit Suisse Framboesa, Alperce e Morango",Pingo Doce,lista-pingo-doce.csv,360 g (6 x 60 g),preencher,60,g,iogurte,unidade de um pack de 6
 5601009930210,Wafer Chocolate,Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2597,12 +2597,12 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009974320,Iogurte morango,Pingo Doce,lista-pingo-doce.csv,170 g,preencher,170,g,iogurte,embalagem individual
 5601009984527,Barras de Sementes e Frutos Secos,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009987733,Batatas Fritas Batata Doce,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009925025,Espirais,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009925025,Espirais cozidas,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009978991,Batatas Fritas Camponesa,Pingo Doce,lista-pingo-doce.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009974610,Queijo Brie,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009979462,Iced Tea Zero Pêssego,Pingo Doce,lista-pingo-doce.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009110254,Bebida com Cereais e Café,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009974665,Cappuccino,Pingo Doce,lista-pingo-doce.csv,130 g (10 x 13 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009110254,Mistura solúvel de cereais com café (pó),Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009974665,Cappuccino instantâneo (preparado),Pingo Doce,lista-pingo-doce.csv,130 g (10 x 13 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009927937,Pingo Doce - Cookies Tradicionais.,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009974412,Queijo e Fiambre,Pingo Doce,lista-pingo-doce.csv,410 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009973132,Esparguete Integral,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2629,7 +2629,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047009178,Azeitona Verde recheada com pasta de pimento,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009999286,Spaghetti,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010464,Bebida à Base de Arroz,Pingo Doce,lista-pingo-doce.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
-5601009110032,Esparguete,Pingo Doce,lista-pingo-doce.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009110032,Esparguete cozido,Pingo Doce,lista-pingo-doce.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009993604,Natas culinária Light**,Pingo Doce,lista-pingo-doce.csv,200 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009935970,Batatas Fritas Lisas Batatas Receita Rústica,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047008485,Mini Panquecas,Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2641,7 +2641,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047012086,Iogurte Morango Magro Aroma,Pingo Doce,lista-pingo-doce.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601009978717,Batatas Fritas Sabor a Ketchup,Pingo Doce,lista-pingo-doce.csv,170 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047019788,Pudim Proteico Sabor a Chocolate e Avelã,Pingo Doce,lista-pingo-doce.csv,200 g,preencher,200,g,iogurte,embalagem individual
-5601009980482,Chicória com Café Mistura Solúvel,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009980482,Mistura solúvel de chicória e café (preparada),Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047005996,Super Smoothie vitamin love Manga Goji,Pingo Doce,lista-pingo-doce.csv,250 ml,preencher,250,ml,bebida (nome só com o sabor),embalagem individual
 5607047009499,Mixture Oriental De Vegetais,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018026,FLOCOS DE AVEIA GROSSOS BIOLÓGICOS,Pingo Doce,lista-pingo-doce.csv,500 grs,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2706,7 +2706,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8437018135912,Salada Caesar,Pingo Doce,lista-pingo-doce.csv,210 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047002391,Ondulada com Sal Sabor Original,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009970544,Doce Extra de Frutos Silvestres,Pingo Doce,lista-pingo-doce.csv,355 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009971985,Chocopintas,Pingo Doce,lista-pingo-doce.csv,140 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009971985,Iogurte com discos de chocolate (Chocopintas),Pingo Doce,lista-pingo-doce.csv,140 g,preencher,140,g,iogurte,embalagem individual
 5601009923731,Estrelinhas,Pingo Doce,lista-pingo-doce.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047002919,Iogurte Magro Morango e Cereais,Pingo Doce,lista-pingo-doce.csv,170 g / 163 ml,preencher,170,g,iogurte,embalagem individual
 5607047012062,Iogurte Biscuit Cremoso,Pingo Doce,lista-pingo-doce.csv,125 g,preencher,125,g,iogurte,embalagem individual
@@ -2730,7 +2730,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009940936,Mini tostas integral,Pingo Doce,lista-pingo-doce.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009942084,Iced Tea Limão,Pingo Doce,lista-pingo-doce.csv,"1,5 l",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009994168,Bolachas animais,Pingo Doce,lista-pingo-doce.csv,2 x 200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009986675,Cogumelos Cogumelos Inteiros,Pingo Doce,lista-pingo-doce.csv,355 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009986675,Cogumelos inteiros,Pingo Doce,lista-pingo-doce.csv,355 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009933297,Queijo da Ilha de São Jorge Ralado,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009973422,Choco Cookies,Pingo Doce,lista-pingo-doce.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009969401,Iced Tea Manga,Pingo Doce,lista-pingo-doce.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2764,7 +2764,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009998982,Chocolate Preto Avelãs Inteiras,Pingo Doce,lista-pingo-doce.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009991228,Multi-Frutos com Aveia,Pingo Doce,lista-pingo-doce.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018385,Chia Maçã Manga Banana Maracujá Smoothie+,Pingo Doce,lista-pingo-doce.csv,250 ml,preencher,250,ml,bebida (nome só com o sabor),embalagem individual
-5601009998753,Massa pd spaghetti di nero500g,Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009998753,Esparguete de tinta de choco (spaghetti di nero),Pingo Doce,lista-pingo-doce.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047017258,Frutos Tropicais Magro sem Lactose,Pingo Doce,lista-pingo-doce.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047008294,"Mix Caju, Avelã e Amendoim",Pingo Doce,lista-pingo-doce.csv,50 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047001141,Limão e Gengibre Fruta Batida Magro,Pingo Doce,lista-pingo-doce.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2779,7 +2779,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009962204,Petit Biscuit Chocolate Preto,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009988754,Mirtilos,Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009972265,Queijo Fresco sem Lactose,Pingo Doce,lista-pingo-doce.csv,"125 g (2 x 62,5 g)",preencher,62.5,g,queijo fresco,unidade de um pack de 2
-5607047014264,Café Moído Envolvente,Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047014264,Café moído Envolvente (preparado),Pingo Doce,lista-pingo-doce.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009972968,Queijo Flamengo sem Lactose,Pingo Doce,lista-pingo-doce.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047016657,Queijo Halloumi DOP,Pingo Doce,lista-pingo-doce.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009111688,Tosta de Trigo Integral,Pingo Doce,lista-pingo-doce.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2810,10 +2810,10 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20006150,Pão estaladiço de centeio integral,Rivercote,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20017088,Pulled Pork,Sem marca,lista-segunda-passagem.csv,550 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20041649,Atum claro em azeite,Nixe,lista-segunda-passagem.csv,156 g (3 x 52 g) [240 g (3 x 80 g)],ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20050764,Dorada,Opey,lista-segunda-passagem.csv,600 g (3 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20050764,Bolachas Maria douradas,Opey,lista-segunda-passagem.csv,600 g (3 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20077365,Frankfurt 8 Salsichas,Fumadinho,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20084431,Feijão preto em salmoura,Sol&Mar,lista-segunda-passagem.csv,520 g (820 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20121891,Morenazos,Morenazos,lista-segunda-passagem.csv,330 g (5 x 66 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20121891,Bolachas de cacau recheadas com creme,Morenazos,lista-segunda-passagem.csv,330 g (5 x 66 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20129200,Fiambre da Perna Extra Finíssimo,Fumadinho,lista-segunda-passagem.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20171841,Roggen Vollkorn-Knäckebr,Sem marca,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20186852,Pão de Forma Clássico,Certossa,lista-segunda-passagem.csv,600 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2823,9 +2823,9 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20189105,Wellness organic tea,Lord Nelson,lista-segunda-passagem.csv,12 x 2 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20203429,Choco Flakes,Goody,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20203634,Atum claro em óleo de girassol,Nixe,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20213350,Estrelas,Goody,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20213350,Cereais Estrelas,Goody,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20221126,Madalenas quadradas,La Cestera,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20225438,Morango,Lactolus,lista-segunda-passagem.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20225438,Iogurte líquido aroma de morango,Lactolus,lista-segunda-passagem.csv,180 g,preencher,180,g,iogurte,embalagem individual
 20225445,Morango-Banana,Lactolus,lista-segunda-passagem.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20303471,Tostas Clássicas,A Minha Padaria,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20361211,Queijo Fatiado Flamengo dos Açores,Terra do Vento,lista-segunda-passagem.csv,275 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2841,7 +2841,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 20609849,Biscoitos de Canela,Samor,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20622640,100% cevada solúvel,Bellarom,lista-segunda-passagem.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20666323,Cocktail de Marisco,ocean sea,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-20685683,Relax,Lord Nelson,lista-segunda-passagem.csv,20 x 2 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+20685683,Chá Relax (saquetas),Lord Nelson,lista-segunda-passagem.csv,20 x 2 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20692230,Skyr Natural,Milbona (Lidl),lista-segunda-passagem.csv,150 g,preencher,150,g,iogurte,embalagem individual
 20692810,Línguas de Veado,Samor,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 20787905,Protein +,Sportyfeel,lista-segunda-passagem.csv,61 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2863,7 +2863,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 3023290053317,Creations Natural,Nestlé,lista-segunda-passagem.csv,1000 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601048541033,Líquido Sabor Frutos Tropicais,Nestlé,lista-segunda-passagem.csv,160 g / 149 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601050033113,Ananás & Coco,Danone,lista-segunda-passagem.csv,155 g / 151 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601050022940,Morango,Danone,lista-segunda-passagem.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601050022940,Iogurte de morango,Danone,lista-segunda-passagem.csv,120 g,preencher,120,g,iogurte,embalagem individual
 5601050036619,Iogurte Grego Maçã Canela,Danone,lista-segunda-passagem.csv,440 g (4 x 110 g),preencher,110,g,iogurte,unidade de um pack de 4
 5601050036961,Frutos Tropicais,Danone,lista-segunda-passagem.csv,155 g / 151 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601050033182,Sabor Tutti-Frutti,Danone,lista-segunda-passagem.csv,145 ml / 155 g,preencher,145,ml,bebida (nome só com o sabor),embalagem individual
@@ -2876,13 +2876,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601050031775,Iogurte Grego Natural,Danone,lista-segunda-passagem.csv,115 g x 4,preencher,115,g,iogurte,unidade de um pack de 4
 5601312505594,Grego ligeiro natural,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5603722515972,Magro Frutos Silvestres,Mimosa,lista-segunda-passagem.csv,156 ml,preencher,156,ml,bebida (nome só com o sabor),embalagem individual
-5601312504801,Bolacha,Continente,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312504801,Iogurte líquido com bolacha,Continente,lista-segunda-passagem.csv,160 g,preencher,160,g,iogurte,embalagem individual
 5601312142812,Iogurte Magro Líquido Morango,Continente,lista-segunda-passagem.csv,1 kg,ignorar,,,,embalagem grande (1000 g): não é uma dose individual de iogurte
 5603722518423,Iogurte com Pedaços de Morango,Agros,lista-segunda-passagem.csv,120 g,preencher,120,g,iogurte,embalagem individual
 5601312503514,Iogurte Aroma Pack Poupança,Continente,lista-segunda-passagem.csv,2 kg (16 x 125 g),preencher,125,g,iogurte,unidade de um pack de 16
 5601312512707,Mythos Sensação Iogurte estilo Grego Avelã Chocolate,Continente,lista-segunda-passagem.csv,460 g (4 x 115 g),preencher,115,g,iogurte,unidade de um pack de 4
 5601312510703,"Super Smoothie Morango, Beterraba e Gengibre",Continente,lista-segunda-passagem.csv,280 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312504696,Bolacha,Continente,lista-segunda-passagem.csv,640 g (4 x 160 g) / 600 ml (4 x 150 ml),preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601312504696,Iogurte líquido com bolacha,Continente,lista-segunda-passagem.csv,640 g (4 x 160 g) / 600 ml (4 x 150 ml),preencher,150,ml,iogurte,unidade de um pack de 4
 5601158401746,Iogurte com Pedaços Sem Lactose Morango,Nutrégi,lista-segunda-passagem.csv,480 g (4 x 120 g),preencher,120,g,iogurte,unidade de um pack de 4
 5601312501558,Iogurte líquido morango banana,Continente,lista-segunda-passagem.csv,160 g / 150 ml,preencher,150,ml,iogurte,embalagem individual
 5601312501534,Iogurte líquido morango,Continente,lista-segunda-passagem.csv,160 g / 150 ml,preencher,150,ml,iogurte,embalagem individual
@@ -2891,7 +2891,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312508625,Iogurte bifidus de morango e kiwi,Continente,lista-segunda-passagem.csv,,ignorar,,,,sem embalagem
 5601312513780,Iogurte Líquido Caramel Macchiato,Continente,lista-segunda-passagem.csv,,ignorar,,,,sem embalagem
 5601312514787,+ Proteína Morango,Continente,lista-segunda-passagem.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312145493,Pedaços,Continente,lista-segunda-passagem.csv,1500 g (12 x 125 g),preencher,125,g,iogurte (nome só com o sabor),unidade de um pack de 12
+5601312145493,Iogurte com pedaços de fruta (1% M.G.),Continente,lista-segunda-passagem.csv,1500 g (12 x 125 g),preencher,125,g,iogurte,unidade de um pack de 12
 5601312141259,Iogurte Líquido Morango,Continente,lista-segunda-passagem.csv,1 kg,ignorar,,,,embalagem grande (1000 g): não é uma dose individual de iogurte
 5601312514497,Mythos Iogurte estilo Grego Melão,Continente,lista-segunda-passagem.csv,460 g (4 x 115 g),preencher,115,g,iogurte,unidade de um pack de 4
 5601244202158,Queijo de Pastagem Light,Terra Nostra,lista-segunda-passagem.csv,400 g (2 x 200 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -2992,7 +2992,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312184508,5 Cereais,Continente,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8412600022887,Pão de forma Bimbo,Bimbo,lista-segunda-passagem.csv,770 g (26 fatias),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312179344,"Croutons Azeite, Alho e Salsa",Continente,lista-segunda-passagem.csv,75 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-2646336100076,Integral,Museu do Pão,lista-segunda-passagem.csv,450 g,ignorar,,,,código de peso variável (EAN 2...)
+2646336100076,Pão especial integral de trigo,Museu do Pão,lista-segunda-passagem.csv,450 g,ignorar,,,,código de peso variável (EAN 2...)
 5601312184096,Pao de cereais,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312183624,Pão especial com farinha de Espelta e grãos de Quinoa,Continente,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312175735,Farinha Especial Alfarroba,Continente,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3000,13 +3000,13 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312040941,Esparguete à bolonhesa,Continente,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312512370,Tagliatelle Carbonara,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312065852,Noodles sabor a frango,Continente,lista-segunda-passagem.csv,70 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312000327,Pontinha,Continente,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312000327,Massa pontinha,Continente,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312154075,Massa Filo,Continente,lista-segunda-passagem.csv,120 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312072171,Spaghetti,Sem marca,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312180531,Noodles com Vegetais e Frango,Fácil & Bom,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077176,Noodles sabor a carne,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312512387,Esparguete à Bolonhesa,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312107064,Cotovelinhos,Continente,lista-segunda-passagem.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312107064,Massa cotovelinhos,Continente,lista-segunda-passagem.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 7613037040869,Zero Espelta e aveia,Nestlé,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604321029983,A Granola + deliciosa de Chocolate e Coco,Cem Porcento,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604321029990,A Granola + deliciosa de Frutos Vermelhos com cereais integrais,Cem Porcento,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3037,7 +3037,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312063605,Arroz Risotto,Continente,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312881575,Sementes de Quinoa,Continente,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5053990182480,Batatas fritas de trufa negra e manteiga,Pringles,lista-segunda-passagem.csv,165 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312079866,Onduladas,Continente,lista-segunda-passagem.csv,240 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312079866,Batatas fritas onduladas,Continente,lista-segunda-passagem.csv,240 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312067894,Bolacha Arroz com Sal,Continente,lista-segunda-passagem.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312070498,Bolacha de Milho,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312067887,Bolacha Milho com Sal,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3082,8 +3082,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312509950,Almôndegas Powered by Plants,Continente,lista-segunda-passagem.csv,360 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410320034319,Pizza com molho barbecue,Campofrío,lista-segunda-passagem.csv,410 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514794,Lemon Freezy Sabor lima-limão,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312508328,Baunilha,Continente,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312510277,Stracciatella,Continente,lista-segunda-passagem.csv,504 g / 950 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312508328,Gelado de baunilha,Continente,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312510277,Gelado stracciatella (baunilha com molho e pedaços de chocolate),Continente,lista-segunda-passagem.csv,504 g / 950 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312509653,Pizza Romana,Continente,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312145257,Doce de leite,Continente,lista-segunda-passagem.csv,509 g (900 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312504504,Pizza Crostata Hawai,Continente,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3091,7 +3091,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312510079,Riced Veggies com Alga Wakame,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312506829,Batatas Noisettes,Continente,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312510185,Amendoim,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312145479,Jardineira,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312145479,Jardineira de legumes,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312514695,Puré de Beterraba,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312506614,Folhado de Salmão e Espinafres,Continente,lista-segunda-passagem.csv,300 g (2 x 150 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312501107,Croquetes de Carne,Continente,lista-segunda-passagem.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3141,7 +3141,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312074205,Manteiga de Amendoim cremosa,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074212,Manteiga de Amendoim com Pedaços,Continente,lista-segunda-passagem.csv,340 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312072959,Creme para barrar de cacau e avelã,Choco Fun,lista-segunda-passagem.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312072966,Creme para Barrar,Continente,lista-segunda-passagem.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312072966,Creme de cacau e avelã para barrar,Continente,lista-segunda-passagem.csv,750 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312883081,Maçã Verde Desidratada,Continente,lista-segunda-passagem.csv,20 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312045441,Duplo creme para barrar com cacau e avelãs,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312063254,Doce extra pêssego,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3173,11 +3173,11 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5604321044689,Biscoitos Integrais Coco & Espelta,Cem Porcento,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312073833,"Marinheiras, Chia, Sementes",Daveiga,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604321027699,Nutríssimas Snack Canela,Cem Porcento,lista-segunda-passagem.csv,190 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312101406,Gelatina sabor ananás,Continente,lista-segunda-passagem.csv,31g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312101406,Gelatina de ananás pronta,Continente,lista-segunda-passagem.csv,31g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312106449,Bolacha Integral Pack Poupança,Continente,lista-segunda-passagem.csv,300 g (6 x 50 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600744051372,Mini Bites Mistério,Saborosa,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074397,Mini Croissants Cacau,Continente,lista-segunda-passagem.csv,315 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312079330,Tijolos,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312079330,Gomas Tijolos ácidos,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312043225,Bolacha Softcake,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602519000967,Palmiers,Da Nossa Pastelaria,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502862,Bolachas Maria Sem Lactose,Continente,lista-segunda-passagem.csv,240 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3191,19 +3191,19 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601008101079,Bolacha Maria Sem Açúcar,Vieira,lista-segunda-passagem.csv,300 g (12 × 25 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312074038,Cookies clássicos,Continente,lista-segunda-passagem.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077930,Nachos de Milho com Sal,Continente,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312079859,Clássica,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312079859,Batatas fritas lisas clássicas,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077800,Roscas de Chocolate,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312101369,Bolachas Digestive Continente Equilíbrio,Continente,lista-segunda-passagem.csv,24 165g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312073338,Barras de cereais com fruta e chocolate,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312101413,Nachos de Milho sabor a Queijo,Continente,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312064282,Pipocas,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312045229,Barre de céréales,Continente,lista-segunda-passagem.csv,126 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312072843,Chocolate,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312072843,Biscoitos de cereais com pepitas de chocolate,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312181491,Palmiers,Continente,lista-segunda-passagem.csv,720 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077817,Bolachas recheadas chocolate,Continente,lista-segunda-passagem.csv,154g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312101277,Bolacha coberta com Chocolate de Leite,Continente,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312101499,Bolachas com recheio de sabor a Chocolate,Continente,lista-segunda-passagem.csv,440 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312100706,Creams,Continente,lista-segunda-passagem.csv,440 g (10 x 44 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312100706,Bolacha de cacau com recheio (Creams),Continente,lista-segunda-passagem.csv,440 g (10 x 44 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312079590,Crackers crocantes,Continente,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312072836,Cookies com pepitas de chocolate e mel,Continente,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312075905,Barritas Sésamo e Quinoa,Continente,lista-segunda-passagem.csv,150,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3232,7 +3232,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8410076910240,Bolo sabor a caramelo salgado,Fibre One,lista-segunda-passagem.csv,24 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602519184476,Biscoitos Requintados,Confeitaria,lista-segunda-passagem.csv,"0,250 kg",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312146193,Strudel de Maçã,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312181736,Churritos,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312181736,Biscoitos recheados com creme de cacau (Churritos),Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312100324,Madalenas Recheadas,Continente,lista-segunda-passagem.csv,336 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312302025,"Tapas, Salpicão e Paio com Tempero Alentejano",Continente,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601069008256,Mini Bolachas Chai & Gengibre,Dan Cake,lista-segunda-passagem.csv,160 g (4 x 40 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3278,10 +3278,10 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312077879,Puré de Fruta Maçã,Continente,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077862,Puré de Fruta Multifrutos,Continente,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600954502541,Mythos Sensação Estilo Grego Stracciatella,Continente,lista-segunda-passagem.csv,240 g (2 x 120 g),preencher,120,g,iogurte,unidade de um pack de 2
-5601312506713,Matilhas de Aroma Baunilha,Continente,lista-segunda-passagem.csv,500g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312506713,Sobremesa láctea de baunilha (Matilhas),Continente,lista-segunda-passagem.csv,500g,ignorar,,,,embalagem grande (500 g): não é uma dose individual de iogurte
 5601312504542,Natas do Céu,Continente,lista-segunda-passagem.csv,2 x 90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601050034387,+Proteína Ananás,Danone,lista-segunda-passagem.csv,145 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601050036909,Coconut,Danone,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601050036909,"Leite fermentado com coco (0,4% M.G.)",Danone,lista-segunda-passagem.csv,160 g,ignorar,,,,unidade g numa bebida: confirmar à mão
 5601050037418,Natur Pêssego e Maracujá,Danone,lista-segunda-passagem.csv,460 g (4 x 115 g),preencher,115,g,iogurte (nome só com o sabor),unidade de um pack de 4
 5601312146551,Gelatina com Aroma a Morango,Continente,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077831,"Puré de fruta Banana, Maçã, Laranja & Bolacha",Continente,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3293,14 +3293,14 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312071129,Puré de Fruta Maçã e Banana,Continente,lista-segunda-passagem.csv,200 g (2 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312079712,Puré de Fruta 4 Frutas & Aveia,Continente,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312077893,Metades de Pêssego em calda,Continente,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601050034493,Infusíon,Activia,lista-segunda-passagem.csv,155 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601050034493,Leite fermentado líquido magro de mirtilo e menta,Activia,lista-segunda-passagem.csv,155 g,ignorar,,,,unidade g numa bebida: confirmar à mão
 5601024134136,Azeite,Oliveira da Serra,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312104322,Psílio,Supla,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312104322,Casca de psílio em pó biológica,Supla,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312075974,Azeite Virgem Extra Superior,Cinco Soldos,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312078449,Azeite,Cinco Soldos,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312075950,Azeite Virgem Casto,Cinco Soldos,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312103028,Leite de Coco,Continente,lista-segunda-passagem.csv,400 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312104247,Matcha,Supla,lista-segunda-passagem.csv,70 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312104247,Matcha em pó biológico,Supla,lista-segunda-passagem.csv,70 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312881759,Sementes de Girassol,Continente,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312882299,Mistura Mediterrânea,Continente,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 7891095300631,Polvilho Doce,Yoki,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3325,10 +3325,10 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312078470,Salada Fruta em calda,Continente,lista-segunda-passagem.csv,840 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312179924,Sopa de Grão com Espinafres com legumes frescos,Continente,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312185161,Sops de cenoura,Sem marca,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601151971444,Lima,Pepsi,lista-segunda-passagem.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601151971444,Refrigerante Pepsi Lima (zero),Pepsi,lista-segunda-passagem.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5603722523663,Leite Proteína Baunilha,Mimosa,lista-segunda-passagem.csv,1 L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5603089007462,Bebida Active de laranja e cenoura,Santal,lista-segunda-passagem.csv,"1,5 l",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601163003614,Limão,Luso,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601163003614,Refrigerante de limão com água mineral,Luso,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8711327488052,Ice Tea Zero Açúcar Limão,Lipton,lista-segunda-passagem.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312092407,Limonada com hortelã,Autêntico,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312093244,"Néctar Maracujá, Maçã e Manga Clássico",Continente,lista-segunda-passagem.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
@@ -3336,8 +3336,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601312092797,Refrigerante de sumo de laranja,Continente,lista-segunda-passagem.csv,"1,5 l",ignorar,,,,embalagem grande (1500 ml): não é uma dose individual de bebida
 5601312026266,Água,Continente,lista-segunda-passagem.csv,330 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312107132,Super Smoothie Immunity Boost,Continente,lista-segunda-passagem.csv,250 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312028208,Cola,Continente,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601312094456,Original,Guapa,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312028208,Refrigerante de cola,Continente,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601312094456,Refrigerante Guapa original,Guapa,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601312090564,Néctar Manga,Continente,lista-segunda-passagem.csv,1L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601312142898,Leite com Chocolate,Continente,lista-segunda-passagem.csv,200 ml,preencher,200,ml,bebida,embalagem individual
 5601312091691,"Nectar maracuja, maca e manga",Continente,lista-segunda-passagem.csv,1 L,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
@@ -3374,7 +3374,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047027363,Leite Proteina Magro,Go Active Pingo Doce,lista-segunda-passagem.csv,1 litro,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601050036541,Iogurte Grego Natural Super Preço,Oikos,lista-segunda-passagem.csv,440 g (4 x 110 g),preencher,110,g,iogurte,unidade de um pack de 4
 5607047008577,Iogurte Proteico Morango,Go Active Pingo Doce,lista-segunda-passagem.csv,230 g,ignorar,,,,embalagem grande (230 g): não é uma dose individual de iogurte
-5601050023107,Natural,Danone,lista-segunda-passagem.csv,480 g (4 x 120 g),preencher,120,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601050023107,Iogurte natural meio-gordo,Danone,lista-segunda-passagem.csv,480 g (4 x 120 g),preencher,120,g,iogurte,unidade de um pack de 4
 4000980551314,Iogurte Natural,Go Bio,lista-segunda-passagem.csv,150 g,preencher,150,g,iogurte,embalagem individual
 5607047021262,Go active coco,Go Active,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5603722521225,Iogurte Líquido Magro Morango,Mimosa,lista-segunda-passagem.csv,4 x 155 g,preencher,155,g,iogurte,unidade de um pack de 4
@@ -3399,7 +3399,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047015582,Magro Aroma Frutos Vermelhos,Pingo Doce,lista-segunda-passagem.csv,680 g (4 x 170 g) / 660 ml (4 x 165 ml),preencher,170,g,iogurte (nome só com o sabor),unidade de um pack de 4
 5607047003107,Morango e Cereais Sem Lactose,Pingo Doce,lista-segunda-passagem.csv,680 g (4 x 170 g) / 652 ml (4 x 163 ml),preencher,170,g,iogurte (nome só com o sabor),unidade de um pack de 4
 5607047014301,Iogurte Cremoso Morango e Banana,Pingo Doce,lista-segunda-passagem.csv,750 g,ignorar,,,,embalagem grande (750 g): não é uma dose individual de iogurte
-5601009982158,Chocolocos,Pingo Doce,lista-segunda-passagem.csv,128 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009982158,Iogurte açucarado Chocolocos,Pingo Doce,lista-segunda-passagem.csv,128 g,preencher,128,g,iogurte,embalagem individual
 5607047008515,Estilo Grego Natural Açucarado,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,sem embalagem
 5607047021217,Iogurte Proteína Magro Baunilha Sem Lactose,Pingo Doce,lista-segunda-passagem.csv,680 g (4 x 170 g) / 648 ml (4 x 162 ml),preencher,170,g,iogurte,unidade de um pack de 4
 5603722523397,Iogurte líquido Sem Lactose Magro Frutos Tropicais,Mimosa,lista-segunda-passagem.csv,,ignorar,,,,sem embalagem
@@ -3417,7 +3417,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009928989,Iogurte Magro Natural,Pingo Doce,lista-segunda-passagem.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601009929733,Pedaços Cereais,Pingo Doce,lista-segunda-passagem.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5603722510922,Aroma 6 morango + 6 coco,Mimosa,lista-segunda-passagem.csv,1500 g (12 x 125 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-8435257018034,Magro,Nestlé,lista-segunda-passagem.csv,640 g (4 x 160 g),preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 4
+8435257018034,Iogurte líquido magro de frutos tropicais,Nestlé,lista-segunda-passagem.csv,640 g (4 x 160 g),preencher,160,g,iogurte,unidade de um pack de 4
 5601009929726,Pedaços Ananás,Pingo Doce,lista-segunda-passagem.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047008522,Iogurte Proteico Magro cremoso Manga e Acerola,Pingo Doce,lista-segunda-passagem.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
 5607047011652,Iogurte Banana Aroma,Pingo Doce,lista-segunda-passagem.csv,125 g,preencher,125,g,iogurte,embalagem individual
@@ -3435,7 +3435,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009999033,Iogurte Líquido com Alto teor em Proteína Morango,Pingo Doce,lista-segunda-passagem.csv,230 g,preencher,230,g,iogurte,embalagem individual
 5607047011645,Iogurte Tropical Aroma,Pingo Doce,lista-segunda-passagem.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601009929016,Pedaços Magro Morango,Pingo Doce,lista-segunda-passagem.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009936984,Morango,Pingo Doce,lista-segunda-passagem.csv,720 g (4 x 180 g) / 668 ml (4 x 167 ml),preencher,180,g,iogurte (nome só com o sabor),unidade de um pack de 4
+5601009936984,Iogurte líquido meio-gordo de morango,Pingo Doce,lista-segunda-passagem.csv,720 g (4 x 180 g) / 668 ml (4 x 167 ml),preencher,167,ml,iogurte,unidade de um pack de 4
 5601009929047,Cremoso Natural Açucarado,Pingo Doce,lista-segunda-passagem.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009991785,Iogurte sem Lactose Pedaços Ananás,Pingo Doce,lista-segunda-passagem.csv,120 g,preencher,120,g,iogurte,embalagem individual
 5601009987535,Iogurte Grego Lima Limão,Pingo Doce,lista-segunda-passagem.csv,500 g (4 x 125 g),preencher,125,g,iogurte,unidade de um pack de 4
@@ -3462,7 +3462,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009976683,Iogurte Pedaços Magro Ananás,Pingo Doce,lista-segunda-passagem.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5601009929139,Iogurte Aroma Morango,Pingo Doce,lista-segunda-passagem.csv,125 g,preencher,125,g,iogurte,embalagem individual
 5607047019344,Iogurte Cremoso Cookie,Pingo Doce,lista-segunda-passagem.csv,680 g (4 x 170 g) / 632 ml (4 x 158 ml),preencher,170,g,iogurte,unidade de um pack de 4
-5601050030396,Stracciadictive,Danone,lista-segunda-passagem.csv,149 ml,preencher,149,ml,bebida (nome só com o sabor),embalagem individual
+5601050030396,Iogurte líquido com raspas de chocolate,Danone,lista-segunda-passagem.csv,149 ml,preencher,149,ml,iogurte,embalagem individual
 5601050029963,Very strawberry morango,Danone,lista-segunda-passagem.csv,"1,28 kg (8 x 160 g) / 1,2 l (8 x 150 ml)",preencher,160,g,iogurte (nome só com o sabor),unidade de um pack de 8
 5603722512698,Momentos Refrescantes Baobá Cooler,Adagio,lista-segunda-passagem.csv,175 ml,preencher,175,ml,bebida (nome só com o sabor),embalagem individual
 8435257002682,Yoggi Original Morango e Banana,Nestlé,lista-segunda-passagem.csv,720 g / 668 ml (4 x 180 g / 167 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3519,7 +3519,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009992324,Queijo da Beira Baixa DOP Picante,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2949989001548,Queijo Comté,Queijos do Mundo,lista-segunda-passagem.csv,"Variável, ~0,150 kg",ignorar,,,,código de peso variável (EAN 2...)
 2647445000004,Barra Queijo Flamengo,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,código de peso variável (EAN 2...)
-5607047011775,Cabra,Pingo Doce,lista-segunda-passagem.csv,200 g (2 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047011775,Queijo de cabra curado,Pingo Doce,lista-segunda-passagem.csv,200 g (2 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009997206,Queijo de Ovelha com Trufa,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410500023652,Bebida proteica sabor framboesa,DANONE S.A.,lista-segunda-passagem.csv,300 g / 291 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047011003,Estilo Skyr Islandês Morango e Framboesa,GO ACTIVE pingo doce,lista-segunda-passagem.csv,150 g,preencher,150,g,iogurte,embalagem individual
@@ -3598,7 +3598,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009964956,Miolo de Mexilhão,Pingo Doce,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047017371,Miolo de Camarão,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009955749,Fuet Extra,Pingo Doce,lista-segunda-passagem.csv,180 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047008539,Charcutaria,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047008539,Salsichas,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009942381,Mini Tostas,Pingo Doce,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009934478,Tosta de trigo tipo sueca,Pingo Doce,lista-segunda-passagem.csv,225 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009981069,"Pãezinhos Tostados Azeite, Alho & Salsa",Pingo Doce,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3637,14 +3637,14 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009977826,Choconuts Splash Cereais Recheados de Chocolate e Avelã,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047006368,Granola saborosa de caramelo,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047016329,Chocorice Cereais de Arroz Integral e Trigo Integral com Chocolate,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009995455,Estrelinhas,Pingo Doce,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009995455,Cereais estrelinhas,Pingo Doce,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009966868,Flocos com Mel,Pingo Doce,lista-segunda-passagem.csv,750 g (2 x 375 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009977833,Cookie Bitz Cereais Mini Cookies com Pepitas de Chocolate,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010068,Super pequeno almoco,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047005699,Muesli ao Forno Chocolate & Amêndoas,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009965106,Muesli crocante,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009967780,Flocos de Aveia,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009160150,Chocolocos,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009160150,Cereais Chocolocos,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009923748,Chocorice Arroz Tufado com Chocolate,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047008225,Granola Enriquecida Sementes Ancestrais,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009935161,Energia de Gold & Crash,Pingo Doce,lista-segunda-passagem.csv,375 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3656,7 +3656,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009935185,Puré de Batata em pó,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047015001,Edição Limitada Sabor a Cream&Onion,Pingo Doce,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009994113,Bolinhas de Alheira e Chouriço,Pingo Doce,lista-segunda-passagem.csv,12 x 25 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601363000888,Light,Lay's,lista-segunda-passagem.csv,140 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601363000888,Batatas fritas Light,Lay's,lista-segunda-passagem.csv,140 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009986798,"Bebida à Base de Aveia, Aveia, Original",Pingo Doce,lista-segunda-passagem.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5601009962495,Tortitas de arroz integral sem sal,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009962488,Tortitas de milho com sal,Pingo Doce,lista-segunda-passagem.csv,130 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3701,9 +3701,9 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009957668,Pizza Presunto Serrano,Pingo Doce,lista-segunda-passagem.csv,390 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010129,Chocolate com Biscoito com Molho de Sabor a Chocolate,Pingo Doce,lista-segunda-passagem.csv,500 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009955756,Pizza Fiambre e Queijo Mozzarella,Pingo Doce,lista-segunda-passagem.csv,405 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009958610,Baunilha,Pingo Doce,lista-segunda-passagem.csv,250 g (500 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009958610,Gelado de baunilha,Pingo Doce,lista-segunda-passagem.csv,250 g (500 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009952090,Pizza Forno de Lenha Romana,Pingo Doce,lista-segunda-passagem.csv,350 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009975747,Tubitos,Pingo Doce,lista-segunda-passagem.csv,6 x 117 g,preencher,117,g,iogurte (nome só com o sabor),unidade de um pack de 6
+5601009975747,Gelado de fruta (morango e limão) em tubos,Pingo Doce,lista-segunda-passagem.csv,6 x 117 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047015711,Ice Cream Blue,Pingo Doce,lista-segunda-passagem.csv,475 g / 950 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010822,Gelado Banana Nacional,Pingo Doce,lista-segunda-passagem.csv,188 g (4 x 47 g) / 240 ml (4 x 60 ml),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018934,Gelado Mini Bites Caramelo Salgado,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3711,7 +3711,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047018477,Mochi caramelo,Pingo Doce,lista-segunda-passagem.csv,4 x 35 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018361,Gelados Majestic Limão,Pingo Doce,lista-segunda-passagem.csv,"600 ml (6 x 100 ml) / 417 g (6 x 69,5 g)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018699,Mini gelados majestic double caramel,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009961900,Baunilha,Pingo Doce,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009961900,Gelado vegetal de baunilha (ervilha),Pingo Doce,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009985135,Vegetais Grelhados,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009999279,Gelado de caramelo com molho de caramelo salgado Pingo Doce,Pingo Doce,lista-segunda-passagem.csv,275g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009500147,Lasanha Bolonhesa,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3727,7 +3727,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047007952,"Shot vitamin love Maçã, Laranja, Gengibre e Inulina",Pingo Doce,lista-segunda-passagem.csv,125 ml,preencher,125,ml,bebida (nome só com o sabor),embalagem individual
 5607047016640,Sumo com Proteina Vegetal Frutos Vermelhos,Pingo Doce,lista-segunda-passagem.csv,250 ml,preencher,250,ml,bebida,embalagem individual
 5601151977965,Veggie Maçã & Beterraba,Compal,lista-segunda-passagem.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047016497,Tangerina,Pingo Doce,lista-segunda-passagem.csv,1 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047016497,Sumo de tangerina,Pingo Doce,lista-segunda-passagem.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5607047012147,Sumo 4 Veggie Maçã + Cenoura + Gengibre + Limão,Pingo Doce,lista-segunda-passagem.csv,250ml,preencher,250,ml,bebida,embalagem individual
 5601009984480,Sumo Natural Laranja com Maçã,Pingo Doce,lista-segunda-passagem.csv,750 ml,ignorar,,,,embalagem grande (750 ml): não é uma dose individual de bebida
 5601009984442,Sumo Laranja Maçã de Alcobaça,Pingo Doce,lista-segunda-passagem.csv,250 ml,preencher,250,ml,bebida,embalagem individual
@@ -3756,8 +3756,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047009017,"Bebida à Base de Amêndoa, sem Adição de Açúcares",Pingo Doce,lista-segunda-passagem.csv,1 l,ignorar,,,,embalagem grande (1000 ml): não é uma dose individual de bebida
 5607047013779,Bebida à Base de Soja Chocolate,Pingo Doce,lista-segunda-passagem.csv,200 ml,preencher,200,ml,bebida,embalagem individual
 5607047006023,"Linhaça uva Laranja Pêssego, Maçã Banana, Manga Maracujá Smoothie+",Pingo Doce,lista-segunda-passagem.csv,250 ml,preencher,250,ml,bebida (nome só com o sabor),embalagem individual
-5607047006221,Infusão de Ervas Defesa,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047006238,Infusão de Ervas Equilíbrio,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047006221,Infusão de ervas Defesa,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047006238,Infusão de ervas Equilíbrio,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009960798,AntiOx Frutos vermelhos,Pingo Doce,lista-segunda-passagem.csv,1L,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009981496,Leite de Coco,Pingo Doce,lista-segunda-passagem.csv,400 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009955992,"Original, Bebida à Base de Soja",Pingo Doce,lista-segunda-passagem.csv,200 ml,preencher,200,ml,bebida,embalagem individual
@@ -3811,7 +3811,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009995226,Tarteletes Morango,Pingo Doce,lista-segunda-passagem.csv,96 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009998548,Bolachas butter cookies,Pingo Doce,lista-segunda-passagem.csv,454 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047019184,Bolachas Marinheiras com Alfarroba,Pingo Doce,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009992614,Palitos,Pingo Doce,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009992614,Massa palitos com ovo,Pingo Doce,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047002155,Bolacha com Cacau com Recheio de Sabor a Chocolate,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009996049,Tarteletes de Chocolate,Pingo Doce,lista-segunda-passagem.csv,91 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009975334,Palitos de Chocolate,Pingo Doce,lista-segunda-passagem.csv,150g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3882,7 +3882,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009984138,Barras Linha Chocolate Negro,Pingo Doce,lista-segunda-passagem.csv,120 g (6 x 20 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009942213,Soft Cakes Recheadas com Laranja Cobertas com Chocolate,Pingo Doce,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047003756,Madalenas Clássicas Sem Glúten,Pingo Doce,lista-segunda-passagem.csv,160 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601306010554,Canudinhos,Dailidoce,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601306010554,Canudinhos (biscoito),Dailidoce,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604697901012,Bolo de Chocolate,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009943760,"Um Waffle, Várias Opções",Pingo Doce,lista-segunda-passagem.csv,165 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047017098,Madalenas com Recheio de Cacau,Pingo Doce,lista-segunda-passagem.csv,336 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3893,7 +3893,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009985531,Barras de Frutos Secos,Pingo Doce,lista-segunda-passagem.csv,35 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604697001231,Extra-Fofos,Sem marca,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 8410199016591,Snack ondulado de multicereais sabor sour cream e pimenta,Sunbites,lista-segunda-passagem.csv,95 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009975181,Chocopintas,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009975181,Pastilhas de chocolate de leite com capa de açúcar,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010273,Snack Vegetariano Framboesa e Amêndoa,Pingo Doce,lista-segunda-passagem.csv,80 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047013113,Bolitos com Pepitas de Chocolate de Leite,Pingo Doce,lista-segunda-passagem.csv,280 g (8 x 35 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009973057,Gomas Tijolos & Cilindros,Pingo Doce,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3924,7 +3924,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009996773,Morango e Banana com Iogurte,Pingo Doce,lista-segunda-passagem.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047013861,Gelatina Maracujá,Pingo Doce,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047020722,Gelatina Proteica Frutos Vermelhos,Pingo Doce,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-3041091718037,Pera,Blédina,lista-segunda-passagem.csv,380 g (4 x 95 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+3041091718037,Puré de pêra,Blédina,lista-segunda-passagem.csv,380 g (4 x 95 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047011720,Mirtilo Soja,Pingo Doce,lista-segunda-passagem.csv,480 g (4 x 120 g),preencher,120,g,iogurte (nome só com o sabor),unidade de um pack de 4
 7622300870409,Gelatina sabor tropical,Royal,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047013854,Gelatina Ananás com sumo de fruta,Pingo Doce,lista-segunda-passagem.csv,400 g (4 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3946,7 +3946,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 2000002641728,Doce Pingo Doce,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,código de peso variável (EAN 2...)
 5601009991914,100% Fruta Maçã e Pêra,Go Bio,lista-segunda-passagem.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047018606,Maçã Pera,Pingo Doce,lista-segunda-passagem.csv,90 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601082022758,Lote Chávena,Delta,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601082022758,Café moído Lote Chávena (preparado),Delta,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047003619,Polpa de Tomate,Pingo Doce,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009974689,Azeite Virgem Extra Não Filtrado,Sem marca,lista-segunda-passagem.csv,500 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009974672,Azeite Virgem Extra Não Filtrado Azeite dos Nossos Planaltos,Sem marca,lista-segunda-passagem.csv,500 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3957,8 +3957,8 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009297917,Café Gold,Pingo Doce,lista-segunda-passagem.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009984008,Sementes de Girassol,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047011935,Cogumelos laminados,Pingo Doce,lista-segunda-passagem.csv,185grs,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009971114,Chiado,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009993710,Galão,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009971114,Café moído Chiado (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009993710,Galão instantâneo (preparado),Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047007211,Café Moído Descafeinado,Pingo Doce,lista-segunda-passagem.csv,250 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009990061,Azeite Virgem Extra Azeite das Nossas Planícies,Pingo Doce,lista-segunda-passagem.csv,3 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047009239,Corposo Formato Poupança,Pingo Doce,lista-segunda-passagem.csv,240 g (30 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3966,10 +3966,10 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009986941,Azeitona Mista com Az. Alho Oreg 155 g,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604360212926,Hambúrguer Tremoço Azeitona,Tremoceira,lista-segunda-passagem.csv,200 g (2 x 100 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009962198,Milho doce,Pingo Doce,lista-segunda-passagem.csv,"150 g (líquido), 140 g (escorrido)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009958269,Descafeinado,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009958252,Corposo,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009958269,Café moído descafeinado (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009958252,Café moído Corposo (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047009475,Café Moído Vietname,Pingo Doce,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009978410,Cravinho,Pingo Doce,lista-segunda-passagem.csv,25 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009978410,Cravinho inteiro,Pingo Doce,lista-segunda-passagem.csv,25 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047007358,Azeite de Moura Dop,Pingo Doce,lista-segunda-passagem.csv,750ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009993246,Café Intenso,Pingo Doce,lista-segunda-passagem.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047007228,Pastilhas de Café Intenso,Pingo Doce,lista-segunda-passagem.csv,105 g (15 x 7 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -3980,15 +3980,15 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601009110223,Café Solúvel Descafeinado,Pingo Doce,lista-segunda-passagem.csv,20 g (10 x 2 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 02805203,Azeite,Oliveira da Serra,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5605378532853,Cebola roxa,Domingos Ferreira,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009973873,Invicta,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009958283,Aromático,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009973873,Café moído Invicta (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009958283,Café moído Aromático (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009972548,Farinha para Pão,Pingo Doce,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602348111186,Vegan Panados Ervilha,Izidoro,lista-segunda-passagem.csv,260g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047012550,Intenso,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047012550,Café moído Intenso (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047010112,Café Solúvel,Pingo Doce,lista-segunda-passagem.csv,20 g (10 x 2 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047019429,Guatemala,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047011072,Aveludado,Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5607047019092,Biológico,Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047019429,Café moído Guatemala (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047011072,Café moído Aveludado (preparado),Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5607047019092,Café moído biológico (preparado),Pingo Doce,lista-segunda-passagem.csv,128 g (16 x 8 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009990092,Azeite Virgem Extra Não Filtrado,Sem marca,lista-segunda-passagem.csv,3 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009110537,Cogumelos laminados,Pingo Doce,lista-segunda-passagem.csv,"355 g (líquido), 185 g (escorrido)",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2000003734689,Creme de cenoura,Pingo Doce,lista-segunda-passagem.csv,"0,400 kg",ignorar,,,,código de peso variável (EAN 2...)
@@ -4012,7 +4012,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5607047016633,Sumo com Proteína Whey Manga e Curcuma,Pingo Doce,lista-segunda-passagem.csv,250 ml,preencher,250,ml,bebida,embalagem individual
 5601009972647,Iced Tea Limão,Pingo Doce,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009970445,Cola Clássica,Pingo Doce,lista-segunda-passagem.csv,2 l,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5601009991716,Ananás,Pingo Doce,lista-segunda-passagem.csv,"1,5 l",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5601009991716,Refrigerante de ananás,Pingo Doce,lista-segunda-passagem.csv,"1,5 l",ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5607047006849,Limonada Limão Frutos Vermelhos,Pingo Doce,lista-segunda-passagem.csv,750 ml,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601009984435,Sumo Natural Maçã com Cenoura,Pingo Doce,lista-segunda-passagem.csv,25 cl,preencher,250,ml,bebida,embalagem individual
 5601009951949,"Frutíssimo Ananás, Coco Laranja",Pingo Doce,lista-segunda-passagem.csv,,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -4093,7 +4093,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 4056489574392,Bolacha Crock sabor chocolate,LIDL,lista-segunda-passagem.csv,500 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604993546436,Bolachas de Amendoim,Avó Elvira,lista-segunda-passagem.csv,260 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602519481384,Linguas de veado,A Minha Padaria,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5602519483180,Esses,A Minha Padaria,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5602519483180,Biscoito sabor a limão (Esses),A Minha Padaria,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602519480806,Biscoitos de Canela,A Minha Padaria,lista-segunda-passagem.csv,360 g (300 g + 60 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 4056489762720,Chocolate de leite proteico crocante,Fin Carré,lista-segunda-passagem.csv,90g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 09107439,Preto Equador,J.D: Gross,lista-segunda-passagem.csv,125 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -4135,7 +4135,7 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 8429583442748,Petingas em Azeite,Frinsa,lista-segunda-passagem.csv,60 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600968900357,Sardinhas em azeite,Socilink,lista-segunda-passagem.csv,120 g (90 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601943001700,Carapaus em Azeite,Fides,lista-segunda-passagem.csv,120 g (84 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-6971835850457,Nori-Seetang,Miyata,lista-segunda-passagem.csv,14 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+6971835850457,Alga nori seca,Miyata,lista-segunda-passagem.csv,14 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002119766,Salsichas tipo frankfurt,Polegar,lista-segunda-passagem.csv,200 g (350 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002123138,Pão de Forma,Polegar,lista-segunda-passagem.csv,600 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5600341930445,Granola Bio,Seara,lista-segunda-passagem.csv,300 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
@@ -4147,14 +4147,14 @@ EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo
 5601002119742,Grão-de-bico cozido,Polegar,lista-segunda-passagem.csv,400 g (540 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002119728,Feijão-frade cozido,Polegar,lista-segunda-passagem.csv,400 g (540 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601315132001,Mistura de Legumes para Sopa Ultracongelada,Sem marca,lista-segunda-passagem.csv,1 kg,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-5602036205012,Mulata,Moaçor,lista-segunda-passagem.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+5602036205012,Bolacha com cacau (Mulata),Moaçor,lista-segunda-passagem.csv,175 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604772200092,Caramelos duros mini sabor a café,Drops Villa,lista-segunda-passagem.csv,100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5609060092496,Croffee Cereais com Café,Delta,lista-segunda-passagem.csv,105 g (5 x 21 g),ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
-7622201639419,Pim's,Triunfo,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+7622201639419,Bolachas Pim's,Triunfo,lista-segunda-passagem.csv,150 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5602070003025,Pastel de Chaves IGP,Carina,lista-segunda-passagem.csv,4,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5609060092519,Croffee Barra de Cereais com Café,Delta,lista-segunda-passagem.csv,21 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 2110591000025,Bola de Berlim:c/ Creme un,Sem marca,lista-segunda-passagem.csv,,ignorar,,,,código de peso variável (EAN 2...)
-4335619106574,Gelatina,High Protein,lista-segunda-passagem.csv,4 x 100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
+4335619106574,Gelatina proteica de tangerina,High Protein,lista-segunda-passagem.csv,4 x 100 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5601002124500,Sementes de chia,Sem marca,lista-segunda-passagem.csv,200 g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 7613038877044,Almond Latte,Nescafe,lista-segunda-passagem.csv,96g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"
 5604321031085,Cem Porcento Hambúrguer Proteico Tofu e Chia,Cem Porcento,lista-segunda-passagem.csv,200g,ignorar,,,,"não é uma dose individual de iogurte, bebida ou queijo fresco"

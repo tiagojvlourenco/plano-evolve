@@ -98,6 +98,8 @@ function parsePackaging(raw){
 
 // iogurtes líquidos (garrafas) medem-se em ml sempre que a embalagem o diga
 var LIQUID_YOGURT = /l[ií]quido|bebível|bebivel|drink|yoggi/i;
+// sobremesas/mousses/cremes salgados (mousse de queijo com alho e ervas, mousse de atum...) não são doses de iogurte
+var SAVORY = /queijo|alho|ervas|salm[ãa]o|atum|peixe|fumado|marisco|camar[ãa]o|frango|legumes|abacate|guacamole|tomate|pimento|sardinha|bacalhau|presunto|fiambre|paté|pat[eé]/i;
 // laticínios cujo nome é só o sabor ("Natural", "Morango", "Sem Lactose Magro") valem como doses individuais, salvo se forem queijo, manteiga, natas, molhos, pastas ou produtos em pó
 var DAIRY_NOT_PACK = /queijo|requeij|manteiga|natas|creme|cremos|barrar|cunha|fatia|ralad|curad|por[çc]|portion|babybel|philadelphia|molho|pesto|tempero|pasta|em p[óo]|condensado|coco|gelado/i;
 
@@ -114,6 +116,7 @@ function servingCategory(name, kcalPer100){
   for (var i = 0; i < CATEGORIES.length; i++){
     var c = CATEGORIES[i];
     if (!c.head.test(name)) continue;
+    if (c.key === "iogurte" && SAVORY.test(name)) return null;
     if (c.key !== "iogurte" && NEVER.test(name)) return null;   // um iogurte pode ter "chocolate" no sabor: só os outros têm de passar pelas exclusões
     if (c.exclude && c.exclude.test(name)) return null;
     if (isFinite(kcalPer100) && kcalPer100 > c.kcalMax) return null; // nutrição incoerente com a categoria: "leite" que é pó de sobremesa, "presunto" que é snack...
@@ -129,7 +132,7 @@ function packForProduct(name, embalagem, kcalPer100, ean, group){
   var cat = servingCategory(name, kcalPer100), viaGroup = false;
   if (!cat){
     // "Natural", "Morango", "Sem Lactose Magro": só o sabor no nome. Laticínios com copos de 60–200 g/ml (pack de 2 ou mais) ou pacotes de bebida pequenos, com calorias de iogurte/leite
-    if (group === "laticinios" && !NEVER.test(String(name || "")) && hasWholePackFood(name, group) && isFinite(kcalPer100) && p.ok){
+    if (group === "laticinios" && !NEVER.test(String(name || "")) && !SAVORY.test(String(name || "")) && hasWholePackFood(name, group) && isFinite(kcalPer100) && p.ok){
       var liquidPack = p.unit === "ml" && p.size >= 100 && p.size <= 250 && kcalPer100 <= 120;
       var cupPack = p.form === "multi" && p.count >= 2 && p.size >= 60 && p.size <= 200 && kcalPer100 <= 200;
       if (liquidPack) cat = CATEGORIES[2];

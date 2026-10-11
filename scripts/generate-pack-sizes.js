@@ -55,14 +55,30 @@ function loadProducts(dir){
   return out;
 }
 
-// nomes tal como ficaram no catálogo (os output-import-*.sql traduzem e corrigem os nomes das listas): é nesses que a app procura "iogurte", "queijo"...
+// nomes e grupos tal como ficaram no catálogo: os output-import-*.sql inserem, e os output-review-*/translate-* mudam depois o nome e o grupo (~500 produtos). É nesses que a app procura "iogurte", "queijo"...
+const SQL_STR = "'((?:[^']|'')*)'";
+function unq(v){ return v.replace(/''/g, "'"); }
 function loadDbNames(dir){
   const names = new Map();
-  const re = /^insert into food_products \(ean, name, brand, food_group[^)]*\) values \('([^']*)', '((?:[^']|'')*)', '((?:[^']|'')*)', '([a-z]*)'/;
-  fs.readdirSync(dir).filter(f => /^output-(import|migrate)-.*\.sql$/.test(f)).sort().forEach(file => {
+  const ins = new RegExp("^insert into food_products \\(ean, name, brand, food_group[^)]*\\) values \\('([^']*)', " + SQL_STR + ", " + SQL_STR + ", '([a-z]*)'");
+  const upd = /^update food_products set (.*?) where (.*?);\s*(?:--.*)?$/;
+  const setName = new RegExp("(?:^|, )name = " + SQL_STR), setGroup = /(?:^|, )food_group = '([a-z]*)'/, setBrand = new RegExp("(?:^|, )brand = " + SQL_STR);
+  const whereEan = /^ean = '([^']*)'/, whereName = new RegExp("^name = " + SQL_STR + " and brand = " + SQL_STR);
+  const rank = f => /^output-import-/.test(f) ? 0 : /^output-migrate-/.test(f) ? 1 : /^output-review-/.test(f) ? 2 : 3;
+  const files = fs.readdirSync(dir).filter(f => /^output-(import|migrate|review|translate)-.*\.sql$/.test(f)).sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  files.forEach(file => {
     fs.readFileSync(path.join(dir, file), "utf8").split("\n").forEach(line => {
-      const m = re.exec(line);
-      if (m) names.set(m[1], {name: m[2].replace(/''/g, "'"), group: m[4]});
+      let m = ins.exec(line);
+      if (m){ names.set(m[1], {name: unq(m[2]), brand: unq(m[3]), group: m[4]}); return; }
+      m = upd.exec(line);
+      if (!m) return;
+      const sn = setName.exec(m[1]), sg = setGroup.exec(m[1]), sb = setBrand.exec(m[1]);
+      if (!sn && !sg) return;
+      const apply = e => { if (sn) e.name = unq(sn[1]); if (sg) e.group = sg[1]; if (sb) e.brand = unq(sb[1]); };
+      const we = whereEan.exec(m[2]);
+      if (we){ const e = names.get(we[1]); if (e) apply(e); return; }
+      const wn = whereName.exec(m[2]);
+      if (wn) names.forEach(e => { if (e.name === unq(wn[1]) && e.brand === unq(wn[2])) apply(e); });
     });
   });
   return names;
@@ -90,9 +106,9 @@ if (require.main === module){
   const recs = run(__dirname);
   const ok = recs.filter(r => r.decision.ok);
   const sql = ["-- Tamanho da embalagem individual (dose) dos produtos perecíveis do Catálogo, a partir da coluna 'Embalagem' das listas lista-*.csv.",
-    "-- Gerado por scripts/generate-pack-sizes.js — " + ok.length + " produtos (doses individuais de iogurte, bebida e queijo fresco). Só preenche linhas sem package_quantity.",
+    "-- Gerado por scripts/generate-pack-sizes.js — " + ok.length + " produtos (doses individuais de iogurte, bebida e queijo fresco). Só preenche linhas sem package_quantity e com o nome com que foram classificadas (se o nome mudou entretanto, a linha fica por preencher).",
     "-- Corre isto no SQL Editor do Supabase. Pode correr-se mais do que uma vez (não sobrescreve nada).", ""]
-    .concat(ok.map(r => "update food_products set package_quantity = " + r.decision.packageQuantity + ", package_unit = " + sqlStr(r.decision.packageUnit) + " where ean = " + sqlStr(r.ean) + " and package_quantity is null; -- " + r.name.replace(/[\r\n]/g, " ")))
+    .concat(ok.map(r => "update food_products set package_quantity = " + r.decision.packageQuantity + ", package_unit = " + sqlStr(r.decision.packageUnit) + " where ean = " + sqlStr(r.ean) + " and name = " + sqlStr(r.name) + " and package_quantity is null;"))
     .join("\n") + "\n";
   fs.writeFileSync(path.join(__dirname, "output-pack-sizes.sql"), sql);
   const csv = ["EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo"].concat(recs.map(r => [r.ean, r.name, r.brand, r.file, r.embalagem, r.decision.ok ? "preencher" : "ignorar", r.decision.ok ? r.decision.packageQuantity : "", r.decision.ok ? r.decision.packageUnit : "", r.decision.ok ? r.decision.category : "", r.decision.ok ? (r.decision.form === "multi" ? "unidade de um pack de " + r.decision.count : "embalagem individual") : r.decision.reason].map(csvCell).join(","))).join("\n") + "\n";

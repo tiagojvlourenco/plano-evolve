@@ -60,6 +60,7 @@ var G = require("../scripts/generate-pack-sizes.js");
   check.check("2. Mozzarella e burrata '125 g (210 g)': a unidade é a bola de 125 g; para o iogurte o parêntesis continua ambíguo", d("Mozzarella Bola", "125 g (210 g)", 250) === "125g" && d("Burrata", "125 g (210 g)", 270) === "125g" && d("Iogurte", "125 g (210 g)", 60) === "–");
   check.check("2. Bebidas vegetais e néctares pequenos contam; bebida energética e embalagem de 1 l não", d("Bebida de aveia", "250 ml", 45) === "250ml" && d("Néctar de pêssego", "200 ml", 50) === "200ml" && d("Batido de morango", "200 ml", 75) === "200ml" && d("Bebida energética", "250 ml", 45) === "–" && d("Bebida de aveia", "1 l", 45) === "–");
   check.check("2. Nome só com o sabor ('Natural', 'Líquido Morango'): só em laticínios e só em copos de pack ou garrafas pequenas; nunca queijo ralado nem outros grupos", dg("Natural", "720 g (6 x 120 g)", 70, "laticinios") === "120g" && dg("Líquido Morango", "4 x 150 ml", 70, "laticinios") === "150ml" && dg("Natural", "720 g (6 x 120 g)", 70, "cereais") === "–" && dg("Natural", "120 g", 70, "laticinios") === "–" && dg("Queijo ralado", "4 x 50 g", 300, "laticinios") === "–" && dg("Magro Framboesa & Piri-Piri", "4 x 125 g", 90, "laticinios") === "–");
+  check.check("2. Mousses e cremes salgados (queijo com alho e ervas, atum, salmão) não são doses de iogurte, mas a mousse de chocolate sim", ["Mousse de queijo com alho e ervas finas", "Mousse de Salmão", "Mousse de atum", "Sobremesa de Queijo", "Pudim de peixe"].every(function(n){ return d(n, "150 g", 200) === "–" && dg(n, "4 x 150 g", 200, "laticinios") === "–"; }) && d("Mousse de chocolate", "4 x 60 g", 150) === "60g");
   check.check("2. Peso variável, ambíguo ou sem embalagem → nada a preencher", d("Queijo fresco", "Variável, ~0,180 kg", 100) === "–" && d("Iogurte", "125 g (210 g)", 60) === "–" && d("Iogurte", "", 60) === "–");
 })();
 
@@ -89,6 +90,23 @@ var G = require("../scripts/generate-pack-sizes.js");
   mergeFoodProduct({name: "Mistura láctea em pó", brand: "TesteF", food_group: "laticinios", kcal: 380, protein: 25, carbs: 50, fat: 8, package_quantity: 200, package_unit: "g"}, []);
   mergeFoodProduct({name: "Natural", brand: "TesteG", food_group: "cereais", kcal: 350, protein: 7, carbs: 78, fat: 1, package_quantity: 120, package_unit: "g"}, []);
   check.check("4. Laticínio cujo nome é só o sabor ('Natural') com embalagem do catálogo passa a ter embalagem inteira; produtos em pó e outros grupos não", packSizeOf("Natural (TesteE)") === 120 && packSizeOf("Mistura láctea em pó (TesteF)") === 0 && packSizeOf("Natural (TesteG)") === 0);
+  // revisão adversarial: unidade em maiúsculas, produtos já existentes e quantidade-padrão
+  var q = {name: "Iogurte magro melancia", brand: "Pingo Doce", food_group: "laticinios", kcal: 50, protein: 4, carbs: 6, fat: 0.5, package_quantity: 170, package_unit: "g"};
+  mergeFoodProduct(q, []);
+  var qn = foodProductDisplayName(q, []);
+  check.check("4. Iogurte de 170 g: a quantidade-padrão é a embalagem (170 g) e '2 iogurtes' no texto colado dão 340 g (2 embalagens), não 170 g", packSizeOf(qn) === 170 && defaultQtyForFood(qn) === "170 g" && matchDraftPhrase("2 iogurtes magro melancia pingo doce").qty === "340 g");
+  ["mL", "ML", "G", " g "].forEach(function(u, i){
+    var r = {name: "Iogurte teste unidade", brand: "U" + i, food_group: "laticinios", kcal: 60, protein: 4, carbs: 5, fat: 2, package_quantity: 125, package_unit: u};
+    mergeFoodProduct(r, []);
+    check.check("4. A unidade '" + u + "' (maiúsculas ou espaços) também vale para a embalagem inteira", packSizeOf(foodProductDisplayName(r, [])) === 125);
+  });
+  check.check("4. Unidade que não é g nem ml ('unid.') é ignorada", (function(){ var r = {name: "Iogurte teste unidade", brand: "UX", food_group: "laticinios", kcal: 60, protein: 4, carbs: 5, fat: 2, package_quantity: 4, package_unit: "unid."}; mergeFoodProduct(r, []); return packSizeOf(foodProductDisplayName(r, [])) === 0; })());
+  FOOD_DB["Mozzarella teste (Hacendado)"] = {per: "100g", kcal: 202, p: 18, c: 1, f: 14};
+  var existing = mergeFoodProduct({name: "Mozzarella teste", brand: "Hacendado", food_group: "laticinios", kcal: 999, protein: 1, carbs: 1, fat: 1, package_quantity: 125, package_unit: "g"}, []);
+  check.check("4. Produto que já existe na app não é substituído (nutrição intacta) mas passa a ter a embalagem do catálogo; uma embalagem já conhecida não é alterada", existing === false && FOOD_DB["Mozzarella teste (Hacendado)"].kcal === 202 && packSizeOf("Mozzarella teste (Hacendado)") === 125 && (function(){ mergeFoodProduct({name: "Mozzarella teste", brand: "Hacendado", food_group: "laticinios", kcal: 1, protein: 1, carbs: 1, fat: 1, package_quantity: 100, package_unit: "g"}, []); return packSizeOf("Mozzarella teste (Hacendado)") === 125; })());
+  FOOD_PACKS["Embalagem teste A"] = 170; FOOD_PACKS["Embalagem teste B"] = 62.5; FOOD_PACKS["Embalagem teste C"] = 200;
+  var strip = function(h){ return h.replace(/<[^>]+>/g, ""); };
+  check.check("4. O aviso de desperdício não repete o mesmo tamanho ('Usa 170 g.'), usa vírgula decimal e a unidade certa (ml)", /Usa 170 g\.$/.test(strip(packWasteHint({name: "Embalagem teste A", qty: "100 g"}))) && /Usa 62,5 g ou 125 g\./.test(strip(packWasteHint({name: "Embalagem teste B", qty: "100 g"}))) && /Embalagem de 200 ml: 100 ml deixa 100 ml.*Usa 200 ml\./.test(strip(packWasteHint({name: "Embalagem teste C", qty: "100 ml"}))));
   check.check("4. Bolachas com manteiga e arroz não ficam presos a embalagens inteiras (não se estragam depois de abertos)", packSizeOf("Bolachas com Manteiga (TesteC)") === 0 && packSizeOf("Arroz (TesteD)") === 0);
   check.check("4. O plano arredonda para embalagens inteiras: 100 g → 125 g; 250 g de iogurte líquido → 255 ml (1 e 2 embalagens de 170)", snapToWholePacks("Iogurte Natural (TesteA)", 100) === 125 && snapToWholePacks("Iogurte Líquido (TesteB)", 250) === 340 || snapToWholePacks("Iogurte Líquido (TesteB)", 250) === 170);
   check.check("4. O editor do catálogo explica que se indica o tamanho de UMA unidade de um pack", /Tamanho de uma embalagem individual/.test(appSource) && /UMA unidade/.test(appSource));
@@ -124,6 +142,30 @@ var G = require("../scripts/generate-pack-sizes.js");
   check.check("5. Nomes com apóstrofo não rebentam", by["1000555"].decision.packageQuantity === 150);
 })();
 
+// ---- 5b. Nomes e grupos depois das revisões (output-review-*/translate-*) ----
+(function(){
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), "packs-ren-"));
+  fs.writeFileSync(path.join(dir, "lista-a.csv"), [
+    "EAN,Nome,Marca,Grupo,Embalagem,kcal/100g",
+    '2000111,"Tubitos","Marca",laticinios,"6 x 117 g",88',
+    '2000222,"Natural","Marca",laticinios,"500 g (4 x 125 g)",60',
+    '2000333,"Fresh Yogurt","Marca",laticinios,"4 x 125 g",60',
+    ""].join("\n"));
+  var cols = "(ean, name, brand, food_group, nutrition_basis, kcal, protein, carbs, fat, source_url, internal_note, source_type, verification_status)";
+  fs.writeFileSync(path.join(dir, "output-import-teste.sql"), [
+    "insert into food_products " + cols + " values ('2000111', 'Tubitos', 'Marca', 'laticinios', '100g', 88, 1, 15, 2, 'x', null, 'open_food_facts', 'pending') on conflict (ean) do nothing;",
+    "insert into food_products " + cols + " values ('2000222', 'Natural', 'Marca', 'laticinios', '100g', 60, 4, 5, 2, 'x', null, 'open_food_facts', 'pending') on conflict (ean) do nothing;",
+    "insert into food_products " + cols + " values ('2000333', 'Fresh Yogurt', 'Marca', 'laticinios', '100g', 60, 4, 5, 2, 'x', null, 'open_food_facts', 'pending') on conflict (ean) do nothing;", ""].join("\n"));
+  fs.writeFileSync(path.join(dir, "output-review-teste.sql"), [
+    "update food_products set name = 'Gelado de fruta em tubos', food_group = 'snacks', verification_status = 'verified', verified_at = now(), internal_note = null where ean = '2000111' and verification_status = 'pending' and source_type = 'open_food_facts';",
+    "update food_products set name = 'Iogurte natural', brand = 'Marca' where ean = '2000222';", ""].join("\n"));
+  fs.writeFileSync(path.join(dir, "output-translate-teste.sql"), "update food_products set name = 'Iogurte fresco' where name = 'Fresh Yogurt' and brand = 'Marca' and verification_status = 'pending' and source_type = 'open_food_facts';\n");
+  var names = G.loadDbNames(dir);
+  check.check("5b. Renomeações e mudanças de grupo posteriores (por EAN e por nome+marca) entram nos nomes do catálogo", names.get("2000111").name === "Gelado de fruta em tubos" && names.get("2000111").group === "snacks" && names.get("2000222").name === "Iogurte natural" && names.get("2000333").name === "Iogurte fresco");
+  var recs = G.run(dir), by = {}; recs.forEach(function(r){ by[r.ean] = r; });
+  check.check("5b. O gelado renomeado deixa de receber embalagem; os iogurtes ficam com o nome novo", !by["2000111"].decision.ok && by["2000222"].decision.packageQuantity === 125 && by["2000222"].name === "Iogurte natural" && by["2000333"].decision.packageQuantity === 125);
+})();
+
 // ---- 6. Dados reais do repositório ----
 (function(){
   var recs = G.run(path.join(__dirname, "..", "scripts"));
@@ -134,6 +176,6 @@ var G = require("../scripts/generate-pack-sizes.js");
   check.check("6. Todos os produtos escolhidos são reconhecidos como perecíveis pela app", ok.every(function(r){ return hasWholePackFood({name: r.name, food_group: r.group}, r.name + " (" + r.brand + ")") && P.hasWholePackFood(r.name, r.group); }));
   var sql = fs.readFileSync(path.join(__dirname, "..", "scripts", "output-pack-sizes.sql"), "utf8");
   var lines = sql.split("\n").filter(function(l){ return l && l.indexOf("--") !== 0; });
-  check.check("6. O ficheiro SQL tem só UPDATEs com 'package_quantity is null' (nunca sobrescreve) e um por produto escolhido", lines.length === ok.length && lines.every(function(l){ return /^update food_products set package_quantity = [\d.]+, package_unit = '(g|ml)' where ean = '\d+' and package_quantity is null;/.test(l); }));
+  check.check("6. O ficheiro SQL tem só UPDATEs com 'package_quantity is null' (nunca sobrescreve) e um por produto escolhido", lines.length === ok.length && lines.every(function(l){ return /^update food_products set package_quantity = [\d.]+, package_unit = '(g|ml)' where ean = '\d+' and name = '(?:[^']|'')+' and package_quantity is null;$/.test(l); }));
 })();
 check.summarize();

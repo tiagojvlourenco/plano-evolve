@@ -185,6 +185,12 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   check.check("8. Ignora texto, NaN, zero e negativos; sem leituras válidas devolve null; mais de 3 só usa as 3 primeiras", combineReadings(["12", "abc", NaN, 0, -3], 5).value === 12 && combineReadings([NaN, 0], 5) === null && combineReadings([], 5) === null && combineReadings(null, 5) === null && combineReadings([10, 20, 30, 1000], 5).value === 20);
   check.check("8. A dispersão é (máx − mín) / média × 100", combineReadings([12, 14], 5).spreadPct === 15.4);
 
+  // revisão adversarial: fronteiras exatas, empates e leitura única
+  check.check("8. Fronteira exata da tolerância não pede a 3.ª (erro de vírgula flutuante): 11,7/12,3 a 5 %, 79,6/80,4 e 19,9/20,1 a 1 %", combineReadings([11.7, 12.3], 5).needsThird === false && combineReadings([42.9, 45.1], 5).needsThird === false && combineReadings([79.6, 80.4], 1).needsThird === false && combineReadings([19.9, 20.1], 1).needsThird === false);
+  check.check("8. A decisão usa a percentagem que a mensagem mostra: 19,4/20,4 (5,0 %) não pede; 19,4/20,5 (5,5 %) pede, e a mensagem nunca diz 'diferem 5,0 % (mais de 5 %)'", combineReadings([19.4, 20.4], 5).needsThird === false && combineReadings([19.4, 20.5], 5).needsThird === true && !/diferem 5,0 % \(mais de 5 %\)/.test(readSkinfoldSet(fakeForm({sfTriceps: 19.4, sfTriceps_2: 20.4}, false, true)).issues.join(" ")));
+  check.check("8. A média arredonda os empates sempre para cima (binário não manda): 12,1+12,2 → 12,2; 10,1+10,2 → 10,2; 40+40,1 → 40,1; 10,1+11,2 → 10,7", combineReadings([12.1, 12.2], 5).value === 12.2 && combineReadings([10.1, 10.2], 5).value === 10.2 && combineReadings([40, 40.1], 5).value === 40.1 && combineReadings([10.1, 11.2], 5).value === 10.7);
+  check.check("8. Uma única leitura guarda-se tal como foi escrita (sem arredondar a 0,1): 12,25 e 82,25 ficam iguais", combineReadings([12.25], 5).value === 12.25 && readSkinfoldSet(fakeForm({sfTriceps: "12.25", sfSubscapular: "10.04"}, false, false)).values.triceps === 12.25 && readPerimeterSet(fakeForm({asWaist: "82.25"}, false, false)).values.waist === 82.25);
+
   // leitura do formulário (campo falso): o modo de 2–3 leituras liga as caixas _2 e _3
   function fakeForm(map, multiPerim, multiSkin){
     return {querySelector: function(sel){
@@ -208,6 +214,7 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   // formulário e cartões
   var f = tplAssessForm({sex: "Masculino"});
   check.check("8. O formulário tem os campos extra (_2, _3) para todos os locais e o interruptor de cada secção", PERIMETER_FIELDS.every(function(fl){ return f.indexOf('id="as' + fl[2] + '_2"') >= 0 && f.indexOf('id="as' + fl[2] + '_3"') >= 0; }) && SKINFOLD_SITES.every(function(site){ return f.indexOf('id="sf' + site[2] + '_3"') >= 0; }) && /id="mrPerim"/.test(f) && /id="mrSkin"/.test(f) && (f.match(/class="meas-grid"/g) || []).length === 2);
+  check.check("8. Cada 2.ª/3.ª leitura tem o nome do local no aria-label (leitores de ecrã distinguem os 27 campos)", /id="asWaist_2"[^>]*aria-label="Cintura[^"]*, 2\.ª leitura"/.test(f) && /id="sfTriceps_3"[^>]*aria-label="Tricipital, 3\.ª leitura"/.test(f) && !/aria-label="2\.ª leitura"/.test(f));
   var noteP = tplPerimetersCard({sex: "Masculino", height: 180, age: 30, assessments: [{date: "2026-10-10", waist: 82.4, reads: {waist: [82, 82.4, 83.6]}}]});
   var noNoteP = tplPerimetersCard({sex: "Masculino", height: 180, age: 30, assessments: [{date: "2026-10-10", waist: 82.4}]});
   check.check("8. O cartão de perímetros explica que há valores de várias leituras, só quando existem", /média de 2 ou a mediana de 3/.test(noteP) && !/média de 2 ou a mediana de 3/.test(noNoteP));

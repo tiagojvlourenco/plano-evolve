@@ -4303,15 +4303,20 @@ function foodProductDisplayName(row, retailers){
 function mergeFoodProduct(row, retailers){
   if (!row || !row.name || !row.brand) return false;
   var name = foodProductDisplayName(row, retailers);
-  if (FOOD_DB[name]) return false; // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods)
-  FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
-  if ((row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 350 && hasWholePackFood(row, name)){
-    FOOD_PACKS[name] = row.package_quantity; // embalagem individual conhecida: o plano usa embalagens inteiras
+  var unit = String(row.package_unit || "").trim().toLowerCase(); // o editor aceita texto livre: "mL", "G"...
+  var hasPack = (unit === "g" || unit === "ml") && row.package_quantity > 0;
+  var wholePack = hasPack && row.package_quantity <= 350 && hasWholePackFood(row, name);
+  if (FOOD_DB[name]){
+    // nunca substitui um alimento já existente (INSA, curado, Fase 30 ou custom_foods); só acrescenta o tamanho da embalagem se ainda não se conhecia
+    if (wholePack && !(FOOD_PACKS[name] > 0)) FOOD_PACKS[name] = row.package_quantity;
+    return false;
   }
+  FOOD_DB[name] = {per: "100g", kcal: row.kcal, p: row.protein, c: row.carbs, f: row.fat};
+  if (wholePack) FOOD_PACKS[name] = row.package_quantity; // embalagem individual conhecida: o plano usa embalagens inteiras
   var group = FOOD_GROUPS[resolveGroup(row.food_group)];
   if (group && !group.some(function(o){ return o.name === name; })){
-    // produtos de dose única (ex.: uma barra de 55 g) propõem a embalagem como quantidade-padrão
-    var single = (row.package_unit === "g" || row.package_unit === "ml") && row.package_quantity > 0 && row.package_quantity <= 150;
+    // produtos de dose única (ex.: uma barra de 55 g, um iogurte de 160 g) propõem a embalagem como quantidade-padrão
+    var single = hasPack && (row.package_quantity <= 150 || wholePack);
     group.push({name: name, qty: qtyStringWithBeverageUnit(name, single ? row.package_quantity + " g" : "100 g")});
   }
   return true;
@@ -4468,7 +4473,9 @@ function packWasteHint(f){
   if (!left) return "";
   var size = packSizeOf(f.name), amount = parseQtyAmount(f.qty).value;
   var lower = Math.max(1, Math.floor(amount / size)) * size, upper = Math.ceil(amount / size) * size;
-  return "<span class=\"pack-waste\" style=\"display:block; font-size:0.74rem; color:var(--warn);\">⚠ Embalagem de " + size + " g: " + escapeHtml(f.qty) + " deixa " + left + " g por consumir (desperdício). Usa " + lower + " g ou " + upper + " g.</span>";
+  var unit = /\bml\b/i.test(String(f.qty)) ? "ml" : "g", fmt = function(n){ return String(Math.round(n * 100) / 100).replace(".", ",") + " " + unit; };
+  var advice = lower === upper ? "Usa " + fmt(upper) + "." : "Usa " + fmt(lower) + " ou " + fmt(upper) + ".";
+  return "<span class=\"pack-waste\" style=\"display:block; font-size:0.74rem; color:var(--warn);\">⚠ Embalagem de " + fmt(size) + ": " + escapeHtml(f.qty) + " deixa " + fmt(left) + " por consumir (desperdício). " + advice + "</span>";
 }
 
 function scaleFoodQty(name, qty, scale){
@@ -8049,14 +8056,17 @@ var DURNIN_WOMERSLEY = {
 // Leituras repetidas (ISAK): com duas leituras usa-se a média; se diferirem mais do que a tolerância (1 % nos perímetros, 5 % nas pregas),
 // faz-se uma terceira e usa-se a mediana das três
 var READING_TOLERANCE_PCT = {perimeter: 1, skinfold: 5};
+function roundReading(x){ return Math.round(x * 10 + 1e-7) / 10; } // meio para cima também quando o binário dá 12,149999...
 function combineReadings(values, tolerancePct){
   var v = (values || []).map(Number).filter(function(x){ return isFinite(x) && x > 0; }).slice(0, 3).sort(function(a, b){ return a - b; });
   if (!v.length) return null;
   var n = v.length, mean = v.reduce(function(a, b){ return a + b; }, 0) / n;
-  var value = n === 1 ? v[0] : (n === 2 ? mean : v[1]);
-  var spread = n > 1 ? (v[n - 1] - v[0]) / mean * 100 : 0;
-  return {value: Math.round(value * 10) / 10, n: n, spreadPct: Math.round(spread * 10) / 10, method: n === 1 ? "única" : (n === 2 ? "média" : "mediana"),
-    needsThird: n === 2 && spread > tolerancePct, scattered: n === 3 && spread > tolerancePct * 2};
+  // uma única leitura fica como foi escrita; média e mediana arredondam a 0,1
+  var value = n === 1 ? v[0] : roundReading(n === 2 ? mean : v[1]);
+  // a decisão usa a mesma percentagem que a mensagem mostra (1 casa decimal): "diferem 5,0 % (mais de 5 %)" nunca acontece
+  var spreadPct = n > 1 ? roundReading((v[n - 1] - v[0]) / mean * 100) : 0;
+  return {value: value, n: n, spreadPct: spreadPct, method: n === 1 ? "única" : (n === 2 ? "média" : "mediana"),
+    needsThird: n === 2 && spreadPct > tolerancePct, scattered: n === 3 && spreadPct > tolerancePct * 2};
 }
 function sexKeyOf(sex){ return sex === "Masculino" ? "M" : (sex === "Feminino" ? "F" : null); }
 function ptNum(n, digits){ return Number(n).toFixed(digits).replace(".", ","); }
@@ -8212,12 +8222,13 @@ function fmtPos(v, digits, unit){ return v > 0 ? Number(v).toFixed(digits) + uni
 function tplAssessForm(s){
   var sexKnown = !!sexKeyOf(s.sex);
   // um campo por local; com o interruptor "2–3 leituras" ligado aparecem mais dois (ids terminados em _2 e _3)
-  function readFields(id, unit, step){
+  function readFields(id, unit, step, site){
+    var who = site ? site + ", " : "";
     return "<div class=\"reads\"><input type=\"number\" inputmode=\"decimal\" step=\"" + step + "\" min=\"0\" id=\"" + id + "\" placeholder=\"" + unit + "\">" +
-      "<input type=\"number\" inputmode=\"decimal\" step=\"" + step + "\" min=\"0\" id=\"" + id + "_2\" class=\"extra-read\" placeholder=\"2.ª\" aria-label=\"2.ª leitura\">" +
-      "<input type=\"number\" inputmode=\"decimal\" step=\"" + step + "\" min=\"0\" id=\"" + id + "_3\" class=\"extra-read\" placeholder=\"3.ª\" aria-label=\"3.ª leitura\"></div>";
+      "<input type=\"number\" inputmode=\"decimal\" step=\"" + step + "\" min=\"0\" id=\"" + id + "_2\" class=\"extra-read\" placeholder=\"2.ª\" aria-label=\"" + who + "2.ª leitura\">" +
+      "<input type=\"number\" inputmode=\"decimal\" step=\"" + step + "\" min=\"0\" id=\"" + id + "_3\" class=\"extra-read\" placeholder=\"3.ª\" aria-label=\"" + who + "3.ª leitura\"></div>";
   }
-  function perimInput(f){ return "<div class=\"f\"><label for=\"as" + f[2] + "\">" + f[1] + "</label>" + readFields("as" + f[2], "cm", "0.1") + "</div>"; }
+  function perimInput(f){ return "<div class=\"f\"><label for=\"as" + f[2] + "\">" + f[1] + "</label>" + readFields("as" + f[2], "cm", "0.1", f[1]) + "</div>"; }
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
     "<div class=\"f\"><label>Hora da pesagem</label><input type=\"time\" id=\"asTime\" value=\"" + nowHHMM() + "\"></div>" +
@@ -8244,7 +8255,7 @@ function tplAssessForm(s){
       "<details class=\"assess-howto\"><summary>Onde medir</summary><ul>" + SKINFOLD_SITES.map(function(site){ return "<li><b>" + site[1] + ":</b> " + escapeHtml(site[3]) + "</li>"; }).join("") + "</ul></details>" +
       "<label class=\"multi-toggle\"><input type=\"checkbox\" id=\"mrSkin\"> Registar 2–3 leituras por prega (média de 2 ou mediana de 3)</label>" +
       "<div class=\"meas-grid\" style=\"display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px;\">" +
-        SKINFOLD_SITES.map(function(site){ return "<div class=\"f\"><label for=\"sf" + site[2] + "\">" + site[1] + "</label>" + readFields("sf" + site[2], "mm", "0.1") + "</div>"; }).join("") +
+        SKINFOLD_SITES.map(function(site){ return "<div class=\"f\"><label for=\"sf" + site[2] + "\">" + site[1] + "</label>" + readFields("sf" + site[2], "mm", "0.1", site[1]) + "</div>"; }).join("") +
         "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Protocolo</label><select id=\"sfProtocol\" class=\"mini-select\" style=\"width:100%;\"><option value=\"auto\">Automático (o mais completo possível)</option>" +
           SKINFOLD_PROTOCOL_ORDER.map(function(k){ return "<option value=\"" + k + "\">" + SKINFOLD_PROTOCOLS[k].label + "</option>"; }).join("") +
         "</select></div>" +
