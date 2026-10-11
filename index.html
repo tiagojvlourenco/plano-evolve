@@ -368,7 +368,7 @@
     .pro-sidebar-student{padding:4px 10px; white-space:nowrap;}
     .pro-nav-item{white-space:nowrap; flex-shrink:0;}
     .pro-sidebar-student-open{gap:4px; padding:8px; overflow-x:visible;}
-    .pro-sidebar-student-open .pro-nav-item{flex:1 1 0; min-width:0; padding:10px 2px; font-size:0.62rem; text-align:center; letter-spacing:0.01em;}
+    .pro-sidebar-student-open .pro-nav-item{flex:1 1 0; min-width:0; padding:10px 2px; font-size:0.7rem; text-align:center; letter-spacing:0.01em;}
     .pro-stat-row{grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px;}
     .pro-stat-card{padding:10px 8px;}
     .pro-stat-card .v{font-size:1.35rem;}
@@ -9114,7 +9114,7 @@ function renderProShell(){
     sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
       "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
   } else {
-    // com um aluno aberto o menu são só as 5 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
+    // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
     var curGroup = proNavGroupOf(state.proTab);
     sidebar += PRO_NAV.map(function(g){
       var on = g === curGroup;
@@ -9513,13 +9513,12 @@ function proStat(v, l, key){
 // Fase 25: o separador chama-se "Nutrição" na interface, mas a key interna
 // continua "plano" (routing/estado e todo o resto do código já dependem
 // dela) — só o rótulo visível muda, pedido explícito.
-// Navegação do profissional por aluno: cinco entradas (cada separador continua a ter a sua key; os de uma mesma entrada ficam juntos em atalhos)
+// Navegação do profissional por aluno: quatro entradas (cada separador continua a ter a sua key; os de uma mesma entrada ficam juntos em atalhos)
 var PRO_NAV = [
-  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins"]},
+  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino"]},
-  {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]},
-  {id: "ficha", label: "Ficha", tabs: ["perfil", "notas", "historico"]}
+  {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
 ];
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
