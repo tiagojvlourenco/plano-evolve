@@ -4428,10 +4428,11 @@ var FOOD_PACKS = {
   "Queijo fresco longa duração light (Continente Equilíbrio)": 62.5, // cada unidade vem fechada: 4 x 62,5 g
   "Queijo fresco light (Hacendado)": 62.5 // 2 unidades por embalagem (62,5 g cada, como o Natural do Hacendado)
 };
-var PERISHABLE_AFTER_OPENING = /iogurte|skyr|leite|queijo|fiambre|presunto|peru fatiado|natas|requeij|bebida vegetal|kefir|sumo|molho|pudim|manteiga|margarina|húmus|hummus|paté|mozzarella|mozarela|cottage|ricotta|burrata|camembert|brie|feta|quark|tofu|tempeh|seitan/i;
-// o nome começa por (ou tem na 1.ª/2.ª palavra) um produto que não se estraga depois de aberto: "Pão de Leite", "Chocolate de leite", "Bolachas com manteiga"...
-var NOT_PERISHABLE_HEAD = /^(?:\S+\s+)?(?:bolacha|biscoito|batata|bolo|wafer|chocolate|p[ãa]o|barra|snack|tosta|gelado|doce|feij|cereais|granola|muesli|pastilha|caramelo|compota|cacau)/i;
-var NOT_PERISHABLE_ANYWHERE = /(?:manteiga|pasta|creme) de amendoim/i;
+// o produto aparece nas 3 primeiras palavras do nome ("Mythos Iogurte Estilo Grego", "100% Sumo de Pera"); uma palavra de sabor mais à frente ("Nachos sabor a Queijo", "Chocolate de Leite") não conta
+var PERISHABLE_AFTER_OPENING = /^(?:\S+\s+){0,2}(?:iogurte|yogurte|skyr|quark|kefir|pudim|flan|leite|bebida vegetal|queijo|requeij|cottage|mozzarella|mozarela|burrata|ricotta|feta|camembert|brie|natas|fiambre|peru fatiado|presunto|paté|húmus|hummus|tofu|tempeh|seitan|sumo|margarina|manteiga|molho)/i;
+// produtos que não se estragam depois de abertos, ainda que a palavra apareça ao início: "Pão de Leite", "Bolachas com manteiga", "Brioche de leite"
+var NOT_PERISHABLE_HEAD = /^(?:\S+\s+)?(?:bolacha|biscoito|biscuit|batata|bolo|wafer|chocolate|p[ãa]o|brioche|barra|snack|tosta|gelado|doce|feij|cereais|granola|muesli|pastilha|caramelo|compota|cacau|palitos|palets)/i;
+var NOT_PERISHABLE_ANYWHERE = /(?:manteiga|pasta|creme) de amendoim|leite de coco|leite condensado|leite em p[óo]|molho de soja|tempero|piri-?piri|pesto/i;
 function isPerishableAfterOpening(name){
   name = String(name || "");
   return PERISHABLE_AFTER_OPENING.test(name) && !NOT_PERISHABLE_HEAD.test(name) && !NOT_PERISHABLE_ANYWHERE.test(name);

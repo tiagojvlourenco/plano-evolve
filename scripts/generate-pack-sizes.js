@@ -3,7 +3,8 @@
 //
 // As listas lista-*.csv (Open Food Facts) têm a coluna "Embalagem" ("150 g", "500 g (4 x 125 g)", "1 l"...), mas os inserts do catálogo
 // nunca a gravaram em package_quantity/package_unit — por isso a app só conhecia 3 embalagens. Este script lê as listas, calcula o tamanho
-// de UMA unidade fechada (iogurte de 125 g, queijo fresco de 62,5 g, leite de 200 ml...) e gera o SQL para o preencher.
+// de UMA unidade fechada (iogurte de 125 g, queijo fresco de 62,5 g, leite de 200 ml...) e gera o SQL para o preencher. Só doses individuais
+// (copos de iogurte, unidades de queijo fresco, pacotes pequenos de leite/bebida): ralado, fatiado, curado, fiambre, húmus, natas, molhos e conservas ficam de fora.
 //
 //   node scripts/generate-pack-sizes.js
 //
@@ -43,11 +44,12 @@ function loadProducts(dir){
   fs.readdirSync(dir).filter(f => /^lista-.*\.csv$/.test(f)).sort().forEach(file => {
     const rows = parseCsv(fs.readFileSync(path.join(dir, file), "utf8"));
     const head = rows[0] || [];
-    const iEan = head.findIndex(h => /^EAN/i.test(h)), iName = 1, iBrand = 2, iPack = head.findIndex(h => /Embalagem/i.test(h));
+    const iEan = head.findIndex(h => /^EAN/i.test(h)), iName = 1, iBrand = 2, iPack = head.findIndex(h => /Embalagem/i.test(h)), iKcal = head.findIndex(h => /^kcal/i.test(h));
     if (iEan < 0 || iPack < 0) return;
     rows.slice(1).forEach(r => {
       const ean = normalizeEan(r[iEan]);
-      if (ean) out.push({file, ean, name: (r[iName] || "").trim(), brand: (r[iBrand] || "").trim(), embalagem: (r[iPack] || "").trim()});
+      const kcal = iKcal >= 0 ? parseFloat(String(r[iKcal] || "").replace(",", ".")) : NaN;
+      if (ean) out.push({file, ean, name: (r[iName] || "").trim(), brand: (r[iBrand] || "").trim(), embalagem: (r[iPack] || "").trim(), kcal: isFinite(kcal) ? kcal : NaN});
     });
   });
   return out;
@@ -72,7 +74,7 @@ function run(dir){
   const byEan = new Map();
   products.forEach(p => {
     const dbName = dbNames.get(p.ean) || null;
-    const d = packForProduct(dbName || p.name, p.embalagem);
+    const d = packForProduct(dbName || p.name, p.embalagem, p.kcal, p.ean);
     const rec = {ean: p.ean, name: dbName || p.name, listName: p.name, brand: p.brand, file: p.file, embalagem: p.embalagem, decision: d};
     const prev = byEan.get(p.ean);
     if (!prev){ byEan.set(p.ean, rec); return; }
@@ -88,12 +90,12 @@ if (require.main === module){
   const recs = run(__dirname);
   const ok = recs.filter(r => r.decision.ok);
   const sql = ["-- Tamanho da embalagem individual (dose) dos produtos perecíveis do Catálogo, a partir da coluna 'Embalagem' das listas lista-*.csv.",
-    "-- Gerado por scripts/generate-pack-sizes.js — " + ok.length + " produtos (doses de " + PACK_MIN + " a " + PACK_MAX + " g/ml). Só preenche linhas sem package_quantity.",
+    "-- Gerado por scripts/generate-pack-sizes.js — " + ok.length + " produtos (doses individuais de iogurte, bebida e queijo fresco). Só preenche linhas sem package_quantity.",
     "-- Corre isto no SQL Editor do Supabase. Pode correr-se mais do que uma vez (não sobrescreve nada).", ""]
     .concat(ok.map(r => "update food_products set package_quantity = " + r.decision.packageQuantity + ", package_unit = " + sqlStr(r.decision.packageUnit) + " where ean = " + sqlStr(r.ean) + " and package_quantity is null; -- " + r.name.replace(/[\r\n]/g, " ")))
     .join("\n") + "\n";
   fs.writeFileSync(path.join(__dirname, "output-pack-sizes.sql"), sql);
-  const csv = ["EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Motivo"].concat(recs.map(r => [r.ean, r.name, r.brand, r.file, r.embalagem, r.decision.ok ? "preencher" : "ignorar", r.decision.ok ? r.decision.packageQuantity : "", r.decision.ok ? r.decision.packageUnit : "", r.decision.ok ? (r.decision.form === "multi" ? "unidade de um pack de " + r.decision.count : "embalagem individual") : r.decision.reason].map(csvCell).join(","))).join("\n") + "\n";
+  const csv = ["EAN,Nome,Marca,Lista,Embalagem,Decisão,Tamanho (g/ml),Unidade,Categoria,Motivo"].concat(recs.map(r => [r.ean, r.name, r.brand, r.file, r.embalagem, r.decision.ok ? "preencher" : "ignorar", r.decision.ok ? r.decision.packageQuantity : "", r.decision.ok ? r.decision.packageUnit : "", r.decision.ok ? r.decision.category : "", r.decision.ok ? (r.decision.form === "multi" ? "unidade de um pack de " + r.decision.count : "embalagem individual") : r.decision.reason].map(csvCell).join(","))).join("\n") + "\n";
   fs.writeFileSync(path.join(__dirname, "output-pack-sizes-review.csv"), csv);
   const reasons = {};
   recs.filter(r => !r.decision.ok).forEach(r => { reasons[r.decision.reason] = (reasons[r.decision.reason] || 0) + 1; });

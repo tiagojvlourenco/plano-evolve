@@ -23,18 +23,35 @@ var G = require("../scripts/generate-pack-sizes.js");
   check.check("1. Duas alternativas multi-pack com tamanhos diferentes na mesma unidade → ambíguo", P.parsePackaging("4 x 125 g / 6 x 100 g").ok === false);
 })();
 
-// ---- 2. Decisão por produto (doses individuais de produtos que se estragam depois de abertos) ----
+// ---- 2. Decisão por produto: só doses individuais de iogurte, bebida e queijo fresco ----
 (function(){
-  function d(name, emb){ var r = P.packForProduct(name, emb); return r.ok ? r.packageQuantity + r.packageUnit : "–"; }
-  check.check("2. Iogurte em pack de 4 × 125 g → 125 g (cada copo vem fechado)", d("Iogurte Natural", "500 g (4 x 125 g)") === "125g");
-  check.check("2. Queijo fresco 2 × 62,5 g → 62,5 g", d("Queijo fresco light", "125 g (2 x 62,5 g)") === "62.5g");
-  check.check("2. Leite de 200 ml → 200 ml; leite de 1 l → ignorado (não é uma dose)", d("Leite Meio-Gordo", "200ml") === "200ml" && d("Leite Meio-Gordo", "1 l") === "–");
-  check.check("2. Pote de 250 g e iogurte líquido de 680 g → ignorados (acima de 200 g/ml)", d("Queijo Quark", "250 g") === "–" && d("Iogurte Líquido", "680 g (4 x 170 g) / 632 ml (4 x 158 ml)") === "170g");
-  check.check("2. Fronteiras: 200 g aceite, 201 g recusado; 10 g aceite, 9 g recusado", d("Iogurte", "200 g") === "200g" && d("Iogurte", "201 g") === "–" && d("Manteiga", "10 g") === "10g" && d("Manteiga", "9 g") === "–");
-  check.check("2. Produtos que não se estragam depois de abertos ficam de fora: pão de leite, bolachas com manteiga, chocolate de leite, batatas fritas sabor presunto, feijão-manteiga, manteiga de amendoim", ["Pão de Leite", "Bolachas Biológicas de Espelta com Manteiga", "Chocolate de leite", "Batatas Fritas Presunto", "Feijão-Manteiga Cozido", "Manteiga de amendoim 100%"].every(function(n){ return d(n, "100 g") === "–"; }));
-  check.check("2. Mas 'Iogurte com chocolate' e 'Iogurte com cereais' continuam a contar (a palavra não é a do produto)", d("Iogurte com chocolate", "125 g") === "125g" && d("Iogurte com cereais", "125 g") === "125g");
-  check.check("2. Mozzarella, cottage, quark, tofu e tempeh passam a ser reconhecidos", ["Mozzarella light", "Cottage cheese", "Quark natural", "Tofu natural", "Tempeh de soja"].every(function(n){ return d(n, "100 g") === "100g"; }));
-  check.check("2. Peso variável, ambíguo ou sem embalagem → nada a preencher", d("Queijo Brie", "Variável, ~0,180 kg") === "–" && d("Iogurte", "125 g (210 g)") === "–" && d("Iogurte", "") === "–");
+  function d(name, emb, kcal, ean){ var r = P.packForProduct(name, emb, kcal, ean); return r.ok ? r.packageQuantity + r.packageUnit : "–"; }
+  check.check("2. Iogurte em pack de 4 × 125 g → 125 g (cada copo vem fechado)", d("Iogurte Natural", "500 g (4 x 125 g)", 60) === "125g");
+  check.check("2. Queijo fresco 2 × 62,5 g → 62,5 g", d("Queijo fresco light", "125 g (2 x 62,5 g)", 100) === "62.5g");
+  check.check("2. Leite de 200 ml → 200 ml; leite de 1 l → ignorado (não é uma dose)", d("Leite Meio-Gordo", "200ml", 48) === "200ml" && d("Leite Meio-Gordo", "1 l", 48) === "–");
+  check.check("2. Peso e volume na mesma embalagem: o iogurte fica em g (640 g = 4 × 160 g), a bebida em ml", d("Iogurte de chocolate", "602 ml (4 x 150,6 ml) / 640 g (4 x 160 g)", 90) === "160g" && d("Leite meio-gordo", "200 ml / 206 g", 48) === "200ml");
+  check.check("2. Fronteiras do iogurte: 200 g aceite, 201 g recusado; 10 g aceite, 9 g recusado", d("Iogurte", "200 g", 60) === "200g" && d("Iogurte", "201 g", 60) === "–" && d("Iogurte", "10 g", 60) === "10g" && d("Iogurte", "9 g", 60) === "–");
+  check.check("2. Queijo fresco: unidades até 125 g; a tarrina de 200 g é multi-dose e fica de fora", d("Queijo fresco light", "125 g", 100) === "125g" && d("Queijo fresco light", "200 g", 100) === "–" && d("Queijo fresco meio-gordo", "4 x 62,5 g", 100) === "62.5g");
+  check.check("2. Bebidas: até 250 ml (200 ml e 250 ml sim, 330 ml não); em gramas pede confirmação", d("Sumo Maçã", "250 ml", 45) === "250ml" && d("Sumo Maçã", "330 ml", 45) === "–" && d("Leite", "200 g", 48) === "–");
+  // casos reais que a auditoria apanhou: nada disto pode gerar UPDATE
+  var rejected = [
+    ["Crêpes Dentelle Chocolate de Leite", "100 g", 520], ["Tortilla rolls crocantes de queijo", "125 g", 480], ["Aveia integral com chocolate de leite", "200 g", 497], ["Tablete de chocolate de leite com caramelo salgado", "44 g", 540],
+    ["Aperitivo de bolinhas de queijo", "100 g", 500], ["Palets bretões de manteiga", "0,125 kg", 514], ["Bombom sabor a natas com chocolate negro", "480 ml (4 x 120 ml)", 287], ["Molho de Soja Continente", "200 ml", 80],
+    ["Palitos de Chocolate de Leite", "150 g", 506], ["Presunto", "175 g", 517], ["Cones De Milho Queijo E Bacon", "130 g", 497], ["Mini natas", "444 ml (12 x 37 ml)", 352], ["Roditas de chocolate de leite", "4 x 75 g", 479],
+    ["Calendário de advento de chocolate de leite", "75 g", 540], ["Petit biscuit de chocolate de leite", "150 g", 498], ["Nachos com sabor a Queijo", "150 g", 480], ["Brioche de Leite 60 g *", "60 g", 380], ["Leite creme", "92g (4x23g)", 346],
+    ["Tempero de Sumo de Limão", "200 ml", 10], ["Molho Teriyaki 200ml", "200 ml", 269], ["Pota e Polvo em Molho de Tomate", "120 g", 100], ["Sardinhas em molho de tomate", "2 x 125 g", 180], ["Molho Piripíri", "200 ml", 40],
+    ["Queijo Grana Padano", "200 g", 400], ["Queijo da Ilha Ralado", "200 g", 398], ["Queijo emmental ralado", "200 g", 381], ["Queijo Gouda", "200 g", 359], ["Queijo fundido original", "140 g", 250], ["Queijo Flamengo Ralado", "150 g", 340],
+    ["Mozzarella ralada", "200 g", 296], ["Queijo Fatiado Flamengo dos Açores Light", "200 g", 280], ["Natas sem Lactose", "200 ml", 336], ["Queijo Fresco para Barrar", "200 g", 244], ["Queijo cremoso clássico", "150 g", 256],
+    ["Queijo Feta", "200 g", 276], ["Queijo Brie", "200 g", 351], ["Húmus clássico", "200 g", 277], ["Fiambre Perna Extra", "200 g", 100], ["Peito de peru fatiado finíssimo", "150 g", 100], ["Paté de Sardinha", "4 x 22 g", 250],
+    ["Molho fresco de pesto com manjericão", "150g", 418], ["Leite de coco", "0.2 l", 178], ["Requeijão", "200 g", 170], ["Queijo de cabra", "150 g", 300]
+  ];
+  var leaked = rejected.filter(function(r){ return d(r[0], r[1], r[2]) !== "–"; }).map(function(r){ return r[0]; });
+  check.check("2. Nenhum dos " + rejected.length + " falsos positivos apanhados na auditoria gera embalagem" + (leaked.length ? " (fugas: " + leaked.join("; ") + ")" : ""), leaked.length === 0);
+  check.check("2. EAN de peso variável (13 dígitos a começar por 2) é ignorado; EAN-8 do Lidl (20...) não", d("Queijo estilo suíço", "0,140 kg", 100, "2800410001400") === "–" && d("Iogurte Natural", "125 g", 60, "2800410001400") === "–" && d("Iogurte Natural", "125 g", 60, "20001940") === "125g");
+  check.check("2. A nutrição incoerente com a categoria (leite com 346 kcal, iogurte com 400 kcal) é recusada; sem kcal conhecido decide só o nome", d("Iogurte Natural", "125 g", 400) === "–" && d("Iogurte Natural", "125 g", NaN) === "125g" && d("Iogurte Natural", "125 g", undefined) === "125g");
+  check.check("2. 'Iogurte com chocolate' e 'Iogurte com cereais' continuam a contar (a palavra de sabor não manda); 'Mythos Iogurte' e 'Sem Lactose Iogurte' também (iogurte na 2.ª/3.ª palavra)", ["Iogurte com chocolate", "Iogurte com cereais", "Mythos Iogurte Estilo Grego", "Sem Lactose Iogurte Natural"].every(function(n){ return d(n, "125 g", 90) === "125g"; }));
+  check.check("2. Pudim, flan, skyr, quark e kefir contam como iogurte", ["Pudim Flan de Baunilha", "Skyr natural", "Quark natural", "Kefir natural", "Flan Baunilha"].every(function(n){ return d(n, "100 g", 100) === "100g"; }));
+  check.check("2. Peso variável, ambíguo ou sem embalagem → nada a preencher", d("Queijo fresco", "Variável, ~0,180 kg", 100) === "–" && d("Iogurte", "125 g (210 g)", 60) === "–" && d("Iogurte", "", 60) === "–");
 })();
 
 // ---- 3. Expressões iguais às da app (index.html) ----
@@ -45,7 +62,7 @@ var G = require("../scripts/generate-pack-sizes.js");
     var lib = literal(fs.readFileSync(path.join(__dirname, "..", "scripts", "lib", "pack-size.js"), "utf8"), v);
     check.check("3. " + v + " é igual na app e no gerador de SQL", !!lib && lib === literal(html, v));
   });
-  var names = ["Iogurte Natural", "Pão de Leite", "Bolachas com Manteiga", "Iogurte com chocolate", "Queijo cottage", "Chocolate de leite (Milka)", "Mozzarella light", "Feijão-Manteiga Cozido", "Manteiga de amendoim 100% (Mercadona)", "Leite meio-gordo (Mimosa)", "Skyr natural", "Batatas Fritas Presunto", "Hummus clássico (Hacendado)", "Tofu natural", "Arroz", "Peito de frango", "", null, undefined, 42];
+  var names = ["Iogurte Natural", "Pão de Leite", "Bolachas com Manteiga", "Iogurte com chocolate", "Queijo cottage", "Chocolate de leite (Milka)", "Mozzarella light", "Feijão-Manteiga Cozido", "Manteiga de amendoim 100% (Mercadona)", "Leite meio-gordo (Mimosa)", "Skyr natural", "Batatas Fritas Presunto", "Hummus clássico (Hacendado)", "Tofu natural", "Arroz", "Peito de frango", "Nachos com sabor a Queijo", "Tablete de chocolate de leite", "Brioche de Leite 60 g *", "Molho de Soja", "Mythos Iogurte Estilo Grego", "100% Sumo Maçã", "Queijo Brie", "", null, undefined, 42];
   check.check("3. A app e o gerador decidem o mesmo para todos os nomes de teste (incluindo vazio, null e número)", names.every(function(n){ return isPerishableAfterOpening(n) === P.isPerishableAfterOpening(n); }));
 })();
 
@@ -98,7 +115,8 @@ var G = require("../scripts/generate-pack-sizes.js");
 (function(){
   var recs = G.run(path.join(__dirname, "..", "scripts"));
   var ok = recs.filter(function(r){ return r.decision.ok; });
-  check.check("6. Das listas do repositório saem centenas de embalagens (≥ 400), todas entre 10 e 200 g/ml", ok.length >= 400 && ok.every(function(r){ return r.decision.packageQuantity >= 10 && r.decision.packageQuantity <= 200 && (r.decision.packageUnit === "g" || r.decision.packageUnit === "ml"); }));
+  check.check("6. Das listas do repositório saem centenas de embalagens (≥ 200), todas entre 10 e 250 g/ml, de categorias iogurte, bebida ou queijo fresco", ok.length >= 200 && ok.every(function(r){ return r.decision.packageQuantity >= 10 && r.decision.packageQuantity <= 250 && (r.decision.packageUnit === "g" || r.decision.packageUnit === "ml") && ["iogurte", "bebida", "queijo fresco"].indexOf(r.decision.category) >= 0; }));
+  check.check("6. Nenhuma embalagem de queijo fresco passa de 125 g nem de bebida de 250 ml; nenhum nome tem ralado, fatias, curado, snack ou chocolate de leite (o 'molho de caramelo' de um pudim não conta)", ok.every(function(r){ var c = r.decision; return !(c.category === "queijo fresco" && c.packageQuantity > 125) && !(c.category === "bebida" && (c.packageQuantity > 250 || c.packageUnit !== "ml")) && (c.category === "iogurte" || !/ralad|fatia|curad|molho|snack|nachos|chocolate de leite/i.test(r.name)) && !/ralad|fatia|curad|snack|nachos|chocolate de leite/i.test(r.name); }));
   check.check("6. Nenhum EAN repetido nem vazio", new Set(ok.map(function(r){ return r.ean; })).size === ok.length && ok.every(function(r){ return /^\d+$/.test(r.ean); }));
   check.check("6. Todos os produtos escolhidos são reconhecidos como perecíveis pela app", ok.every(function(r){ return isPerishableAfterOpening(r.name); }));
   var sql = fs.readFileSync(path.join(__dirname, "..", "scripts", "output-pack-sizes.sql"), "utf8");
