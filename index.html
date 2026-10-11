@@ -421,6 +421,9 @@
   table.assess-table th{font-size:0.66rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); font-weight:600; white-space:nowrap;}
   table.assess-table td{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap;}
   table.assess-table td.date-cell{font-family:var(--sans);}
+  table.assess-table td.assess-group{text-align:left; font-family:var(--sans); font-size:0.66rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; padding-top:14px; border-bottom:none;}
+  details.assess-howto{grid-column:1/-1; margin-top:8px; font-size:0.78rem; color:var(--muted);} details.assess-howto summary{cursor:pointer; font-weight:600;} details.assess-howto ul{margin:6px 0 0 16px; padding:0; line-height:1.5;}
+  .assess-form-grid .assess-subhead{font-size:0.66rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin-top:4px;}
   .assess-table-scroll{overflow-x:auto; margin-top:12px; -webkit-overflow-scrolling:touch;}
   .assess-table-scroll table.assess-table{margin-top:0;}
   .sort-th{background:none; border:none; padding:0; margin:0; font:inherit; letter-spacing:inherit; text-transform:inherit; color:inherit; cursor:pointer; white-space:nowrap;}
@@ -436,7 +439,7 @@
        grelha de 3 colunas isso empurrava-o para cima do campo seguinte
        ("peso"). Abaixo de 480px força-se a data a ocupar a linha toda. */
     .assess-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
-    .assess-form-grid .f:first-child, .assess-form-grid .f:nth-child(2){grid-column:1/-1;}
+    .assess-form-grid > .f:first-child, .assess-form-grid > .f:nth-child(2){grid-column:1/-1;}
   }
   .assess-del{border:none; background:transparent; color:var(--muted-2); cursor:pointer; font-size:0.85rem;}
   .assess-del:hover{color:var(--critical);}
@@ -6725,31 +6728,121 @@ function tplAssessKpis(s){
   return html.indexOf("class=\"kpi\"") >= 0 ? html : "";
 }
 
-// Perímetros: tabela com variação face à medição anterior + razões de risco (cintura/anca, cintura/altura)
+// valor anterior de uma medida: a primeira avaliação mais antiga (a lista vem da mais recente para a mais antiga) em que existe
+function previousMeasure(list, idx, valueOf){
+  for (var j = idx + 1; j < list.length; j++){ var v = valueOf(list[j]); if (v > 0) return v; }
+  return null;
+}
+// a avaliação mais recente em que todas as chaves estão medidas
+function latestAssessmentWith(list, keys){
+  for (var i = 0; i < list.length; i++) if (keys.every(function(k){ return posNum(list[i][k]) > 0; })) return list[i];
+  return null;
+}
+// Perímetros: razões de risco + tabela por zona do corpo (as últimas 4 medições) com a variação face à medição anterior
 function tplPerimetersCard(s){
-  var list = (s.assessments || []).filter(function(a){ return PERIMETER_FIELDS.some(function(f){ return a[f[0]] > 0; }); })
+  var list = (s.assessments || []).filter(function(a){ return a && PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; }); })
     .sort(function(x, y){ return compareAssessmentsDesc(x, y); });
   if (!list.length) return "";
-  var a = list[0];
+  var sexKey = sexKeyOf(s.sex);
+  var tiles = [];
+  var forWaist = latestAssessmentWith(list, ["waist"]);
+  if (forWaist){
+    var wc = posNum(forWaist.waist), risk = waistRiskLevel(sexKey, wc);
+    tiles.push(kpiTileText("Cintura", ptNum(wc, 1) + "<small> cm</small>", risk == null ? "flat" : (risk === 0 ? "good" : "bad"),
+      risk == null ? "indica o sexo para classificar" : (risk === 0 ? "sem risco acrescido" : (risk === 1 ? "risco aumentado" : "risco substancialmente aumentado"))));
+  }
+  var forWhr = latestAssessmentWith(list, ["waist", "hip"]);
+  if (forWhr){
+    var whr = Math.round(posNum(forWhr.waist) / posNum(forWhr.hip) * 100) / 100, limit = s.sex === "Masculino" ? 0.90 : 0.85; // classifica o valor que se mostra (2 casas)
+    tiles.push(kpiTileText("Cintura / anca", ptNum(whr, 2), whr >= limit ? "bad" : "good", whr >= limit ? "a partir de " + ptNum(limit, 2) + ": risco aumentado" : "abaixo de " + ptNum(limit, 2)));
+  }
+  if (forWaist && posNum(s.height) > 0){
+    var whtr = Math.round(posNum(forWaist.waist) / posNum(s.height) * 100) / 100;
+    // NICE NG246: < 0,40 sem categoria (ler com o IMC e a composição corporal); 0,40–0,49 saudável; 0,50–0,59 aumentado; ≥ 0,60 elevado
+    tiles.push(kpiTileText("Cintura / altura", ptNum(whtr, 2), whtr < 0.4 ? "flat" : (whtr < 0.5 ? "good" : "bad"),
+      whtr < 0.4 ? "valor baixo: ler com o IMC e a composição corporal" : (whtr < 0.5 ? "saudável (< 0,50)" : (whtr < 0.6 ? "adiposidade central aumentada" : "adiposidade central elevada"))));
+  }
   var html = "<div class=\"card\"><div class=\"eyebrow\">Perímetros</div>";
-  var ratios = [];
-  if (a.waist > 0 && a.hip > 0){
-    var whr = a.waist / a.hip, limit = s.sex === "Masculino" ? 0.90 : 0.85;
-    ratios.push(kpiTileText("Cintura / anca", whr.toFixed(2).replace(".", ","), whr > limit ? "bad" : "good", whr > limit ? "acima de " + String(limit).replace(".", ",") : "dentro do esperado"));
+  if (tiles.length) html += "<div class=\"kpi-grid\">" + tiles.join("") + "</div>";
+  var cols = list.slice(0, 4);
+  var rows = PERIMETER_FIELDS.filter(function(f){ return cols.some(function(a){ return posNum(a[f[0]]) > 0; }); });
+  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Perímetro (cm)</th>" + cols.map(function(a){ return "<th>" + fmtDateFullPt(a.date) + "</th>"; }).join("") + "</tr></thead><tbody>";
+  PERIMETER_GROUPS.forEach(function(g, gi){
+    var inGroup = rows.filter(function(f){ return f[3] === gi; });
+    if (!inGroup.length) return;
+    html += "<tr><td colspan=\"" + (cols.length + 1) + "\" class=\"assess-group\">" + g + "</td></tr>";
+    inGroup.forEach(function(f){
+      html += "<tr><td class=\"date-cell\">" + f[1] + "</td>" + cols.map(function(a, i){
+        var v = posNum(a[f[0]]);
+        var prev = v && i === 0 ? previousMeasure(list, i, function(x){ return posNum(x[f[0]]); }) : null; // variação só na medição mais recente
+        return "<td>" + (v ? ptNum(v, 1) : "—") + (prev ? assessDelta(v, prev, "") : "") + "</td>";
+      }).join("") + "</tr>";
+    });
+  });
+  html += "</tbody></table></div>";
+  var diffs = PERIMETER_PAIRS.map(function(p){
+    var a = latestAssessmentWith(list, [p[0], p[1]]);
+    return a ? p[2] + " " + ptNum(Math.abs(posNum(a[p[0]]) - posNum(a[p[1]])), 1) + " cm" : null;
+  }).filter(Boolean);
+  if (diffs.length) html += "<p class=\"muted-p\" style=\"margin-top:10px;\">Diferença entre o lado direito e o esquerdo (última medição): " + diffs.join(" · ") + ".</p>";
+  return html + "</div>";
+}
+
+// Dobras cutâneas: % de gordura pelo protocolo escolhido, massa gorda/magra, soma das dobras e tabela por prega (as últimas 4 medições)
+function tplSkinfoldsCard(s, opts){
+  var list = (s.assessments || []).filter(function(a){ return a && skinfoldValuesOf(a); }).sort(function(x, y){ return compareAssessmentsDesc(x, y); });
+  if (!list.length) return "";
+  var results = list.map(function(a){ return skinfoldResult(s, a); });
+  var r0 = results[0], sexKey = r0.sexKey;
+  // só se compara com medições feitas com o mesmo protocolo (e, por isso, as mesmas dobras)
+  function prevSame(valueOf){
+    for (var j = 1; j < list.length; j++) if (results[j] && results[j].protocol === r0.protocol){ var v = valueOf(list[j], results[j]); if (v != null) return v; }
+    return null;
   }
-  if (a.waist > 0 && s.height > 0){
-    var whtr = a.waist / s.height;
-    ratios.push(kpiTileText("Cintura / altura", whtr.toFixed(2).replace(".", ","), whtr >= 0.5 ? "bad" : "good", whtr >= 0.5 ? "≥ 0,50: risco aumentado" : "< 0,50"));
+  function kgOf(a, r, lean){
+    var w = weightForAssessment(s, a);
+    if (!r || r.bodyFat == null || !w) return null;
+    var fat = Math.round(w * r.bodyFat) / 100;
+    return lean ? Math.round((w - fat) * 10) / 10 : fat;
   }
-  if (ratios.length) html += "<div class=\"kpi-grid\">" + ratios.join("") + "</div>";
-  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Data</th>" + PERIMETER_FIELDS.map(function(f){ return "<th>" + f[1] + "</th>"; }).join("") + "</tr></thead><tbody>";
-  list.slice(0, 12).forEach(function(row, i){
-    var prev = list[i + 1];
-    html += "<tr><td class=\"date-cell\">" + fmtDateFullPt(row.date) + "</td>" + PERIMETER_FIELDS.map(function(f){
-      return "<td>" + fmtPos(row[f[0]], 1, "") + (prev ? assessDelta(row[f[0]], prev[f[0]], "") : "") + "</td>";
+  var tiles = [];
+  if (r0.protocol && r0.sum != null) tiles.push(kpiTile("Σ " + r0.sites.length + " dobras", r0.sum, "mm", prevSame(function(a, r){ return r.sum; }), "down", 1));
+  if (r0.bodyFat != null){
+    tiles.push(kpiTile("% gordura (dobras)", r0.bodyFat, "%", prevSame(function(a, r){ return r.bodyFat; }), "down", 1));
+    var fat0 = kgOf(list[0], r0, false), lean0 = kgOf(list[0], r0, true);
+    if (fat0 != null){
+      tiles.push(kpiTile("Massa gorda (dobras)", fat0, "kg", prevSame(function(a, r){ return kgOf(a, r, false); }), "down", 1));
+      tiles.push(kpiTile("Massa magra (dobras)", lean0, "kg", prevSame(function(a, r){ return kgOf(a, r, true); }), "up", 1));
+    }
+  }
+  // áreas do braço: precisam do perímetro do braço relaxado e da tricipital na mesma avaliação
+  var armIdx = -1;
+  for (var i = 0; i < list.length; i++) if (posNum(list[i].arm) > 0 && posNum(list[i].skinfolds && list[i].skinfolds.triceps) > 0 && sexKey){ armIdx = i; break; }
+  if (armIdx >= 0){
+    var areas = function(a){ return armAreas(posNum(a.arm), posNum(a.skinfolds.triceps), sexKey); };
+    var cur = areas(list[armIdx]), prevArea = null;
+    for (var k = armIdx + 1; k < list.length; k++) if (posNum(list[k].arm) > 0 && posNum(list[k].skinfolds && list[k].skinfolds.triceps) > 0){ prevArea = areas(list[k]); break; }
+    tiles.push(kpiTile("Área muscular do braço", cur.muscle, "cm²", prevArea ? prevArea.muscle : null, "up", 1));
+    tiles.push(kpiTile("Área de gordura do braço", cur.fat, "cm²", prevArea ? prevArea.fat : null, "down", 1));
+  }
+  var html = "<div class=\"card\"><div class=\"eyebrow\">Dobras cutâneas</div>";
+  if (r0.protocol) html += "<p class=\"muted-p\" style=\"margin-top:6px;\">Protocolo: <b>" + r0.label + "</b>" + (opts && opts.editable && r0.bodyFat != null && bodyFatCategory(sexKey, r0.bodyFat) ? " · " + bodyFatCategory(sexKey, r0.bodyFat) + " (ACE)" : "") /* a categoria é para o profissional: ao aluno mostram-se os números e a tendência */ + "</p>";
+  if (tiles.length) html += "<div class=\"kpi-grid\">" + tiles.join("") + "</div>";
+  r0.warnings.forEach(function(w){ html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--warn);\">⚠ " + escapeHtml(w) + "</p>"; });
+  var cols = list.slice(0, 4), rows = SKINFOLD_SITES.filter(function(site){ return cols.some(function(a){ return posNum(a.skinfolds[site[0]]) > 0; }); });
+  html += "<div class=\"assess-table-scroll\"><table class=\"assess-table\"><thead><tr><th>Dobra (mm)</th>" + cols.map(function(a){ return "<th>" + fmtDateFullPt(a.date) + "</th>"; }).join("") + "</tr></thead><tbody>";
+  rows.forEach(function(site){
+    html += "<tr><td class=\"date-cell\">" + site[1] + "</td>" + cols.map(function(a, i){
+      var v = posNum(a.skinfolds[site[0]]);
+      var prev = v && i === 0 ? previousMeasure(list, i, function(x){ return posNum(x.skinfolds && x.skinfolds[site[0]]); }) : null;
+      return "<td>" + (v ? ptNum(v, 1) : "—") + (prev ? assessDelta(v, prev, "") : "") + "</td>";
     }).join("") + "</tr>";
   });
-  return html + "</tbody></table></div></div>";
+  html += "</tbody></table></div>";
+  var prevFat = prevSame(function(a, r){ return r.bodyFat; });
+  if (r0.bodyFat != null && prevFat != null && Math.abs(r0.bodyFat - prevFat) < 2) html += "<p class=\"muted-p\" style=\"margin-top:10px;\">A variação da % de gordura (" + ptNum(Math.abs(r0.bodyFat - prevFat), 1) + " pontos) está dentro do erro do método: não a interpretes como mudança real.</p>";
+  html += "<p class=\"muted-p\" style=\"margin-top:10px;\">Estimativa com erro típico de ±3–4 % de gordura: compara sempre medições do mesmo protocolo, feitas pela mesma pessoa e com o mesmo adipómetro. O que conta é a tendência, sobretudo a soma das dobras.</p>";
+  return html + "</div>";
 }
 function kpiTileText(label, value, cls, note){
   return "<div class=\"kpi\"><div class=\"l\">" + label + "</div><div class=\"v num\">" + value + "</div><div class=\"d " + cls + "\">" + note + "</div></div>";
@@ -7639,6 +7732,7 @@ function tplEvolucaoAluno(s, opts){
   "</div>";
 
   html += tplPerimetersCard(s);
+  html += tplSkinfoldsCard(s, opts);
 
   html += tplPhotosSection(s, opts);
 
@@ -7865,13 +7959,207 @@ function tplImportPreview(s, parsed, plan){
   return html;
 }
 
-// Perímetros de referência (cm): [chave, rótulo, sufixo do id]. Cintura e anca dão a razão cintura/anca; cintura/altura é o melhor preditor simples de risco.
-var PERIMETER_FIELDS = [["waist","Cintura","Waist"], ["hip","Anca","Hip"], ["chest","Peito","Chest"], ["arm","Braço","Arm"], ["thigh","Coxa","Thigh"]];
+// ---------- Antropometria: perímetros e dobras cutâneas ----------
+// Perímetros em cm: [chave, rótulo, sufixo do id, grupo, mínimo, máximo]. Mede-se o lado direito (ISAK); "(E)" é o esquerdo, para ver assimetrias.
+// As chaves antigas (waist, hip, chest, arm, thigh) mantêm-se, por isso as avaliações já gravadas continuam a aparecer.
+var PERIMETER_GROUPS = ["Tronco", "Membros superiores", "Membros inferiores"];
+var PERIMETER_FIELDS = [
+  ["neck", "Pescoço", "Neck", 0, 22, 70, 28, 55, "logo acima da cartilagem tiroideia, fita perpendicular ao pescoço, sem encolher os ombros"],
+  ["shoulders", "Ombros", "Shoulders", 0, 70, 200, 85, 160, "fita horizontal no ponto de maior saliência dos deltoides, braços relaxados"],
+  ["chest", "Peito", "Chest", 0, 55, 220, 70, 160, "ao nível do mesoesternal (linha dos mamilos), no fim de uma expiração normal"],
+  ["waist", "Cintura", "Waist", 0, 45, 230, 55, 160, "ponto médio entre a última costela e a crista ilíaca, no fim de uma expiração normal (é o que os limiares da OMS assumem)"],
+  ["abdomen", "Abdómen", "Abdomen", 0, 45, 240, 55, 170, "ao nível do umbigo, abdómen relaxado, no fim de uma expiração normal"],
+  ["hip", "Anca", "Hip", 0, 60, 230, 70, 170, "perímetro máximo sobre os glúteos, pés juntos"],
+  ["arm", "Braço relaxado (D)", "Arm", 1, 12, 75, 17, 55, "ponto médio entre o acrómio e o rádio, braço pendente e relaxado"],
+  ["armL", "Braço relaxado (E)", "ArmL", 1, 12, 75, 17, 55, "igual ao direito, no lado esquerdo"],
+  ["armFlexed", "Braço contraído (D)", "ArmFlexed", 1, 14, 85, 19, 62, "braço à frente na horizontal, bíceps em contração máxima, perímetro máximo"],
+  ["armFlexedL", "Braço contraído (E)", "ArmFlexedL", 1, 14, 85, 19, 62, "igual ao direito, no lado esquerdo"],
+  ["forearm", "Antebraço (D)", "Forearm", 1, 13, 55, 17, 42, "perímetro máximo, braço pendente com a palma para a frente"],
+  ["forearmL", "Antebraço (E)", "ForearmL", 1, 13, 55, 17, 42, "igual ao direito, no lado esquerdo"],
+  ["wrist", "Punho", "Wrist", 1, 9, 30, 12, 23, "perímetro mínimo, logo abaixo das apófises estiloides"],
+  ["thigh", "Coxa (D)", "Thigh", 2, 25, 120, 33, 95, "ponto médio entre o trocânter e a tíbia, em pé com o peso no outro pé"],
+  ["thighL", "Coxa (E)", "ThighL", 2, 25, 120, 33, 95, "igual à direita, no lado esquerdo"],
+  ["calf", "Gémeo (D)", "Calf", 2, 17, 75, 24, 58, "perímetro máximo da perna, em pé com o peso repartido"],
+  ["calfL", "Gémeo (E)", "CalfL", 2, 17, 75, 24, 58, "igual ao direito, no lado esquerdo"],
+  ["ankle", "Tornozelo", "Ankle", 2, 13, 45, 16, 32, "perímetro mínimo, logo acima do maléolo interno"]
+];
+// pares direito/esquerdo para mostrar a diferença entre lados
+var PERIMETER_PAIRS = [["arm", "armL", "Braço relaxado"], ["armFlexed", "armFlexedL", "Braço contraído"], ["forearm", "forearmL", "Antebraço"], ["thigh", "thighL", "Coxa"], ["calf", "calfL", "Gémeo"]];
+function perimeterField(key){ return PERIMETER_FIELDS.filter(function(f){ return f[0] === key; })[0] || null; }
+
+// Dobras cutâneas em mm: [chave, rótulo, sufixo do id, onde medir]
+var SKINFOLD_SITES = [
+  ["triceps", "Tricipital", "Triceps", "vertical, face posterior do braço, a meio entre o acrómio e o olécrano, braço relaxado", 55],
+  ["biceps", "Bicipital", "Biceps", "vertical, face anterior do braço sobre o bíceps, ao nível da tricipital", 45],
+  ["subscapular", "Subescapular", "Subscapular", "oblíqua (cerca de 45°), uns 2 cm abaixo do ângulo inferior da omoplata", 60],
+  ["suprailiac", "Suprailíaca", "Suprailiac", "oblíqua, logo acima da crista ilíaca, na linha axilar anterior", 65],
+  ["abdominal", "Abdominal", "Abdominal", "vertical, 2 cm ao lado do umbigo", 75],
+  ["chest", "Peitoral", "Chest", "oblíqua; nos homens a meio entre a prega axilar anterior e o mamilo, nas mulheres a um terço", 50],
+  ["midaxillary", "Axilar média", "Midaxillary", "vertical, na linha axilar média, ao nível do apêndice xifoide", 60],
+  ["thigh", "Coxa", "Thigh", "vertical, face anterior, a meio entre a prega inguinal e a rótula", 75],
+  ["calf", "Geminal", "Calf", "vertical, face interna da perna, no maior perímetro", 55]
+];
+var SKINFOLD_MIN_MM = 1, SKINFOLD_MAX_MM = 80, SKINFOLD_SOFT_MIN_MM = 2.5; // fora disto é gralha ou unidade errada; entre o aviso e o limite só se avisa
+// Equações de densidade corporal → % de gordura pela equação de Siri. Idades de validação: Jackson-Pollock 18–61 (homens) e 18–55 (mulheres); Durnin-Womersley 16–72.
+var SKINFOLD_PROTOCOLS = {
+  jp7: {label: "Jackson-Pollock 7 dobras", short: "JP7", sites: ["chest", "midaxillary", "triceps", "subscapular", "abdominal", "suprailiac", "thigh"], ages: {M: [18, 61], F: [18, 55]}},
+  jp3: {label: "Jackson-Pollock 3 dobras", short: "JP3", sites: {M: ["chest", "abdominal", "thigh"], F: ["triceps", "suprailiac", "thigh"]}, ages: {M: [18, 61], F: [18, 55]}},
+  dw4: {label: "Durnin-Womersley 4 dobras", short: "D-W4", sites: ["biceps", "triceps", "subscapular", "suprailiac"], ages: {M: [16, 72], F: [16, 72]}}
+};
+var SKINFOLD_PROTOCOL_ORDER = ["jp7", "jp3", "dw4"]; // "automático": a mais completa que as dobras medidas permitirem
+// Durnin-Womersley (1974): D = c − m·log10(Σ4); [idade mínima, c, m] por escalão (a partir de 17; aos 16 usa-se o primeiro)
+var DURNIN_WOMERSLEY = {
+  M: [[0, 1.1620, 0.0630], [20, 1.1631, 0.0632], [30, 1.1422, 0.0544], [40, 1.1620, 0.0700], [50, 1.1715, 0.0779]],
+  F: [[0, 1.1549, 0.0678], [20, 1.1599, 0.0717], [30, 1.1423, 0.0632], [40, 1.1333, 0.0612], [50, 1.1339, 0.0645]]
+};
+function sexKeyOf(sex){ return sex === "Masculino" ? "M" : (sex === "Feminino" ? "F" : null); }
+function ptNum(n, digits){ return Number(n).toFixed(digits).replace(".", ","); }
+function posNum(v){ var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
+function skinfoldSitesOf(protocol, sexKey){
+  var p = SKINFOLD_PROTOCOLS[protocol];
+  if (!p) return null;
+  return Array.isArray(p.sites) ? p.sites : (sexKey ? p.sites[sexKey] : null);
+}
+function skinfoldSum(sf, sites){
+  if (!sf || !sites || !sites.length) return null;
+  var sum = 0;
+  for (var i = 0; i < sites.length; i++){ var v = posNum(sf[sites[i]]); if (!v) return null; sum += v; }
+  return sum;
+}
+// densidade corporal (g/mL) a partir da soma das dobras; null se a combinação não existir
+function bodyDensityFromSkinfolds(protocol, sexKey, age, sum){
+  if (!(sum > 0) || !sexKey || !(age > 0)) return null;
+  if (protocol === "jp3") return sexKey === "M"
+    ? 1.10938 - 0.0008267 * sum + 0.0000016 * sum * sum - 0.0002574 * age
+    : 1.0994921 - 0.0009929 * sum + 0.0000023 * sum * sum - 0.0001392 * age;
+  if (protocol === "jp7") return sexKey === "M"
+    ? 1.112 - 0.00043499 * sum + 0.00000055 * sum * sum - 0.00028826 * age
+    : 1.097 - 0.00046971 * sum + 0.00000056 * sum * sum - 0.00012828 * age;
+  if (protocol === "dw4"){
+    var rows = DURNIN_WOMERSLEY[sexKey], row = rows[0];
+    for (var i = 0; i < rows.length; i++) if (age >= rows[i][0]) row = rows[i];
+    return row[1] - row[2] * Math.log10(sum);
+  }
+  return null;
+}
+function siriBodyFat(density){ return density > 0 ? 495 / density - 450 : null; } // sempre a partir da densidade sem arredondar
+// idade na data da avaliação (a data de nascimento é mais certa do que a idade guardada, que envelhece)
+function ageAtDate(s, iso){
+  if (s && s.birthDate && isIsoDate(s.birthDate) && isIsoDate(iso)){
+    var b = new Date(s.birthDate + "T00:00:00"), d = new Date(iso + "T00:00:00");
+    var age = d.getFullYear() - b.getFullYear();
+    if (d.getMonth() < b.getMonth() || (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) age--;
+    if (age >= 0 && age < 120) return age;
+  }
+  var a = Number(s && s.age);
+  return a > 0 && a < 120 ? a : null;
+}
+function skinfoldValuesOf(a){
+  var sf = a && a.skinfolds;
+  if (!sf || typeof sf !== "object" || Array.isArray(sf)) return null;
+  var out = {}, any = false;
+  SKINFOLD_SITES.forEach(function(site){ var v = posNum(sf[site[0]]); if (v) { out[site[0]] = v; any = true; } });
+  return any ? out : null;
+}
+// protocolo usado: o escolhido (se as dobras o permitirem) ou o mais completo possível
+function resolveSkinfoldProtocol(sf, sexKey, wanted){
+  if (wanted && wanted !== "auto" && skinfoldSum(sf, skinfoldSitesOf(wanted, sexKey)) != null) return wanted;
+  for (var i = 0; i < SKINFOLD_PROTOCOL_ORDER.length; i++){
+    if (skinfoldSum(sf, skinfoldSitesOf(SKINFOLD_PROTOCOL_ORDER[i], sexKey)) != null) return SKINFOLD_PROTOCOL_ORDER[i];
+  }
+  return null;
+}
+// resultado das dobras de uma avaliação: {protocol, label, short, sites, sum, density, bodyFat, warnings}; null sem dobras
+function skinfoldResult(s, a, wantedProtocol){
+  var sf = skinfoldValuesOf(a);
+  if (!sf) return null;
+  var sexKey = sexKeyOf(s && s.sex) || (a.sfSex === "M" || a.sfSex === "F" ? a.sfSex : null);
+  var protocol = resolveSkinfoldProtocol(sf, sexKey, wantedProtocol || a.sfProtocol);
+  var res = {protocol: protocol, label: null, short: null, sites: null, sum: null, density: null, bodyFat: null, warnings: [], sexKey: sexKey, age: ageAtDate(s, a.date)};
+  if (!protocol){
+    res.warnings.push(sexKey ? "Faltam dobras para calcular a % de gordura (JP7: 7, JP3: 3, D-W4: 4)." : "Indica o sexo para aplicar as equações.");
+    return res;
+  }
+  var p = SKINFOLD_PROTOCOLS[protocol];
+  res.label = p.label; res.short = p.short; res.sites = skinfoldSitesOf(protocol, sexKey); res.sum = skinfoldSum(sf, res.sites);
+  if (!sexKey){ res.warnings.push("Indica o sexo para aplicar as equações."); return res; } // os coeficientes dependem do sexo (mesmo na D-W4)
+  if (!(res.age > 0)){ res.warnings.push("Falta a idade (ou a data de nascimento) do aluno."); return res; }
+  var range = p.ages[sexKey];
+  if (res.age < range[0] || res.age > range[1]) res.warnings.push("Idade fora do intervalo de validação desta equação (" + range[0] + "–" + range[1] + " anos): usa o resultado com cautela.");
+  else if (protocol !== "dw4" && sexKey === "F" && res.age > 40) res.warnings.push("As equações de Jackson-Pollock são menos fiáveis em mulheres com mais de 40 anos.");
+  res.density = bodyDensityFromSkinfolds(protocol, sexKey, res.age, res.sum);
+  var pct = res.density ? siriBodyFat(res.density) : null;
+  if (pct != null && pct >= 2 && pct <= 60) res.bodyFat = Math.round(pct * 10) / 10;
+  else if (pct != null) res.warnings.push("O resultado (" + ptNum(pct, 1) + " %) não é plausível: confirma as medições.");
+  return res;
+}
+// avisos (não bloqueiam): valores possíveis mas invulgares, ou combinações que não batem certo entre si
+function anthroPlausibilityWarnings(perims, sfs, heightCm){
+  var out = [];
+  PERIMETER_FIELDS.forEach(function(f){
+    var v = perims[f[0]];
+    if (v == null) return;
+    if (v < f[6]) out.push(f[1] + " " + ptNum(v, 1) + " cm é muito baixo: confirma a medição.");
+    else if (v > f[7]) out.push(f[1] + " " + ptNum(v, 1) + " cm é muito alto: confirma a medição.");
+  });
+  function has(k){ return perims[k] > 0; }
+  [["armFlexed", "arm", ""], ["armFlexedL", "armL", " (E)"]].forEach(function(p){
+    if (has(p[0]) && has(p[1]) && (perims[p[0]] < perims[p[1]] - 1 || perims[p[0]] > perims[p[1]] + 12)) out.push("Braço contraído" + p[2] + " e relaxado" + p[2] + " não batem certo (o contraído costuma ser 1–12 cm maior).");
+  });
+  if (has("hip") && has("waist") && perims.hip < perims.waist - 5) out.push("A anca é bastante menor do que a cintura: confirma as duas medidas.");
+  if (has("waist") && has("hip")){ var r = perims.waist / perims.hip; if (r < 0.55 || r > 1.3) out.push("A razão cintura/anca (" + ptNum(r, 2) + ") é invulgar: confirma as medidas."); }
+  if (has("waist") && heightCm > 0){ var rh = perims.waist / heightCm; if (rh < 0.3 || rh > 0.9) out.push("A razão cintura/altura (" + ptNum(rh, 2) + ") é invulgar: confirma a cintura."); }
+  if (has("neck") && has("waist") && perims.neck >= perims.waist) out.push("O pescoço não pode ser maior do que a cintura.");
+  if (has("wrist") && has("forearm") && perims.wrist >= perims.forearm) out.push("O punho é maior do que o antebraço: confirma as medidas.");
+  if (has("forearm") && has("arm") && perims.forearm >= perims.arm) out.push("O antebraço é maior do que o braço relaxado: confirma as medidas.");
+  if (has("ankle") && has("calf") && perims.ankle >= perims.calf) out.push("O tornozelo é maior do que o gémeo: confirma as medidas.");
+  if (has("calf") && has("thigh") && perims.calf >= perims.thigh) out.push("O gémeo é maior do que a coxa: confirma as medidas.");
+  SKINFOLD_SITES.forEach(function(site){
+    var v = sfs[site[0]];
+    if (v == null) return;
+    if (v < SKINFOLD_SOFT_MIN_MM) out.push("Dobra " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito baixa: confirma a leitura.");
+    else if (v > site[4]) out.push("Dobra " + site[1].toLowerCase() + " de " + ptNum(v, 1) + " mm é muito alta: confirma a leitura.");
+  });
+  return out;
+}
+// peso de uma avaliação: o da própria, ou a pesagem desse dia
+function weightForAssessment(s, a){
+  if (posNum(a.weight)) return Number(a.weight);
+  var same = (s.weights || []).filter(function(w){ return w && w.date === a.date && posNum(w.w); });
+  return same.length ? Number(same[same.length - 1].w) : null;
+}
+// categorias da % de gordura (American Council on Exercise)
+var BODY_FAT_BANDS = {
+  M: [[2, "abaixo do essencial"], [6, "gordura essencial"], [14, "atleta"], [18, "em forma"], [25, "aceitável"], [999, "obesidade"]],
+  F: [[10, "abaixo do essencial"], [14, "gordura essencial"], [21, "atleta"], [25, "em forma"], [32, "aceitável"], [999, "obesidade"]]
+};
+function bodyFatCategory(sexKey, pct){
+  var bands = BODY_FAT_BANDS[sexKey];
+  if (!bands || !(pct > 0)) return null;
+  for (var i = 0; i < bands.length; i++) if (pct < bands[i][0]) return bands[i][1];
+  return null;
+}
+// áreas do braço (Frisancho/Heymsfield): perímetro do braço relaxado (cm) + prega tricipital (mm). A muscular é corrigida (−10 cm² homens, −6,5 cm² mulheres).
+function armAreas(armCm, tricepsMm, sexKey){
+  if (!(armCm > 0) || !(tricepsMm > 0) || !sexKey) return null;
+  var t = tricepsMm / 10;
+  var muscle = Math.pow(armCm - Math.PI * t, 2) / (4 * Math.PI) - (sexKey === "M" ? 10 : 6.5);
+  var fat = armCm * t / 2 - Math.PI * t * t / 4;
+  return {muscle: Math.max(0, Math.round(muscle * 10) / 10), fat: Math.round(fat * 10) / 10};
+}
+// risco pela circunferência da cintura (OMS/IDF): 0 sem risco acrescido, 1 aumentado, 2 muito aumentado
+function waistRiskLevel(sexKey, waistCm){
+  if (!sexKey || !(waistCm > 0)) return null;
+  var t = sexKey === "M" ? [94, 102] : [80, 88];
+  return waistCm >= t[1] ? 2 : (waistCm >= t[0] ? 1 : 0);
+}
 // A bioimpedância varia com a hidratação e o momento do dia: registar as condições torna as pesagens comparáveis.
 var WEIGH_CONTEXTS = ["Em jejum", "Pós-refeição", "Pós-treino", "Desidratado / muito hidratado"];
 function fmtPos(v, digits, unit){ return v > 0 ? Number(v).toFixed(digits) + unit : "—"; }
 
 function tplAssessForm(s){
+  var sexKnown = !!sexKeyOf(s.sex);
+  function perimInput(f){ return "<div class=\"f\"><label>" + f[1] + "</label><input type=\"number\" inputmode=\"decimal\" step=\"0.1\" min=\"0\" id=\"as" + f[2] + "\" placeholder=\"cm\"></div>"; }
   return "<div class=\"assess-form-grid\">" +
     "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"asDate\"></div>" +
     "<div class=\"f\"><label>Hora da pesagem</label><input type=\"time\" id=\"asTime\" value=\"" + nowHHMM() + "\"></div>" +
@@ -7881,13 +8169,30 @@ function tplAssessForm(s){
     "<div class=\"f\"><label>Gordura visceral</label><input type=\"number\" step=\"1\" min=\"0\" id=\"asVisceral\"></div>" +
     "<div class=\"f\"><label>Água (%)</label><input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" id=\"asWater\"></div>" +
     "<details class=\"assess-extra\" style=\"grid-column:1/-1;\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">Perímetros (cm) e condições da pesagem (opcional)</summary>" +
+      "<p class=\"muted-p\" style=\"margin-top:8px;\">Mede do lado direito, com a fita justa mas sem apertar. Para ver assimetrias, regista também o lado esquerdo (E). Se duas medições diferirem mais de 1 %, mede uma terceira e regista a mediana.</p>" +
+      "<details class=\"assess-howto\"><summary>Como medir</summary><ul>" + PERIMETER_FIELDS.filter(function(f){ return !/\(E\)/.test(f[1]); }).map(function(f){ return "<li><b>" + f[1].replace(" (D)", "") + ":</b> " + f[8] + "</li>"; }).join("") + "</ul></details>" +
       "<div style=\"display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px;\">" +
-        PERIMETER_FIELDS.map(function(f){ return "<div class=\"f\"><label>" + f[1] + " (cm)</label><input type=\"number\" step=\"0.1\" min=\"0\" id=\"as" + f[2] + "\"></div>"; }).join("") +
+        PERIMETER_GROUPS.map(function(g, gi){
+          return "<div class=\"assess-subhead\" style=\"grid-column:1/-1;\">" + g + "</div>" + PERIMETER_FIELDS.filter(function(f){ return f[3] === gi; }).map(perimInput).join("");
+        }).join("") +
         "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Condições da pesagem</label><select id=\"asContext\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">—</option>" +
           WEIGH_CONTEXTS.map(function(c){ return "<option value=\"" + c + "\">" + c + "</option>"; }).join("") +
         "</select></div>" +
       "</div>" +
     "</details>" +
+    "<details class=\"assess-extra\" style=\"grid-column:1/-1;\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">Dobras cutâneas (mm) (opcional)</summary>" +
+      "<p class=\"muted-p\" style=\"margin-top:8px;\">Mede do lado direito com o adipómetro, ao fim de cerca de 2 s depois de largar a pressão, e regista a média de 2–3 medições por dobra (se diferirem mais de 5 %, mede uma terceira e usa a mediana). As equações dão uma estimativa da % de gordura (erro típico de ±3–4 %): o importante é medir sempre da mesma forma.</p>" +
+      "<details class=\"assess-howto\"><summary>Onde medir</summary><ul>" + SKINFOLD_SITES.map(function(site){ return "<li><b>" + site[1] + ":</b> " + escapeHtml(site[3]) + "</li>"; }).join("") + "</ul></details>" +
+      "<div style=\"display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px;\">" +
+        SKINFOLD_SITES.map(function(site){ return "<div class=\"f\"><label>" + site[1] + "</label><input type=\"number\" inputmode=\"decimal\" step=\"0.5\" min=\"0\" id=\"sf" + site[2] + "\" placeholder=\"mm\"></div>"; }).join("") +
+        "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Protocolo</label><select id=\"sfProtocol\" class=\"mini-select\" style=\"width:100%;\"><option value=\"auto\">Automático (o mais completo possível)</option>" +
+          SKINFOLD_PROTOCOL_ORDER.map(function(k){ return "<option value=\"" + k + "\">" + SKINFOLD_PROTOCOLS[k].label + "</option>"; }).join("") +
+        "</select></div>" +
+        (sexKnown ? "" : "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Aplicar equações de</label><select id=\"sfSex\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">—</option><option value=\"M\">Homens</option><option value=\"F\">Mulheres</option></select></div>") +
+        "<p class=\"muted-p\" id=\"sfPreview\" style=\"grid-column:1/-1; margin:0;\"></p>" +
+      "</div>" +
+    "</details>" +
+    "<p class=\"muted-p\" id=\"assessWarn\" style=\"color:var(--warn); grid-column:1/-1; margin:0;\"></p>" +
     "<div class=\"f\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"addAssessment\" style=\"width:100%;\">Adicionar</button></div>" +
     "<p class=\"muted-p\" id=\"assessError\" style=\"color:var(--critical); display:none; grid-column:1/-1; margin:0;\"></p>" +
   "</div>";
@@ -7913,7 +8218,7 @@ function tplAssessTable(s, editable){
     var idx = list.indexOf(a);
     var prev = list[idx+1];
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + "</td>" +
+      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + (PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; }) ? " <span class=\"atime\">· perímetros</span>" : "") + (skinfoldValuesOf(a) ? " <span class=\"atime\">· dobras</span>" : "") + "</td>" +
       "<td>" + fmtPos(a.weight, 1, "kg") + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + fmtPos(a.bodyFat, 1, "%") + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + fmtPos(a.muscle, 1, "kg") + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -10279,6 +10584,46 @@ function tplProHistorico(s){
   return html;
 }
 
+// lê as dobras do formulário (só as preenchidas)
+function readSkinfoldInputs(el){
+  var out = {};
+  SKINFOLD_SITES.forEach(function(site){ var inp = el.querySelector("#sf" + site[2]); var v = inp ? parseFloat(inp.value) : NaN; if (!isNaN(v)) out[site[0]] = v; });
+  return out;
+}
+// lê os perímetros do formulário (só os preenchidos)
+function readPerimeterInputs(el){
+  var out = {};
+  PERIMETER_FIELDS.forEach(function(f){ var inp = el.querySelector("#as" + f[2]); var v = inp ? parseFloat(inp.value) : NaN; if (!isNaN(v)) out[f[0]] = v; });
+  return out;
+}
+// avisos de valores invulgares enquanto se escreve (não impedem de guardar)
+function updateAnthroWarnings(s, el){
+  var out = el.querySelector("#assessWarn");
+  if (!out) return;
+  var perims = readPerimeterInputs(el), sfs = readSkinfoldInputs(el);
+  // os valores fora dos limites rígidos já são recusados ao guardar: aqui só os "invulgares"
+  var inRange = {};
+  Object.keys(perims).forEach(function(k){ var f = perimeterField(k); if (f && perims[k] >= f[4] && perims[k] <= f[5]) inRange[k] = perims[k]; });
+  var sfOk = {};
+  Object.keys(sfs).forEach(function(k){ if (sfs[k] >= SKINFOLD_MIN_MM && sfs[k] <= SKINFOLD_MAX_MM) sfOk[k] = sfs[k]; });
+  var warns = anthroPlausibilityWarnings(inRange, sfOk, s.height);
+  out.textContent = warns.length ? "⚠ " + warns.join(" ") : "";
+}
+// mostra, enquanto se escreve, que protocolo se aplica e a % de gordura estimada
+function updateSkinfoldPreview(s, el){
+  var out = el.querySelector("#sfPreview");
+  if (!out) return;
+  var sfs = readSkinfoldInputs(el);
+  if (!Object.keys(sfs).length){ out.textContent = ""; return; }
+  var sexSel = el.querySelector("#sfSex");
+  var fake = {date: (el.querySelector("#asDate") || {}).value || todayISO(), skinfolds: sfs, sfProtocol: (el.querySelector("#sfProtocol") || {}).value, sfSex: sexSel ? sexSel.value : ""};
+  var r = skinfoldResult(s, fake);
+  if (!r) { out.textContent = ""; return; }
+  var txt = r.protocol ? r.label + (r.bodyFat != null ? ": " + ptNum(r.bodyFat, 1) + " % de gordura (Σ " + ptNum(r.sum, 1) + " mm)" : "") : "";
+  if (r.warnings.length) txt += (txt ? " · " : "") + r.warnings[0];
+  out.textContent = txt;
+}
+
 function wireProTab(s){
   var el = document.getElementById("proTabContent");
 
@@ -10797,6 +11142,10 @@ function wireProTab(s){
     });
   });
 
+  function refreshAnthroFeedback(){ updateSkinfoldPreview(s, el); updateAnthroWarnings(s, el); }
+  SKINFOLD_SITES.forEach(function(site){ var inp = el.querySelector("#sf" + site[2]); if (inp) inp.addEventListener("input", refreshAnthroFeedback); });
+  PERIMETER_FIELDS.forEach(function(f){ var inp = el.querySelector("#as" + f[2]); if (inp) inp.addEventListener("input", function(){ updateAnthroWarnings(s, el); }); });
+  ["#sfProtocol", "#sfSex", "#asDate"].forEach(function(sel){ var inp = el.querySelector(sel); if (inp) inp.addEventListener("change", function(){ updateSkinfoldPreview(s, el); }); });
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){
     var errEl = el.querySelector("#assessError");
@@ -10809,14 +11158,38 @@ function wireProTab(s){
     var visceral = parseFloat(el.querySelector("#asVisceral").value);
     var water = parseFloat(el.querySelector("#asWater").value);
     var perims = {};
-    PERIMETER_FIELDS.forEach(function(f){ var v = parseFloat(el.querySelector("#as" + f[2]).value); if (!isNaN(v)) perims[f[0]] = v; });
+    perims = readPerimeterInputs(el);
+    var sfs = readSkinfoldInputs(el);
     var ctxEl = el.querySelector("#asContext"), context = ctxEl ? ctxEl.value : "";
-    if ([weight,bodyFat,muscle,visceral,water].every(function(v){ return isNaN(v); }) && !Object.keys(perims).length) return;
-    var badPerim = Object.keys(perims).some(function(k){ return perims[k] < 20 || perims[k] > 250; });
+    if ([weight,bodyFat,muscle,visceral,water].every(function(v){ return isNaN(v); }) && !Object.keys(perims).length && !Object.keys(sfs).length) return;
+    var badPerim = PERIMETER_FIELDS.filter(function(f){ return perims[f[0]] != null && (perims[f[0]] < f[4] || perims[f[0]] > f[5]); })[0];
     if (badPerim){
-      errEl.textContent = "Os perímetros têm de estar entre 20 e 250 cm.";
+      errEl.textContent = badPerim[1] + ": o perímetro tem de estar entre " + badPerim[4] + " e " + badPerim[5] + " cm (confirma a unidade).";
       errEl.style.display = "block";
       return;
+    }
+    var badSkin = SKINFOLD_SITES.filter(function(site){ return sfs[site[0]] != null && (sfs[site[0]] < SKINFOLD_MIN_MM || sfs[site[0]] > SKINFOLD_MAX_MM); })[0];
+    if (badSkin){
+      errEl.textContent = "Dobra " + badSkin[1].toLowerCase() + ": o valor tem de estar entre " + SKINFOLD_MIN_MM + " e " + SKINFOLD_MAX_MM + " mm.";
+      errEl.style.display = "block";
+      return;
+    }
+    var sfSexEl = el.querySelector("#sfSex"), sfSex = sfSexEl ? sfSexEl.value : "";
+    var sfWanted = (el.querySelector("#sfProtocol") || {}).value || "auto";
+    var sfSexKey = sexKeyOf(s.sex) || (sfSex === "M" || sfSex === "F" ? sfSex : null);
+    if (Object.keys(sfs).length && sfWanted !== "auto"){
+      var need = skinfoldSitesOf(sfWanted, sfSexKey);
+      if (!need){
+        errEl.textContent = "Escolhe se aplicas as equações de homens ou de mulheres.";
+        errEl.style.display = "block";
+        return;
+      }
+      var missing = need.filter(function(k){ return !(sfs[k] > 0); });
+      if (missing.length){
+        errEl.textContent = SKINFOLD_PROTOCOLS[sfWanted].label + ": faltam as dobras " + missing.map(function(k){ return SKINFOLD_SITES.filter(function(x){ return x[0] === k; })[0][1].toLowerCase(); }).join(", ") + ".";
+        errEl.style.display = "block";
+        return;
+      }
     }
     var negative = [weight,muscle,visceral].some(function(v){ return !isNaN(v) && v < 0; });
     var outOfPercentRange = [bodyFat,water].some(function(v){ return !isNaN(v) && (v < 0 || v > 100); });
@@ -10828,15 +11201,24 @@ function wireProTab(s){
     if (errEl) errEl.style.display = "none";
     if (!s.assessments) s.assessments = [];
     var hasComposition = [weight,bodyFat,muscle,visceral,water].some(function(v){ return !isNaN(v); });
-    // só perímetros: não houve pesagem — não se inventa um peso (ficaria como medição e estragaria os indicadores)
+    // só perímetros/dobras: não houve pesagem — não se inventa um peso (ficaria como medição e estragaria os indicadores)
     var entry = {date:date, weight: hasComposition ? (weight||s.weightCurrent) : 0, bodyFat:bodyFat||0, muscle:muscle||0, visceral:visceral||0, water:water||0};
     if (time) entry.time = time;
     Object.keys(perims).forEach(function(k){ entry[k] = perims[k]; });
+    if (Object.keys(sfs).length){
+      entry.skinfolds = sfs;
+      // o protocolo fica fixo na avaliação: assim a evolução compara sempre as mesmas equações
+      var usedProtocol = resolveSkinfoldProtocol(sfs, sfSexKey, sfWanted);
+      if (usedProtocol) entry.sfProtocol = usedProtocol;
+      if (!sexKeyOf(s.sex) && sfSexKey) entry.sfSex = sfSexKey;
+    }
     if (context) entry.context = context;
     s.assessments.push(entry);
     if (!isNaN(weight)){ s.weightCurrent = weight; s.weights.push({date:date, w:weight}); }
+    var softWarns = anthroPlausibilityWarnings(perims, sfs, s.height);
     renderProTabContent(s);
     persistStudent(s);
+    if (softWarns.length) showToast("Guardado. Confirma: " + softWarns[0] + (softWarns.length > 1 ? " (+" + (softWarns.length - 1) + ")" : ""));
   });
   el.querySelectorAll(".assess-del").forEach(function(btn){
     btn.addEventListener("click", function(){

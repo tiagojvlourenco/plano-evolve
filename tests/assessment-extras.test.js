@@ -8,10 +8,11 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 // ---- 1. Formulário ----
 (function(){
   var f = tplAssessForm({});
-  check.check("1. O formulário tem os 5 perímetros (cintura, anca, peito, braço, coxa)", ["asWaist", "asHip", "asChest", "asArm", "asThigh"].every(function(id){ return f.indexOf('id="' + id + '"') >= 0; }));
+  check.check("1. O formulário tem os perímetros antigos (cintura, anca, peito, braço, coxa) com os mesmos ids", ["asWaist", "asHip", "asChest", "asArm", "asThigh"].every(function(id){ return f.indexOf('id="' + id + '"') >= 0; }));
+  check.check("1. E todos os perímetros novos (pescoço, ombros, abdómen, braço contraído, antebraço, punho, gémeo, tornozelo, lado esquerdo)", PERIMETER_FIELDS.every(function(fl){ return f.indexOf('id="as' + fl[2] + '"') >= 0; }) && PERIMETER_FIELDS.length === 18);
   check.check("1. O formulário tem as condições da pesagem (jejum, pós-refeição, pós-treino...)", /id="asContext"/.test(f) && /Em jejum/.test(f) && /Pós-treino/.test(f));
   check.check("1. Os perímetros estão numa secção recolhida (não pesam na pesagem rápida)", /<details class="assess-extra"/.test(f));
-  check.check("1. O botão Adicionar lê perímetros e condições e valida 20–250 cm", /PERIMETER_FIELDS\.forEach\(function\(f\)\{ var v = parseFloat\(el\.querySelector\("#as" \+ f\[2\]\)/.test(appSource) && /perímetros têm de estar entre 20 e 250 cm/.test(appSource));
+  check.check("1. O botão Adicionar lê perímetros e condições e valida os limites de cada perímetro", /perims = readPerimeterInputs\(el\)/.test(appSource) && /o perímetro tem de estar entre/.test(appSource) && /PERIMETER_FIELDS\.forEach\(function\(f\)\{ var inp = el\.querySelector\("#as" \+ f\[2\]\)/.test(appSource));
 })();
 
 // ---- 2. Tabela robusta + condições ----
@@ -42,7 +43,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   ]};
   var h = tplPerimetersCard(s);
   check.check("4. Mostra a tabela de perímetros com variação e as razões", /Perímetros/.test(h) && /Cintura \/ anca/.test(h) && /Cintura \/ altura/.test(h) && /▼ 4\.0/.test(h));
-  check.check("4. Cintura/altura 84/160 = 0,53 → risco aumentado; cintura/anca 0,88 > 0,85 (mulher) → acima", /≥ 0,50: risco aumentado/.test(h) && /acima de 0,85/.test(h));
+  check.check("4. Cintura/altura 84/160 = 0,53 → adiposidade central aumentada; cintura/anca 0,88 ≥ 0,85 (mulher) → risco aumentado", /adiposidade central aumentada/.test(h) && /a partir de 0,85: risco aumentado/.test(h));
   check.check("4. Sem perímetros, o cartão não aparece", tplPerimetersCard({assessments:[{date:"2026-09-01", weight:60, bodyFat:20}]}) === "");
 })();
 
