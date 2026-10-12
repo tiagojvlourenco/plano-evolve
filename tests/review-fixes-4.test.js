@@ -45,7 +45,7 @@ function tick(){ return new Promise(function(r){ setTimeout(r, 5); }); }
   var realSb = sb, realReady = sbReady, realRole = authRole, realCols = trainingColumnsAvailable, realTab = state.alunoTab, realStu = state.alunoStudentId;
   var mock = sbWithManualPromises();
   sb = mock.sb; sbReady = true; authRole = "professional"; trainingColumnsAvailable = true;
-  state.alunoTab = "checkin"; state.alunoStudentId = "S1"; state.wlDraft = {};
+  state.alunoTab = "treino"; state.alunoStudentId = "S1"; state.wlDraft = {};
   var s = {id: "S1", name: "Maria", workoutLogs: [], workoutLogsRaw: [], checkins: [], weights: [], meals: [],
     trainingProgram: {days: [{id: "d1", name: "A", exercises: [{id: "e1", name: "Supino", sets: 3, reps: "8", rpe: 7, rest: 90}]}]}};
   var rerenders = 0;

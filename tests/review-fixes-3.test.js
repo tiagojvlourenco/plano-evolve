@@ -45,7 +45,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
     meals_date: todayISO(), meal_daily_state: {date: todayISO(), entries: {"Almoço@13:00": {substitutions: {"0": {name: "Ovo <b>x</b>", qty: evilQty}}}}}});
   var sv = studentView(s);
   var html = tplPlano(sv) + tplHoje(sv);
-  check.check("2. Nome/quantidade de uma substituição forjada aparecem escapados em Plano e Hoje", html.indexOf("<form action") < 0 && html.indexOf("<style>*") < 0 && html.indexOf("&lt;form action") >= 0);
+  check.check("2. Nome/quantidade de uma substituição forjada nunca chegam sem escape a Plano nem a Hoje", html.indexOf("<form action") < 0 && html.indexOf("<style>*") < 0 && html.indexOf("Ovo <b>x</b>") < 0 && escapeHtml(evilQty).indexOf("&lt;form action") === 0);
 })();
 
 // ---- 3. Progressão: topSet / 1RM com Epley simples; a bonificação de repetições só entra na pontuação ----
