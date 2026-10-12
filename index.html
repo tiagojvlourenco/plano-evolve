@@ -10098,7 +10098,9 @@ function renderProCatalogMain(){
     "</div>" +
     "<div id=\"catalogList\"><p class=\"muted-p\">A carregar...</p></div>";
 
+  state.catalogLimit = CATALOG_PAGE;
   wireProCatalog(main);
+  if (state.catalogProducts && state.catalogProducts.length) renderCatalogList(main); // já carregado antes: mostra de imediato e atualiza por baixo
   loadCatalogProducts(main);
 }
 
@@ -10109,7 +10111,9 @@ function loadCatalogProducts(main){
   }
   fetchAllFoodProductPages(function(){ return sb.from("food_products").select("*, food_product_retailers(*)").order("id"); }).then(function(res){
     if (res.error){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; return; }
-    state.catalogProducts = (res.data || []).slice().sort(function(a, b){ return a.name.localeCompare(b.name, "pt"); });
+    var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
+    state.catalogProducts = (res.data || []).slice().sort(function(a, b){ return cmp(a.name, b.name); });
+    state.catalogProducts.forEach(function(p){ p._k = (p.name + "\n" + p.brand + "\n" + (p.ean || "")).toLowerCase(); }); // chave de pesquisa calculada uma vez
     renderCatalogList(main);
   }).catch(function(){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; });
 }
@@ -10118,7 +10122,7 @@ function catalogFilteredProducts(){
   var f = state.catalogFilters || {};
   var q = (f.q || "").trim().toLowerCase();
   return (state.catalogProducts || []).filter(function(p){
-    if (q && p.name.toLowerCase().indexOf(q) === -1 && p.brand.toLowerCase().indexOf(q) === -1 && !(p.ean && p.ean.toLowerCase().indexOf(q) >= 0)) return false;
+    if (q && (p._k || (p.name + "\n" + p.brand + "\n" + (p.ean || "")).toLowerCase()).indexOf(q) === -1) return false;
     if (f.group && p.food_group !== f.group) return false;
     if (f.status && p.verification_status !== f.status) return false;
     if (f.retailer && !(p.food_product_retailers || []).some(function(r){ return r.retailer === f.retailer; })) return false;
@@ -10146,7 +10150,10 @@ function renderCatalogList(main){
     main.querySelector("#catalogSelectedCount").textContent = selectedCount ? (selectedCount + " selecionado" + (selectedCount > 1 ? "s" : "")) : "";
   }
   if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; return; }
-  listEl.innerHTML = items.map(function(p){
+  // o catálogo tem milhares de produtos: desenhar todos de uma vez bloqueava a app (e a cada letra da pesquisa); mostram-se 40 de cada vez
+  var limit = state.catalogLimit || CATALOG_PAGE;
+  var shown = items.slice(0, limit);
+  listEl.innerHTML = "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + items.length + (items.length === 1 ? " produto" : " produtos") + "</p>" + shown.map(function(p){
     var retailers = (p.food_product_retailers || []).map(function(r){ return r.retailer; }).join(", ");
     return "<div class=\"card\" style=\"margin-bottom:8px; display:flex; align-items:flex-start; gap:10px;\">" +
       (p.verification_status === "pending" ? "<input type=\"checkbox\" class=\"catalog-select\" data-id=\"" + p.id + "\"" + (state.catalogSelected[p.id] ? " checked" : "") + " style=\"margin-top:4px;\">" : "<span style=\"width:16px; display:inline-block;\"></span>") +
@@ -10163,9 +10170,12 @@ function renderCatalogList(main){
         (p.verification_status !== "rejected" ? "<button type=\"button\" class=\"btn btn-sm\" data-catalog-reject=\"" + p.id + "\">Rejeitar</button>" : "") +
       "</div>" +
     "</div>";
-  }).join("");
+  }).join("") + (items.length > shown.length ? "<button type=\"button\" class=\"btn\" id=\"catalogMore\" style=\"width:100%; min-height:48px;\">Mostrar mais (" + (items.length - shown.length) + " por mostrar)</button>" : "");
+  var more = listEl.querySelector("#catalogMore");
+  if (more) more.addEventListener("click", function(){ state.catalogLimit = limit + CATALOG_PAGE; renderCatalogList(main); });
   wireCatalogListActions(main);
 }
+var CATALOG_PAGE = 40;
 
 function catalogUpdateProductStatus(main, id, status){
   if (!sbReady) return;
@@ -10207,20 +10217,27 @@ function wireProCatalog(main){
   main.querySelector("#catalogNewProduct").addEventListener("click", function(){
     openFoodProductModal(null, function(){ loadCatalogProducts(main); });
   });
+  var searchTimer = null;
   main.querySelector("#catalogSearch").addEventListener("input", function(){
-    state.catalogFilters.q = this.value;
-    renderCatalogList(main);
+    var el = this;
+    state.catalogFilters.q = el.value;
+    state.catalogLimit = CATALOG_PAGE;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function(){ renderCatalogList(main); }, 250); // só pesquisa quando paras de escrever
   });
   main.querySelector("#catalogRetailerFilter").addEventListener("change", function(){
     state.catalogFilters.retailer = this.value;
+    state.catalogLimit = CATALOG_PAGE;
     renderCatalogList(main);
   });
   main.querySelector("#catalogGroupFilter").addEventListener("change", function(){
     state.catalogFilters.group = this.value;
+    state.catalogLimit = CATALOG_PAGE;
     renderCatalogList(main);
   });
   main.querySelector("#catalogStatusFilter").addEventListener("change", function(){
     state.catalogFilters.status = this.value;
+    state.catalogLimit = CATALOG_PAGE;
     renderCatalogList(main);
   });
   main.querySelector("#catalogSelectAll").addEventListener("change", function(){
