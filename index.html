@@ -522,6 +522,10 @@
   .meal-row .check-circle{width:48px; height:48px; font-size:1.3rem;}
   .check-circle:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
   .soft-details{margin-top:12px; border-top:1px solid var(--line); padding-top:10px;}
+  .soft-details summary::before{content:"▸"; display:inline-block; margin-right:8px; font-size:0.9rem; transition:transform .15s;}
+  .soft-details[open] > summary::before{transform:rotate(90deg);}
+  .ci-card > summary::after{content:"▾"; color:var(--muted); margin-left:auto; transition:transform .15s;}
+  .ci-card:not([open]) > summary::after{transform:rotate(-90deg);}
   .soft-details summary{cursor:pointer; color:var(--muted); font-size:0.8rem; font-weight:600; min-height:36px; display:flex; align-items:center;}
   .help-link{width:100%; color:var(--muted); font-size:0.78rem; text-transform:none; letter-spacing:0; min-height:44px;}
   .treino-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
@@ -549,16 +553,18 @@
   .wl-ex-name{font-family:var(--display); font-weight:700; font-size:1.15rem;}
   .wl-ex-presc, .wl-ex-note{font-size:0.8rem; margin:2px 0 0;}
   .wl-ex-last{font-size:0.78rem; color:var(--accent-strong); margin-top:2px;}
-  .wl-set{display:grid; grid-template-columns:minmax(0,1fr) 68px; gap:8px; align-items:stretch; margin-top:10px; padding:8px; border:1px solid var(--line); border-radius:16px; background:var(--surface-2);}
+  .wl-set{display:grid; grid-template-columns:minmax(0,1fr) 60px; gap:8px; align-items:stretch; margin-top:10px; padding:8px; border:1px solid var(--line); border-radius:16px; background:var(--surface-2);}
   .wl-set.done{border-color:var(--accent); background:var(--accent-soft);}
   .wl-fields{display:flex; flex-direction:column; gap:6px; min-width:0;}
-  .wl-field{display:grid; grid-template-columns:34px 44px minmax(0,1fr) 44px; gap:4px; align-items:center;}
+  .wl-card{padding:14px;}
+  .wl-field{display:grid; grid-template-columns:26px 42px minmax(0,1fr) 42px; gap:3px; align-items:center;}
   .wl-lbl{font-family:var(--mono); font-size:0.66rem; text-transform:uppercase; color:var(--muted); letter-spacing:0.06em;}
-  .wl-step{min-height:48px; min-width:44px; padding:0; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-size:1.4rem; font-weight:700; line-height:1; cursor:pointer; touch-action:manipulation;}
+  .wl-step{min-height:48px; min-width:42px; padding:0; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-size:1.4rem; font-weight:700; line-height:1; cursor:pointer; touch-action:manipulation;}
   .wl-step:active{background:var(--surface-3);}
   .wl-step:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
-  #alunoApp .wl-field input[type=number]{width:100%; min-width:0; min-height:48px; padding:0 4px; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:1.35rem !important; font-weight:700; text-align:center;}
+  #alunoApp .wl-field input[type=number]{width:100%; min-width:0; min-height:48px; padding:0 2px; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:1.2rem !important; font-weight:700; text-align:center;}
   #alunoApp .wl-field input[type=number]::placeholder{color:var(--muted-2); font-weight:500;}
+  @media (max-width:340px){ #alunoApp .wl-field input[type=number]{font-size:1rem !important;} }
   .wl-done{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:100px; border-radius:14px; cursor:pointer;}
   .wl-done input{position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer;}
   .wl-tick{display:grid; place-items:center; width:44px; height:44px; border-radius:50%; border:2px solid var(--line-strong); background:var(--bg); color:transparent; font-size:1.4rem; font-weight:700;}
@@ -6729,13 +6735,41 @@ function renderAlunoShell(){
   renderAlunoTab(s);
 }
 
+// o separador é redesenhado em quase todas as ações: guarda que secções estavam abertas e o que estava escrito no check-in
+function captureTabUi(el){
+  var keep = {open: {}, fields: {}};
+  el.querySelectorAll("details").forEach(function(d){
+    var sm = d.querySelector("summary");
+    keep.open[(d.id || "") + "|" + (sm ? sm.textContent.trim() : "")] = !!d.open;
+  });
+  el.querySelectorAll("[id^=ci]").forEach(function(f){ if (f.id && "value" in f) keep.fields[f.id] = f.value; });
+  return keep;
+}
+function restoreTabUi(el, keep){
+  if (!keep) return;
+  el.querySelectorAll("details").forEach(function(d){
+    var sm = d.querySelector("summary"), k = (d.id || "") + "|" + (sm ? sm.textContent.trim() : "");
+    if (k in keep.open && keep.open[k]) d.open = true;
+  });
+  var ciOpen = keep.open["ciDetails|Check-in semanal Por fazer"] || keep.open["ciDetails|Check-in semanal Em dia"] || keep.open["ciDetails|Check-in semanal Ainda por fazer"];
+  Object.keys(keep.fields).forEach(function(id){
+    var f = el.querySelector("#" + id);
+    if (!f || f.value === keep.fields[id]) return;
+    f.value = keep.fields[id];
+    var v = el.querySelector("#" + id + "Val");
+    if (v) v.textContent = f.value;
+    if (f.type === "range" && f.style && f.style.setProperty) f.style.setProperty("--p", rangeFill(f.value) + "%");
+  });
+}
 function renderAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
+  var keep = captureTabUi(el);
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
   if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
   else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
   else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
   else el.innerHTML = tplCheckin(sv) + tplEvolucaoAluno(sv, {editable:false}); // Progresso: check-in da semana + evolução
+  restoreTabUi(el, keep);
   wireAlunoTab(s); // escrita: sempre sobre o student real, nunca sobre a vista
 }
 
@@ -7004,6 +7038,7 @@ function tplAdherenceChart(s){
 
 /* ===================== AÇÃO DO DIA (aluno) =====================
    Ao abrir a app o aluno vê só o que tem para fazer hoje: o treino (Iniciar / Continuar / Feito) e as refeições, que se marcam com um toque. */
+function plural(n, one, many){ return n + " " + (n === 1 ? one : many); }
 function workoutDaysWithExercises(s){ return trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; }); }
 // treino proposto: o escolhido (state.workoutDayId) ou o que segue na rotação
 function workoutDayFor(s){
@@ -7046,7 +7081,7 @@ function tplTodayWorkout(s){
     var last = logged[logged.length - 1], sets = (last.entries || []).reduce(function(a, e){ return a + ((e && e.sets) || []).length; }, 0);
     return `<div class="card today-workout complete"><div class="eyebrow">Treino de hoje</div>` +
       `<div class="tw-name"><span class="tw-tick" aria-hidden="true">✓</span>Feito${last.dayName ? " · " + escapeHtml(last.dayName) : ""}</div>` +
-      `<p class="muted-p">${sets} séries registadas${last.rpe ? " · esforço " + last.rpe + "/10" : ""}. Bom trabalho!</p>` +
+      `<p class="muted-p">${plural(sets, "série registada", "séries registadas")}${last.rpe ? " · esforço " + last.rpe + "/10" : ""}. Bom trabalho!</p>` +
       `<button type="button" class="btn" id="startWorkout" ${dayAttr}>Registar outro treino</button></div>`;
   }
   if (isTrainingDayToday(s) === false){
@@ -7057,7 +7092,7 @@ function tplTodayWorkout(s){
   var time = s.trainingTime && s.trainingTime !== "—" ? escapeHtml(s.trainingTime) : "";
   return `<div class="card today-workout"><div class="eyebrow">Treino de hoje${time ? " · " + time : ""}</div>` +
     `<div class="tw-name">${escapeHtml(day.name)}</div>` +
-    `<p class="muted-p">${day.exercises.length} ${day.exercises.length === 1 ? "exercício" : "exercícios"} · ${total} séries</p>` +
+    `<p class="muted-p">${plural(day.exercises.length, "exercício", "exercícios")} · ${plural(total, "série", "séries")}</p>` +
     `<button type="button" class="btn primary big" id="startWorkout" ${dayAttr}>Iniciar treino</button></div>`;
 }
 
@@ -7069,11 +7104,7 @@ function tplTodayMeals(s){
   });
   var planned = s.meals.filter(function(m){ return m.status !== "skipped"; });
   var doneN = planned.filter(mealCountsToday).length;
-  var nextIdx = -1;
-  for (var k = 0; k < order.length; k++){
-    var mm = s.meals[order[k]];
-    if (!mealCountsToday(mm) && mm.status !== "skipped"){ nextIdx = order[k]; break; }
-  }
+  var nm = getNextMeal(s), nextIdx = nm && !nm.tomorrow ? s.meals.indexOf(nm.meal) : -1; // a mesma "próxima" que a assistente usa; depois da última refeição não há nenhuma
   var pct = t.kcal ? Math.min(100, Math.round((totals.kcal / t.kcal) * 100)) : 0;
   var html = `<div class="card today-meals"><div class="tm-head"><div class="eyebrow">Refeições de hoje</div><span class="tm-count num">${doneN}/${planned.length} feitas</span></div>`;
   if (t.kcal){
@@ -7275,12 +7306,11 @@ function tplCheckin(s){
     "<div class=\"checkin-field\"><label for=\"ciNotes\">Dificuldades / observações</label><textarea id=\"ciNotes\" maxlength=\"2000\" placeholder=\"Opcional\"></textarea></div>" +
     "<p class=\"muted-p\" id=\"checkinError\" style=\"color:var(--critical); display:none; margin-bottom:10px;\"></p>" +
     "<button type=\"button\" class=\"btn primary big\" id=\"submitCheckin\">Enviar check-in</button>";
-  var recent = (s.checkins || []).slice(-4).reverse();
-  if (recent.length){
-    html += "<div class=\"eyebrow\" style=\"margin:18px 0 8px;\">Últimos check-ins</div>";
-    recent.forEach(function(c){
-      html += "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.weight + " kg · adesão " + c.adherence + "/10</span></div>";
-    });
+  var all = (s.checkins || []).slice().reverse();
+  if (all.length){
+    var row = function(c){ return "<div class=\"checkin-history-row\"><span>" + fmtDatePt(c.date) + "</span><span class=\"num\">" + c.weight + " kg · adesão " + c.adherence + "/10</span></div>"; };
+    html += "<div class=\"eyebrow\" style=\"margin:18px 0 8px;\">Últimos check-ins</div>" + all.slice(0, 4).map(row).join("");
+    if (all.length > 4) html += "<details class=\"soft-details\"><summary>Ver todos (" + all.length + ")</summary>" + all.slice(4).map(row).join("") + "</details>";
   }
   return html + "</details>";
 }
@@ -7289,9 +7319,9 @@ function tplCheckin(s){
 function tplPlanoTabs(s){
   var hasProgram = workoutDaysWithExercises(s).length > 0;
   var sec = hasProgram && state.planoSection === "treino" ? "treino" : "alimentacao";
-  var seg = hasProgram ? "<div class=\"seg\" role=\"tablist\">" +
-    "<button type=\"button\" role=\"tab\" data-plano-sec=\"alimentacao\" aria-selected=\"" + (sec === "alimentacao") + "\" class=\"" + (sec === "alimentacao" ? "on" : "") + "\">Alimentação</button>" +
-    "<button type=\"button\" role=\"tab\" data-plano-sec=\"treino\" aria-selected=\"" + (sec === "treino") + "\" class=\"" + (sec === "treino" ? "on" : "") + "\">Treino</button></div>" : "";
+  var seg = hasProgram ? "<div class=\"seg\">" +
+    "<button type=\"button\" data-plano-sec=\"alimentacao\" aria-pressed=\"" + (sec === "alimentacao") + "\" class=\"" + (sec === "alimentacao" ? "on" : "") + "\">Alimentação</button>" +
+    "<button type=\"button\" data-plano-sec=\"treino\" aria-pressed=\"" + (sec === "treino") + "\" class=\"" + (sec === "treino" ? "on" : "") + "\">Treino</button></div>" : "";
   return seg + (sec === "treino" ? tplTrainingProgramCard(s) : tplPlano(s));
 }
 
@@ -7303,7 +7333,7 @@ function tplTrainingProgramCard(s){
   return "<div class=\"card\"><div class=\"eyebrow\">Programa de treino</div>" +
     (hasDays ? "<div class=\"week-chips\">" + [1,2,3,4,5,6,0].map(function(d){ return "<div class=\"week-chip" + (s.trainingDays.indexOf(d) !== -1 ? " on" : "") + "\">" + names[d] + "<i></i></div>"; }).join("") + "</div>" : "") +
     days.map(function(d){
-      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(d.name) + "</div><div class=\"pd-meta\">" + d.exercises.length + " exercícios · " + workoutSetCount(d) + " séries</div></div>" +
+      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(d.name) + "</div><div class=\"pd-meta\">" + plural(d.exercises.length, "exercício", "exercícios") + " · " + plural(workoutSetCount(d), "série", "séries") + "</div></div>" +
         "<button type=\"button\" class=\"btn btn-sm\" data-start-day=\"" + escapeHtml(d.id) + "\">Iniciar</button></div>" +
         "<details class=\"soft-details\"><summary>Ver exercícios</summary><ul class=\"pd-ex\">" + d.exercises.map(function(e){ return "<li>" + escapeHtml(e.name) + " <span class=\"num\">" + escapeHtml(String(e.sets)) + " × " + escapeHtml(String(e.reps)) + "</span></li>"; }).join("") + "</ul></details></div>";
     }).join("") + "</div>";
@@ -7686,6 +7716,7 @@ function tplWorkoutLogger(s){
   return html;
 }
 
+var uiTapGuardUntil = 0; // depois de terminar o treino ignora toques rápidos que cairiam em 'Hoje'
 var wlSaving = {}; // alunos com uma gravação de treino em curso (id → true): impede duplo toque enquanto o pedido está a meio
 function wireWorkoutLogger(s, el, rerender){
   var daySel = el.querySelector("#wlDay");
@@ -7770,12 +7801,15 @@ function wireWorkoutLogger(s, el, rerender){
     if (!log){ err.textContent = "Marca ✓ pelo menos uma série feita, com repetições."; err.style.display = "block"; return; }
     err.style.display = "none";
     function finish(){
+      // treino feito: nenhum dia fica 'em curso' (o rascunho abandonado de outro dia seria enganador)
+      trainingProgramOf(s).days.forEach(function(d){ if (d.id !== day.id) wlDraftClear(s, d.id); });
       wlDraftClear(s, day.id);
       restTimerStop(); // o treino acabou: o descanso já não faz sentido
       state.workoutDayId = null;
       // o pedido é assíncrono (profissional): só se redesenha se este aluno e este separador ainda estiverem no ecrã
       if (state.alunoTab === "treino" && (authRole !== "professional" || !state.alunoStudentId || String(state.alunoStudentId) === String(s.id))){
         state.alunoTab = "hoje"; // terminado: volta a "Hoje", onde aparece "Treino feito"
+        uiTapGuardUntil = Date.now() + 700;
         try { window.scrollTo(0, 0); } catch (e) {}
         rerender();
       }
@@ -7958,7 +7992,7 @@ function tplEvolucaoAluno(s, opts){
   opts = opts || {};
   var diff = (s.weightCurrent - s.weightInitial).toFixed(1);
   var trend = computeWeeklyTrend(s.weights);
-  var html = (opts.editable ? "" : tabHead("Avaliação", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
+  var html = (opts.editable ? "" : tabHead("Progresso", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
     "<div class=\"hero-row\"><div class=\"hero-num\">" + Number(s.weightCurrent).toFixed(1) + "<small>kg</small></div></div>" +
     "<div class=\"weight-chart-wrap\">" + weightSvg(s.weights) + "</div>" +
@@ -8897,17 +8931,21 @@ function wireAlunoTab(s){
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
     row.addEventListener("click", function(){
+      if (Date.now() < uiTapGuardUntil) return;
       openMealDetail(s, parseInt(row.getAttribute("data-midx"),10));
     });
   });
   el.querySelectorAll(".check-circle[data-circle]").forEach(function(c){
     c.addEventListener("click", function(e){
       e.stopPropagation();
+      if (Date.now() < uiTapGuardUntil) return;
       var idx = parseInt(c.getAttribute("data-circle"),10);
       var m = resolveMealsForToday(s)[idx];
       m.done = !m.done;
       commitMealView(s, m);
       renderAlunoTab(s);
+      var again = el.querySelector('.check-circle[data-circle="' + idx + '"]');
+      if (again && again.focus) { try { again.focus({preventScroll: true}); } catch (e2) {} } // o teclado continua no mesmo botão
       persistStudent(s);
       if (m.done) showToast("✓ " + m.name + " concluído");
     });
@@ -9240,7 +9278,7 @@ function renderProDashboardMain(){
 
   main.innerHTML = html;
   main.querySelectorAll("[data-open]").forEach(function(el){
-    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); });
+    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   });
   main.querySelectorAll("[data-active-toggle]").forEach(function(input){
     input.addEventListener("click", function(e){ e.stopPropagation(); });
@@ -9527,8 +9565,8 @@ var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],
 function renderProDetailMain(s){
   var main = document.getElementById("proMain");
   var group = proNavGroupOf(state.proTab);
-  var subtabs = group.tabs.length > 1 ? "<div class=\"pro-subtabs\" role=\"tablist\">" + group.tabs.map(function(k){
-    return "<button type=\"button\" role=\"tab\" class=\"chip" + (k === state.proTab ? " on" : "") + "\" data-sub=\"" + k + "\" aria-selected=\"" + (k === state.proTab) + "\">" + proTabLabel(k) + "</button>";
+  var subtabs = group.tabs.length > 1 ? "<div class=\"pro-subtabs\">" + group.tabs.map(function(k){
+    return "<button type=\"button\" class=\"chip" + (k === state.proTab ? " on" : "") + "\" data-sub=\"" + k + "\" aria-pressed=\"" + (k === state.proTab) + "\">" + proTabLabel(k) + "</button>";
   }).join("") + "</div>" : "";
   main.innerHTML = "<div class=\"detail-header\">" +
       "<button type=\"button\" class=\"btn pro-back\" id=\"proBack\" aria-label=\"Voltar à lista de alunos\">←</button>" +
@@ -9548,7 +9586,7 @@ function renderProDetailMain(s){
 // voltar à lista, atalhos de ação e separadores da mesma área
 function wireProDetailNav(main){
   var back = main.querySelector("#proBack");
-  if (back) back.addEventListener("click", function(){ state.proSelectedId = null; state.proView = "dashboard"; renderProShell(); });
+  if (back) back.addEventListener("click", function(){ state.proSelectedId = null; state.proView = "dashboard"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   main.querySelectorAll("[data-sub]").forEach(function(b){
     b.addEventListener("click", function(){ state.proTab = b.getAttribute("data-sub"); renderProShell(); });
   });
@@ -9562,7 +9600,7 @@ function wireProDetailNav(main){
       setTimeout(function(){
         var target = document.getElementById(act === "avaliar" ? "asWeight" : "tKcal");
         if (!target) return;
-        window.scrollTo({top: Math.max(0, target.getBoundingClientRect().top + (window.pageYOffset || 0) - 90), behavior: "smooth"});
+        window.scrollTo({top: Math.max(0, target.getBoundingClientRect().top + (window.pageYOffset || 0) - 90), behavior: (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) ? "auto" : "smooth"});
       }, 60);
     });
   });
