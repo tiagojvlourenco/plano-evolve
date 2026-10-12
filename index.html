@@ -10453,6 +10453,27 @@ function offSearch(query){
   }).catch(function(){ return {error: true, products: []}; });
 }
 
+// Chave que ignora maiúsculas, acentos e pontuação: "Leite magro (Continente Equilíbrio)" == "Leite Magro" + "Continente Equilíbrio".
+// Os produtos antigos (migrados do código) não têm EAN, por isso só a comparação por nome+marca apanha os repetidos.
+function offKey(text){
+  var t = String(text == null ? "" : text).toLowerCase();
+  if (t.normalize) t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return t.replace(/[^a-z0-9]+/g, "");
+}
+function offProductKey(name, brand){ return offKey(name + " (" + brand + ")"); }
+// o que a app já conhece: nomes dos alimentos (sem o sufixo "· Supermercado") e EANs do Catálogo carregado
+function offKnownIndex(){
+  var idx = {names: {}, eans: {}};
+  Object.keys(FOOD_DB).forEach(function(n){ idx.names[offKey(n.replace(/\s·\s[^·]+$/, ""))] = n; });
+  (state.catalogProducts || []).forEach(function(p){
+    if (p.ean) idx.eans[p.ean] = true;
+    if (p.name && p.brand) idx.names[offProductKey(p.name, p.brand)] = idx.names[offProductKey(p.name, p.brand)] || foodProductDisplayName(p, p.food_product_retailers);
+  });
+  return idx;
+}
+function offIsKnown(m, idx){ idx = idx || offKnownIndex(); return !!(idx.eans[m.ean] || idx.names[offProductKey(m.name, m.brand)]); }
+function offIlikeEscape(t){ return String(t).replace(/[\\%_]/g, function(c){ return "\\" + c; }); }
+
 // Grava o produto escolhido em food_products (verified) e nos supermercados, e junta-o já aos alimentos da app.
 // Devolve {name} (nome nos alimentos da app), {existing:true,name} se o EAN já está no catálogo, ou {error}/{blocked}.
 function offSaveProduct(m){
@@ -10464,6 +10485,23 @@ function offSaveProduct(m){
       if (found.verification_status === "verified") return {existing: true, name: foodProductDisplayName(found, null), foundRow: found};
       return {blocked: "Este EAN já está no catálogo como " + (VERIFICATION_STATUS_LABELS[found.verification_status] || found.verification_status).toLowerCase() + " — revê-o no Catálogo."};
     }
+    // já existe o mesmo produto sem EAN (ex.: migrado do código) ou com outro EAN? Não se duplica.
+    var known = offKnownIndex().names[offProductKey(m.name, m.brand)];
+    if (known) return {existing: true, name: known};
+    return sb.from("food_products").select("id,name,brand,verification_status").ilike("name", offIlikeEscape(m.name)).limit(20).then(function(same){
+      if (same.error) return {error: "Não foi possível guardar — tenta novamente."};
+      var dup = (same.data || []).filter(function(r){ return offProductKey(r.name, r.brand) === offProductKey(m.name, m.brand); })[0];
+      if (dup){
+        if (dup.verification_status === "verified") return {existing: true, name: foodProductDisplayName(dup, null), foundRow: dup};
+        return {blocked: "Este produto já está no catálogo como " + (VERIFICATION_STATUS_LABELS[dup.verification_status] || dup.verification_status).toLowerCase() + " — revê-o no Catálogo."};
+      }
+      return offInsertProduct(m);
+    });
+  }).catch(function(){ return {error: "Não foi possível guardar — tenta novamente."}; });
+}
+
+function offInsertProduct(m){
+  return Promise.resolve().then(function(){
     var now = new Date().toISOString();
     var row = {};
     ["ean","name","brand","food_group","package_quantity","package_unit","nutrition_basis","kcal","protein","carbs","fat","sugars","fiber","saturated_fat","salt","ingredients","allergens","source_url","source_type"].forEach(function(k){ row[k] = m[k]; });
@@ -10504,6 +10542,9 @@ function offAutoSearch(host, query, localCount, onPick){
       if (host._offSeq !== seq) return;
       if (res.error){ box.innerHTML = "<div class=\"food-search-empty\">Open Food Facts indisponível — tenta mais tarde.</div>"; return; }
       if (!res.products.length){ box.innerHTML = "<div class=\"food-search-empty\">Sem resultados no Open Food Facts (Portugal).</div>"; return; }
+      var idx = offKnownIndex();
+      res = {products: res.products.filter(function(m){ return !offIsKnown(m, idx); })}; // os que a app já tem (mesmo EAN ou mesmo nome+marca) não se oferecem outra vez
+      if (!res.products.length){ box.innerHTML = "<div class=\"food-search-empty\">Os produtos encontrados no Open Food Facts já estão no catálogo.</div>"; return; }
       box.innerHTML = "<div class=\"food-search-empty\">Open Food Facts (Portugal) — ao escolher, fica guardado no catálogo como verificado:</div>" +
         res.products.map(function(m, i){
           return "<div class=\"food-search-item off-item\" data-off=\"" + i + "\">" + escapeHtml(m.name) + " <span class=\"muted-p\">(" + escapeHtml(m.brand) + ") · " + m.kcal + " kcal · P " + m.protein + " · H " + m.carbs + " · G " + m.fat + " (por " + (m.nutrition_basis === "100ml" ? "100 ml" : "100 g") + ")</span></div>";

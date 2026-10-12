@@ -37,12 +37,13 @@ var check = require("./check")();
   check.check("11. Sem rede devolve erro (e não rebenta)", r3.error === true && r3.products.length === 0);
 
   // 3. gravação
-  var calls = [], existing = null;
+  var calls = [], existing = null, sameName = null, mode = null;
   sb = {from: function(t){
     var api = {
       select: function(){ return api; },
-      eq: function(c, v){ calls.push(t + " eq " + c + "=" + v); return api; },
-      limit: function(){ return Promise.resolve({data: existing ? [existing] : []}); },
+      eq: function(c, v){ calls.push(t + " eq " + c + "=" + v); mode = "ean"; return api; },
+      ilike: function(c, v){ calls.push(t + " ilike " + c + "=" + v); mode = "name"; return api; },
+      limit: function(){ return Promise.resolve({data: mode === "ean" ? (existing ? [existing] : []) : (sameName || [])}); },
       insert: function(rows){ calls.push("insert " + t + " " + JSON.stringify(rows)); return {select: function(){ return Promise.resolve({data: Array.isArray(rows) ? rows : [Object.assign({id: "n1"}, rows)]}); }}; }
     };
     return api;
@@ -61,6 +62,24 @@ var check = require("./check")();
   var already = await offSaveProduct(m);
   check.check("16. Um EAN já verificado devolve o produto existente", already.existing === true);
 
+  // 3b. repetidos sem EAN (produtos migrados do código) — o caso do "Leite magro (Continente Equilíbrio)"
+  existing = null; calls = [];
+  var milk = offMapProduct({code: "5601312507994", product_name: "Leite Magro", brands: "Continente Equilíbrio", categories_tags: ["en:milks"], nutriments: {"energy-kcal_100g": 35, "proteins_100g": 3.5, "carbohydrates_100g": 5, "fat_100g": 0.1}});
+  FOOD_DB["Leite magro (Continente Equilíbrio)"] = {per: "100g", kcal: 35, p: 3.5, c: 5, f: 0.1};
+  check.check("20. offKey ignora maiúsculas, acentos e pontuação", offProductKey("Leite Magro", "Continente Equilíbrio") === offProductKey("leite magro", "continente  equilibrio"));
+  check.check("21. Um produto que a app já tem (sem EAN, outra capitalização) é reconhecido", offIsKnown(milk));
+  var dupLocal = await offSaveProduct(milk);
+  check.check("22. Escolhê-lo não cria uma linha nova: devolve o alimento existente", dupLocal.existing === true && dupLocal.name === "Leite magro (Continente Equilíbrio)" && !calls.some(function(c){ return c.indexOf("insert food_products ") === 0; }));
+  delete FOOD_DB["Leite magro (Continente Equilíbrio)"];
+  check.check("23. Sem esse alimento já não é conhecido", !offIsKnown(milk));
+  sameName = [{id: "d1", name: "leite magro", brand: "Continente Equilibrio", verification_status: "rejected"}];
+  var dupDb = await offSaveProduct(milk);
+  check.check("24. Um nome+marca já na base de dados (mesmo rejeitado, acentos diferentes) não é duplicado", !!dupDb.blocked && !calls.some(function(c){ return c.indexOf("insert food_products ") === 0; }));
+  sameName = [{id: "d2", name: "Leite Magro", brand: "Outra marca", verification_status: "verified"}];
+  var other = await offSaveProduct(milk);
+  check.check("25. A mesma designação com outra marca é outro produto e grava-se", other.name === "Leite Magro (Continente Equilíbrio)" && calls.some(function(c){ return c.indexOf("insert food_products ") === 0; }));
+  sameName = null;
+
   // 4. pesquisa automática (só com poucos resultados locais)
   function fakeHost(){ var h = {children: [], _offSeq: 0, appendChild: function(c){ h.children.push(c); return c; }}; return h; }
   var realCreate = document.createElement;
@@ -68,6 +87,10 @@ var check = require("./check")();
   var asked = 0;
   global.fetch = function(){ asked++; return Promise.resolve({ok: true, json: function(){ return Promise.resolve({products: [good]}); }}); };
   var picked = null;
+  var hKnown = fakeHost(); offAutoSearch(hKnown, "iogurte grego", 1, function(){});
+  await new Promise(function(r){ setTimeout(r, 800); });
+  check.check("26. Produtos que a app já tem não voltam a ser oferecidos", /já estão no catálogo/.test(hKnown.children[0].innerHTML) && !/off-item/.test(hKnown.children[0].innerHTML));
+  delete FOOD_DB["Iogurte grego natural (Marca X)"]; delete FOOD_DB["Leite Magro (Continente Equilíbrio)"]; state.catalogProducts = []; asked = 0;
   var h1 = fakeHost(); offAutoSearch(h1, "iogurte", OFF_MIN_LOCAL, function(){});
   var h2 = fakeHost(); offAutoSearch(h2, "io", 0, function(){});
   var h3 = fakeHost(); offAutoSearch(h3, "iogurte novo", 1, function(n){ picked = n; });
