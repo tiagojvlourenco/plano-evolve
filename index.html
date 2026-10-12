@@ -10113,7 +10113,7 @@ function loadCatalogProducts(main){
     if (res.error){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; return; }
     var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
     state.catalogProducts = (res.data || []).slice().sort(function(a, b){ return cmp(a.name, b.name); });
-    state.catalogProducts.forEach(function(p){ p._k = (p.name + "\n" + p.brand + "\n" + (p.ean || "")).toLowerCase(); }); // chave de pesquisa calculada uma vez
+    state.catalogProducts.forEach(function(p){ p._k = catalogSearchKey(p); }); // chave de pesquisa calculada uma vez
     renderCatalogList(main);
   }).catch(function(){ main.querySelector("#catalogList").innerHTML = "<p class=\"muted-p\">⚠ Não foi possível carregar o catálogo.</p>"; });
 }
@@ -10200,7 +10200,7 @@ function wireCatalogListActions(main){
     btn.addEventListener("click", function(){
       var id = btn.getAttribute("data-catalog-edit");
       var p = (state.catalogProducts || []).find(function(x){ return x.id === id; });
-      if (p) openFoodProductModal(p, function(){ loadCatalogProducts(main); });
+      if (p) openFoodProductModal(p, function(){ renderCatalogList(main); });
     });
   });
   main.querySelectorAll(".catalog-select").forEach(function(cb){
@@ -10215,7 +10215,7 @@ function wireCatalogListActions(main){
 
 function wireProCatalog(main){
   main.querySelector("#catalogNewProduct").addEventListener("click", function(){
-    openFoodProductModal(null, function(){ loadCatalogProducts(main); });
+    openFoodProductModal(null, function(){ renderCatalogList(main); });
   });
   var searchTimer = null;
   main.querySelector("#catalogSearch").addEventListener("input", function(){
@@ -10268,10 +10268,10 @@ function wireProCatalog(main){
 // food_product_retailers desse produto pelas marcadas no formulário — mais
 // simples do que calcular a diferença, e a tabela é sempre pequena por
 // produto (no máximo 5 retalhistas).
-function openFoodProductModal(product, onSaved){
+function tplCatalogProductForm(product){
   var p = product || {};
   var currentRetailers = (p.food_product_retailers || []).map(function(r){ return r.retailer; });
-  var sheet = openModal(
+  return (
     "<div class=\"mtitle\">" + (product ? "Editar produto" : "Novo produto") + "</div>" +
     "<div class=\"field-row\">" +
       "<div class=\"f\"><label>EAN (código de barras)</label><input type=\"text\" id=\"fpEan\" value=\"" + escapeHtml(p.ean || "") + "\"></div>" +
@@ -10314,61 +10314,88 @@ function openFoodProductModal(product, onSaved){
     "<p class=\"muted-p\" id=\"fpError\" style=\"color:var(--critical); display:none; margin:8px 0;\"></p>" +
     "<button type=\"button\" class=\"btn primary\" id=\"fpSave\" style=\"width:100%; margin-top:6px;\">Guardar produto</button>"
   );
+}
 
-  sheet.querySelector("#fpSave").addEventListener("click", function(){
-    var errEl = sheet.querySelector("#fpError");
-    errEl.style.display = "none";
-    var name = sheet.querySelector("#fpName").value.trim();
-    var brand = sheet.querySelector("#fpBrand").value.trim();
-    var kcal = parseFloat(sheet.querySelector("#fpKcal").value);
-    var protein = parseFloat(sheet.querySelector("#fpProtein").value);
-    var carbs = parseFloat(sheet.querySelector("#fpCarbs").value);
-    var fat = parseFloat(sheet.querySelector("#fpFat").value);
-    if (!name || !brand){ errEl.textContent = "Preenche o nome e a marca."; errEl.style.display = "block"; return; }
-    if (!(kcal >= 0) || !(protein >= 0) || !(carbs >= 0) || !(fat >= 0)){ errEl.textContent = "Preenche kcal/proteína/hidratos/gordura (podem ser 0, nunca negativos)."; errEl.style.display = "block"; return; }
-    if (!sbReady){ errEl.textContent = "Sem ligação à base de dados."; errEl.style.display = "block"; return; }
-
-    function numOrNull(id){ var v = parseFloat(sheet.querySelector(id).value); return isFinite(v) ? v : null; }
-    var row = {
-      ean: sheet.querySelector("#fpEan").value.trim() || null,
-      name: name, brand: brand,
-      food_group: sheet.querySelector("#fpGroup").value,
-      package_quantity: numOrNull("#fpPackageQty"),
-      package_unit: sheet.querySelector("#fpPackageUnit").value.trim() || null,
-      nutrition_basis: sheet.querySelector("#fpBasis").value,
-      kcal: kcal, protein: protein, carbs: carbs, fat: fat,
-      sugars: numOrNull("#fpSugars"), fiber: numOrNull("#fpFiber"),
-      saturated_fat: numOrNull("#fpSatFat"), salt: numOrNull("#fpSalt"),
-      ingredients: sheet.querySelector("#fpIngredients").value.trim() || null,
-      allergens: sheet.querySelector("#fpAllergens").value.trim() || null,
-      source_url: sheet.querySelector("#fpSourceUrl").value.trim() || null,
-      internal_note: sheet.querySelector("#fpInternalNote").value.trim() || null,
-      source_type: sheet.querySelector("#fpSourceType").value,
-      verification_status: sheet.querySelector("#fpStatus").value,
-      updated_at: new Date().toISOString()
-    };
-    var selectedRetailers = Array.from(sheet.querySelectorAll(".fp-retailer:checked")).map(function(cb){ return cb.value; });
-
-    var save = product
-      ? sb.from("food_products").update(row).eq("id", product.id).select()
-      : sb.from("food_products").insert(row).select();
-
-    save.then(function(res){
-      if (res.error){ errEl.textContent = "⚠ Não foi possível guardar — verifica se o EAN já existe noutro produto."; errEl.style.display = "block"; return; }
-      var saved = res.data && res.data[0];
-      var productId = saved ? saved.id : product.id;
-      return sb.from("food_product_retailers").delete().eq("food_product_id", productId).then(function(){
-        if (!selectedRetailers.length) return;
-        return sb.from("food_product_retailers").insert(selectedRetailers.map(function(r){ return {food_product_id: productId, retailer: r}; }));
-      }).then(function(){
-        showToast("✓ Produto guardado");
-        closeModal();
-        onSaved();
-      });
-    }).catch(function(){ errEl.textContent = "⚠ Não foi possível guardar — tenta novamente."; errEl.style.display = "block"; });
-  });
-
+// Abre o formulário de edição (product === null -> criar). "onSaved" corre depois de guardar e de o estado local já estar atualizado.
+function openFoodProductModal(product, onSaved){
+  var sheet = openModal(tplCatalogProductForm(product));
+  sheet.querySelector("#fpSave").addEventListener("click", function(){ saveEditedFoodProduct(sheet, product, onSaved); });
   return sheet;
+}
+
+// Chave de pesquisa do Catálogo (nome, marca, EAN) — calculada uma vez por produto, não a cada letra escrita.
+function catalogSearchKey(p){ return (p.name + "\n" + p.brand + "\n" + (p.ean || "")).toLowerCase(); }
+
+// Mete um produto acabado de guardar no estado local (substitui ou acrescenta), refaz a chave de pesquisa e mantém a ordem alfabética.
+function catalogApplySavedProduct(saved){
+  var list = state.catalogProducts || (state.catalogProducts = []);
+  var idx = -1;
+  list.forEach(function(x, i){ if (x.id === saved.id) idx = i; });
+  saved._k = catalogSearchKey(saved);
+  if (idx >= 0) list[idx] = saved; else list.push(saved);
+  if (saved.verification_status !== "pending" && state.catalogSelected) delete state.catalogSelected[saved.id];
+  var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
+  list.sort(function(a, b){ return cmp(a.name, b.name); });
+}
+
+// Lê o formulário, valida, faz o UPDATE (ou INSERT) em food_products e substitui os supermercados do produto.
+function saveEditedFoodProduct(sheet, product, onSaved){
+  var errEl = sheet.querySelector("#fpError");
+  errEl.style.display = "none";
+  var name = sheet.querySelector("#fpName").value.trim();
+  var brand = sheet.querySelector("#fpBrand").value.trim();
+  var kcal = parseFloat(sheet.querySelector("#fpKcal").value);
+  var protein = parseFloat(sheet.querySelector("#fpProtein").value);
+  var carbs = parseFloat(sheet.querySelector("#fpCarbs").value);
+  var fat = parseFloat(sheet.querySelector("#fpFat").value);
+  if (!name || !brand){ errEl.textContent = "Preenche o nome e a marca."; errEl.style.display = "block"; return; }
+  if (!(kcal >= 0) || !(protein >= 0) || !(carbs >= 0) || !(fat >= 0)){ errEl.textContent = "Preenche kcal/proteína/hidratos/gordura (podem ser 0, nunca negativos)."; errEl.style.display = "block"; return; }
+  if (!sbReady){ errEl.textContent = "Sem ligação à base de dados."; errEl.style.display = "block"; return; }
+
+  function numOrNull(id){ var v = parseFloat(sheet.querySelector(id).value); return isFinite(v) ? v : null; }
+  var row = {
+    ean: sheet.querySelector("#fpEan").value.trim() || null,
+    name: name, brand: brand,
+    food_group: sheet.querySelector("#fpGroup").value,
+    package_quantity: numOrNull("#fpPackageQty"),
+    package_unit: sheet.querySelector("#fpPackageUnit").value.trim() || null,
+    nutrition_basis: sheet.querySelector("#fpBasis").value,
+    kcal: kcal, protein: protein, carbs: carbs, fat: fat,
+    sugars: numOrNull("#fpSugars"), fiber: numOrNull("#fpFiber"),
+    saturated_fat: numOrNull("#fpSatFat"), salt: numOrNull("#fpSalt"),
+    ingredients: sheet.querySelector("#fpIngredients").value.trim() || null,
+    allergens: sheet.querySelector("#fpAllergens").value.trim() || null,
+    source_url: sheet.querySelector("#fpSourceUrl").value.trim() || null,
+    internal_note: sheet.querySelector("#fpInternalNote").value.trim() || null,
+    source_type: sheet.querySelector("#fpSourceType").value,
+    verification_status: sheet.querySelector("#fpStatus").value,
+    updated_at: new Date().toISOString()
+  };
+  var selectedRetailers = Array.from(sheet.querySelectorAll(".fp-retailer:checked")).map(function(cb){ return cb.value; });
+
+  var saveBtn = sheet.querySelector("#fpSave");
+  function fail(msg){ errEl.textContent = msg; errEl.style.display = "block"; saveBtn.disabled = false; }
+  saveBtn.disabled = true; // evita guardar duas vezes com um duplo toque
+
+  var save = product
+    ? sb.from("food_products").update(row).eq("id", product.id).select()
+    : sb.from("food_products").insert(row).select();
+
+  save.then(function(res){
+    if (res.error || !res.data || !res.data[0]){ fail("⚠ Não foi possível guardar — verifica se o EAN já existe noutro produto."); return; }
+    var saved = res.data[0];
+    return sb.from("food_product_retailers").delete().eq("food_product_id", saved.id).then(function(){
+      if (!selectedRetailers.length) return {data: []};
+      return sb.from("food_product_retailers").insert(selectedRetailers.map(function(r){ return {food_product_id: saved.id, retailer: r}; })).select();
+    }).then(function(rr){
+      if (rr && rr.error){ fail("⚠ Produto guardado, mas não foi possível atualizar os supermercados — tenta novamente."); return; }
+      saved.food_product_retailers = (rr && rr.data) || [];
+      catalogApplySavedProduct(saved);
+      showToast("✓ Produto guardado");
+      closeModal();
+      if (onSaved) onSaved(saved);
+    });
+  }).catch(function(){ fail("⚠ Não foi possível guardar — tenta novamente."); });
 }
 
 function tplAddFoodForm(midx){
