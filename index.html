@@ -10149,7 +10149,9 @@ function renderCatalogList(main){
     var selectedCount = Object.keys(state.catalogSelected).filter(function(id){ return state.catalogSelected[id]; }).length;
     main.querySelector("#catalogSelectedCount").textContent = selectedCount ? (selectedCount + " selecionado" + (selectedCount > 1 ? "s" : "")) : "";
   }
-  if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; return; }
+  var catQ = ((state.catalogFilters || {}).q || "").trim();
+  function offIntoCatalog(){ offAutoSearch(listEl, catQ, items.length, function(){ renderCatalogList(main); }); }
+  if (!items.length){ listEl.innerHTML = "<p class=\"muted-p\">Sem produtos com estes filtros.</p>"; offIntoCatalog(); return; }
   // o catálogo tem milhares de produtos: desenhar todos de uma vez bloqueava a app (e a cada letra da pesquisa); mostram-se 40 de cada vez
   var limit = state.catalogLimit || CATALOG_PAGE;
   var shown = items.slice(0, limit);
@@ -10174,6 +10176,7 @@ function renderCatalogList(main){
   var more = listEl.querySelector("#catalogMore");
   if (more) more.addEventListener("click", function(){ state.catalogLimit = limit + CATALOG_PAGE; renderCatalogList(main); });
   wireCatalogListActions(main);
+  offIntoCatalog();
 }
 var CATALOG_PAGE = 40;
 
@@ -10336,6 +10339,194 @@ function catalogApplySavedProduct(saved){
   if (saved.verification_status !== "pending" && state.catalogSelected) delete state.catalogSelected[saved.id];
   var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
   list.sort(function(a, b){ return cmp(a.name, b.name); });
+}
+
+/* ---------- Open Food Facts (Portugal): pesquisa externa e importação ----------
+   Quando a pesquisa local dá poucos resultados, consulta a API pública do Open Food Facts (produtos vendidos em Portugal, ou um código
+   de barras), converte cada produto para a estrutura de food_products e, ao escolher um, grava-o em food_products como "verified"
+   (fonte "open_food_facts") — fica logo disponível e guardado para as próximas vezes. Só o profissional vê isto (a escrita exige RLS de profissional). */
+var OFF_MIN_LOCAL = 5;      // abaixo deste número de resultados locais, procura também no Open Food Facts
+var OFF_MIN_CHARS = 3;
+var OFF_FIELDS = "code,product_name,product_name_pt,brands,nutriments,quantity,product_quantity,product_quantity_unit,categories_tags,ingredients_text,ingredients_text_pt,allergens_tags,stores_tags";
+var OFF_CACHE = {};
+var OFF_STORES = {"continente": "Continente", "pingo-doce": "Pingo Doce", "mercadona": "Mercadona", "auchan": "Auchan", "lidl": "Lidl"};
+
+function offNum(v){
+  if (v == null || v === "") return null;
+  var n = parseFloat(String(v).replace(",", "."));
+  return isFinite(n) ? n : null;
+}
+function offRound(n){ return n == null ? null : Math.round(n * 10) / 10; }
+function offClean(t){ return String(t == null ? "" : t).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(); }
+function offIsEan(q){ return /^\d{8,14}$/.test(String(q || "").trim()); }
+
+// categorias do Open Food Facts -> os 7 grupos aceites por food_products (bebidas sem leite ficam em "snacks", como no resto do catálogo)
+function offGuessGroup(tags){
+  var t = (tags || []).join(" ");
+  function has(re){ return re.test(t); }
+  if (has(/en:(oils|vegetable-oils|olive-oils|fats|nuts|seeds|nut-butters|margarines)\b/)) return "gorduras";
+  if (has(/en:(dairies|milks|cheeses|yogurts|butters|creams|dairy-desserts|fermented-milk)/)) return "laticinios";
+  if (has(/en:(meats|poultries|fishes|seafood|eggs|sausages|hams|canned-fishes|tunas|charcuteries|meat-based)/)) return "carnes";
+  if (has(/en:(fruits|fresh-fruits|dried-fruits|fruit-based)/) && !has(/en:(beverages|juices|sodas)/)) return "fruta";
+  if (has(/en:(vegetables|legumes|pulses|fresh-vegetables|canned-vegetables|salads)/)) return "vegetais";
+  if (has(/en:(cereals|breads|pastas|rices|flours|breakfast-cereals|cereal-grains|potatoes|biscuits-and-cakes|crackers)/)) return "cereais";
+  return "snacks";
+}
+
+// Converte um produto bruto do Open Food Facts para uma linha de food_products. Devolve null se faltar algo essencial
+// (nome, marca, EAN, kcal/proteína/hidratos/gordura) ou se os valores não fizerem sentido.
+function offMapProduct(raw){
+  if (!raw) return null;
+  var ean = String(raw.code || "").replace(/\D/g, "");
+  if (ean.length < 8 || ean.length > 14) return null;
+  var name = offClean(raw.product_name_pt || raw.product_name);
+  var brand = offClean(String(raw.brands || "").split(",")[0]);
+  if (name.length < 2 || !brand) return null;
+  var n = raw.nutriments || {};
+  var kcal = offNum(n["energy-kcal_100g"]);
+  if (kcal == null){ var kj = offNum(n["energy_100g"]); if (kj != null) kcal = kj / 4.184; }
+  var protein = offNum(n["proteins_100g"]), carbs = offNum(n["carbohydrates_100g"]), fat = offNum(n["fat_100g"]);
+  if (kcal == null || protein == null || carbs == null || fat == null) return null;
+  if (kcal < 0 || kcal > 900 || protein < 0 || carbs < 0 || fat < 0 || protein > 100 || carbs > 100 || fat > 100) return null;
+  if (protein + carbs + fat > 102) return null; // macros por 100 g nunca passam 100 g
+  var calc = 4 * protein + 4 * carbs + 9 * fat;
+  if (Math.abs(kcal - calc) > Math.max(60, 0.5 * Math.max(kcal, calc))) return null; // energia incompatível com os macros: dado de má qualidade
+  // base: líquidos vêm por 100 ml
+  var qtyStr = String(raw.quantity || "").toLowerCase();
+  var unit = String(raw.product_quantity_unit || "").toLowerCase();
+  var liquid = unit === "ml" || unit === "cl" || unit === "l" || /\d\s*(ml|cl|l)\b/.test(qtyStr);
+  var pq = offNum(raw.product_quantity);
+  var packQty = null, packUnit = null;
+  if (pq != null && pq > 0){
+    if (liquid){ packQty = unit === "l" ? pq * 1000 : (unit === "cl" ? pq * 10 : pq); packUnit = "ml"; }
+    else { packQty = unit === "kg" ? pq * 1000 : pq; packUnit = "g"; }
+    packQty = offRound(packQty);
+  }
+  var stores = [];
+  (raw.stores_tags || []).forEach(function(tg){ var r = OFF_STORES[String(tg).toLowerCase().replace(/^[a-z]{2}:/, "")]; if (r && stores.indexOf(r) < 0) stores.push(r); });
+  var allergens = (raw.allergens_tags || []).map(function(a){ return String(a).replace(/^[a-z]{2}:/, ""); }).filter(Boolean).join(", ");
+  var ingredients = offClean(raw.ingredients_text_pt || raw.ingredients_text).slice(0, 1000);
+  return {
+    ean: ean, name: name, brand: brand,
+    food_group: offGuessGroup(raw.categories_tags),
+    package_quantity: packQty, package_unit: packUnit,
+    nutrition_basis: liquid ? "100ml" : "100g",
+    kcal: offRound(kcal), protein: offRound(protein), carbs: offRound(carbs), fat: offRound(fat),
+    sugars: offRound(offNum(n["sugars_100g"])), fiber: offRound(offNum(n["fiber_100g"])),
+    saturated_fat: offRound(offNum(n["saturated-fat_100g"])), salt: offRound(offNum(n["salt_100g"])),
+    ingredients: ingredients || null, allergens: allergens || null,
+    source_url: "https://world.openfoodfacts.org/product/" + ean,
+    source_type: "open_food_facts",
+    stores: stores
+  };
+}
+
+function offFetchJson(url){
+  var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  var timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 9000) : null;
+  return fetch(url, ctrl ? {signal: ctrl.signal} : undefined).then(function(r){
+    if (timer) clearTimeout(timer);
+    if (!r.ok) throw new Error("off " + r.status);
+    return r.json();
+  }, function(e){ if (timer) clearTimeout(timer); throw e; });
+}
+
+// Pesquisa por termo (só produtos vendidos em Portugal) ou por código de barras. Devolve {products:[linhas já convertidas]}; em erro, {error:true}.
+function offSearch(query){
+  var q = String(query || "").trim();
+  var key = q.toLowerCase();
+  if (OFF_CACHE[key]) return Promise.resolve(OFF_CACHE[key]);
+  var url = offIsEan(q)
+    ? "https://world.openfoodfacts.org/api/v2/product/" + q + ".json?fields=" + OFF_FIELDS
+    : "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + encodeURIComponent(q) + "&search_simple=1&action=process&json=1&page_size=24&sort_by=unique_scans_n" +
+      "&tagtype_0=countries&tag_contains_0=contains&tag_0=portugal&fields=" + OFF_FIELDS;
+  return offFetchJson(url).then(function(data){
+    var raws = offIsEan(q) ? (data && data.status === 1 && data.product ? [data.product] : []) : ((data && data.products) || []);
+    var seen = {}, products = [];
+    raws.forEach(function(r){
+      var m = offMapProduct(r);
+      if (m && !seen[m.ean]){ seen[m.ean] = true; products.push(m); }
+    });
+    var res = {products: products};
+    OFF_CACHE[key] = res;
+    return res;
+  }).catch(function(){ return {error: true, products: []}; });
+}
+
+// Grava o produto escolhido em food_products (verified) e nos supermercados, e junta-o já aos alimentos da app.
+// Devolve {name} (nome nos alimentos da app), {existing:true,name} se o EAN já está no catálogo, ou {error}/{blocked}.
+function offSaveProduct(m){
+  if (!sbReady) return Promise.resolve({error: "Sem ligação à base de dados."});
+  return sb.from("food_products").select("id,name,brand,verification_status").eq("ean", m.ean).limit(1).then(function(ex){
+    if (ex.error) return {error: "Não foi possível guardar — tenta novamente."};
+    var found = ex.data && ex.data[0];
+    if (found){
+      if (found.verification_status === "verified") return {existing: true, name: foodProductDisplayName(found, null), foundRow: found};
+      return {blocked: "Este EAN já está no catálogo como " + (VERIFICATION_STATUS_LABELS[found.verification_status] || found.verification_status).toLowerCase() + " — revê-o no Catálogo."};
+    }
+    var now = new Date().toISOString();
+    var row = {};
+    ["ean","name","brand","food_group","package_quantity","package_unit","nutrition_basis","kcal","protein","carbs","fat","sugars","fiber","saturated_fat","salt","ingredients","allergens","source_url","source_type"].forEach(function(k){ row[k] = m[k]; });
+    row.verification_status = "verified";
+    row.verified_at = now;
+    row.internal_note = "Importado automaticamente do Open Food Facts em " + now.slice(0, 10) + " (valores não confirmados no rótulo).";
+    return sb.from("food_products").insert(row).select().then(function(res){
+      var saved = res.data && res.data[0];
+      if (res.error || !saved) return {error: "Não foi possível guardar — tenta novamente."};
+      var addRetailers = m.stores && m.stores.length
+        ? sb.from("food_product_retailers").insert(m.stores.map(function(r){ return {food_product_id: saved.id, retailer: r}; })).select()
+        : Promise.resolve({data: []});
+      return addRetailers.then(function(rr){
+        var retailers = (rr && rr.data) || [];
+        saved.food_product_retailers = retailers;
+        mergeFoodProduct(saved, retailers);
+        if (state.catalogProducts) catalogApplySavedProduct(saved);
+        return {name: foodProductDisplayName(saved, retailers), saved: saved};
+      });
+    });
+  }).catch(function(){ return {error: "Não foi possível guardar — tenta novamente."}; });
+}
+
+// Mostra, dentro de "host", os resultados do Open Food Facts quando a pesquisa local deu poucos (localCount < OFF_MIN_LOCAL).
+// onPick(nome) corre depois de o produto escolhido ficar guardado. "seq" descarta respostas de pesquisas antigas.
+function offAutoSearch(host, query, localCount, onPick){
+  var q = String(query || "").trim();
+  host._offSeq = (host._offSeq || 0) + 1;
+  var seq = host._offSeq;
+  clearTimeout(host._offTimer);
+  if (!sbReady || localCount >= OFF_MIN_LOCAL || !(offIsEan(q) || q.length >= OFF_MIN_CHARS)) return;
+  var box = document.createElement("div");
+  box.className = "off-box";
+  box.innerHTML = "<div class=\"food-search-empty\">A procurar no Open Food Facts…</div>";
+  host.appendChild(box);
+  host._offTimer = setTimeout(function(){
+    offSearch(q).then(function(res){
+      if (host._offSeq !== seq) return;
+      if (res.error){ box.innerHTML = "<div class=\"food-search-empty\">Open Food Facts indisponível — tenta mais tarde.</div>"; return; }
+      if (!res.products.length){ box.innerHTML = "<div class=\"food-search-empty\">Sem resultados no Open Food Facts (Portugal).</div>"; return; }
+      box.innerHTML = "<div class=\"food-search-empty\">Open Food Facts (Portugal) — ao escolher, fica guardado no catálogo como verificado:</div>" +
+        res.products.map(function(m, i){
+          return "<div class=\"food-search-item off-item\" data-off=\"" + i + "\">" + escapeHtml(m.name) + " <span class=\"muted-p\">(" + escapeHtml(m.brand) + ") · " + m.kcal + " kcal · P " + m.protein + " · H " + m.carbs + " · G " + m.fat + " (por " + (m.nutrition_basis === "100ml" ? "100 ml" : "100 g") + ")</span></div>";
+        }).join("");
+      box.onclick = function(e){
+        var item = e.target.closest ? e.target.closest(".off-item") : null;
+        if (!item || item.getAttribute("data-busy")) return;
+        var m = res.products[parseInt(item.getAttribute("data-off"), 10)];
+        if (!m) return;
+        item.setAttribute("data-busy", "1");
+        item.style.opacity = "0.5";
+        showToast("A guardar no catálogo…");
+        offSaveProduct(m).then(function(r){
+          item.removeAttribute("data-busy");
+          item.style.opacity = "";
+          if (r.error || r.blocked){ showToast("⚠ " + (r.error || r.blocked)); return; }
+          if (r.foundRow) mergeFoodProduct(r.foundRow, null);
+          showToast(r.existing ? "Já estava no catálogo" : "✓ Guardado no catálogo como verificado");
+          if (FOOD_DB[r.name]) onPick(r.name);
+        });
+      };
+    });
+  }, 600); // espera que pares de escrever antes de ir à rede
 }
 
 // Lê o formulário, valida, faz o UPDATE (ou INSERT) em food_products e substitui os supermercados do produto.
@@ -11349,22 +11540,25 @@ function wireProTab(s){
     // e o seletor apanhava sempre o primeiro (o de outro alimento, escondido)
     // em vez do deste. O resultado é sempre o próximo irmão do input no DOM.
     var resultsEl = input.nextElementSibling;
-    function refresh(){
-      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
-      resultsEl.classList.add("open");
-    }
-    input.addEventListener("input", refresh);
-    input.addEventListener("focus", refresh);
-    resultsEl.addEventListener("click", function(e){
-      var item = e.target.closest(".food-search-item");
-      if (!item) return;
-      var name = item.getAttribute("data-name");
+    function pick(name){
       input.value = name;
       resultsEl.classList.remove("open");
       var qtyWrap = el.querySelector(".ef-qty-wrap[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
       qtyWrap.innerHTML = tplEditFoodQty(name, 100);
       var groupSel = el.querySelector(".ef-group[data-midx=\"" + midx + "\"][data-fidx=\"" + fidx + "\"]");
       if (groupSel) groupSel.value = groupOfFood(name);
+    }
+    function refresh(){
+      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
+      resultsEl.classList.add("open");
+      offAutoSearch(resultsEl, input.value, filterFoodNames(allFoodNames(), input.value).length, pick);
+    }
+    input.addEventListener("input", refresh);
+    input.addEventListener("focus", refresh);
+    resultsEl.addEventListener("click", function(e){
+      var item = e.target.closest(".food-search-item");
+      if (!item || item.classList.contains("off-item")) return;
+      pick(item.getAttribute("data-name"));
     });
     document.addEventListener("click", function(e){
       if (e.target !== input && !resultsEl.contains(e.target)) resultsEl.classList.remove("open");
@@ -11447,22 +11641,25 @@ function wireProTab(s){
     // "Editar alimento" já existente na mesma refeição, que têm o mesmo
     // midx). O resultado é sempre o próximo irmão do input no DOM.
     var resultsEl = input.nextElementSibling;
-    function refresh(){
-      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
-      resultsEl.classList.add("open");
-    }
-    input.addEventListener("input", refresh);
-    input.addEventListener("focus", refresh);
-    resultsEl.addEventListener("click", function(e){
-      var item = e.target.closest(".food-search-item");
-      if (!item) return;
-      var name = item.getAttribute("data-name");
+    function pick(name){
       input.value = name;
       resultsEl.classList.remove("open");
       var qtyWrap = el.querySelector(".af-qty-wrap[data-midx=\"" + midx + "\"]");
       qtyWrap.innerHTML = tplAddFoodQty(name);
       var groupSel = el.querySelector(".af-group[data-midx=\"" + midx + "\"]");
       if (groupSel) groupSel.value = groupOfFood(name);
+    }
+    function refresh(){
+      resultsEl.innerHTML = foodSearchResultsHtml(allFoodNames(), input.value);
+      resultsEl.classList.add("open");
+      offAutoSearch(resultsEl, input.value, filterFoodNames(allFoodNames(), input.value).length, pick);
+    }
+    input.addEventListener("input", refresh);
+    input.addEventListener("focus", refresh);
+    resultsEl.addEventListener("click", function(e){
+      var item = e.target.closest(".food-search-item");
+      if (!item || item.classList.contains("off-item")) return;
+      pick(item.getAttribute("data-name"));
     });
     document.addEventListener("click", function(e){
       if (e.target !== input && !resultsEl.contains(e.target)) resultsEl.classList.remove("open");

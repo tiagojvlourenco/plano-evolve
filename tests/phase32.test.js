@@ -60,7 +60,7 @@ var check = require("./check")();
   check.check("5. O bloco .af-food já não filtra por foodOptionsForGroup()", afBlock.indexOf("foodOptionsForGroup(") === -1);
 
   var efIdx = appSource.indexOf('el.querySelectorAll(".ef-food")');
-  var efBlock = appSource.slice(efIdx, efIdx + 900);
+  var efBlock = appSource.slice(efIdx, efIdx + 1800);
   check.check("5. O bloco .ef-food usa allFoodNames() na pesquisa", efBlock.indexOf("foodSearchResultsHtml(allFoodNames()") >= 0);
   check.check("5. O bloco .ef-food já não filtra por foodOptionsForGroup()", efBlock.indexOf("foodOptionsForGroup(") === -1);
 })();
