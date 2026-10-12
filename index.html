@@ -353,6 +353,7 @@
     font-size:0.72rem; font-weight:600; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;
   }
   .pro-nav-item{min-height:44px;}
+  .pro-nav-item.has-pending::after{content:""; display:inline-block; width:8px; height:8px; margin-left:6px; border-radius:50%; background:var(--critical); vertical-align:middle;}
   .pro-nav-item.active{background:var(--accent); color:var(--accent-ink);}
   .pro-sidebar-divider{height:1px; background:var(--line); margin:10px 4px;}
   .pro-sidebar-student{display:flex; align-items:center; gap:8px; padding:4px 12px 8px; font-size:0.78rem; font-weight:600; color:var(--ink);}
@@ -397,6 +398,8 @@
 
   textarea.notes-area{width:100%; min-height:160px; border:1px solid var(--line-strong); border-radius:11px; padding:12px 14px; background:var(--bg); font-size:0.9rem; line-height:1.5; resize:vertical;}
 
+  /* iPhone com a barra de estado translúcida: o conteúdo que sobe com o scroll não pode ver-se por baixo da hora/bateria */
+  body::before{content:""; position:fixed; top:0; left:0; right:0; height:env(safe-area-inset-top, 0px); background:var(--bg); z-index:150; pointer-events:none;}
   .brand-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
   .evolve-mark{height:26px; width:auto; color:var(--ink); flex-shrink:0;}
   @media (max-width:520px){
@@ -2575,6 +2578,34 @@ function loadHelpRequests(studentId){
     });
 }
 
+// Pedidos de ajuda por tratar, de todos os alunos de uma vez (uma só consulta): alimenta o indicador na lista e no menu do aluno
+function loadPendingHelpCounts(){
+  if (!sbReady) return Promise.resolve({});
+  return sb.from("help_requests").select("student_id").eq("status", "pendente").then(function(res){
+    if (res.error){ console.error("help_requests: falhou a contagem de pendentes", res.error); return null; }
+    var map = {};
+    (res.data || []).forEach(function(r){ map[r.student_id] = (map[r.student_id] || 0) + 1; });
+    return map;
+  }, function(err){ console.error("help_requests: falhou a contagem de pendentes", err); return null; });
+}
+function pendingHelpFor(studentId){ return (state.pendingHelp && state.pendingHelp[studentId]) || 0; }
+function refreshPendingHelp(){
+  return loadPendingHelpCounts().then(function(map){
+    if (map && JSON.stringify(map) !== JSON.stringify(state.pendingHelp || {})){ state.pendingHelp = map; updatePendingBadges(); }
+  });
+}
+// atualiza os indicadores sem redesenhar o que o profissional está a escrever; a lista de alunos (sem campos) redesenha-se
+function updatePendingBadges(){
+  if (state.mode !== "pro") return;
+  if (state.proSelectedId){
+    var n = pendingHelpFor(state.proSelectedId);
+    proRoot.querySelectorAll("[data-sub=\"pedidos\"]").forEach(function(b){ b.textContent = "Pedidos" + (n ? " (" + n + ")" : ""); });
+    proRoot.querySelectorAll("[data-g=\"resumo\"]").forEach(function(b){ b.classList.toggle("has-pending", n > 0); });
+  } else if (state.proView !== "catalog" && proRoot.querySelector(".pro-stat-row")){
+    renderProDashboardMain();
+  }
+}
+
 function markHelpRequestHandled(requestId){
   return sb.from("help_requests").update({status:"tratado"}).eq("id", requestId);
 }
@@ -4737,8 +4768,16 @@ function foodOptionsForGroup(group){
 // foodOptionsForGroup() continuam por grupo — usados nas substituições e no
 // "ver mais alimentos", onde faz sentido manter as alternativas dentro do
 // mesmo grupo do alimento original.
+// Ordenar milhares de nomes com localeCompare a cada abertura de "Nutrição" (uma vez por refeição e por alimento) deixava o separador lento
+// no telemóvel: a lista fica em cache (refeita só quando o número de alimentos muda) e ordena com um Intl.Collator.
+var foodNamesCache = {count: -1, names: null};
+var FOOD_COLLATOR = (typeof Intl !== "undefined" && Intl.Collator) ? new Intl.Collator("pt") : null;
 function allFoodNames(){
-  return Object.keys(FOOD_DB).sort(function(a, b){ return a.localeCompare(b, "pt"); });
+  var names = Object.keys(FOOD_DB);
+  if (foodNamesCache.names && foodNamesCache.count === names.length) return foodNamesCache.names;
+  names.sort(FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); });
+  foodNamesCache = {count: names.length, names: names};
+  return names;
 }
 
 // Fase 16: pesquisa partilhada sobre uma lista de nomes de alimentos —
@@ -6084,7 +6123,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"leitura", proView:"dashboard", showDemoStudents:false, dashboardListMode:"active", planoSection:"alimentacao", ciOpen:false };
+var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"leitura", proView:"dashboard", showDemoStudents:false, dashboardListMode:"active", planoSection:"alimentacao", ciOpen:false, pendingHelp:{} };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -9153,11 +9192,7 @@ function renderProShell(){
       "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
   } else {
     // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
-    var curGroup = proNavGroupOf(state.proTab);
-    sidebar += PRO_NAV.map(function(g){
-      var on = g === curGroup;
-      return "<button type=\"button\" class=\"pro-nav-item" + (on ? " active" : "") + "\" data-t=\"" + (on ? state.proTab : g.tabs[0]) + "\">" + g.label + "</button>";
-    }).join("");
+    sidebar += proStudentNavHtml();
   }
   sidebar += "</div>";
 
@@ -9251,14 +9286,14 @@ function renderProDashboardMain(){
     });
     var rows = listStudents.map(function(st){
       var al = computeDashboardAlerts(st);
-      return {s: st, alerts: al, crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st)};
-    }).sort(function(a, b){ return (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
+      return {s: st, alerts: al, crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st), pending: pendingHelpFor(st.id)};
+    }).sort(function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
     var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
     html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
     html += "<div class=\"student-list\">";
     rows.forEach(function(r){
       var st = r.s;
-      var badges = (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
+      var badges = (r.pending ? "<span class=\"pill critical\">" + plural(r.pending, "pedido de ajuda", "pedidos de ajuda") + "</span>" : "") + (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
         (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "");
       html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
         "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
@@ -9303,6 +9338,7 @@ function renderProDashboardMain(){
     state.showDemoStudents = !state.showDemoStudents;
     renderProDashboardMain();
   });
+  refreshPendingHelp(); // pedidos por tratar: a lista volta a desenhar-se só se a contagem mudou
 }
 
 /* ---------- Convite / questionário inicial ---------- */
@@ -9558,6 +9594,14 @@ var PRO_NAV = [
   {id: "treino", label: "Treino", tabs: ["treino"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
 ];
+// as 4 áreas do aluno aberto (o ponto vermelho em "Resumo" avisa que há pedidos de ajuda por tratar)
+function proStudentNavHtml(){
+  var curGroup = proNavGroupOf(state.proTab);
+  return PRO_NAV.map(function(g){
+    var on = g === curGroup, pend = g.id === "resumo" && pendingHelpFor(state.proSelectedId) > 0;
+    return "<button type=\"button\" class=\"pro-nav-item" + (on ? " active" : "") + (pend ? " has-pending" : "") + "\" data-g=\"" + g.id + "\" data-t=\"" + (on ? state.proTab : g.tabs[0]) + "\">" + g.label + "</button>";
+  }).join("");
+}
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
 var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
@@ -9566,7 +9610,7 @@ function renderProDetailMain(s){
   var main = document.getElementById("proMain");
   var group = proNavGroupOf(state.proTab);
   var subtabs = group.tabs.length > 1 ? "<div class=\"pro-subtabs\">" + group.tabs.map(function(k){
-    return "<button type=\"button\" class=\"chip" + (k === state.proTab ? " on" : "") + "\" data-sub=\"" + k + "\" aria-pressed=\"" + (k === state.proTab) + "\">" + proTabLabel(k) + "</button>";
+    return "<button type=\"button\" class=\"chip" + (k === state.proTab ? " on" : "") + "\" data-sub=\"" + k + "\" aria-pressed=\"" + (k === state.proTab) + "\">" + proTabLabel(k) + (k === "pedidos" && pendingHelpFor(s.id) ? " (" + pendingHelpFor(s.id) + ")" : "") + "</button>";
   }).join("") + "</div>" : "";
   main.innerHTML = "<div class=\"detail-header\">" +
       "<button type=\"button\" class=\"btn pro-back\" id=\"proBack\" aria-label=\"Voltar à lista de alunos\">←</button>" +
@@ -9612,6 +9656,7 @@ function renderProTabContent(s){
     el.innerHTML = "<p class=\"muted-p\">A carregar pedidos...</p>";
     loadHelpRequests(s.id).then(function(reqs){
       if (state.proTab !== "pedidos") return; // o profissional já mudou de separador
+      if (!reqs.error){ state.pendingHelp[s.id] = reqs.filter(function(r){ return r.status !== "tratado"; }).length; if (!state.pendingHelp[s.id]) delete state.pendingHelp[s.id]; updatePendingBadges(); }
       el.innerHTML = tplProPedidos(s, reqs);
       if (reqs.error){
         var retry = document.getElementById("retryHelpRequests");
