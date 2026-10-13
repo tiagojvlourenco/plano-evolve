@@ -543,6 +543,8 @@
   .seg button{min-height:44px; border:none; border-radius:10px; background:transparent; color:var(--muted); font-size:0.82rem; font-weight:700; cursor:pointer; font-family:var(--sans);}
   .seg button.on{background:var(--accent); color:var(--accent-ink);}
   .seg button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  .compare-table th, .compare-table td{padding:6px 5px; font-size:0.74rem; white-space:nowrap;}
+  .compare-table td:first-child{white-space:normal; min-width:70px;}
   .shop-item{cursor:pointer; align-items:center; gap:10px;}
   .shop-item input[type=checkbox]{width:22px; height:22px; vertical-align:middle; margin-right:6px; accent-color:var(--accent);}
   .shop-item.done .fname{text-decoration:line-through; opacity:0.55;}
@@ -5786,7 +5788,7 @@ function normalizeCheckins(arr){
   return arr.filter(function(c){ return c && typeof c === "object" && isIsoDate(c.date); }).map(function(c){
     var out = {date: c.date, weight: finiteNum(c.weight) || 0, hunger: finiteNum(c.hunger) || 0, energy: finiteNum(c.energy) || 0,
       adherence: finiteNum(c.adherence) || 0, workouts: finiteNum(c.workouts) || 0, mealsOff: finiteNum(c.mealsOff) || 0, notes: shortStr(c.notes, 2000)};
-    ["sleepHours", "stress", "recovery"].forEach(function(k){ var v = finiteNum(c[k]); if (v != null) out[k] = v; });
+    ["sleepHours", "stress", "recovery", "sleepQuality", "digestion"].forEach(function(k){ var v = finiteNum(c[k]); if (v != null) out[k] = v; });
     return out;
   });
 }
@@ -7379,6 +7381,8 @@ function tplCheckin(s){
     rangeField("ciEnergy","Energia (1-10)",7) +
     rangeField("ciAdherence","Adesão ao plano (1-10)",8) +
     "<div class=\"checkin-field\"><label for=\"ciSleep\">Sono: horas por noite (média da semana)</label><input type=\"number\" step=\"0.5\" min=\"0\" max=\"14\" id=\"ciSleep\" value=\"7\"></div>" +
+    rangeField("ciSleepQ","Qualidade do sono (1 = péssima, 10 = ótima)",7) +
+    rangeField("ciDigestion","Digestão / conforto intestinal (1 = muito mau, 10 = ótimo)",7) +
     rangeField("ciStress","Stress (1-10)",4) +
     rangeField("ciRecovery","Recuperação / dores musculares (1 = muito cansado, 10 = ótima)",7) +
     "<div class=\"checkin-field\"><label for=\"ciWorkouts\">Treinos realizados</label><input type=\"number\" min=\"0\" id=\"ciWorkouts\" value=\"" + sessions7 + "\"></div>" +
@@ -8022,11 +8026,176 @@ function wireWorkoutLogger(s, el, rerender){
   });
 }
 
+/* ---------- Templates de plano (nutrição e treino) ----------
+   O profissional guarda a estrutura de um plano e aplica-a a outro aluno (substituindo ou acrescentando); depois edita à vontade.
+   Com Supabase vai para a tabela plan_templates (só profissionais); em modo local fica neste browser. */
+var TPL_LOCAL_KEY = "evolve_plan_templates_v1";
+function tplLocalRead(){
+  try { var v = JSON.parse(localStorage.getItem(TPL_LOCAL_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function tplLocalWrite(list){ try { localStorage.setItem(TPL_LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }
+function planTemplatesList(kind){
+  if (!sbReady) return Promise.resolve({data: tplLocalRead().filter(function(t){ return t.kind === kind; })});
+  return sb.from("plan_templates").select("id,kind,name,data,created_at").eq("kind", kind).order("created_at", {ascending: false}).then(function(res){
+    return res.error ? {error: true} : {data: res.data || []};
+  }).catch(function(){ return {error: true}; });
+}
+function planTemplateSave(kind, name, data){
+  name = String(name || "").trim().slice(0, 80);
+  if (!name) return Promise.resolve({error: "Dá um nome ao template."});
+  if (!sbReady){
+    var list = tplLocalRead();
+    list.unshift({id: uidShort("t"), kind: kind, name: name, data: data, created_at: new Date().toISOString()});
+    return Promise.resolve(tplLocalWrite(list) ? {} : {error: "Não foi possível guardar o template neste browser."});
+  }
+  return sb.from("plan_templates").insert({kind: kind, name: name, data: data}).select().then(function(res){
+    return res.error || !res.data || !res.data[0] ? {error: "Não foi possível guardar o template (a migração 0020 já foi corrida no Supabase?)."} : {data: res.data[0]};
+  }).catch(function(){ return {error: "Não foi possível guardar o template — tenta novamente."}; });
+}
+function planTemplateDelete(id){
+  if (!sbReady){ tplLocalWrite(tplLocalRead().filter(function(t){ return t.id !== id; })); return Promise.resolve({}); }
+  return sb.from("plan_templates").delete().eq("id", id).then(function(res){ return res.error ? {error: true} : {}; }).catch(function(){ return {error: true}; });
+}
+// o plano base, nunca a troca do dia (f.original)
+function nutritionTemplateFrom(s){
+  return {meals: (s.meals || []).map(function(m){
+    return {name: m.name, time: m.time, foods: (m.foods || []).map(function(f0){ var f = f0.original || f0; return {name: f.name, qty: f.qty, group: f.group, required: f.required !== false}; })};
+  })};
+}
+function trainingTemplateFrom(s){
+  var p = trainingProgramOf(s);
+  return {name: p.name || "", days: p.days.map(function(d){
+    return {name: d.name, exercises: d.exercises.map(function(e){ return {name: e.name, sets: e.sets, reps: e.reps, rpe: e.rpe, rest: e.rest, notes: e.notes}; })};
+  })};
+}
+function templateCounts(kind, data){
+  if (kind === "treino"){
+    var days = (data && data.days) || [];
+    return days.length + (days.length === 1 ? " dia" : " dias") + " · " + days.reduce(function(a, d){ return a + ((d.exercises || []).length); }, 0) + " exercícios";
+  }
+  var meals = (data && data.meals) || [];
+  return meals.length + (meals.length === 1 ? " refeição" : " refeições") + " · " + meals.reduce(function(a, m){ return a + ((m.foods || []).length); }, 0) + " alimentos";
+}
+// Aplica um template de nutrição ao aluno. mode "append" junta às refeições atuais; senão substitui. Alimentos que a app já não conhece
+// ou que estão bloqueados para este aluno ficam de fora (e são devolvidos em "skipped").
+function applyNutritionTemplate(s, data, mode){
+  var blocked = (s.blockedFoods || []).map(function(n){ return String(n).toLowerCase(); }), skipped = [];
+  var meals = ((data && data.meals) || []).filter(function(m){ return m && m.name; }).map(function(m){
+    var foods = (m.foods || []).filter(function(f){
+      if (!f || !f.name) return false;
+      if (!FOOD_DB[f.name]){ skipped.push(f.name + " (já não existe)"); return false; }
+      if (blocked.indexOf(String(f.name).toLowerCase()) >= 0){ skipped.push(f.name + " (bloqueado para este aluno)"); return false; }
+      return true;
+    }).map(function(f){ return food(f.name, String(f.qty), f.group, f.required !== false); });
+    return meal(String(m.name).slice(0, 80), /^\d{2}:\d{2}$/.test(String(m.time)) ? m.time : "12:00", foods);
+  });
+  s.meals = mode === "append" ? (s.meals || []).concat(meals) : meals;
+  sortMealsByTime(s);
+  return {meals: meals.length, skipped: skipped};
+}
+function applyTrainingTemplate(s, data, mode){
+  var days = ((data && data.days) || []).filter(function(d){ return d && String(d.name || "").trim(); }).map(function(d){
+    return {id: uidShort("d"), name: String(d.name).trim().slice(0, 80), exercises: (d.exercises || []).filter(function(e){ return e && String(e.name || "").trim(); }).map(function(e){
+      var rpe = parseFloat(e.rpe), rest = parseInt(e.rest, 10);
+      return {id: uidShort("e"), name: String(e.name).trim().slice(0, 120), sets: Math.min(20, Math.max(1, parseInt(e.sets, 10) || 3)), reps: String(e.reps || "8-12").slice(0, 20),
+        rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(e.notes || "").slice(0, 200)};
+    })};
+  });
+  var prog = ensureTrainingProgram(s);
+  prog.days = mode === "append" ? prog.days.concat(days) : days;
+  if (mode !== "append" && data && data.name) prog.name = String(data.name).slice(0, 80);
+  return {days: days.length};
+}
+function tplTemplatesBar(kind){
+  return "<div class=\"card\" style=\"margin:14px 0;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Templates de " + (kind === "treino" ? "treino" : "alimentação") + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Guarda a estrutura deste plano para reutilizares com outros alunos, ou aplica um template guardado — depois editas tudo normalmente.</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" data-tpl-save=\"" + kind + "\">💾 Guardar como template</button>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" data-tpl-apply=\"" + kind + "\">📋 Aplicar template</button></div></div>";
+}
+function wireTemplates(s, el){
+  function after(msg){ closeModal(); persistStudent(s); renderProTabContent(s); showToast(msg); }
+  el.querySelectorAll("[data-tpl-save]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var kind = btn.getAttribute("data-tpl-save");
+      var data = kind === "treino" ? trainingTemplateFrom(s) : nutritionTemplateFrom(s);
+      if (!(kind === "treino" ? data.days.length : data.meals.length)){ showToast("Ainda não há nada neste plano para guardar"); return; }
+      var sheet = openModal("<div class=\"mtitle\">Guardar como template</div>" +
+        "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(templateCounts(kind, data)) + "</p>" +
+        "<div class=\"checkin-field\"><label for=\"tplName\">Nome do template</label><input type=\"text\" id=\"tplName\" maxlength=\"80\" placeholder=\"" + (kind === "treino" ? "Ex.: Hipertrofia 4 dias" : "Ex.: Défice 1800 kcal, 4 refeições") + "\"></div>" +
+        "<p class=\"muted-p\" id=\"tplErr\" style=\"color:var(--critical); display:none;\"></p>" +
+        "<button type=\"button\" class=\"btn primary\" id=\"tplSaveGo\" style=\"width:100%;\">Guardar template</button>");
+      sheet.querySelector("#tplSaveGo").addEventListener("click", function(){
+        var go = sheet.querySelector("#tplSaveGo"); go.disabled = true;
+        planTemplateSave(kind, sheet.querySelector("#tplName").value, data).then(function(r){
+          if (r.error){ var e = sheet.querySelector("#tplErr"); e.textContent = r.error; e.style.display = "block"; go.disabled = false; return; }
+          closeModal(); showToast("✓ Template guardado");
+        });
+      });
+    });
+  });
+  el.querySelectorAll("[data-tpl-apply]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var kind = btn.getAttribute("data-tpl-apply");
+      var sheet = openModal("<div class=\"mtitle\">Aplicar template</div><div id=\"tplBody\"><p class=\"muted-p\">A carregar…</p></div>");
+      var body = sheet.querySelector("#tplBody");
+      function currentCount(){ return kind === "treino" ? trainingProgramOf(s).days.length : (s.meals || []).length; }
+      function renderConfirm(t){
+        var has = currentCount() > 0;
+        body.innerHTML = "<p style=\"margin-bottom:6px;\"><strong>" + escapeHtml(t.name) + "</strong></p><p class=\"muted-p\" style=\"margin-bottom:12px;\">" + escapeHtml(templateCounts(kind, t.data)) + "</p>" +
+          (has ? "<div class=\"seg\" style=\"margin-bottom:10px;\"><button type=\"button\" data-tpl-mode=\"replace\" class=\"on\">Substituir o atual</button><button type=\"button\" data-tpl-mode=\"append\">Acrescentar</button></div>" +
+            "<p class=\"muted-p\" id=\"tplModeHint\" style=\"margin-bottom:12px;\">Substitui " + currentCount() + (kind === "treino" ? " dia(s) de treino" : " refeição(ões)") + " deste aluno." + (kind === "treino" ? " As sessões já registadas ficam guardadas." : "") + "</p>" : "") +
+          "<button type=\"button\" class=\"btn primary\" id=\"tplApplyGo\" style=\"width:100%; margin-bottom:8px;\">Aplicar ao aluno</button><button type=\"button\" class=\"btn\" id=\"tplBack\" style=\"width:100%;\">Voltar</button>";
+        var mode = "replace";
+        body.querySelectorAll("[data-tpl-mode]").forEach(function(b){
+          b.addEventListener("click", function(){
+            mode = b.getAttribute("data-tpl-mode");
+            body.querySelectorAll("[data-tpl-mode]").forEach(function(x){ x.classList.toggle("on", x === b); });
+            var hint = body.querySelector("#tplModeHint"); if (hint) hint.style.display = mode === "replace" ? "block" : "none";
+          });
+        });
+        body.querySelector("#tplBack").addEventListener("click", renderList);
+        body.querySelector("#tplApplyGo").addEventListener("click", function(){
+          if (kind === "treino"){
+            var r = applyTrainingTemplate(s, t.data, mode);
+            logPlanEvent(s, "template", "Template de treino aplicado: " + t.name, null, null);
+            after("✓ Template aplicado (" + r.days + (r.days === 1 ? " dia" : " dias") + ")");
+          } else {
+            var before = (s.meals || []).length;
+            var rn = applyNutritionTemplate(s, t.data, mode);
+            logPlanEvent(s, "template", "Template de alimentação aplicado: " + t.name, before, rn.meals);
+            after("✓ Template aplicado (" + rn.meals + (rn.meals === 1 ? " refeição" : " refeições") + ")" + (rn.skipped.length ? " · de fora: " + rn.skipped.slice(0, 2).join(", ") + (rn.skipped.length > 2 ? " (+" + (rn.skipped.length - 2) + ")" : "") : ""));
+          }
+        });
+      }
+      function renderList(){
+        planTemplatesList(kind).then(function(r){
+          if (r.error){ body.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível carregar os templates (a migração 0020 já foi corrida no Supabase?).</p>"; return; }
+          if (!r.data.length){ body.innerHTML = "<p class=\"muted-p\">Ainda não guardaste nenhum template. Monta um plano e usa \"Guardar como template\".</p>"; return; }
+          body.innerHTML = r.data.map(function(t, i){
+            return "<div class=\"food-item\" style=\"cursor:default;\"><span class=\"fname\">" + escapeHtml(t.name) + "<span class=\"muted-p\" style=\"display:block; font-size:0.74rem;\">" + escapeHtml(templateCounts(kind, t.data)) + "</span></span>" +
+              "<span><button type=\"button\" class=\"btn btn-sm primary\" data-tpl-pick=\"" + i + "\">Escolher</button> <button type=\"button\" class=\"btn btn-sm\" data-tpl-del=\"" + i + "\" aria-label=\"Apagar template\">🗑</button></span></div>";
+          }).join("");
+          body.querySelectorAll("[data-tpl-pick]").forEach(function(b){ b.addEventListener("click", function(){ renderConfirm(r.data[parseInt(b.getAttribute("data-tpl-pick"), 10)]); }); });
+          body.querySelectorAll("[data-tpl-del]").forEach(function(b){
+            b.addEventListener("click", function(){
+              var t = r.data[parseInt(b.getAttribute("data-tpl-del"), 10)];
+              if (!window.confirm("Apagar o template \"" + t.name + "\"? Os planos dos alunos que já o usaram não mudam.")) return;
+              planTemplateDelete(t.id).then(function(x){ if (x.error) showToast("⚠ Não foi possível apagar"); renderList(); });
+            });
+          });
+        });
+      }
+      renderList();
+    });
+  });
+}
+
 // ---------- Profissional: programa, progressão e sessões ----------
 function tplProTreino(s){
   var prog = trainingProgramOf(s);
   var html = `<div class="eyebrow" style="margin-bottom:4px;">Programa de treino</div>` +
     `<p class="muted-p" style="margin-bottom:12px;">Define os dias e os exercícios (séries, repetições, RPE alvo e descanso). O aluno regista cada sessão e tu vês a progressão de carga.</p>`;
+  html += tplTemplatesBar("treino");
   if (!prog.days.length) html += `<p class="muted-p" style="margin-bottom:12px;">Ainda sem dias de treino. Acrescenta o primeiro (ex.: "Treino A — Superior").</p>`;
   prog.days.forEach(function(d){
     html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
@@ -8848,20 +9017,65 @@ function findPhotoByDateAndPosition(s, date, position){
   return (s.photos||[]).filter(function(p){ return p.date===date && p.position===position; })[0] || null;
 }
 
+// datas com fotos ou com avaliações: qualquer par serve de "antes" e "depois"
+function compareDates(s){
+  var seen = {};
+  (s.photos || []).forEach(function(p){ if (p.date) seen[p.date] = true; });
+  (s.assessments || []).forEach(function(a){ if (a && a.date) seen[a.date] = true; });
+  return Object.keys(seen).sort();
+}
+// a avaliação dessa data, ou a mais recente antes dela (se não houver, a primeira depois)
+function assessmentForDate(s, date){
+  var list = (s.assessments || []).filter(function(a){ return a && a.date; }).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  return list.filter(function(a){ return a.date <= date; }).pop() || list[0] || null;
+}
+function weightForDate(s, date, a){
+  var logged = (s.weights || []).filter(function(w){ return w.date <= date && w.w > 0; }).sort(function(x, y){ return x.date < y.date ? -1 : x.date > y.date ? 1 : 0; }).pop();
+  if (logged && (!a || a.date !== date || !(a.weight > 0))) return logged.w;
+  return a && a.weight > 0 ? a.weight : (logged ? logged.w : null);
+}
+var COMPARE_MAIN_PERIMETERS = ["waist", "hip", "chest", "arm", "thigh"];
+function compareMetricRows(s, dateA, dateB){
+  var aA = assessmentForDate(s, dateA), aB = assessmentForDate(s, dateB), rows = [];
+  function add(label, unit, va, vb){ var x = va > 0 ? va : null, y = vb > 0 ? vb : null; if (x == null && y == null) return; rows.push({label: label, unit: unit, a: x, b: y}); }
+  add("Peso", "kg", weightForDate(s, dateA, aA), weightForDate(s, dateB, aB));
+  add("Massa gorda", "%", aA && aA.bodyFat, aB && aB.bodyFat);
+  add("Massa muscular", "kg", aA && aA.muscle, aB && aB.muscle);
+  COMPARE_MAIN_PERIMETERS.concat(PERIMETER_FIELDS.map(function(f){ return f[0]; }).filter(function(k){ return COMPARE_MAIN_PERIMETERS.indexOf(k) < 0; })).forEach(function(k){
+    var f = PERIMETER_FIELDS.filter(function(x){ return x[0] === k; })[0];
+    if (f) add(f[1].replace(" (D)", ""), "cm", aA && aA[k], aB && aB[k]);
+  });
+  return rows;
+}
+function compareMetricsHtml(s, dateA, dateB){
+  var rows = compareMetricRows(s, dateA, dateB);
+  if (!rows.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Sem medições registadas nestas datas.</p>";
+  function fmt(n){ return String(Math.round(n * 10) / 10).replace(".", ","); }
+  var aA = assessmentForDate(s, dateA), aB = assessmentForDate(s, dateB);
+  function src(a, d){ return a && a.date !== d ? "<div class=\"muted-p\" style=\"font-size:0.68rem;\">avaliação de " + escapeHtml(fmtDatePt(a.date)) + "</div>" : ""; }
+  return "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">Evolução das medições</div><div class=\"assess-table-scroll\"><table class=\"assess-table compare-table\"><thead><tr><th>Medida</th><th>" + escapeHtml(fmtDatePt(dateA)) + src(aA, dateA) + "</th><th>" + escapeHtml(fmtDatePt(dateB)) + src(aB, dateB) + "</th><th>Δ</th></tr></thead><tbody>" +
+    rows.map(function(r){
+      var d = r.a != null && r.b != null ? r.b - r.a : null;
+      var dTxt = d == null ? "—" : Math.abs(d) < 0.05 ? "sem alteração" : (d < 0 ? "▼ " : "▲ ") + fmt(Math.abs(d)) + " " + r.unit;
+      return "<tr><td class=\"date-cell\" style=\"white-space:normal;\">" + escapeHtml(r.label) + "</td><td>" + (r.a != null ? fmt(r.a) + " " + r.unit : "—") + "</td><td>" + (r.b != null ? fmt(r.b) + " " + r.unit : "—") + "</td><td>" + dTxt + "</td></tr>";
+    }).join("") + "</tbody></table></div>";
+}
+
 function tplPhotoCompare(s){
-  var dates = distinctPhotoDates(s);
+  var dates = compareDates(s);
   if (dates.length < 1) return "";
   var lastIdx = dates.length-1;
   var optsA = dates.map(function(d){ return "<option value=\"" + d + "\">" + fmtDatePt(d) + "</option>"; }).join("");
   var optsB = dates.map(function(d,i){ return "<option value=\"" + d + "\"" + (i===lastIdx?" selected":"") + ">" + fmtDatePt(d) + "</option>"; }).join("");
   return "<div class=\"photo-compare\" style=\"margin-top:14px; padding-top:14px; border-top:1px solid var(--line);\">" +
-    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Comparar evolução</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe dois momentos — mostra frente, lado e costas lado a lado, mesmo que faltem fotos nalguma posição.</p>" +
+    "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Antes vs Depois</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe duas datas — mostra frente, lado e costas lado a lado (mesmo que falte alguma foto) e a evolução do peso e das medições.</p>" +
     "<div style=\"display:flex; gap:10px; margin-bottom:12px;\">" +
       "<select class=\"mini-select\" id=\"compareA\" style=\"flex:1;\">" + optsA + "</select>" +
       "<select class=\"mini-select\" id=\"compareB\" style=\"flex:1;\">" + optsB + "</select>" +
     "</div>" +
     "<div class=\"compare-grid\" id=\"compareGrid\"></div>" +
+    "<div id=\"compareMetrics\"></div>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar comparação</button>" +
     "<p class=\"muted-p\" id=\"compareDownloadError\" style=\"color:var(--critical); display:none; margin-top:8px;\"></p>" +
   "</div>";
@@ -8886,7 +9100,11 @@ function wirePhotoCompare(s, el){
   var selB = el.querySelector("#compareB");
   var grid = el.querySelector("#compareGrid");
   if (!selA || !selB || !grid) return;
-  function update(){ grid.innerHTML = compareGridHtml(s, selA.value, selB.value); }
+  var metrics = el.querySelector("#compareMetrics");
+  function update(){
+    grid.innerHTML = compareGridHtml(s, selA.value, selB.value);
+    if (metrics) metrics.innerHTML = compareMetricsHtml(s, selA.value, selB.value);
+  }
   selA.addEventListener("change", update);
   selB.addEventListener("change", update);
   update();
@@ -9285,6 +9503,8 @@ function wireAlunoTab(s){
       sleepHours: Math.min(14, Math.max(0, parseFloat(el.querySelector("#ciSleep").value) || 0)),
       stress: parseInt(el.querySelector("#ciStress").value,10),
       recovery: parseInt(el.querySelector("#ciRecovery").value,10),
+      sleepQuality: parseInt(el.querySelector("#ciSleepQ").value,10),
+      digestion: parseInt(el.querySelector("#ciDigestion").value,10),
       notes: el.querySelector("#ciNotes").value
     });
     s.weights.push({date: today, w: w});
@@ -9996,6 +10216,7 @@ function tplProPlano(s){
     "<div id=\"pastedPlanResult\"></div>" +
   "</details>";
 
+  html += tplTemplatesBar("nutricao");
   sortMealsByTime(s);
   html += "<div class=\"section-gap eyebrow\" style=\"margin-bottom:4px;\">Refeições do plano</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Nível " + TIER_LABEL[flexTier(s.flexibility)] + " — o aluno vê: " + TIER_HINT[flexTier(s.flexibility)].toLowerCase() + ". As refeições ordenam-se sempre pelo horário.</p>";
@@ -10922,7 +11143,7 @@ function tplProCheckins(s){
   s.checkins.slice().reverse().forEach(function(c){
     html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + fmtDatePt(c.date) + "</div>" +
       (c.notes ? "<div class=\"muted-p\">" + escapeHtml(c.notes) + "</div>" : "") + "</div>" +
-      "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + (c.sleepHours > 0 ? " · sono " + String(c.sleepHours).replace(".", ",") + "h" : "") + (c.stress > 0 ? " · stress " + c.stress : "") + (c.recovery > 0 ? " · recuperação " + c.recovery : "") + "</span></div></div>";
+      "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + (c.sleepHours > 0 ? " · sono " + String(c.sleepHours).replace(".", ",") + "h" : "") + (c.stress > 0 ? " · stress " + c.stress : "") + (c.recovery > 0 ? " · recuperação " + c.recovery : "") + (c.sleepQuality > 0 ? " · qualidade do sono " + c.sleepQuality : "") + (c.digestion > 0 ? " · digestão " + c.digestion : "") + "</span></div></div>";
   });
   if (!s.checkins.length) html += "<p class=\"muted-p\">Sem check-ins registados.</p>";
   return html;
@@ -11155,16 +11376,19 @@ function signalWeight(s){
 var SIGNAL_LOW_SLEEP_HOURS = 6.5;
 var SIGNAL_HIGH_STRESS = 7;
 var SIGNAL_LOW_RECOVERY = 4;
+var SIGNAL_LOW_FEELING = 5; // qualidade do sono ou digestão
 function signalRecuperacao(s){
-  var recent = recentCheckins(s).filter(function(c){ return c.sleepHours > 0 || c.stress > 0 || c.recovery > 0; });
+  var recent = recentCheckins(s).filter(function(c){ return c.sleepHours > 0 || c.stress > 0 || c.recovery > 0 || c.sleepQuality > 0 || c.digestion > 0; });
   if (!recent.length) return signal("recuperacao", "Sono e recuperação", "insuficiente", "Sem registos de sono, stress ou recuperação nos check-ins.", "Últimos " + SIGNAL_RECENT_CHECKINS + " check-ins", "checkins");
   function avg(key){ var v = recent.filter(function(c){ return c[key] > 0; }); return v.length ? v.reduce(function(a, c){ return a + c[key]; }, 0) / v.length : null; }
-  var sleep = avg("sleepHours"), stress = avg("stress"), rec = avg("recovery");
+  var sleep = avg("sleepHours"), stress = avg("stress"), rec = avg("recovery"), sleepQ = avg("sleepQuality"), dig = avg("digestion");
   var parts = [];
   if (sleep != null) parts.push("sono " + sleep.toFixed(1).replace(".", ",") + " h");
+  if (sleepQ != null) parts.push("qualidade do sono " + sleepQ.toFixed(1).replace(".", ",") + "/10");
+  if (dig != null) parts.push("digestão " + dig.toFixed(1).replace(".", ",") + "/10");
   if (stress != null) parts.push("stress " + stress.toFixed(1).replace(".", ",") + "/10");
   if (rec != null) parts.push("recuperação " + rec.toFixed(1).replace(".", ",") + "/10");
-  var attention = (sleep != null && sleep < SIGNAL_LOW_SLEEP_HOURS) || (stress != null && stress > SIGNAL_HIGH_STRESS) || (rec != null && rec < SIGNAL_LOW_RECOVERY);
+  var attention = (sleep != null && sleep < SIGNAL_LOW_SLEEP_HOURS) || (stress != null && stress > SIGNAL_HIGH_STRESS) || (rec != null && rec < SIGNAL_LOW_RECOVERY) || (sleepQ != null && sleepQ < SIGNAL_LOW_FEELING) || (dig != null && dig < SIGNAL_LOW_FEELING);
   return signal("recuperacao", "Sono e recuperação", attention ? "atencao" : "positivo",
     "Média: " + parts.join(" · ") + (attention ? " — sono curto, stress alto ou má recuperação explicam fome, estagnação e quebras de treino." : "."),
     "Últimos " + recent.length + " check-ins", "checkins");
@@ -11791,6 +12015,8 @@ function wireProTab(s){
       if (e.target !== input && !resultsEl.contains(e.target)) resultsEl.classList.remove("open");
     });
   });
+
+  wireTemplates(s, el);
 
   // Sugerir alternativas (profissional): mesmas alternativas do aluno, mais parecidas primeiro e com a porção recalculada; ao escolher troca o alimento no plano
   el.querySelectorAll("[data-suggest-food]").forEach(function(btn){
