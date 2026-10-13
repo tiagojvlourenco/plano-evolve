@@ -91,6 +91,13 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - [ ] Correr `supabase/migrations/0022_contact_and_onboarding.sql` no SQL Editor (é repetível). Sem ela a app funciona, mas o telefone e o registo de contactos não ficam guardados (a app avisa uma vez) e o painel de retenção esquece os contactos ao recarregar.
 - Depois de correr: as fichas que já existem ficam sem data de criação e **não** contam como "alunos novos"; as novas (e só elas) entram no cartão de onboarding durante 30 dias.
 
+## 8c. Migração 0023 (pacotes, presenças e cobranças)
+
+- [ ] Correr `supabase/migrations/0023_studio_packs.sql` no SQL Editor (é repetível). Sem ela, o menu **Estúdio** e o separador **Pacotes** avisam que falta a migração; o resto da app não é afetado.
+- **Regras por omissão** (escolhidas ao criar cada pacote): faltar sem aviso **gasta** uma sessão; cancelar tarde **gasta**; cancelar a tempo **nunca** gasta. Validade por omissão: 3 meses (0 = sem validade). A sessão é descontada ao pacote que caduca primeiro.
+- A app **não cobra** nem emite faturas: regista cobranças e exporta CSV (cobranças e sessões do mês) para a contabilidade. A fatura certificada continua a ser emitida no programa de faturação.
+- Os dados de pacotes e cobranças só são legíveis por profissionais (RLS); os alunos nunca os veem.
+
 **Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
 
 ## 9. Riscos e limitações que ficam por resolver nesta fase

@@ -49,6 +49,7 @@ Barra lateral:
 - **Alunos** (`proView = "dashboard"`) → `renderProDashboardMain()`: lista ordenada por atenção (pedidos pendentes → críticos → alertas → dias sem registo), com indicador de pedidos de ajuda pendentes (`state.pendingHelp`).
   Por cima da lista: **"Hoje: quem contactar"** (`computeContactQueue`: motivos ponderados, exclui inativos, contactados há <3 dias e adiados; botão Contactar → `openContactModal` com mensagem editável e link `wa.me`), **alunos novos** (`onboardingOf`, 30 dias) e **pulso do estúdio** (`studioPulse`).
   Cada aluno mostra também badges de ação (`computeCoachBadges`): sem registos, peso estagnado (com ou sem treino a evoluir), adesão a cair e alta adesão.
+- **Estúdio** (`proView = "studio"`) → `renderProStudioMain()`: a cobrar/em atraso/pacotes a acabar/presença do mês, registo rápido de sessões (feita, faltou, cancelou, cancelou tarde), cobranças por receber (com "Pago" e lembrete por WhatsApp), pacotes a acabar e exportação CSV (cobranças e sessões do mês). Os dados lêem-se de novo de cada vez que o ecrã abre. Na ficha do aluno, o separador **Pacotes** (`tplProSessoes`). Pagamentos em atraso, pacotes a acabar/terminados e faltas entram como motivos em "Hoje: quem contactar".
 - **Catálogo** (`proView = "catalog"`) → `renderProCatalogMain()` / `renderCatalogList()`.
 - **Aluno aberto** (`state.proSelectedId`) → `renderProDetailMain()` com 4 áreas (`PRO_NAV`):
 
@@ -63,7 +64,7 @@ Há ainda: convite de aluno (questionário), importação de pesagens (`tplImpor
 
 ---
 
-## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0022`)
+## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0023`)
 
 Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
@@ -75,6 +76,9 @@ Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 - Históricos (`substitution_history`, `adaptation_history`, `workout_logs`) são **append-only** por trigger (0006, 0019).
 
 - Retenção (0022): `phone`, `contact_log` (`[{date, kind:'contacto'|'adiado', channel?, reason?, until?}]`, últimos 50) e `created_at` (fichas antigas ficam vazias). Só o profissional os altera (fora da lista do trigger de permissões do aluno).
+
+### `session_packs`, `sessions`, `payments` (0023)
+Pacotes de sessões (`total`, `price`, `starts_on`/`expires_on`, regras `missed_consumes` e `late_cancel_consumes`), sessões (`feita` | `faltou` | `cancelada` | `cancelada_tarde`, ligadas a um pacote) e cobranças (`amount`, `due_on`, `paid_on`, `method`). Só profissionais leem e escrevem (uma política `for all` por tabela); apagar o aluno apaga o histórico, apagar um pacote deixa sessões e cobranças sem pacote. Em modo local ficam em `localStorage` (`evolve_studio_v1`, com dados de demonstração). Regras em `sessionConsumes`/`packUsage`/`pickPackForSession` (a sessão desconta ao pacote que caduca primeiro); a app regista e avisa, não cobra nem emite faturas.
 
 ### `professionals`
 `user_id` (PK → `auth.users`), `email`, `created_at`. Só se lê a própria linha; só se gere pelo SQL Editor (`supabase/manage_professionals.sql`).
@@ -145,11 +149,11 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
 | `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
-| `supabase/migrations/0001…0022_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `supabase/migrations/0001…0023_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |
-| `tests/run-all.js`, `tests/extract-app.js`, `tests/*.test.js`, `tests/helpers/` | Suite (≈ 70 ficheiros, ≈ 2300 verificações; inclui testes em Chromium com um Supabase simulado e sem rede) |
+| `tests/run-all.js`, `tests/extract-app.js`, `tests/*.test.js`, `tests/helpers/` | Suite (≈ 75 ficheiros, ≈ 2400 verificações; inclui testes em Chromium com um Supabase simulado e sem rede) |
 | `docs/OPERACOES.md` | Operação: contas, demo, fotos, backups |
 | `docs/ARQUITETURA.md` | Este documento |
 

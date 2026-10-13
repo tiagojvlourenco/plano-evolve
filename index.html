@@ -2621,7 +2621,7 @@ function updatePendingBadges(){
     var n = pendingHelpFor(state.proSelectedId);
     proRoot.querySelectorAll("[data-sub=\"pedidos\"]").forEach(function(b){ b.textContent = "Pedidos" + (n ? " (" + n + ")" : ""); });
     proRoot.querySelectorAll("[data-g=\"resumo\"]").forEach(function(b){ b.classList.toggle("has-pending", n > 0); });
-  } else if (state.proView !== "catalog" && proRoot.querySelector(".pro-stat-row")){
+  } else if (state.proView === "dashboard" && proRoot.querySelector(".pro-stat-row")){
     renderProDashboardMain();
   }
 }
@@ -10722,7 +10722,8 @@ function renderProShell(){
   // qualquer aluno selecionado tem sempre prioridade sobre os dois.
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
-    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">Estúdio</button>" +
       "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
   } else {
     // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
@@ -10735,6 +10736,8 @@ function renderProShell(){
   var navDash = document.getElementById("navDashboard"), navCat = document.getElementById("navCatalog");
   if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
   if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
+  var navStudio = document.getElementById("navStudio");
+  if (navStudio) navStudio.addEventListener("click", function(){ state.proSelectedId=null; state.proView="studio"; studio.loaded = false; renderProShell(); }); // lê os dados de novo de cada vez que se abre
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
@@ -10769,6 +10772,7 @@ function renderProShell(){
 
   if (selected) renderProDetailMain(selected);
   else if (state.proView === "catalog") renderProCatalogMain();
+  else if (state.proView === "studio") renderProStudioMain();
   else renderProDashboardMain();
 }
 
@@ -11143,7 +11147,7 @@ function proStat(v, l, key){
 // dela) — só o rótulo visível muda, pedido explícito.
 // Navegação do profissional por aluno: quatro entradas (cada separador continua a ter a sua key; os de uma mesma entrada ficam juntos em atalhos)
 var PRO_NAV = [
-  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"]},
+  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "sessoes", "perfil", "notas", "historico"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
@@ -11158,7 +11162,7 @@ function proStudentNavHtml(){
 }
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   ensureSyncBaseline(s);
@@ -11231,6 +11235,7 @@ function renderProTabContent(s){
     lazyPhotos(s, function(){ if (state.proSelectedId === s.id && state.proTab === "evolucao" && !modalRoot.firstChild) renderProTabContent(s); });
   }
   else if (state.proTab==="checkins") el.innerHTML = tplProCheckins(s);
+  else if (state.proTab==="sessoes"){ el.innerHTML = tplProSessoes(s); if (studio.available) wireProSessoes(s, el); }
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
   else el.innerHTML = tplProHistorico(s);
   wireProTab(s);
@@ -12764,6 +12769,416 @@ function coachBadgesHtml(badges){
   return (badges || []).map(function(b){ return "<span class=\"pill " + b.tone + "\" title=\"" + escapeHtml(b.hint) + "\">" + escapeHtml(b.label) + "</span>"; }).join("");
 }
 
+/* ---------- Estúdio: pacotes de sessões, presenças/faltas e cobranças (migração 0023, só o profissional) ----------
+   Regras (por pacote, editáveis ao criá-lo): sessão "feita" gasta uma sessão; "faltou" (sem aviso) e "cancelou tarde" gastam também por omissão;
+   "cancelou" a tempo nunca gasta. A app regista e avisa; não cobra nem emite faturas (a fatura certificada continua no programa de faturação). */
+var STUDIO_LOCAL_KEY = "evolve_studio_v1";
+var STUDIO_HISTORY_DAYS = 400;       // sessões mais antigas não se carregam
+var PACK_ENDING_SESSIONS = 2;        // "a acabar": restam estas sessões ou menos...
+var PACK_ENDING_DAYS = 14;           // ...ou falta este tempo para terminar a validade
+var PAYMENT_DUE_SOON_DAYS = 3;
+var ABSENCE_WINDOW_DAYS = 30, ABSENCE_ALERT = 2;
+var SESSION_STATUS = {
+  feita: {label: "Feita", short: "✓ Feita"},
+  faltou: {label: "Faltou", short: "✗ Faltou"},
+  cancelada: {label: "Cancelou a tempo", short: "⊘ Cancelou"},
+  cancelada_tarde: {label: "Cancelou tarde", short: "⊘ Tarde"}
+};
+var PAYMENT_METHODS = {mbway: "MB WAY", transferencia: "Transferência", multibanco: "Multibanco", numerario: "Numerário", outro: "Outro"};
+var studio = {packs: [], sessions: [], payments: [], loaded: false, available: true};
+
+function studioLocalRead(){
+  try { var v = JSON.parse(localStorage.getItem(STUDIO_LOCAL_KEY) || "null"); if (v && Array.isArray(v.packs)) return v; } catch (e) {}
+  return null;
+}
+function studioLocalWrite(){ try { localStorage.setItem(STUDIO_LOCAL_KEY, JSON.stringify({packs: studio.packs, sessions: studio.sessions, payments: studio.payments})); } catch (e) {} }
+var STUDIO_TABLES = {packs: "session_packs", sessions: "sessions", payments: "payments"};
+function studioLoad(){
+  if (!sbReady){
+    var v = studioLocalRead();
+    if (v){ studio.packs = v.packs; studio.sessions = v.sessions || []; studio.payments = v.payments || []; }
+    else { studioSeedDemo(); studioLocalWrite(); }
+    studio.loaded = true; studio.available = true;
+    return Promise.resolve(true);
+  }
+  var since = new Date(Date.now() - STUDIO_HISTORY_DAYS * 86400000).toISOString().slice(0, 10);
+  return Promise.all([
+    sb.from("session_packs").select("*").order("starts_on", {ascending: false}).then(function(r){ return r; }),
+    sb.from("sessions").select("*").gte("date", since).order("date", {ascending: false}).then(function(r){ return r; }),
+    sb.from("payments").select("*").order("due_on", {ascending: false}).then(function(r){ return r; })
+  ]).then(function(r){
+    if (r.some(function(x){ return !x || x.error; })){ studio.available = false; studio.loaded = true; return false; }
+    studio.packs = r[0].data || []; studio.sessions = r[1].data || []; studio.payments = r[2].data || [];
+    studio.available = true; studio.loaded = true;
+    return true;
+  }).catch(function(){ studio.available = false; studio.loaded = true; return false; });
+}
+// grava no servidor (ou no browser, em modo local) e só depois altera a memória
+function studioInsert(kind, row){
+  if (!sbReady){ var r = Object.assign({id: uidShort("s")}, row); studio[kind].unshift(r); studioLocalWrite(); return Promise.resolve({data: r}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).insert(row).select("*")).then(function(res){
+    if (!res || res.error || !res.data || !res.data[0]) return {error: (res && res.error && res.error.message) || "Não foi possível guardar — verifica a ligação (e se a migração 0023 já foi corrida)."};
+    studio[kind].unshift(res.data[0]);
+    return {data: res.data[0]};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function studioUpdate(kind, id, patch){
+  var apply = function(){ var row = studio[kind].filter(function(x){ return x.id === id; })[0]; if (row) Object.assign(row, patch); };
+  if (!sbReady){ apply(); studioLocalWrite(); return Promise.resolve({}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).update(patch).eq("id", id)).then(function(res){
+    if (!res || res.error) return {error: (res && res.error && res.error.message) || "Não foi possível guardar."};
+    apply(); return {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function studioDelete(kind, id){
+  var apply = function(){ studio[kind] = studio[kind].filter(function(x){ return x.id !== id; }); if (kind === "packs") studio.sessions.concat(studio.payments).forEach(function(x){ if (x.pack_id === id) x.pack_id = null; }); };
+  if (!sbReady){ apply(); studioLocalWrite(); return Promise.resolve({}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).delete().eq("id", id)).then(function(res){
+    if (!res || res.error) return {error: "Não foi possível apagar."};
+    apply(); return {};
+  }, function(){ return {error: "Não foi possível apagar — verifica a ligação."}; });
+}
+
+// ---- regras ----
+function sessionConsumes(pack, sess){
+  if (!pack || !sess) return false;
+  if (sess.status === "feita") return true;
+  if (sess.status === "faltou") return pack.missed_consumes !== false;
+  if (sess.status === "cancelada_tarde") return pack.late_cancel_consumes !== false;
+  return false;
+}
+function packUsage(pack, today){
+  today = today || todayISO();
+  var used = studio.sessions.filter(function(x){ return x.pack_id === pack.id && sessionConsumes(pack, x); }).length;
+  var total = Number(pack.total) || 0, remaining = Math.max(0, total - used);
+  var expired = !!pack.expires_on && pack.expires_on < today;
+  var daysLeft = pack.expires_on ? Math.round((new Date(pack.expires_on + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000) : null;
+  var started = !pack.starts_on || pack.starts_on <= today;
+  return {used: used, total: total, remaining: remaining, pct: total ? Math.min(100, Math.round(used / total * 100)) : 0, expired: expired, exhausted: remaining === 0,
+    daysLeft: daysLeft, active: started && !expired && remaining > 0,
+    ending: !expired && remaining > 0 && (remaining <= PACK_ENDING_SESSIONS || (daysLeft != null && daysLeft <= PACK_ENDING_DAYS))};
+}
+function packsOf(studentId){ return studio.packs.filter(function(p){ return p.student_id === studentId; }); }
+function activePacksOf(studentId, today){
+  return packsOf(studentId).filter(function(p){ return packUsage(p, today).active; }).sort(function(a, b){
+    return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : (a.starts_on < b.starts_on ? -1 : 1);
+  });
+}
+// o pacote a que uma sessão numa certa data deve ser descontada: o que caduca primeiro, dentro da validade e com sessões por usar
+function pickPackForSession(studentId, date){
+  var d = isIsoDate(date) ? date : todayISO();
+  return packsOf(studentId).filter(function(p){
+    var u = packUsage(p, d);
+    return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d);
+  }).sort(function(a, b){ return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : 0; })[0] || null;
+}
+function sessionsOfStudent(studentId){ return studio.sessions.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }); }
+function paymentStatus(p, today){
+  today = today || todayISO();
+  if (p.paid_on) return "pago";
+  if (p.due_on < today) return "atrasado";
+  var days = Math.round((new Date(p.due_on + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
+  return days <= PAYMENT_DUE_SOON_DAYS ? "a vencer" : "futuro";
+}
+function paymentsOfStudent(studentId){ return studio.payments.filter(function(p){ return p.student_id === studentId; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; }); }
+function eur(n){ return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace(".", ",") + " €"; }
+function eurShort(n){ var v = Math.round((Number(n) || 0) * 100) / 100; return (v === Math.round(v) ? String(v) : v.toFixed(2).replace(".", ",")) + " €"; }
+function monthOf(iso){ return String(iso || "").slice(0, 7); }
+function studentById(id){ return findStudent(id); }
+
+// resumo de um aluno para o painel de retenção e para a ficha
+function studentStudioSummary(studentId, today){
+  today = today || todayISO();
+  var packs = packsOf(studentId).map(function(p){ return {pack: p, u: packUsage(p, today)}; });
+  var overdue = paymentsOfStudent(studentId).filter(function(p){ return paymentStatus(p, today) === "atrasado"; });
+  var since = addDaysISO(today, -ABSENCE_WINDOW_DAYS);
+  var absences = studio.sessions.filter(function(x){ return x.student_id === studentId && x.date >= since && (x.status === "faltou" || x.status === "cancelada_tarde"); }).length;
+  var activeOrRecent = packs.filter(function(x){ return x.u.active || (x.u.exhausted && x.pack.starts_on >= addDaysISO(today, -90)); });
+  var hasActive = packs.some(function(x){ return x.u.active; });
+  var ending = packs.filter(function(x){ return x.u.ending; });
+  // já teve pacote há pouco tempo e já não tem nenhum a decorrer: falta renovar
+  return {packs: packs, overdue: overdue, absences: absences, hasActive: hasActive, ending: ending,
+    needsRenewal: !hasActive && packs.some(function(x){ return x.pack.starts_on >= addDaysISO(today, -120); }), activeOrRecent: activeOrRecent};
+}
+
+// números do estúdio num mês (AAAA-MM)
+function studioKpis(month, today){
+  today = today || todayISO(); month = month || monthOf(today);
+  var unpaid = studio.payments.filter(function(p){ return !p.paid_on; });
+  var dueMonth = unpaid.filter(function(p){ return monthOf(p.due_on) === month && p.due_on >= today; });
+  var overdue = unpaid.filter(function(p){ return p.due_on < today; });
+  var sum = function(list){ return list.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0); };
+  var ms = studio.sessions.filter(function(x){ return monthOf(x.date) === month; });
+  var done = ms.filter(function(x){ return x.status === "feita"; }).length;
+  var missed = ms.filter(function(x){ return x.status === "faltou" || x.status === "cancelada_tarde"; }).length;
+  var ending = studio.packs.filter(function(p){ var st = findStudent(p.student_id); return st && isStudentActive(st) && packUsage(p, today).ending; });
+  var paidMonth = studio.payments.filter(function(p){ return p.paid_on && monthOf(p.paid_on) === month; });
+  return {toCollect: sum(dueMonth), toCollectN: dueMonth.length, overdue: sum(overdue), overdueN: overdue.length, endingN: ending.length, missed: missed, done: done,
+    attendance: done + missed ? Math.round(done / (done + missed) * 100) : null, received: sum(paidMonth), receivedN: paidMonth.length};
+}
+
+function csvCell(v){ var t = String(v == null ? "" : v); return /[;"\n\r]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; }
+function csvOf(rows){ return rows.map(function(r){ return r.map(csvCell).join(";"); }).join("\r\n"); }
+function nameOf(studentId){ var st = findStudent(studentId); return st ? st.name : studentId; }
+function paymentsCsv(month){
+  var rows = [["Aluno", "Vencimento", "Valor (€)", "Estado", "Pago em", "Método", "Notas"]];
+  studio.payments.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; }).forEach(function(p){
+    rows.push([nameOf(p.student_id), p.due_on, String(Number(p.amount).toFixed(2)).replace(".", ","), paymentStatus(p), p.paid_on || "", PAYMENT_METHODS[p.method] || "", p.notes || ""]);
+  });
+  return csvOf(rows);
+}
+function sessionsCsv(month){
+  var rows = [["Aluno", "Data", "Hora", "Estado", "Pacote", "Notas"]];
+  studio.sessions.filter(function(x){ return monthOf(x.date) === month; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function(x){
+    var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
+    rows.push([nameOf(x.student_id), x.date, x.time || "", (SESSION_STATUS[x.status] || {}).label || x.status, pk ? pk.name : "", x.notes || ""]);
+  });
+  return csvOf(rows);
+}
+function downloadText(filename, text){
+  try {
+    var blob = new Blob(["﻿" + text], {type: "text/csv;charset=utf-8"});
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(function(){ try { URL.revokeObjectURL(a.href); a.remove(); } catch (e) {} }, 500);
+    return true;
+  } catch (e) { return false; }
+}
+
+// dados de demonstração (só no modo local, sem Supabase)
+function studioSeedDemo(){
+  var d = function(n){ return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); };
+  var ahead = function(n){ return new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); };
+  studio.packs = [
+    {id: "pk1", student_id: "maria", name: "Pack 10 sessões", total: 10, price: 250, starts_on: d(40), expires_on: ahead(8), missed_consumes: true, late_cancel_consumes: true},
+    {id: "pk2", student_id: "rui", name: "Pack 20 sessões", total: 20, price: 440, starts_on: d(30), expires_on: ahead(60), missed_consumes: true, late_cancel_consumes: true},
+    {id: "pk3", student_id: "sofia", name: "Pack 10 sessões", total: 10, price: 250, starts_on: d(70), expires_on: d(5), missed_consumes: true, late_cancel_consumes: true}
+  ];
+  var sess = [];
+  for (var i = 0; i < 8; i++) sess.push({id: "s1" + i, student_id: "maria", pack_id: "pk1", date: d(36 - i * 4), status: i === 5 ? "faltou" : "feita"});
+  for (var j = 0; j < 6; j++) sess.push({id: "s2" + j, student_id: "rui", pack_id: "pk2", date: d(28 - j * 5), status: j === 3 ? "cancelada_tarde" : "feita"});
+  sess.push({id: "s30", student_id: "sofia", pack_id: "pk3", date: d(60), status: "feita"}, {id: "s31", student_id: "sofia", pack_id: "pk3", date: d(50), status: "faltou"}, {id: "s32", student_id: "sofia", pack_id: "pk3", date: d(20), status: "faltou"});
+  studio.sessions = sess;
+  studio.payments = [
+    {id: "py1", student_id: "maria", pack_id: "pk1", amount: 250, due_on: d(40), paid_on: d(40), method: "mbway"},
+    {id: "py2", student_id: "rui", pack_id: "pk2", amount: 440, due_on: d(30), paid_on: d(29), method: "transferencia"},
+    {id: "py3", student_id: "sofia", pack_id: "pk3", amount: 250, due_on: d(12), paid_on: null, method: null},
+    {id: "py4", student_id: "maria", pack_id: null, amount: 250, due_on: ahead(2), paid_on: null, method: null}
+  ];
+}
+
+/* ---------- Estúdio: ecrãs (ficha do aluno e visão geral) ---------- */
+function studioUnavailableHtml(){
+  return "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes e cobranças</div><p class=\"muted-p\">Ainda não é possível usar esta área: falta correr a migração <strong>0023</strong> no SQL Editor do Supabase (ficheiro <code>supabase/migrations/0023_studio_packs.sql</code>) e depois recarregar a app.</p></div>";
+}
+function sessionStatusPill(status){
+  var tone = {feita: "good", faltou: "critical", cancelada: "", cancelada_tarde: "warn"}[status] || "";
+  return "<span class=\"pill " + tone + "\">" + escapeHtml((SESSION_STATUS[status] || {}).label || status) + "</span>";
+}
+function packBarHtml(pack, u){
+  return "<div class=\"history-row\" style=\"align-items:flex-start;\"><div style=\"min-width:0;flex:1;\">" +
+    "<div class=\"hlabel\">" + escapeHtml(pack.name) + (u.expired ? " <span class=\"pill\">caducado</span>" : u.exhausted ? " <span class=\"pill\">esgotado</span>" : u.ending ? " <span class=\"pill warn\">a acabar</span>" : "") + "</div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
+      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
+    "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
+    "<button type=\"button\" class=\"assess-del\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></div>";
+}
+function paymentRowHtml(p, today, withName){
+  var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
+  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
+    "<div class=\"hlabel\">" + (withName ? "<button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(p.student_id) + "\">" + escapeHtml(nameOf(p.student_id)) + "</button> · " : "") + escapeHtml(eur(p.amount)) + " <span class=\"pill " + tone + "\">" + st + "</span></div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Vence " + escapeHtml(fmtDateFullPt(p.due_on)) + (p.paid_on ? " · pago em " + escapeHtml(fmtDateFullPt(p.paid_on)) + (p.method ? " (" + escapeHtml(PAYMENT_METHODS[p.method] || p.method) + ")" : "") : "") + "</div></div>" +
+    "<span style=\"white-space:nowrap;\">" + (p.paid_on ? "" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button> ") +
+    (!p.paid_on && withName ? "<button type=\"button\" class=\"btn btn-sm\" data-remind=\"" + escapeHtml(p.id) + "\">Lembrar</button> " : "") +
+    "<button type=\"button\" class=\"assess-del\" data-del-payment=\"" + escapeHtml(p.id) + "\" aria-label=\"Apagar cobrança\">✕</button></span></div>";
+}
+
+function tplProSessoes(s){
+  if (!studio.available) return studioUnavailableHtml();
+  var today = todayISO(), sum = studentStudioSummary(s.id, today);
+  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pacotes</div>";
+  html += sum.packs.length ? sum.packs.map(function(x){ return packBarHtml(x.pack, x.u); }).join("") : "<p class=\"muted-p\">Ainda sem pacotes. Cria o primeiro abaixo.</p>";
+
+  html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">+ Novo pacote</summary><div class=\"assess-form-grid\" style=\"margin-top:10px;\" id=\"packForm\">" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Nome</label><input type=\"text\" id=\"pkName\" maxlength=\"80\" value=\"Pack 10 sessões\"></div>" +
+    "<div class=\"f\"><label>Sessões</label><input type=\"number\" id=\"pkTotal\" min=\"1\" max=\"500\" value=\"10\"></div>" +
+    "<div class=\"f\"><label>Preço (€)</label><input type=\"number\" id=\"pkPrice\" min=\"0\" step=\"0.5\" placeholder=\"250\"></div>" +
+    "<div class=\"f\"><label>Início</label><input type=\"date\" id=\"pkStart\" value=\"" + today + "\"></div>" +
+    "<div class=\"f\"><label>Validade (meses, 0 = sem)</label><input type=\"number\" id=\"pkMonths\" min=\"0\" max=\"36\" value=\"3\"></div>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkMissed\" checked> Faltar sem aviso gasta uma sessão</label>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkLate\" checked> Cancelar tarde gasta uma sessão</label>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkCharge\" checked> Criar a cobrança (vence no início, se tiver preço)</label>" +
+    "<p class=\"muted-p\" id=\"pkErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"pkAdd\" style=\"width:100%;\">Criar pacote</button></div></div></details>";
+
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Registar sessão</div><div class=\"assess-form-grid\" id=\"sessForm\">" +
+    "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"seDate\" value=\"" + today + "\"></div>" +
+    "<div class=\"f\"><label>Hora (opcional)</label><input type=\"time\" id=\"seTime\"></div>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Resultado</label><select id=\"seStatus\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(SESSION_STATUS).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"seErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"seAdd\" style=\"width:100%;\">Registar</button></div></div>" +
+    "<p class=\"muted-p\" style=\"margin-top:6px;\">É descontada ao pacote que caduca primeiro e ainda tem sessões. Se não houver pacote, a sessão fica registada sem pacote.</p>";
+
+  var sess = sessionsOfStudent(s.id).slice(0, 12);
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Sessões recentes" + (sum.absences ? " · " + plural(sum.absences, "falta", "faltas") + " nos últimos " + ABSENCE_WINDOW_DAYS + " dias" : "") + "</div>";
+  html += sess.length ? sess.map(function(x){
+    var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
+    return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) : "sem pacote") + "</div></div>" +
+      "<span>" + sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
+  }).join("") : "<p class=\"muted-p\">Sem sessões registadas.</p>";
+
+  var pays = paymentsOfStudent(s.id);
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Cobranças</div>" + (pays.length ? pays.slice(0, 10).map(function(p){ return paymentRowHtml(p, today, false); }).join("") : "<p class=\"muted-p\">Sem cobranças.</p>") +
+    "<details class=\"perfil-section\" style=\"margin-top:10px;\"><summary class=\"eyebrow\">+ Nova cobrança</summary><div class=\"assess-form-grid\" style=\"margin-top:10px;\">" +
+    "<div class=\"f\"><label>Valor (€)</label><input type=\"number\" id=\"pyAmount\" min=\"0.01\" step=\"0.5\"></div>" +
+    "<div class=\"f\"><label>Vence em</label><input type=\"date\" id=\"pyDue\" value=\"" + today + "\"></div>" +
+    "<p class=\"muted-p\" id=\"pyErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"pyAdd\" style=\"width:100%;\">Criar cobrança</button></div></div></details>";
+  return html;
+}
+
+function studioRerender(s){ if (s && state.proSelectedId === s.id) renderProTabContent(s); else renderProStudioMain(); }
+function openPayModal(paymentId, onDone){
+  var p = studio.payments.filter(function(x){ return x.id === paymentId; })[0];
+  if (!p) return;
+  var sheet = openModal("<div class=\"mtitle\">Marcar como pago</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(nameOf(p.student_id)) + " · " + escapeHtml(eur(p.amount)) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"payDate\">Pago em</label><input type=\"date\" id=\"payDate\" value=\"" + todayISO() + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"payMethod\">Método</label><select id=\"payMethod\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(PAYMENT_METHODS).map(function(k){ return "<option value=\"" + k + "\">" + PAYMENT_METHODS[k] + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"payErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"payGo\" style=\"width:100%;\">Confirmar</button>");
+  sheet.querySelector("#payGo").addEventListener("click", function(){
+    var d = sheet.querySelector("#payDate").value;
+    if (!isIsoDate(d)){ var e = sheet.querySelector("#payErr"); e.textContent = "Indica a data do pagamento."; e.style.display = "block"; return; }
+    studioUpdate("payments", paymentId, {paid_on: d, method: sheet.querySelector("#payMethod").value}).then(function(r){
+      if (r.error){ var e2 = sheet.querySelector("#payErr"); e2.textContent = r.error; e2.style.display = "block"; return; }
+      closeModal(); showToast("✓ Pagamento registado"); if (onDone) onDone();
+    });
+  });
+}
+// registar uma sessão (usado na ficha e no registo rápido)
+function studioAddSession(studentId, date, status, time){
+  if (!isIsoDate(date)) return Promise.resolve({error: "Indica a data da sessão."});
+  if (!SESSION_STATUS[status]) return Promise.resolve({error: "Escolhe o resultado."});
+  var pack = pickPackForSession(studentId, date);
+  var row = {student_id: studentId, pack_id: pack ? pack.id : null, date: date, status: status};
+  if (time && /^\d{2}:\d{2}$/.test(time)) row.time = time;
+  return studioInsert("sessions", row);
+}
+
+function wireProSessoes(s, el){
+  function fail(id, msg){ var e = el.querySelector(id); if (e){ e.textContent = msg; e.style.display = "block"; } }
+  var pkAdd = el.querySelector("#pkAdd");
+  if (pkAdd) pkAdd.addEventListener("click", function(){
+    var name = el.querySelector("#pkName").value.trim(), total = parseInt(el.querySelector("#pkTotal").value, 10), start = el.querySelector("#pkStart").value;
+    var priceRaw = el.querySelector("#pkPrice").value, price = priceRaw === "" ? null : Number(priceRaw), months = parseInt(el.querySelector("#pkMonths").value, 10) || 0;
+    if (!name) return fail("#pkErr", "Dá um nome ao pacote.");
+    if (!(total >= 1 && total <= 500)) return fail("#pkErr", "O número de sessões tem de estar entre 1 e 500.");
+    if (!isIsoDate(start)) return fail("#pkErr", "Indica a data de início.");
+    if (price != null && !(price >= 0)) return fail("#pkErr", "O preço não pode ser negativo.");
+    var exp = null; if (months > 0){ var d = new Date(start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + months); exp = d.toISOString().slice(0, 10); }
+    pkAdd.disabled = true;
+    studioInsert("packs", {student_id: s.id, name: name.slice(0, 80), total: total, price: price, starts_on: start, expires_on: exp,
+      missed_consumes: el.querySelector("#pkMissed").checked, late_cancel_consumes: el.querySelector("#pkLate").checked}).then(function(r){
+      if (r.error){ pkAdd.disabled = false; return fail("#pkErr", r.error); }
+      var charge = price > 0 && el.querySelector("#pkCharge").checked ? studioInsert("payments", {student_id: s.id, pack_id: r.data.id, amount: price, due_on: start}) : Promise.resolve({});
+      charge.then(function(c){ showToast(c.error ? "Pacote criado, mas a cobrança não foi guardada" : "✓ Pacote criado"); studioRerender(s); });
+    });
+  });
+  var seAdd = el.querySelector("#seAdd");
+  if (seAdd) seAdd.addEventListener("click", function(){
+    seAdd.disabled = true;
+    studioAddSession(s.id, el.querySelector("#seDate").value, el.querySelector("#seStatus").value, el.querySelector("#seTime").value).then(function(r){
+      if (r.error){ seAdd.disabled = false; return fail("#seErr", r.error); }
+      showToast("✓ Sessão registada"); studioRerender(s);
+    });
+  });
+  var pyAdd = el.querySelector("#pyAdd");
+  if (pyAdd) pyAdd.addEventListener("click", function(){
+    var amount = Number(el.querySelector("#pyAmount").value), due = el.querySelector("#pyDue").value;
+    if (!(amount > 0)) return fail("#pyErr", "Indica um valor maior que zero.");
+    if (!isIsoDate(due)) return fail("#pyErr", "Indica a data de vencimento.");
+    studioInsert("payments", {student_id: s.id, amount: amount, due_on: due}).then(function(r){ if (r.error) return fail("#pyErr", r.error); showToast("✓ Cobrança criada"); studioRerender(s); });
+  });
+  wireStudioCommon(el, function(){ studioRerender(s); });
+}
+// botões que existem na ficha e na visão geral
+function wireStudioCommon(el, redraw){
+  el.querySelectorAll("[data-del-pack]").forEach(function(b){ b.addEventListener("click", function(){
+    if (!window.confirm("Apagar este pacote? As sessões e cobranças registadas ficam, mas sem pacote.")) return;
+    studioDelete("packs", b.getAttribute("data-del-pack")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-del-session]").forEach(function(b){ b.addEventListener("click", function(){
+    studioDelete("sessions", b.getAttribute("data-del-session")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-del-payment]").forEach(function(b){ b.addEventListener("click", function(){
+    if (!window.confirm("Apagar esta cobrança?")) return;
+    studioDelete("payments", b.getAttribute("data-del-payment")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-pay]").forEach(function(b){ b.addEventListener("click", function(){ openPayModal(b.getAttribute("data-pay"), redraw); }); });
+  el.querySelectorAll("[data-open-student]").forEach(function(b){ b.addEventListener("click", function(){
+    state.proSelectedId = b.getAttribute("data-open-student"); state.proTab = "sessoes"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
+  }); });
+  el.querySelectorAll("[data-remind]").forEach(function(b){ b.addEventListener("click", function(){
+    var p = studio.payments.filter(function(x){ return x.id === b.getAttribute("data-remind"); })[0], st = p && findStudent(p.student_id);
+    if (st) openContactModal(st, "pagamento-atrasado", redraw);
+  }); });
+}
+
+/* visão geral do estúdio (menu "Estúdio") */
+var studioView = {month: null, date: null};
+function renderProStudioMain(){
+  var main = document.getElementById("proMain");
+  if (!studio.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; studioLoad().then(function(){ if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain(); }); return; }
+  if (!studio.available){ main.innerHTML = studioUnavailableHtml(); return; }
+  var today = todayISO(); if (!studioView.month) studioView.month = monthOf(today); if (!studioView.date) studioView.date = today;
+  var k = studioKpis(studioView.month, today);
+  var students = visibleStudentsForDashboard().filter(isStudentActive);
+  var html = "<div class=\"pro-stat-row\" id=\"studioKpis\">" +
+    proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
+    proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + "</div>";
+
+  // registo rápido
+  var withPack = students.filter(function(st){ return pickPackForSession(st.id, studioView.date); });
+  html += "<div class=\"card\" id=\"quickSessions\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Registar sessões</div>" +
+    "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>";
+  if (!withPack.length) html += "<p class=\"muted-p\">Nenhum aluno com pacote a decorrer neste dia. Cria pacotes na ficha do aluno (separador Pacotes).</p>";
+  withPack.forEach(function(st){
+    var existing = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === studioView.date; });
+    var pk = pickPackForSession(st.id, studioView.date), u = pk ? packUsage(pk, studioView.date) : null;
+    html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
+      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (u ? "restam " + u.remaining + " de " + u.total : "") + "</div></div><span style=\"display:flex; gap:6px; flex-wrap:wrap;\">" +
+      (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
+        : Object.keys(SESSION_STATUS).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
+  });
+  html += "</div>";
+
+  var unpaid = studio.payments.filter(function(p){ return !p.paid_on; }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
+  html += "<div class=\"card\" id=\"studioPayments\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
+    (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>";
+
+  var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: findStudent(p.student_id)}; }).filter(function(x){ return x.st && isStudentActive(x.st) && x.u.ending; });
+  html += "<div class=\"card\" id=\"studioEnding\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes a acabar</div>" +
+    (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
+      escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
+
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"stMonth\">Mês</label><input type=\"month\" id=\"stMonth\" value=\"" + studioView.month + "\"></div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido no mês: " + escapeHtml(eur(k.received)) + " (" + k.receivedN + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
+  main.innerHTML = html;
+
+  var redraw = function(){ renderProStudioMain(); };
+  wireStudioCommon(main, redraw);
+  main.querySelector("#qsDate") && main.querySelector("#qsDate").addEventListener("change", function(e){ if (isIsoDate(e.target.value)){ studioView.date = e.target.value; redraw(); } });
+  main.querySelectorAll("[data-qs]").forEach(function(b){ b.addEventListener("click", function(){
+    var parts = b.getAttribute("data-qs").split(":"); b.disabled = true;
+    studioAddSession(parts[0], studioView.date, parts[1]).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  main.querySelectorAll("[data-renew]").forEach(function(b){ b.addEventListener("click", function(){ var st = findStudent(b.getAttribute("data-renew")); if (st) openContactModal(st, "pacote-a-acabar", redraw); }); });
+  var mEl = main.querySelector("#stMonth"); if (mEl) mEl.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mEl.value)){ studioView.month = mEl.value; redraw(); } });
+  var m = function(){ var v = main.querySelector("#stMonth").value; return /^\d{4}-\d{2}$/.test(v) ? v : studioView.month; };
+  main.querySelector("#csvPayments").addEventListener("click", function(){ if (!downloadText("cobrancas-" + m() + ".csv", paymentsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
+  main.querySelector("#csvSessions").addEventListener("click", function(){ if (!downloadText("sessoes-" + m() + ".csv", sessionsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
+}
+
 /* ---------- Retenção: quem contactar hoje, onboarding de alunos novos e pulso do estúdio ----------
    Tudo calculado no telemóvel/computador a partir dos dados que a app já tem (registos, check-ins, treinos, pedidos de ajuda).
    O telefone e o registo de contactos (migração 0022) servem para não contactar duas vezes a mesma pessoa e para abrir o WhatsApp
@@ -12787,6 +13202,9 @@ var CONTACT_REASONS = {
   "plano-antigo": {label: "Plano sem ajustes há semanas", template: "Olá {nome}! Já passaram algumas semanas desde o último ajuste do teu plano. Queres marcar uma revisão rápida?"},
   "aniversario": {label: "Faz anos hoje", template: "Parabéns, {nome}! 🎉 Que este novo ano venha cheio de saúde e energia. Um abraço da equipa EVOLVE!"},
   "boa-noticia": {label: "Boa notícia para partilhar", template: "Olá {nome}! Só para te dizer que estás a fazer um excelente trabalho — os teus registos mostram uma evolução muito boa. Continua assim! 💪"},
+  "pagamento-atrasado": {label: "Pagamento em atraso", template: "Olá {nome}! Só um lembrete simpático: o pagamento de {valor}, com vencimento a {data}, ainda está por regularizar. Podes fazê-lo por MB WAY ou transferência. Qualquer dúvida, diz-me!"},
+  "pacote-a-acabar": {label: "Pacote a acabar", template: "Olá {nome}! O teu pacote está quase a acabar ({restam}). Queres que prepare a renovação para não perderes o ritmo?"},
+  "faltas": {label: "Faltas seguidas", template: "Olá {nome}! Notei que faltaste a algumas sessões nas últimas semanas. Está tudo bem? Se precisares de mudar os horários, ajusto contigo."},
   "generico": {label: "Contacto", template: "Olá {nome}! Como estás a correr a semana? Diz-me se precisas de alguma coisa."}
 };
 
@@ -12805,9 +13223,10 @@ function whatsappUrl(phone, text){
   var n = normalizePhone(phone);
   return n.ok ? "https://wa.me/" + n.digits + (text ? "?text=" + encodeURIComponent(text) : "") : "";
 }
-function contactMessageFor(reasonKey, s){
+function contactMessageFor(reasonKey, s, vars){
   var r = CONTACT_REASONS[reasonKey] || CONTACT_REASONS.generico;
-  return r.template.replace(/\{nome\}/g, studentFirstName(s));
+  vars = vars || {};
+  return r.template.replace(/\{nome\}/g, studentFirstName(s)).replace(/\{(valor|data|restam)\}/g, function(m, k){ return vars[k] != null ? vars[k] : ""; });
 }
 
 function contactEntries(s, kind){ return (Array.isArray(s.contactLog) ? s.contactLog : []).filter(function(e){ return e && e.kind === kind && isIsoDate(e.date); }); }
@@ -12875,6 +13294,21 @@ function contactReasonsFor(s, today){
   if (by["estagnado"] || by["estagnado-a-treinar"]) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
   var planDays = lastPlanChangeDays(s);
   if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
+  if (studio.loaded && studio.available){
+    var ss = studentStudioSummary(s.id, today);
+    if (ss.overdue.length){
+      var owed = ss.overdue.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0), first = ss.overdue[ss.overdue.length - 1];
+      out.push({key: "pagamento-atrasado", label: "Pagamento em atraso (" + eur(owed) + ")", weight: 65, hint: "Cobrança vencida a " + fmtDateFullPt(first.due_on) + ".", vars: {valor: eur(first.amount), data: fmtDateFullPt(first.due_on)}});
+    }
+    if (ss.ending.length){
+      var u = ss.ending.slice().sort(function(a, b){ return a.u.remaining - b.u.remaining; })[0].u;
+      var left = u.remaining <= PACK_ENDING_SESSIONS || u.daysLeft == null ? "restam " + u.remaining + (u.remaining === 1 ? " sessão" : " sessões") : "termina em " + u.daysLeft + " dias";
+      out.push({key: "pacote-a-acabar", label: "Pacote a acabar (" + left + ")", weight: 45, hint: "Boa altura para propor a renovação.", vars: {restam: left}});
+    } else if (ss.needsRenewal){
+      out.push({key: "pacote-a-acabar", label: "Sem pacote a decorrer — renovar?", weight: 50, hint: "O último pacote terminou e ainda não há outro.", vars: {restam: "já terminou"}});
+    }
+    if (ss.absences >= ABSENCE_ALERT) out.push({key: "faltas", label: ss.absences + " faltas nos últimos " + ABSENCE_WINDOW_DAYS + " dias", weight: 40, hint: "Faltas ou cancelamentos tardios.", vars: {}});
+  }
   if (isBirthdayToday(s, today)) out.push({key: "aniversario", label: "Faz anos hoje", weight: 25, hint: "Um parabéns fortalece a relação."});
   if (by["sobrecarga"] || by["alta-adesao"]) out.push({key: "boa-noticia", label: by["sobrecarga"] ? "Pronto para subir carga" : "Adesão muito boa", weight: 15, hint: "Uma mensagem positiva também retém alunos."});
   return out.sort(function(a, b){ return b.weight - a.weight; });
@@ -12992,7 +13426,7 @@ function openContactModal(s, reasonKey, onDone){
   var hasPhone = normalizePhone(s.phone).ok;
   var sheet = openModal("<div class=\"mtitle\">Contactar " + escapeHtml(s.name) + "</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(label) + "</p>" +
-    "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s)) + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s, (reasons.filter(function(r){ return r.key === reason; })[0] || {}).vars)) + "</textarea></div>" +
     (hasPhone ? "<a class=\"btn primary\" id=\"ctWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none; margin-bottom:8px;\">Abrir no WhatsApp</a>"
       : "<div class=\"checkin-field\"><label for=\"ctPhone\">Sem telefone na ficha — acrescenta para abrir o WhatsApp</label><input type=\"tel\" id=\"ctPhone\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
         "<button type=\"button\" class=\"btn btn-sm\" id=\"ctSavePhone\" style=\"margin-bottom:8px;\">Guardar telefone</button>") +
@@ -14059,6 +14493,7 @@ function finishBoot(rows, isProfessional, offline){
     }
     syncPillUpdate();
     if (!offline) outboxFlush();
+    if (isProfessional) studioLoad().then(function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild) renderProDashboardMain(); });
   });
 }
 
@@ -14215,6 +14650,7 @@ function boot(){
     document.getElementById("alunoApp").classList.remove("hidden");
     document.getElementById("proApp").classList.remove("hidden");
     document.getElementById("modeSwitch").classList.remove("hidden");
+    studioLoad(); // modo local: dados de demonstração do estúdio
     setMode("aluno");
     return;
   }
