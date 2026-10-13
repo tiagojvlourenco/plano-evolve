@@ -60,9 +60,26 @@ var plan3 = planCalendarSync({events: [{id: "1", title: "PT 60 - Isabel Carvalho
 check.check("23. Um evento que mudou de dia e de hora atualiza a sessão em vez de a duplicar", plan3.update.some(function(u){ return u.id === "s1" && u.patch.date === d(4) && u.patch.time === "09:00"; }));
 check.check("24. Sem evento nenhum, as sessões do calendário na janela são removidas e as manuais ficam", planCalendarSync({events: [], today: today, window: win, aliases: {}}).remove.sort().join() === "s1,s2,s9");
 
+// ---- revisão antes do merge ----
+STUDENTS.push({id: "q", name: "Rita Arquivada", active: false});
+studio.sessions = [{id: "k1", student_id: "q", date: d(5), time: "10:00", status: "feita", source: "calendario", external_id: "ev1"}];
+check.check("33. Aluno arquivado: as aulas já registadas não são apagadas quando o evento continua no calendário", planCalendarSync({events: [evt("ev1", "PT 60 - Rita Arquivada", 5)], today: today, window: win, aliases: {}}).remove.length === 0);
+check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planCalendarSync({events: [evt("ev2", "PT 60 - Rita Arquivada", 3)], today: today, window: win, aliases: {}}).insert.length === 0);
+
 // ---- definições e ecrã ----
 (async function(){
   sbReady = false; store = {};
+  studio.packs = [{id: "pa", student_id: "a", total: 2, price: 0, starts_on: d(40), expires_on: null, used_before: 0, missed_consumes: true, late_cancel_consumes: false}, {id: "pb", student_id: "b", total: 5, price: 0, starts_on: d(40), expires_on: null, used_before: 0, missed_consumes: true, late_cancel_consumes: false}];
+  studio.sessions = [
+    {id: "o1", student_id: "a", pack_id: "pa", date: d(10), time: "10:00", status: "feita", source: "calendario", external_id: "o1"},
+    {id: "o2", student_id: "a", pack_id: "pa", date: d(9), time: "10:00", status: "feita", source: "calendario", external_id: "o2"},
+    {id: "u1", student_id: "a", pack_id: "pa", date: d(8), time: "11:00", status: "feita", source: "calendario", external_id: "u1"}];
+  studio.packs[0].total = 3;
+  var r1 = await applyCalendarPlan({remove: ["o1", "o2"], update: [{id: "u1", patch: {student_id: "b"}}], insert: [{student_id: "a", date: d(2), time: "10:00", status: "feita", source: "calendario", external_id: "y1"}]});
+  var u1 = studio.sessions.filter(function(x){ return x.id === "u1"; })[0], y1 = studio.sessions.filter(function(x){ return x.external_id === "y1"; })[0];
+  check.check("35. Mudar o aluno de uma sessão do calendário passa-a para o pacote do novo aluno", r1.errors === 0 && u1.student_id === "b" && u1.pack_id === "pb");
+  check.check("36. As remoções contam antes das novas sessões: a nova aula fica no pacote libertado", y1 && y1.pack_id === "pa");
+
   calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.useAsSource = true; calSettings.aliases = {"x": "a"};
   await calSaveSettings();
   calSettings.clientId = ""; calSettings.useAsSource = false; calSettings.aliases = {};
@@ -81,5 +98,9 @@ check.check("24. Sem evento nenhum, as sessões do calendário na janela são re
   check.check("30. A migração 0025: definições só para profissionais, 'calendario' como origem e id do evento único", /create table if not exists studio_settings/.test(mig) && /exists \(select 1 from professionals where user_id = auth\.uid\(\)\)/.test(mig) && /source in \('manual', 'agenda', 'calendario'\)/.test(mig) && /sessions_calendar_unique on sessions\(external_id\) where source = 'calendario'/.test(mig) && !/drop table|delete from|truncate/i.test(mig));
   check.check("31. O pedido de autorização é só de leitura e o token não é guardado", appSource.indexOf('var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"') >= 0 && !/localStorage\.setItem\([^)]*access_token/.test(appSource) && !/calSettings\.token/.test(appSource));
   check.check("32. Mexer numa sessão do calendário na app desliga-a do calendário", /ses\.source === "calendario" \? \{status: status, source: "manual"\}/.test(appSource));
+  studio.slots = [{id: "sl1", student_id: "a", weekday: 1, time: "10:00", counts_from: d(90), generated_until: d(60)}];
+  studio.loaded = true; studio.available = true; studio.slotsAvailable = true; calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.useAsSource = true;
+  await studioAutoSessions();
+  check.check("37. Com o calendário como fonte o horário semanal avança sem criar aulas, para não haver aulas retroativas ao desligar", studio.slots[0].generated_until === addDaysISO(today, -1) && agendaDue({date: today, minutes: 0}).length === 0);
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

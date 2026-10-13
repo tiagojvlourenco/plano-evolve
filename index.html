@@ -13013,7 +13013,12 @@ var agendaRunning = null;
 // conta as sessões do horário que já passaram (desconta ao pacote certo) e avança "contado até" de cada horário; devolve quantas criou
 function studioAutoSessions(){
   if (!studio.loaded || !studio.available || !studio.slotsAvailable) return Promise.resolve(0);
-  if (calUsesCalendar()) return Promise.resolve(0); // o Google Agenda é a fonte: o horário semanal fica em pausa
+  if (calUsesCalendar()){
+    // o Google Agenda é a fonte: o horário semanal fica em pausa, mas avança, para não inventar aulas retroativas se voltares a ele
+    var yday = addDaysISO(localTodayISO(), -1);
+    studio.slots.filter(function(sl){ return !sl.generated_until || sl.generated_until < yday; }).forEach(function(sl){ studioUpdate("slots", sl.id, {generated_until: yday}); });
+    return Promise.resolve(0);
+  }
   if (agendaRunning) return agendaRunning;
   var now = new Date(), today = localTodayISO(), nowInfo = {date: today, minutes: now.getHours() * 60 + now.getMinutes()};
   var due = agendaDue(nowInfo);
@@ -13294,9 +13299,9 @@ function planCalendarSync(opts){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
     var st = matchEventStudent(ev.title, aliases);
     if (!st){ plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1; return; }
+    present[ev.id] = true; // o evento existe: nunca remover as sessões já registadas (mesmo de alunos arquivados)
     if (!isStudentActive(st)) return;
     plan.matched++;
-    present[ev.id] = true;
     var status = ev.colorId === CAL_FALTA_COLOR ? "faltou" : "feita", ex = byExt[ev.id];
     if (ex){
       var patch = {};
@@ -13366,23 +13371,40 @@ function fetchCalendarEvents(token, calendarId, fromISO, toISO){
 // aplica o plano: remove, atualiza e cria (os pacotes decidem-se por ordem de data, contando as que acabámos de decidir)
 function applyCalendarPlan(plan){
   var res = {inserted: 0, updated: 0, removed: 0, errors: 0};
-  var virtual = [];
-  plan.insert.forEach(function(row){
-    var pk = pickPackForSession(row.student_id, row.date);
-    row.pack_id = pk ? pk.id : null;
-    var v = {id: "virtual-" + virtual.length, student_id: row.student_id, pack_id: row.pack_id, date: row.date, time: row.time, status: row.status};
-    virtual.push(v); studio.sessions.push(v);
-  });
-  studio.sessions = studio.sessions.filter(function(x){ return virtual.indexOf(x) < 0; });
   var chain = Promise.resolve();
+  // 1.º remover, 2.º atualizar (o pacote volta a escolher-se se mudou o aluno ou o dia), 3.º criar: assim cada passo vê as contas já certas
   plan.remove.forEach(function(id){ chain = chain.then(function(){ return studioDelete("sessions", id).then(function(r){ if (r.error) res.errors++; else res.removed++; }); }); });
-  plan.update.forEach(function(u){ chain = chain.then(function(){ return studioUpdate("sessions", u.id, u.patch).then(function(r){ if (r.error) res.errors++; else res.updated++; }); }); });
-  return chain.then(function(){ return studioInsertMany("sessions", plan.insert); }).then(function(r){
+  plan.update.forEach(function(u){
+    chain = chain.then(function(){
+      var cur = studio.sessions.filter(function(x){ return x.id === u.id; })[0], oldPack;
+      var patch = Object.assign({}, u.patch);
+      if (cur && (patch.student_id || patch.date)){
+        oldPack = cur.pack_id; cur.pack_id = null;
+        var pk = pickPackForSession(patch.student_id || cur.student_id, patch.date || cur.date);
+        patch.pack_id = pk ? pk.id : null;
+      }
+      return studioUpdate("sessions", u.id, patch).then(function(r){
+        if (r.error){ res.errors++; if (cur && oldPack !== undefined) cur.pack_id = oldPack; } else res.updated++;
+      });
+    });
+  });
+  chain = chain.then(function(){
+    var virtual = [];
+    plan.insert.forEach(function(row){
+      var pk = pickPackForSession(row.student_id, row.date);
+      row.pack_id = pk ? pk.id : null;
+      var v = {id: "virtual-" + virtual.length, student_id: row.student_id, pack_id: row.pack_id, date: row.date, time: row.time, status: row.status};
+      virtual.push(v); studio.sessions.push(v);
+    });
+    studio.sessions = studio.sessions.filter(function(x){ return virtual.indexOf(x) < 0; });
+    return studioInsertMany("sessions", plan.insert);
+  }).then(function(r){
     if (r.error){
       if (plan.insert.length > 1) return plan.insert.reduce(function(c, row){ return c.then(function(){ return studioInsert("sessions", row).then(function(x){ if (x.error) res.errors++; else res.inserted++; }); }); }, Promise.resolve());
       res.errors += plan.insert.length;
     } else res.inserted += r.data.length;
   }).then(function(){ return res; });
+  return chain;
 }
 var calSyncing = false;
 // pede autorização, lê o calendário e deixa as sessões iguais; devolve o resumo para mostrar
