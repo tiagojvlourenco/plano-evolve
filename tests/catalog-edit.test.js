@@ -38,6 +38,16 @@ var check = require("./check")();
   state.catalogFilters = {q: "999"};
   check.check("7. A pesquisa já encontra o produto pelo novo EAN", catalogFilteredProducts().length === 1);
 
+  // 2b. filtro de estado: os rejeitados ficam escondidos por omissão
+  state.catalogProducts = [{id: "a", name: "Leite Magro", brand: "Continente", verification_status: "verified"}, {id: "b", name: "Leite Magro", brand: "Continente", verification_status: "rejected"}, {id: "c", name: "Leite", brand: "X", verification_status: "pending"}];
+  state.catalogFilters = {q: "", status: ""};
+  check.check("9. Por omissão não mostra rejeitados", catalogFilteredProducts().map(function(p){ return p.id; }).join() === "a,c");
+  state.catalogFilters.status = "rejected";
+  check.check("10. Filtrar por Rejeitado mostra só os rejeitados", catalogFilteredProducts().map(function(p){ return p.id; }).join() === "b");
+  state.catalogFilters.status = "todos";
+  check.check("11. 'Todos, incluindo rejeitados' mostra tudo", catalogFilteredProducts().length === 3);
+  state.catalogFilters = {q: "", status: ""};
+
   // 3. erro da base de dados: mostra a mensagem e deixa tentar de novo
   sb = {from: function(){ return {update: function(){ return {eq: function(){ return {select: function(){ return Promise.resolve({error: {message: "dup"}}); }}; }}; }}; }};
   state.catalogProducts[1].name = "Iogurte grego";
