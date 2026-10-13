@@ -8379,120 +8379,123 @@ function wireWorkoutLogger(s, el, rerender){
    Um exercício guardado com o mesmo nome de um da lista base substitui-o; apagá-lo repõe o original. */
 var EXERCISE_GROUPS = ["Peito", "Costas", "Ombros", "Bíceps", "Tríceps", "Quadríceps", "Posteriores", "Glúteos", "Gémeos", "Core"];
 var EX_LIB_LOCAL_KEY = "evolve_exercise_library_v1";
-// [nome, equipamento, "ponto 1|ponto 2|ponto 3", nota opcional]
+// animações de 2 fotogramas (Free Exercise DB, domínio público) guardadas na pasta exercises/ do site
+var EXERCISE_MEDIA_BASE = "https://tiagojvlourenco.github.io/plano-evolve/exercises/";
+// [nome em inglês, equipamento, "ponto 1|ponto 2|ponto 3", nota, nome em português (só para a pesquisa), 1 = tem animação em exercises/]
 var EXERCISE_SEED = {
   "Peito": [
-    ["Supino reto com barra", "Barra", "Omoplatas juntas e para baixo|Barra desce ao meio do peito, cotovelos a ~45°|Pés firmes no chão"],
-    ["Supino reto com halteres", "Halteres", "Omoplatas fixas no banco|Desce com controlo até ao alongamento do peito|Junta os halteres sem os bater em cima"],
-    ["Supino inclinado com halteres", "Halteres", "Banco a 30°, omoplatas juntas|Pega neutra ou semi-neutra, cotovelos a ~45°|Não deixes os ombros subirem para as orelhas", "Bom para ombro sensível com pega neutra"],
-    ["Supino inclinado com barra", "Barra", "Banco a 30°, peito alto|Barra desce à parte alta do peito|Empurra em linha reta, sem arquear em excesso"],
-    ["Press de peito na máquina", "Máquina", "Ajusta o banco: pegas à altura do peito|Empurra sem bloquear os cotovelos|Contrai o peito no fim", "Estável e seguro para ombro sensível"],
-    ["Press inclinado na máquina Smith", "Smith", "Omoplatas juntas e para baixo|Desce à parte alta do peito|Pés bem apoiados"],
-    ["Crucifixo no cabo (baixo para cima)", "Cabo", "Cotovelo ligeiramente fletido e fixo|Faz um arco como se abraçasses|Termina à altura do peito"],
-    ["Crucifixo na máquina (peck deck)", "Máquina", "Peito aberto, omoplatas atrás|Cotovelos ligeiramente fletidos|Controla a volta, sem deixar o peso bater"],
-    ["Crossover no cabo (alto para baixo)", "Cabo", "Peito aberto, tronco ligeiramente inclinado|Cotovelos ligeiramente fletidos|Junta as mãos à frente do peito"],
-    ["Flexões", "Peso corporal", "Corpo em linha, glúteo e abdómen contraídos|Cotovelos a ~45° do tronco|Peito desce até perto do chão"],
-    ["Flexões com apoio elevado", "Peso corporal", "Mãos num banco ou barra|Corpo em linha reta|Desce com controlo e empurra com força", "Regressão das flexões e boa para o ombro"],
-    ["Fundos nas paralelas (peito)", "Paralelas", "Tronco ligeiramente inclinado à frente|Desce até onde o ombro estiver confortável|Sem balançar", "Evitar com dor no ombro"]
+    ["Barbell Bench Press", "Barra", "Omoplatas juntas e para baixo|Barra desce ao meio do peito, cotovelos a ~45°|Pés firmes no chão", "", "Supino reto com barra", 1],
+    ["Dumbbell Bench Press", "Halteres", "Omoplatas fixas no banco|Desce com controlo até ao alongamento do peito|Junta os halteres sem os bater em cima", "", "Supino reto com halteres", 1],
+    ["Incline Dumbbell Press", "Halteres", "Banco a 30°, omoplatas juntas|Pega neutra ou semi-neutra, cotovelos a ~45°|Não deixes os ombros subirem para as orelhas", "Bom para ombro sensível com pega neutra", "Supino inclinado com halteres", 1],
+    ["Incline Barbell Press", "Barra", "Banco a 30°, peito alto|Barra desce à parte alta do peito|Empurra em linha reta, sem arquear em excesso", "", "Supino inclinado com barra", 1],
+    ["Machine Chest Press", "Máquina", "Ajusta o banco: pegas à altura do peito|Empurra sem bloquear os cotovelos|Contrai o peito no fim", "Estável e seguro para ombro sensível", "Press de peito na máquina", 1],
+    ["Smith Machine Incline Press", "Smith", "Omoplatas juntas e para baixo|Desce à parte alta do peito|Pés bem apoiados", "", "Press inclinado na máquina Smith", 1],
+    ["Low Cable Fly", "Cabo", "Cotovelo ligeiramente fletido e fixo|Faz um arco como se abraçasses|Termina à altura do peito", "", "Crucifixo no cabo (baixo para cima)", 1],
+    ["Pec Deck Fly", "Máquina", "Peito aberto, omoplatas atrás|Cotovelos ligeiramente fletidos|Controla a volta, sem deixar o peso bater", "", "Crucifixo na máquina (peck deck)", 1],
+    ["Cable Crossover", "Cabo", "Peito aberto, tronco ligeiramente inclinado|Cotovelos ligeiramente fletidos|Junta as mãos à frente do peito", "", "Crossover no cabo (alto para baixo)", 1],
+    ["Push-Up", "Peso corporal", "Corpo em linha, glúteo e abdómen contraídos|Cotovelos a ~45° do tronco|Peito desce até perto do chão", "", "Flexões", 1],
+    ["Incline Push-Up", "Peso corporal", "Mãos num banco ou barra|Corpo em linha reta|Desce com controlo e empurra com força", "Regressão das flexões e boa para o ombro", "Flexões com apoio elevado", 1],
+    ["Chest Dips", "Paralelas", "Tronco ligeiramente inclinado à frente|Desce até onde o ombro estiver confortável|Sem balançar", "Evitar com dor no ombro", "Fundos nas paralelas (peito)", 1]
   ],
   "Costas": [
-    ["Puxada à frente (pega aberta)", "Cabo", "Peito ao puxador, ombros longe das orelhas|Cotovelos para as ancas|Sem balançar o tronco"],
-    ["Puxada com pega neutra (em V)", "Cabo", "Peito ao puxador|Cotovelos para as ancas|Alonga em cima sem largar as omoplatas", "Pega neutra: mais amiga do ombro"],
-    ["Barra fixa", "Barra fixa", "Começa por baixar as omoplatas|Cotovelos para as ancas|Desce até ao alongamento completo"],
-    ["Remada sentada no cabo", "Cabo", "Peito aberto, costas neutras|Puxa com os cotovelos, não com as mãos|Pausa de 1 s com as omoplatas juntas"],
-    ["Puxada unilateral no cabo", "Cabo", "Ombro baixo, tronco firme|Cotovelo para a anca|Alonga a omoplata em cima sem a largar", "Boa para corrigir assimetrias"],
-    ["Remada com apoio no peito (máquina)", "Máquina", "Peito colado ao apoio|Deprime as omoplatas antes de puxar|Cotovelos junto ao tronco", "Muito estável, boa para ombro sensível"],
-    ["Remada com barra", "Barra", "Tronco a ~45°, costas neutras|Barra sobe ao umbigo|Sem usar o balanço das ancas"],
-    ["Remada com haltere apoiada no banco", "Halteres", "Mão e joelho apoiados, costas planas|Cotovelo vai para a anca|Alonga a omoplata em baixo"],
-    ["Remada em T (T-bar)", "Barra T", "Costas neutras, peito alto|Puxa com os cotovelos|Aperta as omoplatas no topo"],
-    ["Pullover no cabo", "Cabo", "Braços quase esticados|Desce em arco até às coxas|Costelas baixas, sem arquear a lombar"],
-    ["Encolhimentos com halteres", "Halteres", "Sobe os ombros em linha reta, sem rodar|Pausa de 1 s em cima|Desce devagar"]
+    ["Wide-Grip Lat Pulldown", "Cabo", "Peito ao puxador, ombros longe das orelhas|Cotovelos para as ancas|Sem balançar o tronco", "", "Puxada à frente (pega aberta)", 1],
+    ["Neutral-Grip Lat Pulldown", "Cabo", "Peito ao puxador|Cotovelos para as ancas|Alonga em cima sem largar as omoplatas", "Pega neutra: mais amiga do ombro", "Puxada com pega neutra (em V)", 1],
+    ["Pull-Up", "Barra fixa", "Começa por baixar as omoplatas|Cotovelos para as ancas|Desce até ao alongamento completo", "", "Barra fixa", 1],
+    ["Seated Cable Row", "Cabo", "Peito aberto, costas neutras|Puxa com os cotovelos, não com as mãos|Pausa de 1 s com as omoplatas juntas", "", "Remada sentada no cabo", 1],
+    ["Single-Arm Lat Pulldown", "Cabo", "Ombro baixo, tronco firme|Cotovelo para a anca|Alonga a omoplata em cima sem a largar", "Boa para corrigir assimetrias", "Puxada unilateral no cabo", 1],
+    ["Chest-Supported Machine Row", "Máquina", "Peito colado ao apoio|Deprime as omoplatas antes de puxar|Cotovelos junto ao tronco", "Muito estável, boa para ombro sensível", "Remada com apoio no peito (máquina)", 1],
+    ["Barbell Bent-Over Row", "Barra", "Tronco a ~45°, costas neutras|Barra sobe ao umbigo|Sem usar o balanço das ancas", "", "Remada com barra", 1],
+    ["One-Arm Dumbbell Row", "Halteres", "Mão e joelho apoiados, costas planas|Cotovelo vai para a anca|Alonga a omoplata em baixo", "", "Remada com haltere apoiada no banco", 1],
+    ["T-Bar Row", "Barra T", "Costas neutras, peito alto|Puxa com os cotovelos|Aperta as omoplatas no topo", "", "Remada em T (T-bar)", 1],
+    ["Cable Straight-Arm Pulldown", "Cabo", "Braços quase esticados|Desce em arco até às coxas|Costelas baixas, sem arquear a lombar", "", "Pullover no cabo", 1],
+    ["Dumbbell Shrug", "Halteres", "Sobe os ombros em linha reta, sem rodar|Pausa de 1 s em cima|Desce devagar", "", "Encolhimentos com halteres", 1]
   ],
   "Ombros": [
-    ["Press de ombros com halteres sentado", "Halteres", "Costas encostadas, abdómen firme|Cotovelos ligeiramente à frente do corpo|Sobe sem encolher os ombros", "Evitar com dor acima da cabeça"],
-    ["Press de ombros na máquina", "Máquina", "Costas encostadas ao banco|Empurra sem bloquear os cotovelos|Desce até onde o ombro estiver confortável"],
-    ["Landmine press", "Barra (landmine)", "Empurra para cima e ligeiramente para a frente|Glúteo contraído, tronco firme|Omoplata a deslizar, sem encolher", "Alternativa amiga do ombro ao press vertical"],
-    ["Elevação lateral com halteres", "Halteres", "Sobe o cotovelo, não a mão|Para à altura do ombro|Sem balançar o tronco"],
-    ["Elevação lateral no cabo", "Cabo", "Tensão constante desde o início|Sobe o cotovelo, não a mão|Para abaixo da linha do ombro"],
-    ["Press Arnold", "Halteres", "Começa com as palmas viradas para ti|Roda os punhos ao subir|Costas encostadas, sem arquear", "Evitar com dor acima da cabeça"],
-    ["Elevação frontal com cabo", "Cabo", "Braço quase esticado|Sobe até à altura do ombro|Sem inclinar o tronco para trás"],
-    ["Face pull", "Cabo", "Puxa a corda à altura do rosto|Cotovelos altos, abrem para os lados|Roda os punhos para fora no fim", "Excelente para saúde do ombro"],
-    ["Crucifixo inverso na máquina", "Máquina", "Peito apoiado, ombros baixos|Abre os braços com os cotovelos|Sem encolher os ombros"],
-    ["Rotação externa no cabo", "Cabo", "Cotovelo colado ao tronco a 90°|Roda o antebraço para fora, devagar|Carga leve, séries limpas", "Aquecimento e prevenção do ombro"]
+    ["Seated Dumbbell Shoulder Press", "Halteres", "Costas encostadas, abdómen firme|Cotovelos ligeiramente à frente do corpo|Sobe sem encolher os ombros", "Evitar com dor acima da cabeça", "Press de ombros com halteres sentado", 1],
+    ["Machine Shoulder Press", "Máquina", "Costas encostadas ao banco|Empurra sem bloquear os cotovelos|Desce até onde o ombro estiver confortável", "", "Press de ombros na máquina", 1],
+    ["Landmine Press", "Barra (landmine)", "Empurra para cima e ligeiramente para a frente|Glúteo contraído, tronco firme|Omoplata a deslizar, sem encolher", "Alternativa amiga do ombro ao press vertical", "Landmine press", 0],
+    ["Dumbbell Lateral Raise", "Halteres", "Sobe o cotovelo, não a mão|Para à altura do ombro|Sem balançar o tronco", "", "Elevação lateral com halteres", 1],
+    ["Cable Lateral Raise", "Cabo", "Tensão constante desde o início|Sobe o cotovelo, não a mão|Para abaixo da linha do ombro", "", "Elevação lateral no cabo", 1],
+    ["Arnold Press", "Halteres", "Começa com as palmas viradas para ti|Roda os punhos ao subir|Costas encostadas, sem arquear", "Evitar com dor acima da cabeça", "Press Arnold", 1],
+    ["Cable Front Raise", "Cabo", "Braço quase esticado|Sobe até à altura do ombro|Sem inclinar o tronco para trás", "", "Elevação frontal com cabo", 1],
+    ["Face Pull", "Cabo", "Puxa a corda à altura do rosto|Cotovelos altos, abrem para os lados|Roda os punhos para fora no fim", "Excelente para saúde do ombro", "Face pull", 1],
+    ["Reverse Pec Deck Fly", "Máquina", "Peito apoiado, ombros baixos|Abre os braços com os cotovelos|Sem encolher os ombros", "", "Crucifixo inverso na máquina", 1],
+    ["Cable External Rotation", "Cabo", "Cotovelo colado ao tronco a 90°|Roda o antebraço para fora, devagar|Carga leve, séries limpas", "Aquecimento e prevenção do ombro", "Rotação externa no cabo", 1]
   ],
   "Bíceps": [
-    ["Rosca direta com barra", "Barra", "Cotovelos fixos ao lado do tronco|Sem balançar o corpo|Desce com controlo até esticar"],
-    ["Rosca alternada com halteres", "Halteres", "Palmas viradas para cima|Cotovelo fixo|Roda o punho ao subir"],
-    ["Rosca martelo", "Halteres", "Pega neutra, cotovelos fixos|Sem inclinar o tronco|Controla a descida"],
-    ["Rosca inclinada com halteres", "Halteres", "Banco a 45°, braços a pender|Cotovelo para trás do tronco|Alongamento completo em baixo"],
-    ["Rosca no cabo", "Cabo", "Cotovelos fixos|Tensão constante|Pausa de 1 s em cima"],
-    ["Rosca martelo no cabo", "Cabo", "Cotovelo fixo ao lado do tronco|Pega neutra com corda|Pausa de 1 s em cima"],
-    ["Rosca Scott na máquina", "Máquina", "Axilas bem apoiadas no banco|Não deixes o cotovelo sair do apoio|Desce devagar, sem largar o peso"]
+    ["Barbell Curl", "Barra", "Cotovelos fixos ao lado do tronco|Sem balançar o corpo|Desce com controlo até esticar", "", "Rosca direta com barra", 1],
+    ["Alternating Dumbbell Curl", "Halteres", "Palmas viradas para cima|Cotovelo fixo|Roda o punho ao subir", "", "Rosca alternada com halteres", 1],
+    ["Hammer Curl", "Halteres", "Pega neutra, cotovelos fixos|Sem inclinar o tronco|Controla a descida", "", "Rosca martelo", 1],
+    ["Incline Dumbbell Curl", "Halteres", "Banco a 45°, braços a pender|Cotovelo para trás do tronco|Alongamento completo em baixo", "", "Rosca inclinada com halteres", 1],
+    ["Cable Curl", "Cabo", "Cotovelos fixos|Tensão constante|Pausa de 1 s em cima", "", "Rosca no cabo", 1],
+    ["Cable Hammer Curl", "Cabo", "Cotovelo fixo ao lado do tronco|Pega neutra com corda|Pausa de 1 s em cima", "", "Rosca martelo no cabo", 1],
+    ["Machine Preacher Curl", "Máquina", "Axilas bem apoiadas no banco|Não deixes o cotovelo sair do apoio|Desce devagar, sem largar o peso", "", "Rosca Scott na máquina", 1]
   ],
   "Tríceps": [
-    ["Extensão de tríceps na polia", "Cabo", "Cotovelos colados ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe"],
-    ["Extensão de tríceps unilateral na polia", "Cabo", "Cotovelo colado ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe"],
-    ["Extensão acima da cabeça no cabo", "Cabo", "Cotovelos apontados para a frente|Alonga bem o tríceps em baixo|Costelas baixas, sem arquear"],
-    ["Press francês com barra EZ", "Barra EZ", "Cotovelos apontam ao teto, fixos|Desce atrás da cabeça com controlo|Estende sem abrir os cotovelos"],
-    ["Press fechado", "Barra", "Pega à largura dos ombros|Cotovelos junto ao tronco|Empurra em linha reta"],
-    ["Fundos em banco", "Peso corporal", "Ombros afastados das orelhas|Cotovelos para trás, juntos|Desce só até onde o ombro estiver confortável", "Evitar com dor no ombro"],
-    ["Fundos nas paralelas (tríceps)", "Paralelas", "Tronco vertical|Cotovelos junto ao corpo|Estende por completo em cima", "Evitar com dor no ombro"]
+    ["Triceps Pushdown", "Cabo", "Cotovelos colados ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe", "", "Extensão de tríceps na polia", 1],
+    ["Single-Arm Triceps Pushdown", "Cabo", "Cotovelo colado ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe", "", "Extensão de tríceps unilateral na polia", 1],
+    ["Overhead Cable Triceps Extension", "Cabo", "Cotovelos apontados para a frente|Alonga bem o tríceps em baixo|Costelas baixas, sem arquear", "", "Extensão acima da cabeça no cabo", 1],
+    ["EZ-Bar Skullcrusher", "Barra EZ", "Cotovelos apontam ao teto, fixos|Desce atrás da cabeça com controlo|Estende sem abrir os cotovelos", "", "Press francês com barra EZ", 1],
+    ["Close-Grip Bench Press", "Barra", "Pega à largura dos ombros|Cotovelos junto ao tronco|Empurra em linha reta", "", "Press fechado", 1],
+    ["Bench Dips", "Peso corporal", "Ombros afastados das orelhas|Cotovelos para trás, juntos|Desce só até onde o ombro estiver confortável", "Evitar com dor no ombro", "Fundos em banco", 1],
+    ["Triceps Dips", "Paralelas", "Tronco vertical|Cotovelos junto ao corpo|Estende por completo em cima", "Evitar com dor no ombro", "Fundos nas paralelas (tríceps)", 1]
   ],
   "Quadríceps": [
-    ["Agachamento livre com barra", "Barra", "Peito alto, abdómen firme|Joelhos na direção dos pés|Desce com controlo até à amplitude que mantiveres limpa"],
-    ["Agachamento frontal", "Barra", "Cotovelos altos, barra apoiada nos ombros|Tronco vertical|Joelhos para a frente, calcanhares no chão"],
-    ["Agachamento goblet", "Haltere", "Haltere junto ao peito, cotovelos dentro dos joelhos|Tronco vertical|Pés todos apoiados"],
-    ["Leg press 45°", "Máquina", "Lombar colada ao banco|Joelhos na direção dos pés|Amplitude máxima sem a bacia levantar"],
-    ["Leg press unilateral", "Máquina", "Bacia e lombar coladas ao banco|Joelho alinhado com o pé|Amplitude controlada"],
-    ["Hack squat", "Máquina", "Costas e bacia coladas ao apoio|Pés à largura dos ombros|Desce até onde mantiveres a lombar colada"],
-    ["Agachamento búlgaro", "Halteres", "Tronco ligeiramente inclinado à frente|Pé da frente todo apoiado|Desce na vertical, não para a frente"],
-    ["Extensão de pernas", "Máquina", "Bacia colada ao banco|Pausa de 1 s em cima|Desce devagar"],
-    ["Passada andante", "Halteres", "Passos largos, tronco firme|Joelho da frente alinhado com o pé|Desce na vertical"],
-    ["Step-up", "Halteres", "Pé todo apoiado no banco|Empurra com a perna da frente|Desce com controlo"]
+    ["Barbell Back Squat", "Barra", "Peito alto, abdómen firme|Joelhos na direção dos pés|Desce com controlo até à amplitude que mantiveres limpa", "", "Agachamento livre com barra", 1],
+    ["Barbell Front Squat", "Barra", "Cotovelos altos, barra apoiada nos ombros|Tronco vertical|Joelhos para a frente, calcanhares no chão", "", "Agachamento frontal", 1],
+    ["Goblet Squat", "Haltere", "Haltere junto ao peito, cotovelos dentro dos joelhos|Tronco vertical|Pés todos apoiados", "", "Agachamento goblet", 1],
+    ["Leg Press", "Máquina", "Lombar colada ao banco|Joelhos na direção dos pés|Amplitude máxima sem a bacia levantar", "", "Leg press 45°", 1],
+    ["Single-Leg Press", "Máquina", "Bacia e lombar coladas ao banco|Joelho alinhado com o pé|Amplitude controlada", "", "Leg press unilateral", 0],
+    ["Hack Squat", "Máquina", "Costas e bacia coladas ao apoio|Pés à largura dos ombros|Desce até onde mantiveres a lombar colada", "", "Hack squat", 1],
+    ["Bulgarian Split Squat", "Halteres", "Tronco ligeiramente inclinado à frente|Pé da frente todo apoiado|Desce na vertical, não para a frente", "", "Agachamento búlgaro", 0],
+    ["Leg Extension", "Máquina", "Bacia colada ao banco|Pausa de 1 s em cima|Desce devagar", "", "Extensão de pernas", 1],
+    ["Walking Lunge", "Halteres", "Passos largos, tronco firme|Joelho da frente alinhado com o pé|Desce na vertical", "", "Passada andante", 1],
+    ["Dumbbell Step-Up", "Halteres", "Pé todo apoiado no banco|Empurra com a perna da frente|Desce com controlo", "", "Step-up", 1]
   ],
   "Posteriores": [
-    ["Peso morto romeno", "Barra ou halteres", "Empurra a anca para trás|Barra colada às pernas, costas neutras|Para quando sentires o alongamento atrás da coxa"],
-    ["Peso morto unilateral com haltere", "Halteres", "Anca para trás, perna de trás em linha com o tronco|Costas neutras|Mantém a bacia nivelada"],
-    ["Peso morto convencional", "Barra", "Costas neutras, peito alto|Empurra o chão com os pés|Barra sempre colada ao corpo"],
-    ["Curl femoral deitado", "Máquina", "Bacia colada ao banco|Sobe sem levantar a anca|Desce em 3 s"],
-    ["Curl femoral sentado", "Máquina", "Anca fixa no banco|Controla a fase de volta com 3 s|Amplitude completa"],
-    ["Hiperextensão a 45°", "Banco romano", "Costas neutras, não hiperestendas|Sobe com os glúteos e posteriores|Cruza os braços ao peito"],
-    ["Nordic curl", "Peso corporal", "Joelhos fixos e corpo em linha|Desce o mais devagar possível|Usa as mãos para ajudar a subir"]
+    ["Romanian Deadlift", "Barra ou halteres", "Empurra a anca para trás|Barra colada às pernas, costas neutras|Para quando sentires o alongamento atrás da coxa", "", "Peso morto romeno", 1],
+    ["Single-Leg Romanian Deadlift", "Halteres", "Anca para trás, perna de trás em linha com o tronco|Costas neutras|Mantém a bacia nivelada", "", "Peso morto unilateral com haltere", 1],
+    ["Conventional Deadlift", "Barra", "Costas neutras, peito alto|Empurra o chão com os pés|Barra sempre colada ao corpo", "", "Peso morto convencional", 1],
+    ["Lying Leg Curl", "Máquina", "Bacia colada ao banco|Sobe sem levantar a anca|Desce em 3 s", "", "Curl femoral deitado", 1],
+    ["Seated Leg Curl", "Máquina", "Anca fixa no banco|Controla a fase de volta com 3 s|Amplitude completa", "", "Curl femoral sentado", 1],
+    ["45° Back Extension", "Banco romano", "Costas neutras, não hiperestendas|Sobe com os glúteos e posteriores|Cruza os braços ao peito", "", "Hiperextensão a 45°", 1],
+    ["Nordic Hamstring Curl", "Peso corporal", "Joelhos fixos e corpo em linha|Desce o mais devagar possível|Usa as mãos para ajudar a subir", "", "Nordic curl", 1]
   ],
   "Glúteos": [
-    ["Hip thrust", "Barra", "Queixo para o peito, costelas baixas|Empurra pelos calcanhares|Pausa de 2 s com glúteo contraído"],
-    ["Passada reversa", "Halteres", "Passo largo para trás|Tronco ligeiramente inclinado à frente|Empurra pelo calcanhar da frente"],
-    ["Ponte de glúteos", "Peso corporal", "Pés perto do glúteo|Sobe a bacia sem arquear a lombar|Contrai no topo"],
-    ["Abdução na máquina", "Máquina", "Tronco ligeiramente inclinado à frente|Abre com os glúteos, não com o balanço|Controla a volta"],
-    ["Abdução no cabo", "Cabo", "Tronco ligeiramente inclinado|Sem rodar a bacia|Pausa de 1 s no fim"],
-    ["Coice no cabo (kickback)", "Cabo", "Lombar neutra|Estende a anca sem arquear as costas|Contrai o glúteo no fim"],
-    ["Agachamento sumo", "Haltere", "Pés largos, pontas para fora|Joelhos na direção dos pés|Tronco vertical"]
+    ["Barbell Hip Thrust", "Barra", "Queixo para o peito, costelas baixas|Empurra pelos calcanhares|Pausa de 2 s com glúteo contraído", "", "Hip thrust", 1],
+    ["Dumbbell Reverse Lunge", "Halteres", "Passo largo para trás|Tronco ligeiramente inclinado à frente|Empurra pelo calcanhar da frente", "", "Passada reversa", 1],
+    ["Glute Bridge", "Peso corporal", "Pés perto do glúteo|Sobe a bacia sem arquear a lombar|Contrai no topo", "", "Ponte de glúteos", 1],
+    ["Machine Hip Abduction", "Máquina", "Tronco ligeiramente inclinado à frente|Abre com os glúteos, não com o balanço|Controla a volta", "", "Abdução na máquina", 1],
+    ["Cable Hip Abduction", "Cabo", "Tronco ligeiramente inclinado|Sem rodar a bacia|Pausa de 1 s no fim", "", "Abdução no cabo", 0],
+    ["Cable Glute Kickback", "Cabo", "Lombar neutra|Estende a anca sem arquear as costas|Contrai o glúteo no fim", "", "Coice no cabo (kickback)", 1],
+    ["Dumbbell Sumo Squat", "Haltere", "Pés largos, pontas para fora|Joelhos na direção dos pés|Tronco vertical", "", "Agachamento sumo", 1]
   ],
   "Gémeos": [
-    ["Elevação de gémeos em pé", "Máquina ou Smith", "Pausa de 2 s no alongamento|Sobe até à ponta dos pés|Amplitude completa"],
-    ["Elevação de gémeos sentado", "Máquina", "Joelhos a 90°|Pausa de 2 s em baixo|Sobe sem balançar"],
-    ["Elevação de gémeos no leg press", "Máquina", "Só as pontas dos pés na plataforma|Joelhos quase esticados, sem bloquear|Amplitude completa"]
+    ["Standing Calf Raise", "Máquina ou Smith", "Pausa de 2 s no alongamento|Sobe até à ponta dos pés|Amplitude completa", "", "Elevação de gémeos em pé", 1],
+    ["Seated Calf Raise", "Máquina", "Joelhos a 90°|Pausa de 2 s em baixo|Sobe sem balançar", "", "Elevação de gémeos sentado", 1],
+    ["Leg Press Calf Raise", "Máquina", "Só as pontas dos pés na plataforma|Joelhos quase esticados, sem bloquear|Amplitude completa", "", "Elevação de gémeos no leg press", 1]
   ],
   "Core": [
-    ["Prancha", "Peso corporal", "Corpo em linha, glúteos contraídos|Cotovelos sob os ombros|Respira sem perder a posição"],
-    ["Prancha lateral", "Peso corporal", "Corpo em linha, anca alta|Cotovelo sob o ombro|Não deixes a bacia cair"],
-    ["Dead bug", "Peso corporal", "Zona lombar colada ao chão|Expira ao estender o braço e a perna|Movimento lento e controlado"],
-    ["Crunch abdominal no chão", "Peso corporal", "Lombar colada ao chão|Sobe as costelas em direção à bacia|Pescoço relaxado, olhar ao teto"],
-    ["Pallof press", "Cabo", "Resiste à rotação do tronco|Costelas fechadas, glúteos firmes|Respira sem perder a postura"],
-    ["Elevação de pernas deitado", "Peso corporal", "Lombar colada ao chão|Sobe as pernas esticadas, sem balançar|Desce devagar sem tocar no chão"],
-    ["Crunch no cabo", "Cabo", "Enrola a coluna, não dobres só a anca|Cotovelos para as coxas|Expira no fim"],
-    ["Elevação de pernas suspenso", "Barra fixa", "Sobe a bacia no fim, não só as pernas|Sem balançar|Desce devagar"],
-    ["Roda abdominal", "Roda", "Costelas baixas, lombar neutra|Vai até onde mantiveres o controlo|Volta com o abdómen, não com a anca"],
-    ["Bird dog", "Peso corporal", "Costas neutras, bacia estável|Estende braço e perna opostos|Pausa de 2 s e volta devagar"]
+    ["Plank", "Peso corporal", "Corpo em linha, glúteos contraídos|Cotovelos sob os ombros|Respira sem perder a posição", "", "Prancha", 1],
+    ["Side Plank", "Peso corporal", "Corpo em linha, anca alta|Cotovelo sob o ombro|Não deixes a bacia cair", "", "Prancha lateral", 1],
+    ["Dead Bug", "Peso corporal", "Zona lombar colada ao chão|Expira ao estender o braço e a perna|Movimento lento e controlado", "", "Dead bug", 1],
+    ["Crunch", "Peso corporal", "Lombar colada ao chão|Sobe as costelas em direção à bacia|Pescoço relaxado, olhar ao teto", "", "Crunch abdominal no chão", 1],
+    ["Pallof Press", "Cabo", "Resiste à rotação do tronco|Costelas fechadas, glúteos firmes|Respira sem perder a postura", "", "Pallof press", 1],
+    ["Lying Leg Raise", "Peso corporal", "Lombar colada ao chão|Sobe as pernas esticadas, sem balançar|Desce devagar sem tocar no chão", "", "Elevação de pernas deitado", 1],
+    ["Cable Crunch", "Cabo", "Enrola a coluna, não dobres só a anca|Cotovelos para as coxas|Expira no fim", "", "Crunch no cabo", 1],
+    ["Hanging Leg Raise", "Barra fixa", "Sobe a bacia no fim, não só as pernas|Sem balançar|Desce devagar", "", "Elevação de pernas suspenso", 1],
+    ["Ab Wheel Rollout", "Roda", "Costelas baixas, lombar neutra|Vai até onde mantiveres o controlo|Volta com o abdómen, não com a anca", "", "Roda abdominal", 1],
+    ["Bird Dog", "Peso corporal", "Costas neutras, bacia estável|Estende braço e perna opostos|Pausa de 2 s e volta devagar", "", "Bird dog", 0]
   ]
 };
 function exLibFold(s){ return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
-function exerciseSearchUrl(name){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent(String(name) + " execução técnica"); }
+function exerciseSearchUrl(name){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent(String(name) + " exercise proper form"); }
+function exerciseMediaUrl(name){ return EXERCISE_MEDIA_BASE + slug(name) + ".webp"; }
 function exerciseSeedList(){
   var out = [];
   EXERCISE_GROUPS.forEach(function(g){
     (EXERCISE_SEED[g] || []).forEach(function(r){
-      out.push({name: r[0], group: g, equipment: r[1] || "", cues: parseCues(String(r[2] || "").split("|")), note: r[3] || "", demo: exerciseSearchUrl(r[0]), ownDemo: false, seed: true, id: null});
+      out.push({name: r[0], group: g, equipment: r[1] || "", cues: parseCues(String(r[2] || "").split("|")), note: r[3] || "", alias: r[4] || "", media: !!r[5], demo: r[5] ? exerciseMediaUrl(r[0]) : exerciseSearchUrl(r[0]), ownDemo: false, seed: true, id: null});
     });
   });
   return out;
@@ -8517,7 +8520,7 @@ function exerciseLibraryMerged(custom){
     if (!cl.entry) return;
     var k = exLibFold(cl.entry.name), base = byKey[k];
     var e = {name: cl.entry.name, group: cl.entry.group, equipment: cl.entry.equipment || (base ? base.equipment : ""), cues: cl.entry.cues.length ? cl.entry.cues : (base ? base.cues : []), note: cl.entry.note || (base ? base.note : ""),
-      demo: cl.entry.demo || exerciseSearchUrl(cl.entry.name), ownDemo: !!cl.entry.demo, seed: false, overrides: !!base, id: c.id || null};
+      alias: base ? base.alias : "", media: base ? base.media : false, demo: cl.entry.demo || (base ? base.demo : exerciseSearchUrl(cl.entry.name)), ownDemo: !!cl.entry.demo, seed: false, overrides: !!base, id: c.id || null};
     if (!base) order.push(k);
     byKey[k] = e;
   });
@@ -8531,7 +8534,7 @@ function exerciseLibraryMerged(custom){
 function exerciseLibraryFilter(list, group, query){
   var q = exLibFold(query);
   return list.filter(function(e){
-    return (!group || e.group === group) && (!q || exLibFold(e.name + " " + e.equipment + " " + e.group + " " + e.note).indexOf(q) >= 0);
+    return (!group || e.group === group) && (!q || exLibFold(e.name + " " + (e.alias || "") + " " + e.equipment + " " + e.group + " " + e.note).indexOf(q) >= 0);
   });
 }
 function exLibLocalRead(){ try { var v = JSON.parse(localStorage.getItem(EX_LIB_LOCAL_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
@@ -8569,7 +8572,7 @@ function exerciseLibraryDelete(id){
 function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n")}; }
 function openExerciseLibrary(onPick){
   var sheet = openModal("<div class=\"mtitle\">Biblioteca de exercícios</div>" +
-    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Partilhada por todo o estúdio. Escolhe um exercício para o preencher no treino, com demonstração e pontos-chave.</p><div id=\"exLibBody\"><p class=\"muted-p\">A carregar…</p></div>");
+    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Partilhada por todo o estúdio. Escolhe um exercício para o preencher no treino, com animação e pontos-chave.</p><div id=\"exLibBody\"><p class=\"muted-p\">A carregar…</p></div>");
   var body = sheet.querySelector("#exLibBody");
   var custom = [], group = "", query = "";
   function listView(){
@@ -8578,7 +8581,7 @@ function openExerciseLibrary(onPick){
       "<div style=\"display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;\"><button type=\"button\" class=\"chip" + (group ? "" : " on") + "\" data-lib-group=\"\">Todos</button>" +
       EXERCISE_GROUPS.map(function(g){ return "<button type=\"button\" class=\"chip" + (group === g ? " on" : "") + "\" data-lib-group=\"" + escapeHtml(g) + "\">" + escapeHtml(g) + "</button>"; }).join("") + "</div>" +
       "<div id=\"exLibList\">" + (shown.length ? shown.map(function(e, i){
-        return "<div class=\"food-item\" style=\"cursor:default;\"><span class=\"fname\"><button type=\"button\" class=\"wl-info\" data-lib-pick=\"" + i + "\">" + escapeHtml(e.name) + "</button>" +
+        return "<div class=\"food-item\" style=\"cursor:default;\">" + (e.media && !e.ownDemo ? "<img src=\"" + escapeHtml(e.demo) + "\" alt=\"\" loading=\"lazy\" width=\"56\" height=\"56\" style=\"width:56px; height:56px; object-fit:cover; border-radius:10px; margin-right:10px; flex:none;\">" : "") + "<span class=\"fname\" style=\"flex:1; min-width:0;\"><button type=\"button\" class=\"wl-info\" data-lib-pick=\"" + i + "\">" + escapeHtml(e.name) + "</button>" +
           (e.seed ? "" : " <span class=\"pill\" style=\"font-size:0.62rem;\">estúdio</span>") +
           "<span class=\"muted-p\" style=\"display:block; font-size:0.74rem;\">" + escapeHtml(e.group + (e.equipment ? " · " + e.equipment : "") + (e.ownDemo ? " · vídeo próprio" : "")) + (e.note ? " · " + escapeHtml(e.note) : "") + "</span></span>" +
           "<span style=\"white-space:nowrap;\"><a class=\"assess-del\" href=\"" + escapeHtml(e.demo) + "\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"Ver vídeo\" title=\"Ver vídeo\" style=\"text-decoration:none;\">▶</a> " +
@@ -8602,7 +8605,7 @@ function openExerciseLibrary(onPick){
     body.innerHTML = "<div class=\"checkin-field\"><label for=\"exlName\">Nome</label><input type=\"text\" id=\"exlName\" maxlength=\"120\" value=\"" + escapeHtml(e ? e.name : "") + "\"" + (locked || (e && e.overrides) ? " readonly" : "") + "></div>" +
       "<div class=\"checkin-field\"><label for=\"exlGroup\">Grupo muscular</label><select id=\"exlGroup\" class=\"mini-select\" style=\"width:100%;\">" + EXERCISE_GROUPS.map(function(g){ return "<option" + (e && e.group === g ? " selected" : "") + ">" + escapeHtml(g) + "</option>"; }).join("") + "</select></div>" +
       "<div class=\"checkin-field\"><label for=\"exlEquip\">Equipamento (opcional)</label><input type=\"text\" id=\"exlEquip\" maxlength=\"60\" value=\"" + escapeHtml(e ? e.equipment : "") + "\"></div>" +
-      "<div class=\"checkin-field\"><label for=\"exlDemo\">Vídeo ou GIF (ligação https)</label><input type=\"url\" id=\"exlDemo\" maxlength=\"500\" placeholder=\"https://…\" value=\"" + escapeHtml(e && e.ownDemo ? e.demo : "") + "\"><p class=\"muted-p\" style=\"font-size:0.74rem;\">Vazio = pesquisa de vídeo no YouTube.</p></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlDemo\">Vídeo ou GIF (ligação https)</label><input type=\"url\" id=\"exlDemo\" maxlength=\"500\" placeholder=\"https://…\" value=\"" + escapeHtml(e && e.ownDemo ? e.demo : "") + "\"><p class=\"muted-p\" style=\"font-size:0.74rem;\">Vazio = animação da biblioteca (ou pesquisa no YouTube se não houver).</p></div>" +
       "<div class=\"checkin-field\"><label for=\"exlCues\">Pontos-chave (um por linha, até " + EX_CUES_MAX + ")</label><textarea id=\"exlCues\" rows=\"3\">" + escapeHtml(e ? e.cues.join("\n") : "") + "</textarea></div>" +
       "<div class=\"checkin-field\"><label for=\"exlNote\">Nota (opcional)</label><input type=\"text\" id=\"exlNote\" maxlength=\"200\" value=\"" + escapeHtml(e ? e.note : "") + "\" placeholder=\"Ex.: amigo do ombro sensível\"></div>" +
       "<p class=\"muted-p\" id=\"exlErr\" style=\"color:var(--critical); display:none;\"></p>" +
