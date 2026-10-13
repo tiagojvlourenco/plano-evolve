@@ -46,9 +46,9 @@ Barra lateral:
 | Área | Sub-separadores (`state.proTab`) | Template |
 |---|---|---|
 | Resumo | `leitura`, `pedidos`, `checkins`, `perfil`, `notas`, `historico` | `tplProLeitura`, `tplProPedidos`, `tplProCheckins`, `tplProPerfil`, `tplProNotas`, `tplProHistorico` |
-| Nutrição | `plano` | `tplProPlano`, `tplPlanoMealEditor`, `tplAddFoodForm`, `tplEditFoodForm` |
-| Treino | `treino` | `tplProTreino` |
-| Avaliação | `evolucao` | `tplEvolucaoAluno`, `tplAssessForm`, `tplAssessTable`, `tplPhotoCompare` |
+| Nutrição | `plano` | `tplProPlano`, `tplPlanoMealEditor`, `tplAddFoodForm`, `tplEditFoodForm`, `tplTemplatesBar("nutricao")` |
+| Treino | `treino` | `tplProTreino`, `tplTemplatesBar("treino")` |
+| Avaliação | `evolucao` | `tplEvolucaoAluno`, `tplAssessForm`, `tplAssessTable`, `tplPhotoCompare` ("Antes vs Depois": fotos + `compareMetricsHtml`) |
 
 Há ainda: convite de aluno (questionário), importação de pesagens (`tplImportWeighIns`/`tplImportPreview`), cópia do questionário, e o botão voltar com ações rápidas no ecrã do aluno.
 
@@ -70,6 +70,9 @@ Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
 ### `help_requests` / `help_request_notes`
 `help_requests`: `id`, `student_id` → `students`, `created_at`, `situation`, `meal_name`, `note`, `status` (`pendente` | `tratado`). O aluno só insere para si; o profissional lê/trata. `help_request_notes`: notas do profissional sobre um pedido.
+
+### `plan_templates` (0020)
+`id`, `kind` (`nutricao` | `treino`), `name`, `data` (jsonb: refeições com alimentos, ou dias com exercícios), `created_by`, `created_at`. Só profissionais leem, criam e apagam. Em modo local (sem Supabase) os templates ficam em `localStorage` (`evolve_plan_templates_v1`).
 
 ### `custom_foods`
 `id`, `name`, `kcal`, `protein`, `carbs`, `fat`, `food_group` (`protein|carb|veg|fat|fruit`), `created_by`, `created_at`. Leitura para autenticados, escrita só para profissionais.
