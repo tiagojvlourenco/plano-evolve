@@ -12801,14 +12801,22 @@ function studioLoad(){
     studio.loaded = true; studio.available = true;
     return Promise.resolve(true);
   }
-  var since = new Date(Date.now() - STUDIO_HISTORY_DAYS * 86400000).toISOString().slice(0, 10);
+  var since = new Date(Date.now() - STUDIO_HISTORY_DAYS * 86400000).toISOString().slice(0, 10), today = todayISO();
+  // as sessões lêem-se desde o início do pacote mais antigo ainda em vigor (senão as sessões usadas ficavam por contar)
   return Promise.all([
     sb.from("session_packs").select("*").order("starts_on", {ascending: false}).then(function(r){ return r; }),
-    sb.from("sessions").select("*").gte("date", since).order("date", {ascending: false}).then(function(r){ return r; }),
     sb.from("payments").select("*").order("due_on", {ascending: false}).then(function(r){ return r; })
   ]).then(function(r){
-    if (r.some(function(x){ return !x || x.error; })){ studio.available = false; studio.loaded = true; return false; }
-    studio.packs = r[0].data || []; studio.sessions = r[1].data || []; studio.payments = r[2].data || [];
+    if (r.some(function(x){ return !x || x.error; })) return null;
+    var packs = r[0].data || [], from = since;
+    packs.forEach(function(p){ if ((!p.expires_on || p.expires_on >= today) && p.starts_on && p.starts_on < from) from = p.starts_on; });
+    return sb.from("sessions").select("*").gte("date", from).order("date", {ascending: false}).then(function(sr){
+      if (!sr || sr.error) return null;
+      return {packs: packs, payments: r[1].data || [], sessions: sr.data || []};
+    });
+  }).then(function(all){
+    if (!all){ studio.available = false; studio.loaded = true; return false; }
+    studio.packs = all.packs; studio.sessions = all.sessions; studio.payments = all.payments;
     studio.available = true; studio.loaded = true;
     return true;
   }).catch(function(){ studio.available = false; studio.loaded = true; return false; });
