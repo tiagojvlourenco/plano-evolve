@@ -77,6 +77,29 @@ function fixtureRow(id, name){
   await pg.locator('#quickSessions [data-qs="stu2:feita"]').click();
   await pg.waitForFunction(function(){ return window.__fake.tables.sessions.length === 3; });
   check.check("9. O registo rápido grava a sessão de hoje como feita", (await pg.evaluate(function(){ var l = window.__fake.tables.sessions; return l[l.length - 1].status; })) === "feita");
+  // horário semanal: conta sozinho as sessões que já passaram
+  await pg.click("#navDashboard");
+  await pg.locator("[data-open]").first().click();
+  await pg.click('[data-sub="sessoes"]');
+  await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
+  var weekAgo = new Date(Date.now() - 7 * 86400000), wdAgo = weekAgo.getDay() === 0 ? 7 : weekAgo.getDay();
+  var weekAgoISO = weekAgo.getFullYear() + "-" + String(weekAgo.getMonth() + 1).padStart(2, "0") + "-" + String(weekAgo.getDate()).padStart(2, "0");
+  await pg.selectOption("#slWeekday", String(wdAgo)); await pg.fill("#slTime", "07:00"); await pg.fill("#slFrom", weekAgoISO);
+  await pg.click("#slAdd");
+  await pg.waitForFunction(function(){ return window.__fake.tables.sessions.some(function(x){ return x.source === "agenda"; }); });
+  var auto = await pg.evaluate(function(){ return {sess: window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }), slot: window.__fake.tables.session_slots[0]}; });
+  check.check("9b. O horário conta sozinho a sessão que já passou (feita, 07:00, do horário)", auto.sess.length === 1 && auto.sess[0].status === "feita" && auto.sess[0].time === "07:00" && auto.sess[0].date === weekAgoISO);
+  await pg.waitForFunction(function(){ var sl = window.__fake.tables.session_slots[0]; return sl && sl.generated_until; });
+  check.check("9c. O horário fica marcado como contado até ontem, para não repetir", !!(await pg.evaluate(function(){ return window.__fake.tables.session_slots[0].generated_until; })));
+  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
+  check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8) e a agenda", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 1);
+  check.check("9e. A sessão contada pelo horário não se duplica ao reabrir o Estúdio", (await pg.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 1);
+  // importar pacotes a decorrer
+  await pg.click("#studioImport summary");
+  await pg.fill("#impText", "Rui Teste; 26; 01/10/2026; 520; 9\nNinguém; 10; 01/10/2026; 1; 0");
+  await pg.click("#impGo");
+  await pg.waitForFunction(function(){ return window.__fake.tables.session_packs.some(function(p){ return p.student_id === "stu2" && p.used_before === 9; }); });
+  check.check("9f. Importar cria o pacote do aluno com as aulas já dadas e avisa do nome que não existe", /Ninguém/.test(await pg.locator("#impOut").innerText()) && /1 pacote criado/.test(await pg.locator("#impOut").innerText()));
   var [dl] = await Promise.all([pg.waitForEvent("download"), pg.click("#csvSessions")]);
   var csv = fs.readFileSync(await dl.path(), "utf8");
   check.check("10. O CSV das sessões descarrega com cabeçalho e as sessões do mês", /^﻿Aluno;Data;Hora;Estado;Pacote;Notas/.test(csv) && /Pack 10 sessões/.test(csv));

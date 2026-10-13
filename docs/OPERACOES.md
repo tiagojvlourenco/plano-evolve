@@ -98,6 +98,15 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - A app **não cobra** nem emite faturas: regista cobranças e exporta CSV (cobranças e sessões do mês) para a contabilidade. A fatura certificada continua a ser emitida no programa de faturação.
 - Os dados de pacotes e cobranças só são legíveis por profissionais (RLS); os alunos nunca os veem.
 
+## 8d. Migração 0024 (horário semanal e contagem automática) e fim do script de e-mail
+
+- [ ] Correr `supabase/migrations/0024_studio_agenda.sql` no SQL Editor (depois da 0023; é repetível). Sem ela, o Estúdio funciona só com registo à mão (sem horários nem "aulas já dadas").
+- [ ] Importar os pacotes que estão a decorrer: Estúdio → "Importar pacotes que já estão a decorrer" (uma linha por aluno: nome; aulas; início; valor; aulas já dadas). As aulas já dadas vêm do "em falta" da folha de cálculo.
+- [ ] Definir o horário semanal de cada aluno (ficha → Pacotes → Horário semanal). A app conta sozinha cada sessão depois de passar; só precisas de marcar as exceções na Agenda do Estúdio.
+- [ ] Durante 1 ou 2 semanas, comparar o "Resumo de treinos" da app com o e-mail do script. Quando bater certo, apaga o *trigger* semanal do Google Apps Script (função `listarTriggers` / "Recriar trigger semanal" do menu da folha).
+- A app **não lê o Google Calendar**: o horário semanal substitui o calendário para contar aulas. Aulas que não seguem o horário (extra, mudadas de dia) registam-se na secção "Sessão fora do horário". A "falta" (cor 11 no calendário) marca-se como "Faltou"; por omissão também gasta uma sessão, como no script.
+- O limite de "a acabar" passa a ser o número de aulas por semana do aluno (mínimo 2). No script, a fórmula `(aulas/4)/13` arredondada dava quase sempre 1.
+
 **Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
 
 ## 9. Riscos e limitações que ficam por resolver nesta fase

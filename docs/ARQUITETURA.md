@@ -64,7 +64,7 @@ Há ainda: convite de aluno (questionário), importação de pesagens (`tplImpor
 
 ---
 
-## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0023`)
+## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0024`)
 
 Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
@@ -79,6 +79,9 @@ Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
 ### `session_packs`, `sessions`, `payments` (0023)
 Pacotes de sessões (`total`, `price`, `starts_on`/`expires_on`, regras `missed_consumes` e `late_cancel_consumes`), sessões (`feita` | `faltou` | `cancelada` | `cancelada_tarde`, ligadas a um pacote) e cobranças (`amount`, `due_on`, `paid_on`, `method`). Só profissionais leem e escrevem (uma política `for all` por tabela); apagar o aluno apaga o histórico, apagar um pacote deixa sessões e cobranças sem pacote. Em modo local ficam em `localStorage` (`evolve_studio_v1`, com dados de demonstração). Regras em `sessionConsumes`/`packUsage`/`pickPackForSession` (a sessão desconta ao pacote que caduca primeiro); a app regista e avisa, não cobra nem emite faturas.
+
+### `session_slots` e contagem automática (0024)
+`session_slots` guarda o horário semanal de um aluno (`weekday` 1=segunda…7=domingo, `time`, `counts_from`, `generated_until`). `studioAutoSessions()` (ao abrir a app, ao abrir o Estúdio, ao voltar à app e ao criar um horário) cria como **feitas** (`sessions.source = 'agenda'`) as sessões do horário que já passaram (a de hoje só depois da hora + 1 h), desconta-as ao pacote que caduca primeiro e avança `generated_until`; nunca duplica (uma sessão já registada nesse dia/hora, ou sem hora, ocupa o lugar; índice único parcial no servidor). As exceções (faltou, cancelou, mudou de dia) marcam-se na **Agenda** do Estúdio. `session_packs.used_before` = aulas já dadas antes de usar a app; `studioImportPacks()` importa uma linha por aluno (nome; aulas; início; valor; aulas já dadas). O **Resumo de treinos** (`studioSummaryRows`) substitui o e-mail semanal: valor, total, progresso, em falta, "aguarda renovação" e aulas extra (sessões sem pacote depois do último pacote; um pacote novo desconta-as). O menu Estúdio mostra quantos alunos precisam de atenção.
 
 ### `professionals`
 `user_id` (PK → `auth.users`), `email`, `created_at`. Só se lê a própria linha; só se gere pelo SQL Editor (`supabase/manage_professionals.sql`).
@@ -149,7 +152,7 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
 | `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
-| `supabase/migrations/0001…0023_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `supabase/migrations/0001…0024_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |
