@@ -61,8 +61,8 @@ Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 ### `students` (uma linha por aluno; muitos dados em `jsonb`)
 - Identidade/perfil: `id` (text, PK), `auth_user_id`, `name`, `initials`, `age`/data de nascimento, `sex`, `height`, `weight_initial|current|goal`, `goal`, `is_demo`, ativo/arquivado, nível de atividade, dados do questionário (treino, sono, preferências, orçamento, tempo de cozinha, dados médicos…).
 - Listas/objetos `jsonb`: `training_days`, `likes`, `dislikes`, `avoid`, `allergies`, `targets`, `alerts`, `meals` (o plano), `meal_daily_state` (+ `meals_date`), `checkins`, `weights`, `assessments`, `photos`, `plan_history`, `substitution_history`, `adaptation_history`, `training_program` (0019), `workout_logs` (0019).
-- Estrutura de `training_program`: `{name, days:[{id, name, exercises:[{id, name, sets, reps, rpe, rest, notes}]}]}` — só o profissional escreve.
-- Estrutura de `workout_logs`: `[{id, date, dayId, dayName, rpe, notes, entries:[{exerciseId, name, sets:[{reps, load}]}]}]` — o aluno só acrescenta (validado por `workout_log_is_valid` / `workout_logs_appended_are_valid`).
+- Estrutura de `training_program`: `{name, days:[{id, name, exercises:[{id, name, sets, reps, rpe, rest, notes, demo?, cues?}]}]}` — só o profissional escreve.
+- Estrutura de `workout_logs`: `[{id, date, dayId, dayName, rpe, notes, entries:[{exerciseId, name, sets:[{reps, load, rir?}]}]}]` — o aluno só acrescenta (validado por `workout_log_is_valid` / `workout_logs_appended_are_valid`).
 - Históricos (`substitution_history`, `adaptation_history`, `workout_logs`) são **append-only** por trigger (0006, 0019).
 
 ### `professionals`

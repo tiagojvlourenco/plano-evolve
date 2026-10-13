@@ -66,7 +66,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("2. Terminar sessão apaga os rascunhos (também do localStorage)", Object.keys(wlDraftStore()).length === 0 && !store[WL_DRAFT_KEY]);
   wlDraftClear(s, "d1"); state.wlDraft = null;
   check.check("2. Depois de guardar o treino o rascunho é apagado", !wlDraftGet(s, "d1").sets["e1:0"]);
-  check.check("2. Os listeners ficam nos campos (não acumulam no contentor reutilizado)", /querySelectorAll\("\[data-wl-reps\], \[data-wl-load\], \[data-wl-done\], #wlRpe, #wlNotes"\)/.test(appSource));
+  check.check("2. Os listeners ficam nos campos (não acumulam no contentor reutilizado)", /querySelectorAll\("\[data-wl-reps\], \[data-wl-load\], \[data-wl-rir\], \[data-wl-done\], #wlRpe, #wlNotes"\)/.test(appSource));
 })();
 
 // ---- 3. Peso do corpo: progressão por repetições ----
