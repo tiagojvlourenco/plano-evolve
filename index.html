@@ -146,6 +146,12 @@
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
+  .studio-row{padding:10px 12px; border:1px solid var(--line); border-radius:12px; margin-bottom:8px;}
+  .studio-row.renovar{background:var(--critical-soft); border-color:var(--critical);}
+  .studio-row.acabar{background:var(--warn-soft); border-color:var(--warn);}
+  .studio-row .sr-head{display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
+  .studio-row .sr-flag{font-size:0.76rem; font-weight:700; margin-top:6px;}
+  .studio-row.renovar .sr-flag{color:var(--critical);}
   .sync-pill{position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 86px); left:50%; transform:translateX(-50%); z-index:95; max-width:92vw; padding:5px 12px; border-radius:999px; border:1px solid var(--warn); background:var(--surface-3); color:var(--ink); font-size:0.72rem; font-weight:600; line-height:1.3; text-align:center; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.35);}
   .preview-banner{display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; padding:9px 12px; border:1px solid var(--warn); border-radius:12px; background:var(--warn-soft); color:var(--ink); font-size:0.78rem; line-height:1.35;}
   .phone-header .greet{font-family:var(--display); font-size:1.3rem; font-weight:700;}
@@ -2621,7 +2627,7 @@ function updatePendingBadges(){
     var n = pendingHelpFor(state.proSelectedId);
     proRoot.querySelectorAll("[data-sub=\"pedidos\"]").forEach(function(b){ b.textContent = "Pedidos" + (n ? " (" + n + ")" : ""); });
     proRoot.querySelectorAll("[data-g=\"resumo\"]").forEach(function(b){ b.classList.toggle("has-pending", n > 0); });
-  } else if (state.proView !== "catalog" && proRoot.querySelector(".pro-stat-row")){
+  } else if (state.proView === "dashboard" && proRoot.querySelector(".pro-stat-row")){
     renderProDashboardMain();
   }
 }
@@ -8128,7 +8134,7 @@ function addProgramExercise(s, dayId, ex){
   var rpe = parseFloat(ex.rpe), rest = parseInt(ex.rest, 10);
   var e = {id: uidShort("e"), name: name.slice(0, 120), sets: sets, reps: String(ex.reps || "8-12").trim().slice(0, 20),
     rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(ex.notes || "").trim().slice(0, 200),
-    demo: cleanDemoUrl(ex.demo) || null, cues: parseCues(ex.cues)};
+    demo: cleanDemoUrl(ex.demo) || null, cues: parseCues(ex.cues), group: EXERCISE_GROUPS.indexOf(ex.group) >= 0 ? ex.group : (exerciseGroupFor(name) || null)};
   day.exercises.push(e);
   return e;
 }
@@ -8141,6 +8147,7 @@ function updateProgramExerciseGuide(s, dayId, exId, guide){
   if (raw && !cleanDemoUrl(raw)) return false;
   ex.demo = raw ? cleanDemoUrl(raw) : null;
   ex.cues = parseCues(guide && guide.cues);
+  if (guide && guide.group !== undefined) ex.group = EXERCISE_GROUPS.indexOf(guide.group) >= 0 ? guide.group : (exerciseGroupFor(ex.name) || null);
   return true;
 }
 function removeProgramExercise(s, dayId, exId){
@@ -8491,6 +8498,175 @@ function findProgramExercise(s, exId){
   trainingProgramOf(s).days.forEach(function(d){ d.exercises.forEach(function(e){ if (e.id === exId) out = e; }); });
   return out;
 }
+/* ---------- Volume semanal por grupo muscular, deload e recordes ----------
+   O grupo de cada exercício vem da biblioteca (ou escolhe-se à mão; os antigos adivinham-se pelo nome). O volume é contado em séries por
+   semana, por grupo principal (sem somar os músculos auxiliares): "previstas" = séries do programa (cada dia uma vez por semana) e
+   "feitas" = séries registadas pelo aluno nos últimos 7 dias. As zonas são pontos de partida e dependem do objetivo do aluno. */
+var VOLUME_ZONES = {
+  massa: {lo: 10, hi: 20, label: "ganho de massa"},
+  recomp: {lo: 8, hi: 16, label: "recomposição / perda de gordura"},
+  manutencao: {lo: 6, hi: 10, label: "manutenção"}
+};
+var DELOAD_AFTER_WEEKS = 5;      // sem deload há tanto tempo, com treino regular, já se pode considerar um
+var DELOAD_MIN_GAP_DAYS = 21;    // depois de um deload não se volta a sugerir durante este tempo
+var DELOAD_VOLUME_CUT = 40;      // % de séries a cortar na semana de deload
+var MAIN_GROUPS = ["Peito", "Costas", "Ombros", "Quadríceps", "Posteriores"];
+// por ordem de prioridade (o primeiro que encaixar ganha): "Lying Leg Curl" é Posteriores e não Bíceps; "Leg Press Calf Raise" é Gémeos
+var GROUP_KEYWORDS = [
+  ["Gémeos", /calf|g[eé]meo|panturrilha/i],
+  ["Core", /plank|prancha|crunch|abdomin|dead ?bug|pallof|\bcore\b|leg raise|eleva[cç][aã]o de pernas|rollout|roda abdominal|ab wheel|bird dog|russian/i],
+  ["Posteriores", /deadlift|peso morto|rom[eê]no|romanian|leg curl|curl femoral|hamstring|good morning|hiperext|back extension|nordic/i],
+  ["Glúteos", /hip thrust|glute|gl[uú]te|abdu[cç][aã]o|abduction|kickback|coice|ponte de|sumo|reverse lunge|rear lunge|passada reversa/i],
+  ["Tríceps", /tr[ií]ceps|pushdown|skull|franc[eê]s|close-?grip bench|press fechado|bench dips|fundos em banco|acima da cabe[cç]a/i],
+  ["Bíceps", /curl|rosca|b[ií]ceps/i],
+  ["Quadríceps", /agachamento|squat|leg press|extens[aã]o de pernas|leg extension|hack|lunge|afundo|passada|step-?up|b[uú]lgaro|bulgarian/i],
+  ["Ombros", /ombro|shoulder|lateral raise|eleva[cç][aã]o (lateral|frontal)|front raise|arnold|face pull|military|overhead press|press militar|rear delt|reverse pec|crucifixo inverso|landmine|rota[cç][aã]o externa|external rotation/i],
+  ["Costas", /remada|\brow\b|puxada|pulldown|pull-?up|chin-?up|barra fixa|\blat\b|pullover|shrug|encolhimento|costas|t-bar/i],
+  ["Peito", /supino|bench press|incline.*press|press inclinado|peito|chest|\bfly\b|flyes?|crucifixo|crossover|flex[oõ]es|push-?ups?|\bdips?\b|fundos|pec deck|peck/i]
+];
+var groupIndexCache = null;
+function exerciseGroupIndex(){
+  var custom = typeof exLibCustomCache !== "undefined" ? exLibCustomCache : null;
+  if (groupIndexCache && groupIndexCache.custom === custom) return groupIndexCache.map;
+  var map = {};
+  exerciseLibraryMerged(custom || []).forEach(function(e){ map[exLibFold(e.name)] = e.group; if (e.alias) map[exLibFold(e.alias)] = e.group; });
+  groupIndexCache = {custom: custom, map: map};
+  return map;
+}
+function exerciseGroupFor(name){
+  var n = String(name || "").trim();
+  if (!n) return "";
+  var hit = exerciseGroupIndex()[exLibFold(n)];
+  if (hit) return hit;
+  for (var i = 0; i < GROUP_KEYWORDS.length; i++) if (GROUP_KEYWORDS[i][1].test(n)) return GROUP_KEYWORDS[i][0];
+  return "";
+}
+function exerciseGroupOf(ex){ return ex && EXERCISE_GROUPS.indexOf(ex.group) >= 0 ? ex.group : exerciseGroupFor(ex && ex.name); }
+
+function volumeZoneFor(s){
+  var g = exLibFold(s && s.goal);
+  if (/massa|hipertrof|ganho|volume/.test(g)) return VOLUME_ZONES.massa;
+  if (/manut/.test(g)) return VOLUME_ZONES.manutencao;
+  return VOLUME_ZONES.recomp;
+}
+function weeklyVolume(s){
+  var planned = {}, done = {}, groupById = {}, groupByName = {};
+  trainingProgramOf(s).days.forEach(function(d){ d.exercises.forEach(function(e){
+    var g = exerciseGroupOf(e) || "Sem grupo";
+    planned[g] = (planned[g] || 0) + (Number(e.sets) || 0);
+    groupById[e.id] = g; groupByName[exLibFold(e.name)] = g;
+  }); });
+  sessionsInLastDays(s, 7).forEach(function(l){ (l.entries || []).forEach(function(en){
+    var g = groupById[en.exerciseId] || groupByName[exLibFold(en.name)] || exerciseGroupFor(en.name) || "Sem grupo";
+    var n = (en.sets || []).filter(function(x){ return x && x.reps > 0; }).length;
+    if (n) done[g] = (done[g] || 0) + n;
+  }); });
+  return {planned: planned, done: done};
+}
+// uma linha por grupo com trabalho previsto ou feito; estado face à zona do objetivo (previstas) — "baixo" / "ok" / "alto"
+function volumeRows(s){
+  var v = weeklyVolume(s), z = volumeZoneFor(s), groups = EXERCISE_GROUPS.concat(["Sem grupo"]);
+  var rows = groups.filter(function(g){ return v.planned[g] || v.done[g]; }).map(function(g){
+    var p = v.planned[g] || 0, status = g === "Sem grupo" ? "" : (p === 0 ? "" : p < z.lo ? "baixo" : p > z.hi ? "alto" : "ok");
+    // gémeos e core têm volume próprio mais baixo: só se avisa por excesso
+    if ((g === "Gémeos" || g === "Core") && status === "baixo") status = "ok";
+    return {group: g, planned: p, done: v.done[g] || 0, status: status};
+  });
+  var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; }).length;
+  var missing = days >= 2 ? MAIN_GROUPS.filter(function(g){ return !v.planned[g]; }) : [];
+  return {rows: rows, zone: z, missing: missing, hasProgram: days > 0};
+}
+
+function deloadDates(s){
+  var p = trainingProgramOf(s);
+  return (Array.isArray(p.deloads) ? p.deloads : []).map(function(d){ return d && d.date; }).filter(isIsoDate).sort();
+}
+function entryAvgRir(en){
+  var r = (en.sets || []).filter(function(x){ return x && x.reps > 0 && x.rir != null && isFinite(Number(x.rir)); }).map(function(x){ return Number(x.rir); });
+  return r.length >= 2 ? r.reduce(function(a, b){ return a + b; }, 0) / r.length : null;
+}
+// {level: "sugerir"|"considerar", reasons:[...]} ou null: junta sinais que o app já recolhe (RIR, regressões, energia/sono, semanas sem deload)
+function deloadSuggestion(s){
+  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  if (logs.length < 4) return null;
+  var last = deloadDates(s).slice(-1)[0] || null;
+  if (last && daysSinceDate(last) < DELOAD_MIN_GAP_DAYS) return null;
+  var lastSession = daysSinceDate(logs[logs.length - 1].date);
+  if (lastSession != null && lastSession > 14) return null; // já está parado: não é caso de deload
+  var reasons = [], strong = 0;
+  var hard = logs.slice(-2).map(function(l){ return (l.entries || []).filter(function(en){ var a = entryAvgRir(en); return a != null && a < 1; }).length; });
+  if (hard.length === 2 && hard[0] >= 3 && hard[1] >= 3){ reasons.push("RIR médio abaixo de 1 em 3 ou mais exercícios nas últimas 2 sessões"); strong++; }
+  var seen = {}, regressed = [];
+  logs.forEach(function(l){ (l.entries || []).forEach(function(en){
+    var k = exLibFold(en.name); if (seen[k]) return; seen[k] = true;
+    var h = exerciseHistory(s, en.exerciseId, en.name);
+    if (!h.length || daysSinceDate(h[h.length - 1].date) > SIGNAL_LOAD_WINDOW_DAYS) return;
+    if (progressionStatus(baselineHistory(h)) === "regrediu") regressed.push(en.name);
+  }); });
+  if (regressed.length >= 2){ reasons.push("Cargas a recuar em " + regressed.slice(0, 3).join(", ")); strong++; }
+  var ci = (s.checkins || []).slice(-2);
+  if (ci.length === 2){
+    var vals = [];
+    ci.forEach(function(c){ ["energy", "recovery", "sleepQuality"].forEach(function(k){ var v = Number(c[k]); if (v > 0) vals.push(v); }); });
+    if (vals.length >= 3 && vals.reduce(function(a, b){ return a + b; }, 0) / vals.length <= 4){ reasons.push("Energia, sono e recuperação baixos nos últimos 2 check-ins"); strong++; }
+  }
+  var ref = last || logs[0].date, weeks = Math.floor((daysSinceDate(ref) || 0) / 7);
+  if (weeks >= DELOAD_AFTER_WEEKS) reasons.push(weeks + " semanas de treino" + (last ? " desde o último deload" : " sem nenhum deload registado"));
+  if (!reasons.length) return null;
+  return {level: strong >= 2 || (strong >= 1 && weeks >= DELOAD_AFTER_WEEKS) ? "sugerir" : "considerar", reasons: reasons};
+}
+function registerDeload(s, date){
+  var prog = ensureTrainingProgram(s);
+  var d = isIsoDate(date) ? date : todayISO();
+  if (!Array.isArray(prog.deloads)) prog.deloads = [];
+  if (prog.deloads.some(function(x){ return x && x.date === d; })) return false;
+  prog.deloads = prog.deloads.concat([{date: d}]).slice(-20);
+  return true;
+}
+
+// Novo recorde: melhor marca de sempre num exercício (1RM estimado, ou repetições se não há carga), com pelo menos 2 sessões anteriores
+function detectRecords(s, log){
+  var before = {workoutLogs: (s.workoutLogs || []).filter(function(l){ return l !== log && l.id !== log.id; })};
+  var out = [];
+  (log.entries || []).forEach(function(en){
+    var st = workoutEntryStats(en);
+    if (!st.sets) return;
+    var hist = exerciseHistory(before, en.exerciseId, en.name).filter(function(h){ return h.kind === st.kind; });
+    if (hist.length < 2) return;
+    var best = Math.max.apply(null, hist.map(function(h){ return h.score; }));
+    if (st.score > best) out.push({name: en.name, kind: st.kind, top: st.topSet, score: st.score});
+  });
+  return out;
+}
+function recordMessage(records){
+  if (!records.length) return "";
+  var r = records[0], what = r.kind === "load" ? fmtLoadSet(r.top) : r.score + " repetições";
+  return "🏆 Novo recorde" + (records.length > 1 ? " (+" + (records.length - 1) + ")" : "") + ": " + r.name + " — " + what;
+}
+
+function tplVolumeAndDeload(s){
+  var vr = volumeRows(s), dl = deloadSuggestion(s);
+  if (!vr.hasProgram && !(s.workoutLogs || []).length) return "";
+  var html = "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Volume semanal (séries por grupo)</div>";
+  if (vr.rows.length){
+    var pill = {"baixo": "warn", "ok": "good", "alto": "critical", "": ""}, txt = {"baixo": "abaixo", "ok": "na zona", "alto": "acima", "": "—"};
+    html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Zona de referência para " + escapeHtml(vr.zone.label) + ": " + vr.zone.lo + "–" + vr.zone.hi + " séries por grupo e por semana (compara com as previstas no programa).</p>" +
+      "<div class=\"assess-table-scroll\"><table class=\"assess-table\" id=\"volumeTable\"><thead><tr><th>Grupo</th><th>Previstas</th><th>Feitas (7 d)</th><th>Estado</th></tr></thead><tbody>" +
+      vr.rows.map(function(r){ return "<tr><td class=\"date-cell\" style=\"white-space:normal;\">" + escapeHtml(r.group) + "</td><td>" + r.planned + "</td><td>" + r.done + "</td><td>" + (r.status ? "<span class=\"pill " + pill[r.status] + "\">" + txt[r.status] + "</span>" : "—") + "</td></tr>"; }).join("") +
+      "</tbody></table></div>";
+    if (vr.missing.length) html += "<p class=\"muted-p\" style=\"margin-top:8px;\">Sem trabalho previsto para: " + escapeHtml(vr.missing.join(", ")) + ".</p>";
+  } else html += "<p class=\"muted-p\">Ainda sem exercícios no programa nem sessões registadas.</p>";
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Deload</div>";
+  var dates = deloadDates(s), lastD = dates[dates.length - 1];
+  if (dl){
+    html += "<div class=\"card\" id=\"deloadCard\" style=\"margin-bottom:10px;\"><p style=\"margin-bottom:6px;\"><span class=\"pill " + (dl.level === "sugerir" ? "warn" : "") + "\">" + (dl.level === "sugerir" ? "Sugerir deload" : "Considerar deload") + "</span></p>" +
+      "<ul class=\"muted-p\" style=\"margin:0 0 8px 18px;\">" + dl.reasons.map(function(r){ return "<li>" + escapeHtml(r) + "</li>"; }).join("") + "</ul>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Semana de deload: mantém os exercícios e as cargas, corta cerca de " + DELOAD_VOLUME_CUT + "% das séries, pára 3 repetições antes da falha (RIR 3) e prioriza sono e recuperação. Depois volta ao plano normal.</p>" +
+      "<button type=\"button\" class=\"btn btn-sm primary\" id=\"registerDeload\">Registar deload a começar hoje</button></div>";
+  } else html += "<p class=\"muted-p\">" + (lastD ? "Último deload: " + escapeHtml(fmtDateFullPt(lastD)) + ". " : "") + "Sem sinais de fadiga acumulada neste momento.</p>";
+  return html;
+}
+
 function exerciseInfoHtml(s, ex){
   var cues = parseCues(ex.cues), sg = overloadSuggestion(s, ex), sess = exerciseSessions(s, ex, 6);
   var html = "<div class=\"mtitle\">" + escapeHtml(ex.name) + "</div>" +
@@ -8662,7 +8838,9 @@ function wireWorkoutLogger(s, el, rerender){
     var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
     if (!log){ err.textContent = "Marca ✓ pelo menos uma série feita, com repetições."; err.style.display = "block"; return; }
     err.style.display = "none";
+    var records = detectRecords(s, log), recordMsg = recordMessage(records);
     function finish(){
+      if (recordMsg) setTimeout(function(){ showToast(recordMsg); }, 1800); // depois do "Treino guardado"
       // treino feito: nenhum dia fica 'em curso' (o rascunho abandonado de outro dia seria enganador)
       trainingProgramOf(s).days.forEach(function(d){ if (d.id !== day.id) wlDraftClear(s, d.id); });
       wlDraftClear(s, day.id);
@@ -8704,6 +8882,7 @@ function wireWorkoutLogger(s, el, rerender){
    Um exercício guardado com o mesmo nome de um da lista base substitui-o; apagá-lo repõe o original. */
 var EXERCISE_GROUPS = ["Peito", "Costas", "Ombros", "Bíceps", "Tríceps", "Quadríceps", "Posteriores", "Glúteos", "Gémeos", "Core"];
 var EX_LIB_LOCAL_KEY = "evolve_exercise_library_v1";
+var exLibCustomCache = null; // exercícios do estúdio já lidos (para adivinhar o grupo de um exercício pelo nome)
 // animações de 2 fotogramas (Free Exercise DB, domínio público) guardadas na pasta exercises/ do site
 var EXERCISE_MEDIA_BASE = "https://tiagojvlourenco.github.io/plano-evolve/exercises/";
 // [nome em inglês, equipamento, "ponto 1|ponto 2|ponto 3", nota, nome em português (só para a pesquisa), 1 = tem animação em exercises/]
@@ -8894,7 +9073,7 @@ function exerciseLibraryDelete(id){
   return sb.from("exercise_library").delete().eq("id", id).then(function(res){ return res.error ? {error: true} : {}; }).catch(function(){ return {error: true}; });
 }
 // o que o editor de treino preenche ao escolher um exercício
-function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n")}; }
+function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n"), group: e.group}; }
 function openExerciseLibrary(onPick){
   var sheet = openModal("<div class=\"mtitle\">Biblioteca de exercícios</div>" +
     "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Partilhada por todo o estúdio. Escolhe um exercício para o preencher no treino, com animação e pontos-chave.</p><div id=\"exLibBody\"><p class=\"muted-p\">A carregar…</p></div>");
@@ -8956,7 +9135,7 @@ function openExerciseLibrary(onPick){
   function reload(){
     exerciseLibraryCustomList().then(function(r){
       if (r.error){ custom = []; listView(); body.insertAdjacentHTML("afterbegin", "<p class=\"muted-p\" style=\"color:var(--critical); margin-bottom:8px;\">Não foi possível carregar os exercícios do estúdio (a migração 0021 já foi corrida no Supabase?). A lista base está disponível.</p>"); return; }
-      custom = r.data; listView();
+      custom = r.data; exLibCustomCache = custom; listView();
     });
   }
   reload();
@@ -9001,7 +9180,7 @@ function nutritionTemplateFrom(s){
 function trainingTemplateFrom(s){
   var p = trainingProgramOf(s);
   return {name: p.name || "", days: p.days.map(function(d){
-    return {name: d.name, exercises: d.exercises.map(function(e){ return {name: e.name, sets: e.sets, reps: e.reps, rpe: e.rpe, rest: e.rest, notes: e.notes, demo: e.demo || null, cues: parseCues(e.cues)}; })};
+    return {name: d.name, exercises: d.exercises.map(function(e){ return {name: e.name, sets: e.sets, reps: e.reps, rpe: e.rpe, rest: e.rest, notes: e.notes, demo: e.demo || null, cues: parseCues(e.cues), group: e.group || null}; })};
   })};
 }
 function templateCounts(kind, data){
@@ -9035,7 +9214,7 @@ function applyTrainingTemplate(s, data, mode){
       var rpe = parseFloat(e.rpe), rest = parseInt(e.rest, 10);
       return {id: uidShort("e"), name: String(e.name).trim().slice(0, 120), sets: Math.min(20, Math.max(1, parseInt(e.sets, 10) || 3)), reps: String(e.reps || "8-12").slice(0, 20),
         rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(e.notes || "").slice(0, 200),
-        demo: cleanDemoUrl(e.demo) || null, cues: parseCues(e.cues)};
+        demo: cleanDemoUrl(e.demo) || null, cues: parseCues(e.cues), group: EXERCISE_GROUPS.indexOf(e.group) >= 0 ? e.group : (exerciseGroupFor(e.name) || null)};
     })};
   });
   var prog = ensureTrainingProgram(s);
@@ -9137,7 +9316,7 @@ function tplProTreino(s){
   prog.days.forEach(function(d){
     html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
     d.exercises.forEach(function(e){
-      html += `<div class="food-item" style="cursor:default;"><span class="fname"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button>${cleanDemoUrl(e.demo) || parseCues(e.cues).length ? ' <span class="pill" style="font-size:0.62rem;">guia</span>' : ""}<span class="muted-p" style="display:block; font-size:0.74rem;">${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
+      html += `<div class="food-item" style="cursor:default;"><span class="fname"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button>${cleanDemoUrl(e.demo) || parseCues(e.cues).length ? ' <span class="pill" style="font-size:0.62rem;">guia</span>' : ""}<span class="muted-p" style="display:block; font-size:0.74rem;">${exerciseGroupOf(e) ? escapeHtml(exerciseGroupOf(e)) + " · " : ""}${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
         `<span><button type="button" class="assess-del" data-edit-guide="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Editar demonstração e pontos-chave" title="Demonstração e pontos-chave">🎬</button> ` +
         `<button type="button" class="assess-del" data-del-ex="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Remover exercício">✕</button></span></div>`;
     });
@@ -9148,6 +9327,7 @@ function tplProTreino(s){
       `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps></div>` +
       `<div class="f"><label>RPE alvo</label><input type="number" min="1" max="10" step="0.5" data-ex-rpe></div>` +
       `<div class="f"><label>Descanso (s)</label><input type="number" min="0" max="900" step="15" value="90" data-ex-rest></div>` +
+      `<div class="f" style="grid-column:1/-1;"><label>Grupo muscular (conta para o volume semanal)</label><select data-ex-group class="mini-select" style="width:100%;"><option value="">Automático (pelo nome)</option>${EXERCISE_GROUPS.map(function(g){ return `<option>${escapeHtml(g)}</option>`; }).join("")}</select></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Notas (opcional)</label><input type="text" data-ex-notes placeholder="Tempo 3-1-1, pausa no peito..."></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>GIF / vídeo demonstrativo (ligação https, opcional)</label><input type="url" data-ex-demo maxlength="500" placeholder="https://…/supino.gif"></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Pontos-chave de execução (um por linha, até 3)</label><textarea data-ex-cues rows="3" placeholder="Omoplatas juntas&#10;Barra desce ao peito&#10;Pés firmes no chão"></textarea></div>` +
@@ -9157,6 +9337,8 @@ function tplProTreino(s){
   });
   html += `<div class="assess-form-grid" style="margin-top:6px;"><div class="f" style="grid-column:1/-1;"><label>Novo dia de treino</label><input type="text" id="newDayName" maxlength="80" placeholder="Ex.: Treino B — Inferior"></div>` +
     `<div class="f"><button type="button" class="btn primary btn-sm" id="addTrainingDay" style="width:100%;">+ Dia</button></div></div>`;
+
+  html += tplVolumeAndDeload(s);
 
   // Progressão de carga por exercício
   var names = [];
@@ -9204,15 +9386,20 @@ function wireProTreino(s, el){
       var sheet = openModal("<div class=\"mtitle\">" + escapeHtml(ex.name) + "</div>" +
         "<div class=\"checkin-field\"><label for=\"guideDemo\">GIF / vídeo demonstrativo (ligação https)</label><input type=\"url\" id=\"guideDemo\" maxlength=\"500\" value=\"" + escapeHtml(ex.demo || "") + "\" placeholder=\"https://…/supino.gif\"></div>" +
         "<div class=\"checkin-field\"><label for=\"guideCues\">Pontos-chave de execução (um por linha, até " + EX_CUES_MAX + ")</label><textarea id=\"guideCues\" rows=\"4\">" + escapeHtml(parseCues(ex.cues).join("\n")) + "</textarea></div>" +
+        "<div class=\"checkin-field\"><label for=\"guideGroup\">Grupo muscular</label><select id=\"guideGroup\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Automático (pelo nome)</option>" + EXERCISE_GROUPS.map(function(g){ return "<option" + (ex.group === g ? " selected" : "") + ">" + escapeHtml(g) + "</option>"; }).join("") + "</select></div>" +
         "<p class=\"muted-p\" id=\"guideErr\" style=\"color:var(--critical); display:none;\"></p>" +
         "<button type=\"button\" class=\"btn primary\" id=\"guideSave\" style=\"width:100%;\">Guardar</button>");
       sheet.querySelector("#guideSave").addEventListener("click", function(){
-        if (!updateProgramExerciseGuide(s, parts[0], parts[1], {demo: sheet.querySelector("#guideDemo").value, cues: sheet.querySelector("#guideCues").value})){
+        if (!updateProgramExerciseGuide(s, parts[0], parts[1], {demo: sheet.querySelector("#guideDemo").value, cues: sheet.querySelector("#guideCues").value, group: sheet.querySelector("#guideGroup").value})){
           var e = sheet.querySelector("#guideErr"); e.textContent = "A ligação tem de começar por https:// (e não ter espaços)."; e.style.display = "block"; return;
         }
         closeModal(); persistStudent(s); renderProTabContent(s); showToast("✓ Guia do exercício guardado");
       });
     });
+  });
+  var regDl = el.querySelector("#registerDeload");
+  if (regDl) regDl.addEventListener("click", function(){
+    if (registerDeload(s)){ logPlanEvent(s, "treino_dia", "Deload registado", null, todayISO()); persistStudent(s); showToast("✓ Deload registado — não volta a ser sugerido nas próximas semanas"); renderProTabContent(s); }
   });
   var addDay = el.querySelector("#addTrainingDay");
   if (addDay) addDay.addEventListener("click", function(){
@@ -9228,6 +9415,7 @@ function wireProTreino(s, el){
         box.querySelector("[data-ex-name]").value = fill.name;
         box.querySelector("[data-ex-demo]").value = fill.demo;
         box.querySelector("[data-ex-cues]").value = fill.cues;
+        var gSel = box.querySelector("[data-ex-group]"); if (gSel) gSel.value = fill.group || "";
       });
     });
   });
@@ -9235,7 +9423,7 @@ function wireProTreino(s, el){
     btn.addEventListener("click", function(){
       var box = el.querySelector('[data-exform="' + btn.getAttribute("data-add-ex") + '"]');
       function v(sel){ return box.querySelector(sel).value; }
-      var ex = addProgramExercise(s, btn.getAttribute("data-add-ex"), {name: v("[data-ex-name]"), sets: v("[data-ex-sets]"), reps: v("[data-ex-reps]"), rpe: v("[data-ex-rpe]"), rest: v("[data-ex-rest]"), notes: v("[data-ex-notes]"), demo: v("[data-ex-demo]"), cues: v("[data-ex-cues]")});
+      var ex = addProgramExercise(s, btn.getAttribute("data-add-ex"), {name: v("[data-ex-name]"), sets: v("[data-ex-sets]"), reps: v("[data-ex-reps]"), rpe: v("[data-ex-rpe]"), rest: v("[data-ex-rest]"), notes: v("[data-ex-notes]"), demo: v("[data-ex-demo]"), cues: v("[data-ex-cues]"), group: v("[data-ex-group]")});
       if (!ex){ showToast("Dá um nome ao exercício"); return; }
       if (v("[data-ex-demo]").trim() && !ex.demo) showToast("A ligação da demonstração tem de começar por https:// — guardei o exercício sem ela");
       persistStudent(s); renderProTabContent(s);
@@ -10540,7 +10728,8 @@ function renderProShell(){
   // qualquer aluno selecionado tem sempre prioridade sobre os dois.
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
-    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView!=="catalog" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + studioNavLabel() + "</button>" +
       "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
   } else {
     // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
@@ -10553,6 +10742,8 @@ function renderProShell(){
   var navDash = document.getElementById("navDashboard"), navCat = document.getElementById("navCatalog");
   if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
   if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
+  var navStudio = document.getElementById("navStudio");
+  if (navStudio) navStudio.addEventListener("click", function(){ state.proSelectedId=null; state.proView="studio"; studio.loaded = false; renderProShell(); }); // lê os dados de novo de cada vez que se abre
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
@@ -10587,6 +10778,7 @@ function renderProShell(){
 
   if (selected) renderProDetailMain(selected);
   else if (state.proView === "catalog") renderProCatalogMain();
+  else if (state.proView === "studio") renderProStudioMain();
   else renderProDashboardMain();
 }
 
@@ -10961,7 +11153,7 @@ function proStat(v, l, key){
 // dela) — só o rótulo visível muda, pedido explícito.
 // Navegação do profissional por aluno: quatro entradas (cada separador continua a ter a sua key; os de uma mesma entrada ficam juntos em atalhos)
 var PRO_NAV = [
-  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"]},
+  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "sessoes", "perfil", "notas", "historico"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
@@ -10976,7 +11168,7 @@ function proStudentNavHtml(){
 }
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   ensureSyncBaseline(s);
@@ -11049,6 +11241,7 @@ function renderProTabContent(s){
     lazyPhotos(s, function(){ if (state.proSelectedId === s.id && state.proTab === "evolucao" && !modalRoot.firstChild) renderProTabContent(s); });
   }
   else if (state.proTab==="checkins") el.innerHTML = tplProCheckins(s);
+  else if (state.proTab==="sessoes"){ el.innerHTML = tplProSessoes(s); if (studio.available) wireProSessoes(s, el); }
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
   else el.innerHTML = tplProHistorico(s);
   wireProTab(s);
@@ -12572,12 +12765,1039 @@ function computeCoachBadges(s){
   var now = avgAdherence(recent), prev = avgAdherence(before);
   if (now != null && prev != null && prev - now >= BADGE_ADHERENCE_DROP) out.push({key: "adesao-a-cair", label: "Adesão a cair", tone: "warn", hint: "Adesão média de " + prev.toFixed(1).replace(".", ",") + " para " + now.toFixed(1).replace(".", ",") + " /10 nos últimos check-ins."});
   else if (now != null && recent.length >= 2 && now >= BADGE_HIGH_ADHERENCE && (idle == null || idle < BADGE_NO_RECORD_WARN_DAYS)) out.push({key: "alta-adesao", label: "Alta adesão", tone: "good", hint: "Adesão média de " + now.toFixed(1).replace(".", ",") + "/10: bom momento para dar mais autonomia ou progredir."});
+  var dl = deloadSuggestion(s);
+  if (dl) out.push({key: "deload", label: dl.level === "sugerir" ? "Sugerir deload" : "Considerar deload", tone: dl.level === "sugerir" ? "warn" : "", hint: dl.reasons.join("; ")});
   var ready = trainingProgramOf(s).days.reduce(function(n, d){ return n + d.exercises.filter(function(e){ return overloadSuggestion(s, e); }).length; }, 0);
   if (ready) out.push({key: "sobrecarga", label: ready === 1 ? "Pronto para subir carga" : ready + " exercícios para subir carga", tone: "good", hint: "Atingiu a meta superior de repetições nas últimas sessões: vê a sugestão de sobrecarga em Treino."});
   return out;
 }
 function coachBadgesHtml(badges){
   return (badges || []).map(function(b){ return "<span class=\"pill " + b.tone + "\" title=\"" + escapeHtml(b.hint) + "\">" + escapeHtml(b.label) + "</span>"; }).join("");
+}
+
+/* ---------- Estúdio: pacotes de sessões, presenças/faltas e cobranças (migração 0023, só o profissional) ----------
+   Regras (por pacote, editáveis ao criá-lo): sessão "feita" gasta uma sessão; "faltou" (sem aviso) e "cancelou tarde" gastam também por omissão;
+   "cancelou" a tempo nunca gasta. A app regista e avisa; não cobra nem emite faturas (a fatura certificada continua no programa de faturação). */
+var STUDIO_LOCAL_KEY = "evolve_studio_v1";
+var STUDIO_HISTORY_DAYS = 400;       // sessões mais antigas não se carregam
+var PACK_ENDING_SESSIONS = 2;        // "a acabar": restam estas sessões ou menos...
+var PACK_ENDING_DAYS = 14;           // ...ou falta este tempo para terminar a validade
+var PAYMENT_DUE_SOON_DAYS = 3;
+var ABSENCE_WINDOW_DAYS = 30, ABSENCE_ALERT = 2;
+var SESSION_STATUS = {
+  feita: {label: "Feita", short: "✓ Feita"},
+  faltou: {label: "Faltou", short: "✗ Faltou"},
+  cancelada: {label: "Cancelou a tempo", short: "⊘ Cancelou"},
+  cancelada_tarde: {label: "Cancelou tarde", short: "⊘ Tarde"}
+};
+var PAYMENT_METHODS = {mbway: "MB WAY", transferencia: "Transferência", multibanco: "Multibanco", numerario: "Numerário", outro: "Outro"};
+var studio = {packs: [], sessions: [], payments: [], slots: [], loaded: false, available: true, slotsAvailable: false};
+
+function studioLocalRead(){
+  try { var v = JSON.parse(localStorage.getItem(STUDIO_LOCAL_KEY) || "null"); if (v && Array.isArray(v.packs)) return v; } catch (e) {}
+  return null;
+}
+function studioLocalWrite(){ try { localStorage.setItem(STUDIO_LOCAL_KEY, JSON.stringify({packs: studio.packs, sessions: studio.sessions, payments: studio.payments, slots: studio.slots})); } catch (e) {} }
+var STUDIO_TABLES = {packs: "session_packs", sessions: "sessions", payments: "payments", slots: "session_slots"};
+function studioLoad(){
+  if (!sbReady){
+    var v = studioLocalRead();
+    if (v){ studio.packs = v.packs; studio.sessions = v.sessions || []; studio.payments = v.payments || []; studio.slots = v.slots || []; }
+    else { studioSeedDemo(); studioLocalWrite(); }
+    studio.loaded = true; studio.available = true; studio.slotsAvailable = true;
+    return Promise.resolve(true);
+  }
+  var since = new Date(Date.now() - STUDIO_HISTORY_DAYS * 86400000).toISOString().slice(0, 10), today = localTodayISO();
+  // as sessões lêem-se desde o início do pacote mais antigo ainda em vigor (senão as sessões usadas ficavam por contar)
+  return Promise.all([
+    sb.from("session_packs").select("*").order("starts_on", {ascending: false}).then(function(r){ return r; }),
+    sb.from("payments").select("*").order("due_on", {ascending: false}).then(function(r){ return r; })
+  ]).then(function(r){
+    if (r.some(function(x){ return !x || x.error; })) return null;
+    var packs = r[0].data || [], from = since;
+    packs.forEach(function(p){ if ((!p.expires_on || p.expires_on >= today) && p.starts_on && p.starts_on < from) from = p.starts_on; });
+    return sb.from("sessions").select("*").gte("date", from).order("date", {ascending: false}).then(function(sr){
+      if (!sr || sr.error) return null;
+      return {packs: packs, payments: r[1].data || [], sessions: sr.data || []};
+    });
+  }).then(function(all){
+    if (!all){ studio.available = false; studio.loaded = true; return false; }
+    studio.packs = all.packs; studio.sessions = all.sessions; studio.payments = all.payments;
+    studio.available = true; studio.loaded = true;
+    return Promise.resolve(sb.from("session_slots").select("*").order("weekday").then(function(r){ return r; })).then(function(sr){
+      studio.slotsAvailable = !!(sr && !sr.error); studio.slots = studio.slotsAvailable ? (sr.data || []) : [];
+      return true;
+    }, function(){ studio.slotsAvailable = false; studio.slots = []; return true; });
+  }).catch(function(){ studio.available = false; studio.loaded = true; return false; });
+}
+// grava no servidor (ou no browser, em modo local) e só depois altera a memória
+function studioInsert(kind, row){
+  if (!sbReady){ var r = Object.assign({id: uidShort("s")}, row); studio[kind].unshift(r); studioLocalWrite(); return Promise.resolve({data: r}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).insert(row).select("*")).then(function(res){
+    if (!res || res.error || !res.data || !res.data[0]) return {error: (res && res.error && res.error.message) || "Não foi possível guardar — verifica a ligação (e se a migração 0023 já foi corrida)."};
+    studio[kind].unshift(res.data[0]);
+    return {data: res.data[0]};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function studioUpdate(kind, id, patch){
+  var apply = function(){ var row = studio[kind].filter(function(x){ return x.id === id; })[0]; if (row) Object.assign(row, patch); };
+  if (!sbReady){ apply(); studioLocalWrite(); return Promise.resolve({}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).update(patch).eq("id", id)).then(function(res){
+    if (!res || res.error) return {error: (res && res.error && res.error.message) || "Não foi possível guardar."};
+    apply(); return {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function studioDelete(kind, id){
+  var apply = function(){ studio[kind] = studio[kind].filter(function(x){ return x.id !== id; }); if (kind === "packs") studio.sessions.concat(studio.payments).forEach(function(x){ if (x.pack_id === id) x.pack_id = null; }); };
+  if (!sbReady){ apply(); studioLocalWrite(); return Promise.resolve({}); }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).delete().eq("id", id)).then(function(res){
+    if (!res || res.error) return {error: "Não foi possível apagar."};
+    apply(); return {};
+  }, function(){ return {error: "Não foi possível apagar — verifica a ligação."}; });
+}
+
+// ---- regras ----
+function sessionConsumes(pack, sess){
+  if (!pack || !sess) return false;
+  if (sess.status === "feita") return true;
+  if (sess.status === "faltou") return pack.missed_consumes !== false;
+  if (sess.status === "cancelada_tarde") return pack.late_cancel_consumes !== false;
+  return false;
+}
+function packUsage(pack, today){
+  today = today || localTodayISO();
+  var used = (Number(pack.used_before) || 0) + studio.sessions.filter(function(x){ return x.pack_id === pack.id && sessionConsumes(pack, x); }).length;
+  var total = Number(pack.total) || 0, remaining = Math.max(0, total - used);
+  var expired = !!pack.expires_on && pack.expires_on < today;
+  var daysLeft = pack.expires_on ? Math.round((new Date(pack.expires_on + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000) : null;
+  var started = !pack.starts_on || pack.starts_on <= today;
+  return {used: used, total: total, remaining: remaining, pct: total ? Math.min(100, Math.round(used / total * 100)) : 0, expired: expired, exhausted: remaining === 0,
+    daysLeft: daysLeft, active: started && !expired && remaining > 0,
+    ending: started && !expired && remaining > 0 && (remaining <= Math.max(PACK_ENDING_SESSIONS, weeklySlotsOf(pack.student_id)) || (daysLeft != null && daysLeft <= PACK_ENDING_DAYS))};
+}
+function packsOf(studentId){ return studio.packs.filter(function(p){ return p.student_id === studentId; }); }
+function activePacksOf(studentId, today){
+  return packsOf(studentId).filter(function(p){ return packUsage(p, today).active; }).sort(function(a, b){
+    return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : (a.starts_on < b.starts_on ? -1 : 1);
+  });
+}
+// o pacote a que uma sessão numa certa data deve ser descontada: o que caduca primeiro, dentro da validade e com sessões por usar
+function pickPackForSession(studentId, date){
+  var d = isIsoDate(date) ? date : localTodayISO();
+  return packsOf(studentId).filter(function(p){
+    var u = packUsage(p, d);
+    return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d);
+  }).sort(function(a, b){ return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : 0; })[0] || null;
+}
+function sessionsOfStudent(studentId){ return studio.sessions.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }); }
+function paymentStatus(p, today){
+  today = today || localTodayISO();
+  if (p.paid_on) return "pago";
+  if (p.due_on < today) return "atrasado";
+  var days = Math.round((new Date(p.due_on + "T00:00:00Z") - new Date(today + "T00:00:00Z")) / 86400000);
+  return days <= PAYMENT_DUE_SOON_DAYS ? "a vencer" : "futuro";
+}
+function paymentsOfStudent(studentId){ return studio.payments.filter(function(p){ return p.student_id === studentId; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; }); }
+function eur(n){ return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace(".", ",") + " €"; }
+function eurShort(n){ var v = Math.round((Number(n) || 0) * 100) / 100; return (v === Math.round(v) ? String(v) : v.toFixed(2).replace(".", ",")) + " €"; }
+function monthOf(iso){ return String(iso || "").slice(0, 7); }
+function studentById(id){ return findStudent(id); }
+
+// resumo de um aluno para o painel de retenção e para a ficha
+function studentStudioSummary(studentId, today){
+  today = today || localTodayISO();
+  var packs = packsOf(studentId).map(function(p){ return {pack: p, u: packUsage(p, today)}; });
+  var overdue = paymentsOfStudent(studentId).filter(function(p){ return paymentStatus(p, today) === "atrasado"; });
+  var since = addDaysISO(today, -ABSENCE_WINDOW_DAYS);
+  var absences = studio.sessions.filter(function(x){ return x.student_id === studentId && x.date >= since && (x.status === "faltou" || x.status === "cancelada_tarde"); }).length;
+  var activeOrRecent = packs.filter(function(x){ return x.u.active || (x.u.exhausted && x.pack.starts_on >= addDaysISO(today, -90)); });
+  var hasActive = packs.some(function(x){ return x.u.active; });
+  var ending = packs.filter(function(x){ return x.u.ending; });
+  // já teve pacote há pouco tempo e já não tem nenhum a decorrer: falta renovar
+  return {packs: packs, overdue: overdue, absences: absences, hasActive: hasActive, ending: ending,
+    needsRenewal: !hasActive && packs.some(function(x){ return x.pack.starts_on >= addDaysISO(today, -120); }), activeOrRecent: activeOrRecent};
+}
+
+// números do estúdio num mês (AAAA-MM)
+function studioKpis(month, today){
+  today = today || localTodayISO(); month = month || monthOf(today);
+  var unpaid = studio.payments.filter(function(p){ return !p.paid_on; });
+  var dueMonth = unpaid.filter(function(p){ return monthOf(p.due_on) === month && p.due_on >= today; });
+  var overdue = unpaid.filter(function(p){ return p.due_on < today; });
+  var sum = function(list){ return list.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0); };
+  var ms = studio.sessions.filter(function(x){ return monthOf(x.date) === month; });
+  var done = ms.filter(function(x){ return x.status === "feita"; }).length;
+  var missed = ms.filter(function(x){ return x.status === "faltou" || x.status === "cancelada_tarde"; }).length;
+  var ending = studio.packs.filter(function(p){ var st = findStudent(p.student_id); return st && isStudentActive(st) && packUsage(p, today).ending; });
+  var paidMonth = studio.payments.filter(function(p){ return p.paid_on && monthOf(p.paid_on) === month; });
+  return {toCollect: sum(dueMonth), toCollectN: dueMonth.length, overdue: sum(overdue), overdueN: overdue.length, endingN: ending.length, missed: missed, done: done,
+    attendance: done + missed ? Math.round(done / (done + missed) * 100) : null, received: sum(paidMonth), receivedN: paidMonth.length};
+}
+
+function csvCell(v){ var t = String(v == null ? "" : v); return /[;"\n\r]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; }
+function csvOf(rows){ return rows.map(function(r){ return r.map(csvCell).join(";"); }).join("\r\n"); }
+function nameOf(studentId){ var st = findStudent(studentId); return st ? st.name : studentId; }
+function paymentsCsv(month){
+  var rows = [["Aluno", "Vencimento", "Valor (€)", "Estado", "Pago em", "Método", "Notas"]];
+  studio.payments.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; }).forEach(function(p){
+    rows.push([nameOf(p.student_id), p.due_on, String(Number(p.amount).toFixed(2)).replace(".", ","), paymentStatus(p), p.paid_on || "", PAYMENT_METHODS[p.method] || "", p.notes || ""]);
+  });
+  return csvOf(rows);
+}
+function sessionsCsv(month){
+  var rows = [["Aluno", "Data", "Hora", "Estado", "Pacote", "Notas"]];
+  studio.sessions.filter(function(x){ return monthOf(x.date) === month; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function(x){
+    var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
+    rows.push([nameOf(x.student_id), x.date, x.time || "", (SESSION_STATUS[x.status] || {}).label || x.status, pk ? pk.name : "", x.notes || ""]);
+  });
+  return csvOf(rows);
+}
+function downloadText(filename, text){
+  try {
+    var blob = new Blob(["﻿" + text], {type: "text/csv;charset=utf-8"});
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(function(){ try { URL.revokeObjectURL(a.href); a.remove(); } catch (e) {} }, 500);
+    return true;
+  } catch (e) { return false; }
+}
+
+// ---- horário semanal: as sessões contam-se sozinhas à medida que o dia passa (migração 0024) ----
+var SESSION_DURATION_MIN = 60;          // uma sessão de hoje só se conta depois da hora + esta duração
+var WEEKDAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+function pad2(n){ return (n < 10 ? "0" : "") + n; }
+function localTodayISO(){ var d = new Date(); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+function isoWeekday(dateISO){ var w = new Date(dateISO + "T00:00:00Z").getUTCDay(); return w === 0 ? 7 : w; }
+function timeToMinutes(t){ var m = /^(\d{2}):(\d{2})$/.exec(String(t || "")); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
+function slotsOf(studentId){ return studio.slots.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.weekday - b.weekday || (a.time < b.time ? -1 : 1); }); }
+function weeklySlotsOf(studentId){ return studio.slots.filter(function(x){ return x.student_id === studentId; }).length; }
+function slotLabel(sl){ return WEEKDAY_NAMES[sl.weekday] + " " + sl.time; }
+// já existe um registo para este horário nesse dia? (uma sessão sem hora, registada à mão, também ocupa o dia)
+function sessionExistsFor(studentId, date, time){
+  return studio.sessions.some(function(x){ return x.student_id === studentId && x.date === date && (!x.time || x.time === time); });
+}
+// as sessões do horário que já passaram e ainda não estão registadas: [{slot, date}] por ordem de data
+// now = {date: "AAAA-MM-DD", minutes: minutos desde a meia-noite}
+function agendaDue(now){
+  var out = [];
+  studio.slots.forEach(function(sl){
+    var st = findStudent(sl.student_id);
+    if (!st || !isStudentActive(st)) return;
+    var from = sl.counts_from || now.date;
+    if (sl.generated_until && addDaysISO(sl.generated_until, 1) > from) from = addDaysISO(sl.generated_until, 1);
+    var t = timeToMinutes(sl.time);
+    for (var d = from; d <= now.date; d = addDaysISO(d, 1)){
+      if (isoWeekday(d) !== sl.weekday) continue;
+      if (d === now.date && (t == null || now.minutes < t + SESSION_DURATION_MIN)) continue; // ainda não passou
+      if (sessionExistsFor(sl.student_id, d, sl.time)) continue;
+      out.push({slot: sl, date: d});
+    }
+  });
+  return out.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+}
+// insere várias linhas de uma vez (uma só ida ao servidor); em modo local grava no browser
+function studioInsertMany(kind, rows){
+  if (!rows.length) return Promise.resolve({data: []});
+  if (!sbReady){
+    var made = rows.map(function(r){ return Object.assign({id: uidShort("s")}, r); });
+    made.forEach(function(r){ studio[kind].unshift(r); });
+    studioLocalWrite();
+    return Promise.resolve({data: made});
+  }
+  return Promise.resolve(sb.from(STUDIO_TABLES[kind]).insert(rows).select("*")).then(function(res){
+    if (!res || res.error || !Array.isArray(res.data)) return {error: (res && res.error && res.error.message) || "erro", code: res && res.error && res.error.code};
+    res.data.forEach(function(r){ studio[kind].unshift(r); });
+    return {data: res.data};
+  }, function(){ return {error: "rede"}; });
+}
+var agendaRunning = null;
+// conta as sessões do horário que já passaram (desconta ao pacote certo) e avança "contado até" de cada horário; devolve quantas criou
+function studioAutoSessions(){
+  if (!studio.loaded || !studio.available || !studio.slotsAvailable) return Promise.resolve(0);
+  if (calUsesCalendar()){
+    // o Google Agenda é a fonte: o horário semanal fica em pausa, mas avança, para não inventar aulas retroativas se voltares a ele
+    var yday = addDaysISO(localTodayISO(), -1);
+    studio.slots.filter(function(sl){ return !sl.generated_until || sl.generated_until < yday; }).forEach(function(sl){ studioUpdate("slots", sl.id, {generated_until: yday}); });
+    return Promise.resolve(0);
+  }
+  if (agendaRunning) return agendaRunning;
+  var now = new Date(), today = localTodayISO(), nowInfo = {date: today, minutes: now.getHours() * 60 + now.getMinutes()};
+  var due = agendaDue(nowInfo);
+  var yesterday = addDaysISO(today, -1);
+  var rows = [];
+  // o pacote de cada sessão decide-se por ordem de data, contando as que acabámos de decidir
+  var virtual = [];
+  due.forEach(function(x){
+    var pk = pickPackForSession(x.slot.student_id, x.date);
+    var row = {student_id: x.slot.student_id, pack_id: pk ? pk.id : null, date: x.date, time: x.slot.time, status: "feita", source: "agenda"};
+    rows.push(row);
+    var v = {id: "virtual-" + virtual.length, student_id: row.student_id, pack_id: row.pack_id, date: row.date, time: row.time, status: "feita"};
+    virtual.push(v); studio.sessions.push(v);
+  });
+  studio.sessions = studio.sessions.filter(function(x){ return virtual.indexOf(x) < 0; });
+  var advance = function(){
+    // todos os horários passam a "contados até ontem" (hoje ainda pode ter sessões por passar, que se avaliam de novo)
+    return Promise.all(studio.slots.filter(function(sl){ return !sl.generated_until || sl.generated_until < yesterday; }).map(function(sl){
+      return studioUpdate("slots", sl.id, {generated_until: yesterday});
+    }));
+  };
+  agendaRunning = studioInsertMany("sessions", rows).then(function(r){
+    if (r.error){
+      // uma duplicada (outro aparelho contou primeiro) não pode impedir as restantes: tenta uma a uma
+      if (r.code === "23505" && rows.length > 1) return rows.reduce(function(chain, row){ return chain.then(function(n){ return studioInsert("sessions", row).then(function(x){ return n + (x.error ? 0 : 1); }); }); }, Promise.resolve(0)).then(function(n){ return advance().then(function(){ return n; }); });
+      return 0;
+    }
+    return advance().then(function(){ return r.data.length; });
+  }).then(function(n){ agendaRunning = null; return n; }, function(){ agendaRunning = null; return 0; });
+  return agendaRunning;
+}
+// lê os dados do estúdio e conta as sessões do horário que já passaram
+function studioRefresh(){
+  var mode = sbReady; // se a ligação à base de dados mudar entretanto (testes, início de sessão), não se conta nada com os dados de outro modo
+  return Promise.all([studioLoad(), calLoadSettings()]).then(function(r){ var ok = r[0]; return ok && sbReady === mode ? studioAutoSessions() : 0; }).then(function(n){ updateStudioBadge(); return n; });
+}
+function wireCalendarCard(main, redraw){
+  var card = main.querySelector("#gcalCard");
+  if (!card) return;
+  function out(msg, bad){ var o = card.querySelector("#gcOut") || card.querySelector("#gcErr"); if (o){ o.textContent = msg; o.style.color = bad ? "var(--critical)" : ""; o.style.display = "block"; } }
+  var save = card.querySelector("#gcSave");
+  if (save) save.addEventListener("click", function(){
+    var id = card.querySelector("#gcClient").value.trim();
+    if (!/^[\w.\-]+\.apps\.googleusercontent\.com$/i.test(id)){ out("Isto não parece um ID de cliente do Google (termina em .apps.googleusercontent.com).", true); return; }
+    calSettings.clientId = id; save.disabled = true;
+    calSaveSettings().then(function(r){ if (r.error){ calSettings.clientId = ""; save.disabled = false; out(r.error, true); return; } showToast("✓ Guardado — agora sincroniza"); redraw(); });
+  });
+  var sync = card.querySelector("#gcSync");
+  if (sync) sync.addEventListener("click", function(){
+    var cal = card.querySelector("#gcCal").value.trim() || "primary";
+    if (cal !== calSettings.calendarId){ calSettings.calendarId = cal; }
+    sync.disabled = true; out("A pedir autorização ao Google e a ler a agenda…");
+    runCalendarSync().then(function(sum){ showToast("✓ Agenda sincronizada"); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
+  });
+  var tog = card.querySelector("#gcToggle");
+  if (tog) tog.addEventListener("click", function(){
+    if (!calSettings.useAsSource && !window.confirm("Usar o Google Agenda como fonte das sessões? O horário semanal deixa de contar sessões (as já contadas ficam).")) return;
+    calSettings.useAsSource = !calSettings.useAsSource;
+    calSaveSettings().then(function(r){ if (r.error){ calSettings.useAsSource = !calSettings.useAsSource; showToast("⚠ " + r.error); } redraw(); });
+  });
+  var off = card.querySelector("#gcOff");
+  if (off) off.addEventListener("click", function(){
+    if (!window.confirm("Desligar o Google Agenda? As sessões já contadas ficam; deixa de se ler o calendário.")) return;
+    calSettings.clientId = ""; calSettings.useAsSource = false; calSettings.lastSync = null;
+    calSaveSettings().then(function(){ redraw(); });
+  });
+  card.querySelectorAll("[data-gc-alias]").forEach(function(sel){ sel.addEventListener("change", function(){
+    var u = calSettings.lastSync && calSettings.lastSync.unmatched[parseInt(sel.getAttribute("data-gc-alias"), 10)];
+    if (!u || !sel.value) return;
+    calSettings.aliases[calTitleKey(u.title)] = sel.value;
+    calSettings.lastSync.unmatched = calSettings.lastSync.unmatched.filter(function(x){ return x !== u; });
+    calSaveSettings().then(function(){ showToast("✓ Associado — fica para as próximas sincronizações"); redraw(); });
+  }); });
+}
+function studioAfterAutoSessions(n){
+  if (n > 0 && state.mode === "pro" && !modalRoot.firstChild){
+    if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain();
+    else if (state.proSelectedId && state.proTab === "sessoes") renderProTabContent(findStudent(state.proSelectedId));
+  }
+  updateStudioBadge();
+}
+
+// ---- pacote atual, aulas extra e renovação (o que o resumo semanal por e-mail mostrava) ----
+function currentPackOf(studentId, today){
+  var list = packsOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : a.starts_on > b.starts_on ? -1 : 0; });
+  var active = list.filter(function(p){ return packUsage(p, today).active; })[0];
+  if (active) return active;
+  var started = list.filter(function(p){ return !p.starts_on || p.starts_on <= today; });
+  return started[0] || list[0] || null;   // sem nenhum a decorrer: o mais recente
+}
+// aulas dadas fora de qualquer pacote, depois de o último pacote ter começado (as "aulas extra" à espera de renovação)
+function extrasOf(studentId, today){
+  var last = packsOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : -1; })[0];
+  if (!last) return {n: 0, since: null};
+  var list = studio.sessions.filter(function(x){ return x.student_id === studentId && !x.pack_id && x.date >= last.starts_on && (x.status === "feita" || x.status === "faltou" || x.status === "cancelada_tarde"); })
+    .sort(function(a, b){ return a.date < b.date ? -1 : 1; });
+  return {n: list.length, since: list.length ? list[0].date : null};
+}
+// uma linha por aluno com pacote: o que se via na tabela do e-mail (valor, total, progresso, em falta, a renovar)
+function studioSummaryRows(today){
+  today = today || localTodayISO();
+  var rows = [];
+  visibleStudentsForDashboard().filter(isStudentActive).forEach(function(st){
+    var pk = currentPackOf(st.id, today);
+    if (!pk) return;
+    var u = packUsage(pk, today), ex = extrasOf(st.id, today);
+    var hasActive = activePacksOf(st.id, today).length > 0;
+    var renew = !hasActive && (u.exhausted || u.expired);
+    var pending = pk.starts_on > today;
+    rows.push({student: st, pack: pk, u: u, extras: ex, weekly: weeklySlotsOf(st.id),
+      state: renew ? "renovar" : (!pending && u.ending ? "acabar" : (pending ? "pendente" : "normal"))});
+  });
+  var rank = {renovar: 0, acabar: 1, normal: 2, pendente: 3};
+  return rows.sort(function(a, b){ return rank[a.state] - rank[b.state] || a.u.remaining - b.u.remaining || String(a.student.name).localeCompare(String(b.student.name), "pt"); });
+}
+function studioAttentionCount(today){
+  today = today || localTodayISO();
+  var rows = studioSummaryRows(today), n = rows.filter(function(r){ return r.state === "renovar" || r.state === "acabar"; }).length;
+  var overdue = studio.payments.filter(function(p){ return !p.paid_on && p.due_on < today; }).length;
+  return n + overdue;
+}
+function studioNavLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Estúdio" + (n ? " · " + n : ""); }
+function updateStudioBadge(){
+  var b = document.getElementById("navStudio");
+  if (b) b.textContent = studioNavLabel();
+}
+// um pacote novo desconta as aulas extra já dadas desde a sua data de início
+function attachExtrasToPack(pack){
+  var capacity = Math.max(0, (Number(pack.total) || 0) - (Number(pack.used_before) || 0));
+  var list = studio.sessions.filter(function(x){ return x.student_id === pack.student_id && !x.pack_id && x.date >= pack.starts_on && sessionConsumes(pack, x); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; }).slice(0, capacity);
+  return list.reduce(function(chain, x){ return chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: pack.id}).then(function(r){ return n + (r.error ? 0 : 1); }); }); }, Promise.resolve(0));
+}
+
+// ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas) ----
+function parseImportDate(t){
+  t = String(t || "").trim();
+  var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t) || (function(){ var q = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(t); return q ? [null, q[3], q[2], q[1]] : null; })();
+  if (!m) return null;
+  var y = +m[1], mo = +m[2], d = +m[3], iso = y + "-" + pad2(mo) + "-" + pad2(d);
+  var dt = new Date(iso + "T00:00:00Z");
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && dt.getUTCMonth() === mo - 1 ? iso : null;
+}
+function parseImportNumber(t){ var n = Number(String(t == null ? "" : t).trim().replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) ? n : null; }
+function parsePackImport(text){
+  var rows = [], errors = [];
+  String(text || "").split(/\r?\n/).forEach(function(line, i){
+    if (!line.trim()) return;
+    var cols = line.split(/\t|;/).map(function(c){ return c.trim(); });
+    if (cols.length < 3){ errors.push("Linha " + (i + 1) + ": faltam colunas (nome; aulas; data de início; valor; aulas já dadas)."); return; }
+    var total = parseImportNumber(cols[1]), start = parseImportDate(cols[2]);
+    var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0;
+    if (/^(nome|cliente|aluno)$/i.test(cols[0]) && total == null) return; // linha de cabeçalho colada do Sheets
+    if (!cols[0]) errors.push("Linha " + (i + 1) + ": falta o nome.");
+    else if (total == null || total < 1 || total > 500 || total !== Math.round(total)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): número de aulas inválido.");
+    else if (!start) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): data de início inválida (usa 31/12/2026 ou 2026-12-31).");
+    else if (cols[3] && (price == null || price < 0)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): valor inválido.");
+    else if (used == null || used < 0 || used > total || used !== Math.round(used)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): aulas já dadas inválidas (0 a " + total + ").");
+    else rows.push({name: cols[0], total: total, start: start, price: price, used: used});
+  });
+  return {rows: rows, errors: errors};
+}
+// o aluno da app com este nome (sem distinguir maiúsculas/acentos; aceita só o primeiro e último nome se for único)
+function matchStudentByName(name){
+  var key = exLibFold(name), all = STUDENTS.filter(function(s){ return !s.isDemo || state.showDemoStudents; });
+  var exact = all.filter(function(s){ return exLibFold(s.name) === key; });
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  var parts = key.split(" ").filter(Boolean);
+  var loose = all.filter(function(s){ var p = exLibFold(s.name).split(" ").filter(Boolean); return parts.length >= 2 && p[0] === parts[0] && p[p.length - 1] === parts[parts.length - 1]; });
+  return loose.length === 1 ? loose[0] : null;
+}
+function studioImportPacks(text){
+  var parsed = parsePackImport(text), report = {created: 0, skipped: [], errors: parsed.errors.slice()};
+  var chain = Promise.resolve();
+  parsed.rows.forEach(function(r){
+    chain = chain.then(function(){
+      var st = matchStudentByName(r.name);
+      if (!st){ report.errors.push(r.name + ": não encontrei um aluno com este nome."); return; }
+      if (packsOf(st.id).some(function(p){ return p.starts_on === r.start && Number(p.total) === r.total; })){ report.skipped.push(st.name + " (já tem este pacote)"); return; }
+      var d = new Date(r.start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + 3);
+      var row = {student_id: st.id, name: "Trimestre " + r.total + " aulas", total: r.total, price: r.price, starts_on: r.start, expires_on: d.toISOString().slice(0, 10), missed_consumes: true, late_cancel_consumes: true};
+      if (studio.slotsAvailable) row.used_before = r.used;
+      return studioInsert("packs", row).then(function(x){ if (x.error) report.errors.push(st.name + ": " + x.error); else report.created++; });
+    });
+  });
+  return chain.then(function(){ return report; });
+}
+
+// ---- Google Agenda: ler os eventos e contá-los como sessões (migração 0025) ----
+// A app pede ao Google, de cada vez que se sincroniza, autorização só de leitura (calendar.readonly). O token vive só na memória.
+// Cada evento cujo título é o nome de um aluno vira uma sessão "feita" (cor Tomate/11 = "faltou", como no script antigo); tal como lá,
+// contam-se os eventos até ao fim de hoje. O calendário é a fonte: se o evento mudar de dia/hora ou desaparecer, a sessão acompanha-o.
+// Mexer numa sessão na app (Agenda → Alterar) desliga-a do calendário (passa a "manual") e a sincronização deixa-a em paz.
+var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+var CAL_LOCAL_KEY = "evolve_gcal_v1";
+var CAL_DEFAULT_BACK_DAYS = 120, CAL_MAX_BACK_DAYS = 400;
+var CAL_FALTA_COLOR = "11";
+var calSettings = {clientId: "", calendarId: "primary", useAsSource: false, aliases: {}, lastSync: null, loaded: false, available: true};
+
+function calLoadSettings(){
+  var done = function(v){
+    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.lastSync = v.lastSync || null; }
+    calSettings.loaded = true; return true;
+  };
+  if (!sbReady){ try { return Promise.resolve(done(JSON.parse(localStorage.getItem(CAL_LOCAL_KEY) || "null"))); } catch (e) { return Promise.resolve(done(null)); } }
+  return Promise.resolve(sb.from("studio_settings").select("value").eq("key", "google_calendar").maybeSingle().then(function(r){ return r; })).then(function(res){
+    if (res && res.error){ calSettings.available = false; calSettings.loaded = true; return false; }
+    calSettings.available = true;
+    return done(res && res.data ? res.data.value : null);
+  }, function(){ calSettings.available = false; calSettings.loaded = true; return false; });
+}
+function calSettingsValue(){ return {clientId: calSettings.clientId, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, aliases: calSettings.aliases, lastSync: calSettings.lastSync}; }
+function calSaveSettings(){
+  if (!sbReady){ try { localStorage.setItem(CAL_LOCAL_KEY, JSON.stringify(calSettingsValue())); } catch (e) {} return Promise.resolve({}); }
+  return Promise.resolve(sb.from("studio_settings").upsert({key: "google_calendar", value: calSettingsValue(), updated_at: new Date().toISOString()}).then(function(r){ return r; })).then(function(res){
+    return res && res.error ? {error: "Não foi possível guardar as definições (a migração 0025 já foi corrida?)."} : {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function calUsesCalendar(){ return !!(calSettings.useAsSource && calSettings.clientId); }
+
+// ---- eventos ----
+// {id, title, date, time, colorId, cancelled} a partir de um evento da API do Google (hora local do dispositivo)
+function normalizeCalendarEvent(ev){
+  if (!ev || !ev.id || !ev.start) return null;
+  var title = String(ev.summary || "").trim();
+  if (!title) return null;
+  var date = null, time = null;
+  if (ev.start.dateTime){
+    var d = new Date(ev.start.dateTime);
+    if (isNaN(d.getTime())) return null;
+    date = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); time = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  } else if (ev.start.date && isIsoDate(ev.start.date)) date = ev.start.date;
+  if (!date) return null;
+  return {id: String(ev.id).slice(0, 200), title: title, date: date, time: time, colorId: ev.colorId ? String(ev.colorId) : "", cancelled: ev.status === "cancelled"};
+}
+function calTitleKey(t){ return exLibFold(t); }
+// o aluno de um evento. Os títulos costumam trazer mais do que o nome ("PT 60 - Isabel Carvalho"), por isso procura, por ordem:
+// alias definido à mão; título igual ao nome; a parte depois do último " - " igual ao nome; o nome completo de um só aluno dentro do título
+// (se houver vários, o mais comprido); primeiro+último nome se for único.
+function matchEventStudent(title, aliases){
+  var key = calTitleKey(title);
+  if (aliases && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
+  var all = STUDENTS.filter(function(s){ return !s.isDemo || state.showDemoStudents; });
+  function unique(list){ return list.length === 1 ? list[0] : null; }
+  var exact = all.filter(function(s){ return exLibFold(s.name) === key; });
+  if (exact.length) return unique(exact);
+  var parts = String(title).split(/\s+[-–—]\s+/), tail = parts.length > 1 ? calTitleKey(parts[parts.length - 1]) : "";
+  if (tail){
+    var viaTail = all.filter(function(s){ return exLibFold(s.name) === tail; });
+    if (viaTail.length) return unique(viaTail);
+  }
+  var padded = " " + key + " ";
+  var inside = all.filter(function(s){ var n = exLibFold(s.name); return n.indexOf(" ") > 0 && padded.indexOf(" " + n + " ") >= 0; });
+  if (inside.length){
+    var longest = Math.max.apply(null, inside.map(function(s){ return exLibFold(s.name).length; }));
+    var top = inside.filter(function(s){ return exLibFold(s.name).length === longest; });
+    // dois alunos diferentes no mesmo título é ambíguo; só vale se os outros nomes forem parte do mais comprido ("Ana Silva" e "Ana Silva Santos")
+    if (top.length === 1 && inside.every(function(s){ return exLibFold(top[0].name).indexOf(exLibFold(s.name)) >= 0; })) return top[0];
+    return null;
+  }
+  return matchStudentByName(tail || title);
+}
+// a janela a ler: do início do pacote ainda relevante mais antigo até ao fim de hoje
+function calendarWindow(today){
+  var from = addDaysISO(today, -CAL_DEFAULT_BACK_DAYS), limit = addDaysISO(today, -CAL_MAX_BACK_DAYS);
+  studio.packs.forEach(function(p){ if (p.starts_on && p.starts_on <= today && (!p.expires_on || p.expires_on >= addDaysISO(today, -30)) && p.starts_on < from) from = p.starts_on; });
+  if (from < limit) from = limit;
+  return {from: from, to: today};
+}
+// o que há a fazer para as sessões ficarem iguais ao calendário: {insert[], update[], remove[], unmatched{titulo: n}, matched}
+function planCalendarSync(opts){
+  var today = opts.today, win = opts.window, aliases = opts.aliases || {};
+  var plan = {insert: [], update: [], remove: [], unmatched: {}, matched: 0};
+  var present = {};
+  var byExt = {};
+  studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
+  opts.events.forEach(function(ev){
+    if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
+    var st = matchEventStudent(ev.title, aliases);
+    if (!st){ plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1; return; }
+    present[ev.id] = true; // o evento existe: nunca remover as sessões já registadas (mesmo de alunos arquivados)
+    if (!isStudentActive(st)) return;
+    plan.matched++;
+    var status = ev.colorId === CAL_FALTA_COLOR ? "faltou" : "feita", ex = byExt[ev.id];
+    if (ex){
+      var patch = {};
+      if (ex.student_id !== st.id) patch.student_id = st.id;
+      if (ex.date !== ev.date) patch.date = ev.date;
+      if ((ex.time || null) !== (ev.time || null)) patch.time = ev.time;
+      if (ex.status !== status) patch.status = status;
+      if (Object.keys(patch).length) plan.update.push({id: ex.id, patch: patch});
+      return;
+    }
+    // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes
+    var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && (!x.time || !ev.time || x.time === ev.time); });
+    if (dup) return;
+    plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: ev.id});
+  });
+  // sessões vindas do calendário cujo evento já não existe (apagado, cancelado ou renomeado) dentro da janela lida
+  studio.sessions.forEach(function(x){
+    if (x.source === "calendario" && x.external_id && !present[x.external_id] && x.date >= win.from && x.date <= today) plan.remove.push(x.id);
+  });
+  plan.insert.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
+  return plan;
+}
+
+// ---- Google (autorização só de leitura + eventos) ----
+function loadGoogleIdentity(){
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
+  return new Promise(function(resolve, reject){
+    var sc = document.createElement("script");
+    sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
+    sc.onload = function(){ resolve(); };
+    sc.onerror = function(){ reject(new Error("Não foi possível carregar o Google — verifica a ligação.")); };
+    document.head.appendChild(sc);
+  });
+}
+function googleAccessToken(clientId){
+  return loadGoogleIdentity().then(function(){
+    return new Promise(function(resolve, reject){
+      var client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId, scope: CAL_SCOPE,
+        callback: function(resp){ if (resp && resp.access_token) resolve(resp.access_token); else reject(new Error(resp && resp.error === "access_denied" ? "Não autorizaste o acesso à agenda." : "O Google recusou a autorização" + (resp && resp.error ? " (" + resp.error + ")" : "") + ". Confirma o ID de cliente e as origens autorizadas.")); },
+        error_callback: function(err){ reject(new Error(err && err.type === "popup_closed" ? "Fechaste a janela do Google antes de autorizar." : "Não foi possível abrir a janela do Google (o browser bloqueou o pop-up?).")); }
+      });
+      client.requestAccessToken({prompt: ""});
+    });
+  });
+}
+function fetchCalendarEvents(token, calendarId, fromISO, toISO){
+  var out = [];
+  var timeMin = new Date(fromISO + "T00:00:00").toISOString(), timeMax = new Date(addDaysISO(toISO, 1) + "T00:00:00").toISOString();
+  function page(pageToken){
+    var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calendarId || "primary") + "/events?singleEvents=true&orderBy=startTime&maxResults=2500" +
+      "&timeMin=" + encodeURIComponent(timeMin) + "&timeMax=" + encodeURIComponent(timeMax) + "&fields=" + encodeURIComponent("nextPageToken,items(id,summary,start,end,colorId,status)") + (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+    return fetch(url, {headers: {Authorization: "Bearer " + token}}).then(function(res){
+      if (res.status === 401) throw new Error("A autorização expirou — tenta sincronizar outra vez.");
+      if (res.status === 403) throw new Error("O Google recusou o acesso à agenda: confirma que a Google Calendar API está ativada no teu projeto.");
+      if (res.status === 404) throw new Error("Agenda não encontrada: confirma o nome/ID da agenda (por omissão, a principal).");
+      if (!res.ok) throw new Error("O Google respondeu com o erro " + res.status + ".");
+      return res.json();
+    }).then(function(j){
+      (j.items || []).forEach(function(it){ var n = normalizeCalendarEvent(it); if (n) out.push(n); });
+      return j.nextPageToken ? page(j.nextPageToken) : out;
+    });
+  }
+  return page(null);
+}
+
+// aplica o plano: remove, atualiza e cria (os pacotes decidem-se por ordem de data, contando as que acabámos de decidir)
+function applyCalendarPlan(plan){
+  var res = {inserted: 0, updated: 0, removed: 0, errors: 0};
+  var chain = Promise.resolve();
+  // 1.º remover, 2.º atualizar (o pacote volta a escolher-se se mudou o aluno ou o dia), 3.º criar: assim cada passo vê as contas já certas
+  plan.remove.forEach(function(id){ chain = chain.then(function(){ return studioDelete("sessions", id).then(function(r){ if (r.error) res.errors++; else res.removed++; }); }); });
+  plan.update.forEach(function(u){
+    chain = chain.then(function(){
+      var cur = studio.sessions.filter(function(x){ return x.id === u.id; })[0], oldPack;
+      var patch = Object.assign({}, u.patch);
+      if (cur && (patch.student_id || patch.date)){
+        oldPack = cur.pack_id; cur.pack_id = null;
+        var pk = pickPackForSession(patch.student_id || cur.student_id, patch.date || cur.date);
+        patch.pack_id = pk ? pk.id : null;
+      }
+      return studioUpdate("sessions", u.id, patch).then(function(r){
+        if (r.error){ res.errors++; if (cur && oldPack !== undefined) cur.pack_id = oldPack; } else res.updated++;
+      });
+    });
+  });
+  chain = chain.then(function(){
+    var virtual = [];
+    plan.insert.forEach(function(row){
+      var pk = pickPackForSession(row.student_id, row.date);
+      row.pack_id = pk ? pk.id : null;
+      var v = {id: "virtual-" + virtual.length, student_id: row.student_id, pack_id: row.pack_id, date: row.date, time: row.time, status: row.status};
+      virtual.push(v); studio.sessions.push(v);
+    });
+    studio.sessions = studio.sessions.filter(function(x){ return virtual.indexOf(x) < 0; });
+    return studioInsertMany("sessions", plan.insert);
+  }).then(function(r){
+    if (r.error){
+      if (plan.insert.length > 1) return plan.insert.reduce(function(c, row){ return c.then(function(){ return studioInsert("sessions", row).then(function(x){ if (x.error) res.errors++; else res.inserted++; }); }); }, Promise.resolve());
+      res.errors += plan.insert.length;
+    } else res.inserted += r.data.length;
+  }).then(function(){ return res; });
+  return chain;
+}
+var calSyncing = false;
+// pede autorização, lê o calendário e deixa as sessões iguais; devolve o resumo para mostrar
+function runCalendarSync(){
+  if (calSyncing) return Promise.reject(new Error("Já está a sincronizar."));
+  if (!calSettings.clientId) return Promise.reject(new Error("Falta o ID de cliente do Google."));
+  calSyncing = true;
+  var today = localTodayISO(), win = calendarWindow(today);
+  return googleAccessToken(calSettings.clientId).then(function(token){ return fetchCalendarEvents(token, calSettings.calendarId, win.from, win.to); }).then(function(events){
+    var plan = planCalendarSync({events: events, today: today, window: win, aliases: calSettings.aliases});
+    var warnings = studio.packs.filter(function(p){ return Number(p.used_before) > 0 && packUsage(p, today).active; }).map(function(p){ return nameOf(p.student_id); });
+    return applyCalendarPlan(plan).then(function(r){
+      var summary = {at: new Date().toISOString(), events: events.length, matched: plan.matched, inserted: r.inserted, updated: r.updated, removed: r.removed, errors: r.errors,
+        unmatched: Object.keys(plan.unmatched).sort(function(a, b){ return plan.unmatched[b] - plan.unmatched[a]; }).slice(0, 15).map(function(t){ return {title: t, n: plan.unmatched[t]}; }), warnUsedBefore: warnings, from: win.from};
+      calSettings.lastSync = summary;
+      return calSaveSettings().then(function(){ return summary; });
+    });
+  }).then(function(s){ calSyncing = false; return s; }, function(e){ calSyncing = false; throw e; });
+}
+function calendarCardHtml(){
+  var cs = calSettings, ls = cs.lastSync;
+  var html = "<div class=\"card\" id=\"gcalCard\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Google Agenda</div>";
+  if (!studio.slotsAvailable) return html + "<p class=\"muted-p\">Para ligar o Google Agenda falta correr a migração <strong>0024</strong> (e depois a 0025) no SQL Editor do Supabase.</p></div>";
+  if (!cs.available){ return html + "<p class=\"muted-p\">Falta correr a migração <strong>0025</strong> no SQL Editor do Supabase (<code>supabase/migrations/0025_google_calendar.sql</code>) para ligar o Google Agenda.</p></div>"; }
+  if (!cs.clientId){
+    html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Lê a tua agenda do Google e conta como sessões os eventos que têm o nome de um aluno (a cor Tomate conta como falta). Só pede permissão de <strong>leitura</strong>.</p>" +
+      "<div class=\"checkin-field\"><label for=\"gcClient\">ID de cliente do Google (OAuth)</label><input type=\"text\" id=\"gcClient\" placeholder=\"123456-abc.apps.googleusercontent.com\" autocomplete=\"off\"></div>" +
+      "<p class=\"muted-p\" id=\"gcErr\" style=\"color:var(--critical); display:none;\"></p>" +
+      "<button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSave\">Guardar</button>" +
+      "<details class=\"perfil-section\" style=\"margin-top:12px;\"><summary class=\"eyebrow\">Como obter o ID de cliente (uma vez, ~10 min)</summary><ol class=\"muted-p\" style=\"margin:8px 0 0 18px; line-height:1.5;\">" +
+      "<li>Abre <strong>console.cloud.google.com</strong> e cria um projeto (ex.: EVOLVE).</li>" +
+      "<li><strong>APIs e serviços → Biblioteca</strong>: procura <strong>Google Calendar API</strong> e ativa.</li>" +
+      "<li><strong>Ecrã de consentimento OAuth</strong>: tipo <em>Externo</em>, nome EVOLVE, o teu email; em Âmbitos acrescenta <code>calendar.readonly</code>; em Utilizadores de teste acrescenta o teu email.</li>" +
+      "<li><strong>Credenciais → Criar credenciais → ID de cliente OAuth</strong>: aplicação Web; em <em>Origens JavaScript autorizadas</em> põe <code>" + escapeHtml(typeof location !== "undefined" && location.origin && location.origin !== "null" ? location.origin : "https://tiagojvlourenco.github.io") + "</code>.</li>" +
+      "<li>Copia o ID de cliente e cola aqui. (Para não teres de voltar a autorizar de 7 em 7 dias, publica a aplicação em <em>Produção</em> no ecrã de consentimento.)</li></ol></details></div>";
+    return html;
+  }
+  html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + (cs.useAsSource ? "✓ É a fonte das sessões (o horário semanal fica em pausa)." : "Ainda não é a fonte das sessões: o horário semanal continua a contar.") + "</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSync\">⟳ Sincronizar agora</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"gcToggle\">" + (cs.useAsSource ? "Voltar ao horário semanal" : "Usar como fonte das sessões") + "</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"gcOff\">Desligar</button></div>" +
+    "<div class=\"checkin-field\" style=\"max-width:320px;\"><label for=\"gcCal\">Agenda (por omissão a principal)</label><input type=\"text\" id=\"gcCal\" value=\"" + escapeHtml(cs.calendarId) + "\" autocomplete=\"off\"></div>" +
+    "<p class=\"muted-p\" id=\"gcOut\" style=\"margin-top:8px;\">" + (ls ? calendarSummaryText(ls) : "Ainda não sincronizaste. A primeira vez pede autorização ao Google.") + "</p>";
+  if (ls && ls.unmatched && ls.unmatched.length){
+    html += "<div class=\"eyebrow\" style=\"margin:12px 0 6px;\">Eventos sem aluno</div><p class=\"muted-p\" style=\"margin-bottom:6px;\">Se algum destes é um aluno com o nome escrito de outra forma, associa-o (fica guardado para as próximas vezes).</p>" +
+      ls.unmatched.map(function(u, i){ return "<div class=\"history-row\" style=\"align-items:center; gap:6px; flex-wrap:wrap;\"><div class=\"hlabel\" style=\"flex:1 1 120px;\">" + escapeHtml(u.title) + " <span class=\"muted-p\">×" + u.n + "</span></div><select class=\"mini-select\" data-gc-alias=\"" + i + "\"><option value=\"\">Associar a…</option>" + visibleStudentsForDashboard().filter(isStudentActive).map(function(st){ return "<option value=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</option>"; }).join("") + "</select></div>"; }).join("");
+  }
+  return html + "</div>";
+}
+function calendarSummaryText(ls){
+  var days = Math.floor((Date.now() - new Date(ls.at).getTime()) / 86400000);
+  var t = "Última sincronização " + (days <= 0 ? "hoje" : "há " + days + (days === 1 ? " dia" : " dias")) + ": " + ls.events + " eventos lidos, " + ls.matched + " de alunos · " + ls.inserted + " novas, " + ls.updated + " atualizadas, " + ls.removed + " removidas" + (ls.errors ? " · ⚠ " + ls.errors + " com erro" : "") + ".";
+  if (ls.warnUsedBefore && ls.warnUsedBefore.length) t += " ⚠ Pacotes com 'aulas já dadas' maior que 0 (" + ls.warnUsedBefore.slice(0, 4).join(", ") + "): o calendário também conta essas aulas — põe 0.";
+  return t;
+}
+
+// dados de demonstração (só no modo local, sem Supabase)
+function studioSeedDemo(){
+  var d = function(n){ return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); };
+  var ahead = function(n){ return new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); };
+  studio.packs = [
+    {id: "pk1", student_id: "maria", name: "Pack 10 sessões", total: 10, price: 250, starts_on: d(40), expires_on: ahead(8), missed_consumes: true, late_cancel_consumes: true, used_before: 0},
+    {id: "pk2", student_id: "rui", name: "Pack 20 sessões", total: 20, price: 440, starts_on: d(30), expires_on: ahead(60), missed_consumes: true, late_cancel_consumes: true},
+    {id: "pk3", student_id: "sofia", name: "Pack 10 sessões", total: 10, price: 250, starts_on: d(70), expires_on: d(5), missed_consumes: true, late_cancel_consumes: true}
+  ];
+  var sess = [];
+  for (var i = 0; i < 8; i++) sess.push({id: "s1" + i, student_id: "maria", pack_id: "pk1", date: d(36 - i * 4), status: i === 5 ? "faltou" : "feita"});
+  for (var j = 0; j < 6; j++) sess.push({id: "s2" + j, student_id: "rui", pack_id: "pk2", date: d(28 - j * 5), status: j === 3 ? "cancelada_tarde" : "feita"});
+  sess.push({id: "s30", student_id: "sofia", pack_id: "pk3", date: d(60), status: "feita"}, {id: "s31", student_id: "sofia", pack_id: "pk3", date: d(50), status: "faltou"}, {id: "s32", student_id: "sofia", pack_id: "pk3", date: d(20), status: "faltou"});
+  studio.sessions = sess;
+  studio.slots = [
+    {id: "sl1", student_id: "maria", weekday: 2, time: "18:00", counts_from: d(0), generated_until: d(1)},
+    {id: "sl2", student_id: "maria", weekday: 4, time: "18:00", counts_from: d(0), generated_until: d(1)},
+    {id: "sl3", student_id: "rui", weekday: 1, time: "19:00", counts_from: d(14), generated_until: null},
+    {id: "sl4", student_id: "rui", weekday: 3, time: "19:00", counts_from: d(14), generated_until: null},
+    {id: "sl5", student_id: "rui", weekday: 5, time: "19:00", counts_from: d(14), generated_until: null}
+  ];
+  studio.payments = [
+    {id: "py1", student_id: "maria", pack_id: "pk1", amount: 250, due_on: d(40), paid_on: d(40), method: "mbway"},
+    {id: "py2", student_id: "rui", pack_id: "pk2", amount: 440, due_on: d(30), paid_on: d(29), method: "transferencia"},
+    {id: "py3", student_id: "sofia", pack_id: "pk3", amount: 250, due_on: d(12), paid_on: null, method: null},
+    {id: "py4", student_id: "maria", pack_id: null, amount: 250, due_on: ahead(2), paid_on: null, method: null}
+  ];
+}
+
+/* ---------- Estúdio: ecrãs (ficha do aluno e visão geral) ---------- */
+function studioUnavailableHtml(){
+  return "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes e cobranças</div><p class=\"muted-p\">Ainda não é possível usar esta área: falta correr a migração <strong>0023</strong> no SQL Editor do Supabase (ficheiro <code>supabase/migrations/0023_studio_packs.sql</code>) e depois recarregar a app.</p></div>";
+}
+function sessionStatusPill(status){
+  var tone = {feita: "good", faltou: "critical", cancelada: "", cancelada_tarde: "warn"}[status] || "";
+  return "<span class=\"pill " + tone + "\">" + escapeHtml((SESSION_STATUS[status] || {}).label || status) + "</span>";
+}
+function packBarHtml(pack, u){
+  return "<div class=\"history-row\" style=\"align-items:flex-start;\"><div style=\"min-width:0;flex:1;\">" +
+    "<div class=\"hlabel\">" + escapeHtml(pack.name) + (u.expired ? " <span class=\"pill\">caducado</span>" : u.exhausted ? " <span class=\"pill\">esgotado</span>" : u.ending ? " <span class=\"pill warn\">a acabar</span>" : "") + "</div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
+      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
+    "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
+    "<button type=\"button\" class=\"assess-del\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></div>";
+}
+function paymentRowHtml(p, today, withName){
+  var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
+  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
+    "<div class=\"hlabel\">" + (withName ? "<button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(p.student_id) + "\">" + escapeHtml(nameOf(p.student_id)) + "</button> · " : "") + escapeHtml(eur(p.amount)) + " <span class=\"pill " + tone + "\">" + st + "</span></div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Vence " + escapeHtml(fmtDateFullPt(p.due_on)) + (p.paid_on ? " · pago em " + escapeHtml(fmtDateFullPt(p.paid_on)) + (p.method ? " (" + escapeHtml(PAYMENT_METHODS[p.method] || p.method) + ")" : "") : "") + "</div></div>" +
+    "<span style=\"white-space:nowrap;\">" + (p.paid_on ? "" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button> ") +
+    (!p.paid_on && withName ? "<button type=\"button\" class=\"btn btn-sm\" data-remind=\"" + escapeHtml(p.id) + "\">Lembrar</button> " : "") +
+    "<button type=\"button\" class=\"assess-del\" data-del-payment=\"" + escapeHtml(p.id) + "\" aria-label=\"Apagar cobrança\">✕</button></span></div>";
+}
+
+function tplProSessoes(s){
+  if (!studio.available) return studioUnavailableHtml();
+  var today = localTodayISO(), sum = studentStudioSummary(s.id, today);
+  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pacotes</div>";
+  html += sum.packs.length ? sum.packs.map(function(x){ return packBarHtml(x.pack, x.u); }).join("") : "<p class=\"muted-p\">Ainda sem pacotes. Cria o primeiro abaixo.</p>";
+
+  var ex0 = extrasOf(s.id, today);
+  if (ex0.n && !sum.hasActive) html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--critical);\">🔄 Aguarda renovação · +" + ex0.n + (ex0.n === 1 ? " aula extra" : " aulas extra") + " desde " + escapeHtml(fmtDateFullPt(ex0.since)) + " (descontam-se ao próximo pacote).</p>";
+  if (studio.slotsAvailable){
+    var slots = slotsOf(s.id);
+    html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Horário semanal</div>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">As sessões deste horário contam-se sozinhas depois de passarem (como os eventos do calendário). Só precisas de marcar as exceções: faltou, cancelou, mudou de dia.</p>" +
+      (slots.length ? slots.map(function(sl){ return "<div class=\"history-row\" style=\"align-items:center;\"><div class=\"hlabel\">" + escapeHtml(slotLabel(sl)) + "<div class=\"muted-p\" style=\"font-size:0.74rem;\">conta desde " + escapeHtml(fmtDateFullPt(sl.counts_from)) + "</div></div><button type=\"button\" class=\"assess-del\" data-del-slot=\"" + escapeHtml(sl.id) + "\" aria-label=\"Remover horário\">✕</button></div>"; }).join("") : "<p class=\"muted-p\">Sem horário fixo.</p>") +
+      "<details class=\"perfil-section\" style=\"margin-top:10px;\"><summary class=\"eyebrow\">+ Novo horário</summary><div class=\"assess-form-grid\" style=\"margin-top:10px;\">" +
+      "<div class=\"f\"><label>Dia da semana</label><select id=\"slWeekday\" class=\"mini-select\" style=\"width:100%;\">" + [1,2,3,4,5,6,7].map(function(i){ return "<option value=\"" + i + "\">" + WEEKDAY_NAMES[i] + "</option>"; }).join("") + "</select></div>" +
+      "<div class=\"f\"><label>Hora</label><input type=\"time\" id=\"slTime\" value=\"18:00\"></div>" +
+      "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Contar as sessões desde</label><input type=\"date\" id=\"slFrom\" value=\"" + today + "\"></div>" +
+      "<p class=\"muted-p\" style=\"grid-column:1/-1;\">Se o pacote já vem a meio, põe hoje e indica no pacote as aulas já dadas. Para contar desde o início do pacote, escolhe essa data.</p>" +
+      "<p class=\"muted-p\" id=\"slErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+      "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"slAdd\" style=\"width:100%;\">Adicionar horário</button></div></div></details>";
+  }
+
+  html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">+ Novo pacote</summary><div class=\"assess-form-grid\" style=\"margin-top:10px;\" id=\"packForm\">" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Nome</label><input type=\"text\" id=\"pkName\" maxlength=\"80\" value=\"Pack 10 sessões\"></div>" +
+    "<div class=\"f\"><label>Sessões</label><input type=\"number\" id=\"pkTotal\" min=\"1\" max=\"500\" value=\"10\"></div>" +
+    "<div class=\"f\"><label>Preço (€)</label><input type=\"number\" id=\"pkPrice\" min=\"0\" step=\"0.5\" placeholder=\"250\"></div>" +
+    "<div class=\"f\"><label>Início</label><input type=\"date\" id=\"pkStart\" value=\"" + today + "\"></div>" +
+    (studio.slotsAvailable ? "<div class=\"f\"><label>Aulas já dadas (antes da app)</label><input type=\"number\" id=\"pkUsed\" min=\"0\" max=\"500\" value=\"0\"></div>" : "") +
+    "<div class=\"f\"><label>Validade (meses, 0 = sem)</label><input type=\"number\" id=\"pkMonths\" min=\"0\" max=\"36\" value=\"3\"></div>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkMissed\" checked> Faltar sem aviso gasta uma sessão</label>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkLate\" checked> Cancelar tarde gasta uma sessão</label>" +
+    "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkCharge\" checked> Criar a cobrança (vence no início, se tiver preço)</label>" +
+    "<p class=\"muted-p\" id=\"pkErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"pkAdd\" style=\"width:100%;\">Criar pacote</button></div></div></details>";
+
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Registar sessão</div><div class=\"assess-form-grid\" id=\"sessForm\">" +
+    "<div class=\"f\"><label>Data</label><input type=\"date\" id=\"seDate\" value=\"" + today + "\"></div>" +
+    "<div class=\"f\"><label>Hora (opcional)</label><input type=\"time\" id=\"seTime\"></div>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Resultado</label><select id=\"seStatus\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(SESSION_STATUS).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"seErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"seAdd\" style=\"width:100%;\">Registar</button></div></div>" +
+    "<p class=\"muted-p\" style=\"margin-top:6px;\">É descontada ao pacote que caduca primeiro e ainda tem sessões. Se não houver pacote, a sessão fica registada sem pacote.</p>";
+
+  var sess = sessionsOfStudent(s.id).slice(0, 12);
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Sessões recentes" + (sum.absences ? " · " + plural(sum.absences, "falta", "faltas") + " nos últimos " + ABSENCE_WINDOW_DAYS + " dias" : "") + "</div>";
+  html += sess.length ? sess.map(function(x){
+    var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
+    return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) : "sem pacote") + "</div></div>" +
+      "<span>" + sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
+  }).join("") : "<p class=\"muted-p\">Sem sessões registadas.</p>";
+
+  var pays = paymentsOfStudent(s.id);
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Cobranças</div>" + (pays.length ? pays.slice(0, 10).map(function(p){ return paymentRowHtml(p, today, false); }).join("") : "<p class=\"muted-p\">Sem cobranças.</p>") +
+    "<details class=\"perfil-section\" style=\"margin-top:10px;\"><summary class=\"eyebrow\">+ Nova cobrança</summary><div class=\"assess-form-grid\" style=\"margin-top:10px;\">" +
+    "<div class=\"f\"><label>Valor (€)</label><input type=\"number\" id=\"pyAmount\" min=\"0.01\" step=\"0.5\"></div>" +
+    "<div class=\"f\"><label>Vence em</label><input type=\"date\" id=\"pyDue\" value=\"" + today + "\"></div>" +
+    "<p class=\"muted-p\" id=\"pyErr\" style=\"grid-column:1/-1; color:var(--critical); display:none;\"></p>" +
+    "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"pyAdd\" style=\"width:100%;\">Criar cobrança</button></div></div></details>";
+  return html;
+}
+
+function studioRerender(s){ if (s && state.proSelectedId === s.id) renderProTabContent(s); else renderProStudioMain(); }
+function openPayModal(paymentId, onDone){
+  var p = studio.payments.filter(function(x){ return x.id === paymentId; })[0];
+  if (!p) return;
+  var sheet = openModal("<div class=\"mtitle\">Marcar como pago</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(nameOf(p.student_id)) + " · " + escapeHtml(eur(p.amount)) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"payDate\">Pago em</label><input type=\"date\" id=\"payDate\" value=\"" + localTodayISO() + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"payMethod\">Método</label><select id=\"payMethod\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(PAYMENT_METHODS).map(function(k){ return "<option value=\"" + k + "\">" + PAYMENT_METHODS[k] + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"payErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"payGo\" style=\"width:100%;\">Confirmar</button>");
+  sheet.querySelector("#payGo").addEventListener("click", function(){
+    var d = sheet.querySelector("#payDate").value;
+    if (!isIsoDate(d)){ var e = sheet.querySelector("#payErr"); e.textContent = "Indica a data do pagamento."; e.style.display = "block"; return; }
+    studioUpdate("payments", paymentId, {paid_on: d, method: sheet.querySelector("#payMethod").value}).then(function(r){
+      if (r.error){ var e2 = sheet.querySelector("#payErr"); e2.textContent = r.error; e2.style.display = "block"; return; }
+      closeModal(); showToast("✓ Pagamento registado"); if (onDone) onDone();
+    });
+  });
+}
+// registar uma sessão (usado na ficha e no registo rápido)
+function studioAddSession(studentId, date, status, time){
+  if (!isIsoDate(date)) return Promise.resolve({error: "Indica a data da sessão."});
+  if (!SESSION_STATUS[status]) return Promise.resolve({error: "Escolhe o resultado."});
+  var pack = pickPackForSession(studentId, date);
+  var row = {student_id: studentId, pack_id: pack ? pack.id : null, date: date, status: status};
+  if (time && /^\d{2}:\d{2}$/.test(time)) row.time = time;
+  return studioInsert("sessions", row);
+}
+
+function wireProSessoes(s, el){
+  function fail(id, msg){ var e = el.querySelector(id); if (e){ e.textContent = msg; e.style.display = "block"; } }
+  var pkAdd = el.querySelector("#pkAdd");
+  if (pkAdd) pkAdd.addEventListener("click", function(){
+    var name = el.querySelector("#pkName").value.trim(), total = parseInt(el.querySelector("#pkTotal").value, 10), start = el.querySelector("#pkStart").value;
+    var priceRaw = el.querySelector("#pkPrice").value, price = priceRaw === "" ? null : Number(priceRaw), months = parseInt(el.querySelector("#pkMonths").value, 10) || 0;
+    if (!name) return fail("#pkErr", "Dá um nome ao pacote.");
+    if (!(total >= 1 && total <= 500)) return fail("#pkErr", "O número de sessões tem de estar entre 1 e 500.");
+    if (!isIsoDate(start)) return fail("#pkErr", "Indica a data de início.");
+    if (price != null && !(price >= 0)) return fail("#pkErr", "O preço não pode ser negativo.");
+    var usedBefore = el.querySelector("#pkUsed") ? parseInt(el.querySelector("#pkUsed").value, 10) || 0 : 0;
+    if (usedBefore < 0 || usedBefore > total) return fail("#pkErr", "As aulas já dadas têm de estar entre 0 e " + total + ".");
+    var exp = null; if (months > 0){ var d = new Date(start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + months); exp = d.toISOString().slice(0, 10); }
+    pkAdd.disabled = true;
+    studioInsert("packs", Object.assign({student_id: s.id, name: name.slice(0, 80), total: total, price: price, starts_on: start, expires_on: exp,
+      missed_consumes: el.querySelector("#pkMissed").checked, late_cancel_consumes: el.querySelector("#pkLate").checked}, studio.slotsAvailable ? {used_before: usedBefore} : {})).then(function(r){
+      if (r.error){ pkAdd.disabled = false; return fail("#pkErr", r.error); }
+      var charge = price > 0 && el.querySelector("#pkCharge").checked ? studioInsert("payments", {student_id: s.id, pack_id: r.data.id, amount: price, due_on: start}) : Promise.resolve({});
+      Promise.all([charge, attachExtrasToPack(r.data)]).then(function(res){ showToast(res[0].error ? "Pacote criado, mas a cobrança não foi guardada" : "✓ Pacote criado" + (res[1] ? " · " + res[1] + (res[1] === 1 ? " aula extra descontada" : " aulas extra descontadas") : "")); studioRerender(s); });
+    });
+  });
+  var slAdd = el.querySelector("#slAdd");
+  if (slAdd) slAdd.addEventListener("click", function(){
+    var wd = parseInt(el.querySelector("#slWeekday").value, 10), tm = el.querySelector("#slTime").value, from = el.querySelector("#slFrom").value;
+    if (timeToMinutes(tm) == null) return fail("#slErr", "Indica a hora (ex.: 18:00).");
+    if (!isIsoDate(from)) return fail("#slErr", "Indica o dia a partir do qual contar.");
+    if (slotsOf(s.id).some(function(x){ return x.weekday === wd && x.time === tm; })) return fail("#slErr", "Este horário já existe.");
+    slAdd.disabled = true;
+    studioInsert("slots", {student_id: s.id, weekday: wd, time: tm, counts_from: from}).then(function(r){
+      if (r.error){ slAdd.disabled = false; return fail("#slErr", r.error); }
+      showToast("✓ Horário adicionado"); studioAutoSessions().then(function(n){ studioRerender(s); studioAfterAutoSessions(n); });
+    });
+  });
+  var seAdd = el.querySelector("#seAdd");
+  if (seAdd) seAdd.addEventListener("click", function(){
+    seAdd.disabled = true;
+    studioAddSession(s.id, el.querySelector("#seDate").value, el.querySelector("#seStatus").value, el.querySelector("#seTime").value).then(function(r){
+      if (r.error){ seAdd.disabled = false; return fail("#seErr", r.error); }
+      showToast("✓ Sessão registada"); studioRerender(s);
+    });
+  });
+  var pyAdd = el.querySelector("#pyAdd");
+  if (pyAdd) pyAdd.addEventListener("click", function(){
+    var amount = Number(el.querySelector("#pyAmount").value), due = el.querySelector("#pyDue").value;
+    if (!(amount > 0)) return fail("#pyErr", "Indica um valor maior que zero.");
+    if (!isIsoDate(due)) return fail("#pyErr", "Indica a data de vencimento.");
+    studioInsert("payments", {student_id: s.id, amount: amount, due_on: due}).then(function(r){ if (r.error) return fail("#pyErr", r.error); showToast("✓ Cobrança criada"); studioRerender(s); });
+  });
+  wireStudioCommon(el, function(){ studioRerender(s); });
+}
+// botões que existem na ficha e na visão geral
+function wireStudioCommon(el, redraw){
+  el.querySelectorAll("[data-del-pack]").forEach(function(b){ b.addEventListener("click", function(){
+    if (!window.confirm("Apagar este pacote? As sessões e cobranças registadas ficam, mas sem pacote.")) return;
+    studioDelete("packs", b.getAttribute("data-del-pack")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-del-slot]").forEach(function(b){ b.addEventListener("click", function(){
+    if (!window.confirm("Remover este horário? As sessões já contadas ficam.")) return;
+    studioDelete("slots", b.getAttribute("data-del-slot")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-del-session]").forEach(function(b){ b.addEventListener("click", function(){
+    studioDelete("sessions", b.getAttribute("data-del-session")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-del-payment]").forEach(function(b){ b.addEventListener("click", function(){
+    if (!window.confirm("Apagar esta cobrança?")) return;
+    studioDelete("payments", b.getAttribute("data-del-payment")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  el.querySelectorAll("[data-pay]").forEach(function(b){ b.addEventListener("click", function(){ openPayModal(b.getAttribute("data-pay"), redraw); }); });
+  el.querySelectorAll("[data-open-student]").forEach(function(b){ b.addEventListener("click", function(){
+    state.proSelectedId = b.getAttribute("data-open-student"); state.proTab = "sessoes"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
+  }); });
+  el.querySelectorAll("[data-remind]").forEach(function(b){ b.addEventListener("click", function(){
+    var p = studio.payments.filter(function(x){ return x.id === b.getAttribute("data-remind"); })[0], st = p && findStudent(p.student_id);
+    if (st) openContactModal(st, "pagamento-atrasado", redraw);
+  }); });
+}
+
+/* visão geral do estúdio (menu "Estúdio") */
+var studioView = {month: null, date: null};
+function renderProStudioMain(){
+  var main = document.getElementById("proMain");
+  if (!studio.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; studioRefresh().then(function(){ if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain(); }); return; }
+  if (!studio.available){ main.innerHTML = studioUnavailableHtml(); return; }
+  var today = localTodayISO(); if (!studioView.month) studioView.month = monthOf(today); if (!studioView.date) studioView.date = today;
+  var k = studioKpis(studioView.month, today);
+  var students = visibleStudentsForDashboard().filter(isStudentActive);
+  var html = "<div class=\"pro-stat-row\" id=\"studioKpis\">" +
+    proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
+    proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + "</div>";
+
+  html += calendarCardHtml();
+
+  // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
+  var sumRows = studioSummaryRows(today);
+  html += "<div class=\"card\" id=\"studioSummary\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Resumo de treinos</div>";
+  if (!sumRows.length) html += "<p class=\"muted-p\">Ainda sem pacotes. Importa os que já estão a decorrer (no fim desta página) ou cria-os na ficha de cada aluno.</p>";
+  sumRows.forEach(function(r){
+    var flag = r.state === "renovar" ? "🔄 Aguarda renovação" + (r.extras.n ? " · +" + r.extras.n + (r.extras.n === 1 ? " aula extra" : " aulas extra") + " (desde " + escapeHtml(fmtDateFullPt(r.extras.since)) + ")" : "")
+      : r.state === "acabar" ? "⚠️ A acabar" + (r.u.daysLeft != null && r.u.daysLeft <= PACK_ENDING_DAYS ? " · termina em " + r.u.daysLeft + " dias" : "")
+      : r.state === "pendente" ? "Começa a " + escapeHtml(fmtDateFullPt(r.pack.starts_on)) : "";
+    html += "<div class=\"studio-row " + r.state + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
+      "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
+      "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
+      "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
+      (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
+  });
+  html += "</div>";
+
+  // agenda do dia (horários semanais)
+  if (studio.slotsAvailable){
+    var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
+    html += "<div class=\"card\" id=\"studioAgenda\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Agenda — " + escapeHtml(WEEKDAY_NAMES[isoWeekday(studioView.date)]) + ", " + escapeHtml(fmtDateFullPt(studioView.date)) + "</div>" +
+      "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>";
+    if (!agenda.length) html += "<p class=\"muted-p\">Nenhuma sessão agendada neste dia. Define o horário semanal de cada aluno na ficha (separador Pacotes).</p>";
+    agenda.forEach(function(sl){
+      var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
+      var past = studioView.date < today || (studioView.date === today);
+      html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 150px;\"><div class=\"hlabel\">" + escapeHtml(sl.time) + " · <button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(sl.student_id) + "\">" + escapeHtml(nameOf(sl.student_id)) + "</button></div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (ses ? sessionStatusPill(ses.status) + (ses.source === "agenda" ? " contada pelo horário" : "") : (studioView.date > today ? "agendada" : "ainda por contar")) + "</div></div>" +
+        "<select class=\"mini-select\" data-sched=\"" + escapeHtml(sl.id) + "\" aria-label=\"Alterar resultado\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select></div>";
+    });
+    html += "</div>";
+  }
+
+  // registo rápido
+  var withPack = students.filter(function(st){ return pickPackForSession(st.id, studioView.date); });
+  html += "<div class=\"card\" id=\"quickSessions\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">" + (studio.slotsAvailable ? "Sessão fora do horário" : "Registar sessões") + "</div>" +
+    (studio.slotsAvailable ? "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Para uma sessão extra ou mudada de dia (a data é a escolhida na agenda).</p>" : "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>");
+  if (!withPack.length) html += "<p class=\"muted-p\">Nenhum aluno com pacote a decorrer neste dia. Cria pacotes na ficha do aluno (separador Pacotes).</p>";
+  withPack.forEach(function(st){
+    var existing = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === studioView.date; });
+    var pk = pickPackForSession(st.id, studioView.date), u = pk ? packUsage(pk, studioView.date) : null;
+    html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
+      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (u ? "restam " + u.remaining + " de " + u.total : "") + "</div></div><span style=\"display:flex; gap:6px; flex-wrap:wrap;\">" +
+      (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
+        : Object.keys(SESSION_STATUS).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
+  });
+  html += "</div>";
+
+  var unpaid = studio.payments.filter(function(p){ return !p.paid_on; }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
+  html += "<div class=\"card\" id=\"studioPayments\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
+    (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>";
+
+  var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: findStudent(p.student_id)}; }).filter(function(x){ return x.st && isStudentActive(x.st) && x.u.ending; });
+  html += "<div class=\"card\" id=\"studioEnding\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes a acabar</div>" +
+    (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
+      escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
+
+  html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong>. O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
+    "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9\"></textarea>" +
+    "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"stMonth\">Mês</label><input type=\"month\" id=\"stMonth\" value=\"" + studioView.month + "\"></div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido no mês: " + escapeHtml(eur(k.received)) + " (" + k.receivedN + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
+  main.innerHTML = html;
+
+  var redraw = function(){ renderProStudioMain(); };
+  wireStudioCommon(main, redraw);
+  main.querySelector("#qsDate") && main.querySelector("#qsDate").addEventListener("change", function(e){ if (isIsoDate(e.target.value)){ studioView.date = e.target.value; redraw(); } });
+  main.querySelectorAll("[data-sched]").forEach(function(sel){ sel.addEventListener("change", function(){
+    var sl = studio.slots.filter(function(x){ return x.id === sel.getAttribute("data-sched"); })[0], status = sel.value;
+    if (!sl || !status) return;
+    sel.disabled = true;
+    var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
+    var done = ses ? studioUpdate("sessions", ses.id, ses.source === "calendario" ? {status: status, source: "manual"} : {status: status}) : (function(){ var pk = pickPackForSession(sl.student_id, studioView.date); return studioInsert("sessions", {student_id: sl.student_id, pack_id: pk ? pk.id : null, date: studioView.date, time: sl.time, status: status}); })();
+    done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
+  }); });
+  wireCalendarCard(main, redraw);
+  var impGo = main.querySelector("#impGo");
+  if (impGo) impGo.addEventListener("click", function(){
+    var out = main.querySelector("#impOut"); impGo.disabled = true; out.textContent = "A importar…";
+    studioImportPacks(main.querySelector("#impText").value).then(function(rep){
+      impGo.disabled = false;
+      var lines = [];
+      if (rep.created) lines.push("✓ " + rep.created + (rep.created === 1 ? " pacote criado." : " pacotes criados."));
+      if (rep.skipped.length) lines.push("Já existiam: " + rep.skipped.join(", ") + ".");
+      rep.errors.forEach(function(e){ lines.push("⚠ " + e); });
+      if (!lines.length) lines.push("Não encontrei nada para importar.");
+      out.innerHTML = lines.map(escapeHtml).join("<br>");
+      if (rep.created){ showToast("✓ Pacotes importados"); updateStudioBadge(); }
+    });
+  });
+  main.querySelectorAll("[data-qs]").forEach(function(b){ b.addEventListener("click", function(){
+    var parts = b.getAttribute("data-qs").split(":"); b.disabled = true;
+    studioAddSession(parts[0], studioView.date, parts[1]).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
+  }); });
+  main.querySelectorAll("[data-renew]").forEach(function(b){ b.addEventListener("click", function(){ var st = findStudent(b.getAttribute("data-renew")); if (st) openContactModal(st, "pacote-a-acabar", redraw); }); });
+  var mEl = main.querySelector("#stMonth"); if (mEl) mEl.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mEl.value)){ studioView.month = mEl.value; redraw(); } });
+  var m = function(){ var v = main.querySelector("#stMonth").value; return /^\d{4}-\d{2}$/.test(v) ? v : studioView.month; };
+  main.querySelector("#csvPayments").addEventListener("click", function(){ if (!downloadText("cobrancas-" + m() + ".csv", paymentsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
+  main.querySelector("#csvSessions").addEventListener("click", function(){ if (!downloadText("sessoes-" + m() + ".csv", sessionsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
 }
 
 /* ---------- Retenção: quem contactar hoje, onboarding de alunos novos e pulso do estúdio ----------
@@ -12603,6 +13823,9 @@ var CONTACT_REASONS = {
   "plano-antigo": {label: "Plano sem ajustes há semanas", template: "Olá {nome}! Já passaram algumas semanas desde o último ajuste do teu plano. Queres marcar uma revisão rápida?"},
   "aniversario": {label: "Faz anos hoje", template: "Parabéns, {nome}! 🎉 Que este novo ano venha cheio de saúde e energia. Um abraço da equipa EVOLVE!"},
   "boa-noticia": {label: "Boa notícia para partilhar", template: "Olá {nome}! Só para te dizer que estás a fazer um excelente trabalho — os teus registos mostram uma evolução muito boa. Continua assim! 💪"},
+  "pagamento-atrasado": {label: "Pagamento em atraso", template: "Olá {nome}! Só um lembrete simpático: o pagamento de {valor}, com vencimento a {data}, ainda está por regularizar. Podes fazê-lo por MB WAY ou transferência. Qualquer dúvida, diz-me!"},
+  "pacote-a-acabar": {label: "Pacote a acabar", template: "Olá {nome}! O teu pacote está quase a acabar ({restam}). Queres que prepare a renovação para não perderes o ritmo?"},
+  "faltas": {label: "Faltas seguidas", template: "Olá {nome}! Notei que faltaste a algumas sessões nas últimas semanas. Está tudo bem? Se precisares de mudar os horários, ajusto contigo."},
   "generico": {label: "Contacto", template: "Olá {nome}! Como estás a correr a semana? Diz-me se precisas de alguma coisa."}
 };
 
@@ -12621,9 +13844,10 @@ function whatsappUrl(phone, text){
   var n = normalizePhone(phone);
   return n.ok ? "https://wa.me/" + n.digits + (text ? "?text=" + encodeURIComponent(text) : "") : "";
 }
-function contactMessageFor(reasonKey, s){
+function contactMessageFor(reasonKey, s, vars){
   var r = CONTACT_REASONS[reasonKey] || CONTACT_REASONS.generico;
-  return r.template.replace(/\{nome\}/g, studentFirstName(s));
+  vars = vars || {};
+  return r.template.replace(/\{nome\}/g, studentFirstName(s)).replace(/\{(valor|data|restam)\}/g, function(m, k){ return vars[k] != null ? vars[k] : ""; });
 }
 
 function contactEntries(s, kind){ return (Array.isArray(s.contactLog) ? s.contactLog : []).filter(function(e){ return e && e.kind === kind && isIsoDate(e.date); }); }
@@ -12691,6 +13915,21 @@ function contactReasonsFor(s, today){
   if (by["estagnado"] || by["estagnado-a-treinar"]) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
   var planDays = lastPlanChangeDays(s);
   if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
+  if (studio.loaded && studio.available){
+    var ss = studentStudioSummary(s.id, today);
+    if (ss.overdue.length){
+      var owed = ss.overdue.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0), first = ss.overdue[ss.overdue.length - 1];
+      out.push({key: "pagamento-atrasado", label: "Pagamento em atraso (" + eur(owed) + ")", weight: 65, hint: "Cobrança vencida a " + fmtDateFullPt(first.due_on) + ".", vars: {valor: eur(first.amount), data: fmtDateFullPt(first.due_on)}});
+    }
+    if (ss.ending.length){
+      var u = ss.ending.slice().sort(function(a, b){ return a.u.remaining - b.u.remaining; })[0].u;
+      var left = u.remaining <= PACK_ENDING_SESSIONS || u.daysLeft == null ? "restam " + u.remaining + (u.remaining === 1 ? " sessão" : " sessões") : "termina em " + u.daysLeft + " dias";
+      out.push({key: "pacote-a-acabar", label: "Pacote a acabar (" + left + ")", weight: 45, hint: "Boa altura para propor a renovação.", vars: {restam: left}});
+    } else if (ss.needsRenewal){
+      out.push({key: "pacote-a-acabar", label: "Sem pacote a decorrer — renovar?", weight: 50, hint: "O último pacote terminou e ainda não há outro.", vars: {restam: "já terminou"}});
+    }
+    if (ss.absences >= ABSENCE_ALERT) out.push({key: "faltas", label: ss.absences + " faltas nos últimos " + ABSENCE_WINDOW_DAYS + " dias", weight: 40, hint: "Faltas ou cancelamentos tardios.", vars: {}});
+  }
   if (isBirthdayToday(s, today)) out.push({key: "aniversario", label: "Faz anos hoje", weight: 25, hint: "Um parabéns fortalece a relação."});
   if (by["sobrecarga"] || by["alta-adesao"]) out.push({key: "boa-noticia", label: by["sobrecarga"] ? "Pronto para subir carga" : "Adesão muito boa", weight: 15, hint: "Uma mensagem positiva também retém alunos."});
   return out.sort(function(a, b){ return b.weight - a.weight; });
@@ -12808,7 +14047,7 @@ function openContactModal(s, reasonKey, onDone){
   var hasPhone = normalizePhone(s.phone).ok;
   var sheet = openModal("<div class=\"mtitle\">Contactar " + escapeHtml(s.name) + "</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(label) + "</p>" +
-    "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s)) + "</textarea></div>" +
+    "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s, (reasons.filter(function(r){ return r.key === reason; })[0] || {}).vars)) + "</textarea></div>" +
     (hasPhone ? "<a class=\"btn primary\" id=\"ctWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none; margin-bottom:8px;\">Abrir no WhatsApp</a>"
       : "<div class=\"checkin-field\"><label for=\"ctPhone\">Sem telefone na ficha — acrescenta para abrir o WhatsApp</label><input type=\"tel\" id=\"ctPhone\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
         "<button type=\"button\" class=\"btn btn-sm\" id=\"ctSavePhone\" style=\"margin-bottom:8px;\">Guardar telefone</button>") +
@@ -13875,6 +15114,7 @@ function finishBoot(rows, isProfessional, offline){
     }
     syncPillUpdate();
     if (!offline) outboxFlush();
+    if (isProfessional) studioRefresh().then(function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild) renderProDashboardMain(); });
   });
 }
 
@@ -14031,6 +15271,7 @@ function boot(){
     document.getElementById("alunoApp").classList.remove("hidden");
     document.getElementById("proApp").classList.remove("hidden");
     document.getElementById("modeSwitch").classList.remove("hidden");
+    studioRefresh(); // modo local: dados de demonstração do estúdio
     setMode("aluno");
     return;
   }
@@ -14058,6 +15299,7 @@ document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "hidden"){ persistPrepareAll(); outboxFlush(); return; }
   outboxFlush();
   proRefreshAndRender(false);
+  if (authRole === "professional" && studio.loaded) studioAutoSessions().then(studioAfterAutoSessions); // um dia novo: as sessões de ontem já passaram
 });
 if (typeof navigator !== "undefined" && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
   window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
