@@ -14,7 +14,7 @@ if (!pw || !chromiumPath){
 (async function(){
   var browser = await pw.chromium.launch({executablePath: chromiumPath});
   var page = await browser.newPage();
-  await page.route(/jsdelivr|fonts\./, function(r){ return r.abort(); });
+  await page.route(/jsdelivr|fonts\.|vendor\/supabase/, function(r){ return r.abort(); });
   await page.goto("file://" + path.join(__dirname, "..", "index.html"));
   var payloads = {
     plain: '<img src=x onerror="window.__x=1">',

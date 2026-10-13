@@ -162,14 +162,14 @@ function freshStudent(overrides){
 (function(){
   var fnSrc = appSource.slice(appSource.indexOf("function persistStudent"), appSource.indexOf("function insertStudent"));
   check.check("14. persistStudent() não chama upsert()", fnSrc.indexOf(".upsert(") === -1);
-  check.check("14. persistStudent() usa update().eq(\"id\", s.id)", /\.update\(studentToRow\(s\)\)\.eq\("id",\s*s\.id\)/.test(fnSrc));
+  check.check("14. A gravação de um aluno existente usa update().eq(\"id\", id) (a fila só envia as colunas que mudaram)", /\.update\(cols\)\.eq\("id",\s*id\)/.test(fnSrc));
 })();
 
 // 15. insertStudent() existe, para o único caso legítimo de criar um aluno (o profissional)
 (function(){
   check.check("15. insertStudent() existe", typeof insertStudent === "function");
-  var fnSrc = appSource.slice(appSource.indexOf("function insertStudent"), appSource.indexOf("function insertStudent") + 400);
-  check.check("15. insertStudent() usa insert(), não upsert()/update()", fnSrc.indexOf(".insert(studentToRow(s))") >= 0 && fnSrc.indexOf(".upsert(") === -1);
+  var fnSrc = appSource.slice(appSource.indexOf("function insertStudent"), appSource.indexOf("function insertStudent") + 700);
+  check.check("15. insertStudent() usa insert(), não upsert()/update()", fnSrc.indexOf(".insert(row)") >= 0 && fnSrc.indexOf(".upsert(") === -1);
 })();
 
 // 16. A criação de um novo aluno (openOnboardingForm) usa insertStudent(), não persistStudent()

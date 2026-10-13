@@ -24,6 +24,14 @@ Não há router: o estado vive em `var state = {...}` (≈ linha 6126) e cada "e
 - `authScreen` (`showAuthScreen`, modos `signin` / criar conta / recuperar), `recoveryScreen` (evento `PASSWORD_RECOVERY`), `connectionErrorScreen`, ecrã de loading.
 - Sem Supabase configurado, a app abre em modo demonstração com um `modeSwitch` (aluno ⇄ profissional).
 - O papel é decidido pelo servidor: existir linha em `professionals` ⇒ profissional; caso contrário é aluno e a linha `students` é associada à conta via `claim_student_row` (RPC).
+- **Sem rede**: se não for possível perguntar ao servidor (`checkIsProfessional()` devolve `null`) ou ler as fichas, o **aluno** abre a última cópia da sua ficha (`bootFromSnapshot`, `localStorage` `evolve_snapshot_v1`); o profissional vê o `connectionErrorScreen` (nunca guarda fichas de alunos no dispositivo). O arranque não espera pelas fotos: os URLs assinados só se pedem ao abrir a evolução (`lazyPhotos`).
+
+### 1.1b Gravação, fila offline e service worker
+- **Escrita** (`persistStudent`): agrupa alterações (500 ms), compara a ficha com a última versão aceite pelo servidor (`s._sync`, por coluna) e entra na **fila** (`evolve_outbox_v1`, `localStorage`) só com as **colunas que mudaram**. `outboxFlush()` envia a fila por aluno com `update(cols).eq("id", id)`; falhas de ligação/servidor (5xx, 401, 429) repetem-se (online, ao voltar à app, a cada 15 s); recusas do servidor (permissões, formato) isolam-se por coluna: só a recusada é descartada (a ficha é reposta com a versão do servidor, com aviso) e os treinos recusados por "só acrescentar" são fundidos por `id` e reenviados; um `update` que não altera nenhuma linha também conta como recusa. A fila guarda **cópias** (nunca referências vivas da ficha). Ao fechar a app (`pagehide`/`visibilitychange`) o pedido é guardado na fila de forma síncrona. Um aluno nunca reenvia colunas que só o profissional altera (o trigger do servidor recusaria).
+- **Indicador** `#syncPill`: "Sem ligação · N alterações guardadas" / "⏳ N por enviar".
+- **Cópia da ficha do aluno** (`evolve_snapshot_v1`): atualizada em cada leitura e em cada alteração; apagada, com a fila, ao terminar sessão (`offlineDataWipe`).
+- **Dados frescos do profissional**: `proRefreshAndRender()` (ao voltar à app, no máximo de minuto a minuto, e botão "↻ Atualizar") atualiza **no próprio objeto** só as fichas sem alterações por enviar e que não estão abertas; não corre com uma janela aberta nem se houve alterações locais durante a leitura.
+- **`sw.js`**: pré-cache da página, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
 
 ### 1.2 Aluno — `renderAlunoShell()` / `renderAlunoTab()` (`state.alunoTab`)
 Barra inferior com 3 separadores:
@@ -39,6 +47,7 @@ Barra inferior com 3 separadores:
 Barra lateral:
 
 - **Alunos** (`proView = "dashboard"`) → `renderProDashboardMain()`: lista ordenada por atenção (pedidos pendentes → críticos → alertas → dias sem registo), com indicador de pedidos de ajuda pendentes (`state.pendingHelp`).
+  Por cima da lista: **"Hoje: quem contactar"** (`computeContactQueue`: motivos ponderados, exclui inativos, contactados há <3 dias e adiados; botão Contactar → `openContactModal` com mensagem editável e link `wa.me`), **alunos novos** (`onboardingOf`, 30 dias) e **pulso do estúdio** (`studioPulse`).
   Cada aluno mostra também badges de ação (`computeCoachBadges`): sem registos, peso estagnado (com ou sem treino a evoluir), adesão a cair e alta adesão.
 - **Catálogo** (`proView = "catalog"`) → `renderProCatalogMain()` / `renderCatalogList()`.
 - **Aluno aberto** (`state.proSelectedId`) → `renderProDetailMain()` com 4 áreas (`PRO_NAV`):
@@ -54,7 +63,7 @@ Há ainda: convite de aluno (questionário), importação de pesagens (`tplImpor
 
 ---
 
-## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0019`)
+## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0022`)
 
 Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
@@ -64,6 +73,8 @@ Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 - Estrutura de `training_program`: `{name, days:[{id, name, exercises:[{id, name, sets, reps, rpe, rest, notes, demo?, cues?}]}]}` — só o profissional escreve.
 - Estrutura de `workout_logs`: `[{id, date, dayId, dayName, rpe, notes, entries:[{exerciseId, name, sets:[{reps, load, rir?}]}]}]` — o aluno só acrescenta (validado por `workout_log_is_valid` / `workout_logs_appended_are_valid`).
 - Históricos (`substitution_history`, `adaptation_history`, `workout_logs`) são **append-only** por trigger (0006, 0019).
+
+- Retenção (0022): `phone`, `contact_log` (`[{date, kind:'contacto'|'adiado', channel?, reason?, until?}]`, últimos 50) e `created_at` (fichas antigas ficam vazias). Só o profissional os altera (fora da lista do trigger de permissões do aluno).
 
 ### `professionals`
 `user_id` (PK → `auth.users`), `email`, `created_at`. Só se lê a própria linha; só se gere pelo SQL Editor (`supabase/manage_professionals.sql`).
@@ -131,11 +142,14 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 |---|---|
 | `index.html` | **Toda a app**: CSS, HTML dos ecrãs, JS (estado, render, rede, regras de nutrição/treino/antropometria) |
 | `manifest.json`, `icon-*.png` | PWA (cores `#0D0F12`) |
-| `supabase/migrations/0001…0019_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `sw.js` | Service worker (a app abre sem rede) |
+| `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
+| `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
+| `supabase/migrations/0001…0022_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |
-| `tests/run-all.js`, `tests/extract-app.js`, `tests/*.test.js` | Suite (≈ 59 ficheiros, 1991 verificações) |
+| `tests/run-all.js`, `tests/extract-app.js`, `tests/*.test.js`, `tests/helpers/` | Suite (≈ 70 ficheiros, ≈ 2300 verificações; inclui testes em Chromium com um Supabase simulado e sem rede) |
 | `docs/OPERACOES.md` | Operação: contas, demo, fotos, backups |
 | `docs/ARQUITETURA.md` | Este documento |
 

@@ -18,7 +18,7 @@ if (!pw || !chromiumPath){
   page.setDefaultTimeout(4000);
   var errors = [];
   page.on("pageerror", function(e){ errors.push(e.message); });
-  await page.route(/jsdelivr|fonts\./, function(r){ return r.abort(); });
+  await page.route(/jsdelivr|fonts\.|vendor\/supabase/, function(r){ return r.abort(); });
   await page.goto("file://" + path.join(__dirname, "..", "index.html"));
   await page.click('#modeSwitch button[data-mode="pro"]');
   await page.click("#toggleDemo").catch(function(){});
