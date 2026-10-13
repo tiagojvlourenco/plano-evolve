@@ -29,8 +29,11 @@ function stubElement(){
 
 function setupDom(){
   global.window = global;
+  global.addEventListener = function () {};
   global.document = {
     getElementById: function () { return stubElement(); },
+    addEventListener: function () {},
+    visibilityState: "visible",
     querySelectorAll: function () { return []; },
     createElement: function () { return stubElement(); },
     body: { appendChild: function () {} }

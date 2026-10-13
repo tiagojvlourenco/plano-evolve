@@ -15,11 +15,16 @@
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/jura-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script src="vendor/supabase.js"></script>
 <style>
+  /* Fontes guardadas no próprio site (funcionam sem rede e não enviam o IP do aluno a servidores de terceiros) */
+  @font-face{font-family:'Manrope'; font-style:normal; font-weight:200 800; font-display:swap; src:url(fonts/manrope-latin-wght-normal.woff2) format('woff2');}
+  @font-face{font-family:'Jura'; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/jura-latin-400-normal.woff2) format('woff2');}
+  @font-face{font-family:'Jura'; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/jura-latin-500-normal.woff2) format('woff2');}
+  @font-face{font-family:'Jura'; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/jura-latin-600-normal.woff2) format('woff2');}
+  @font-face{font-family:'Jura'; font-style:normal; font-weight:700; font-display:swap; src:url(fonts/jura-latin-700-normal.woff2) format('woff2');}
   :root{
     --bg:#0D0F12;
     --surface:#1A1D24;
@@ -141,6 +146,7 @@
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
+  .sync-pill{position:fixed; top:calc(env(safe-area-inset-top,0px) + 6px); left:50%; transform:translateX(-50%); z-index:95; max-width:92vw; padding:5px 12px; border-radius:999px; border:1px solid var(--warn); background:var(--surface-3); color:var(--ink); font-size:0.72rem; font-weight:600; line-height:1.3; text-align:center; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.35);}
   .preview-banner{display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; padding:9px 12px; border:1px solid var(--warn); border-radius:12px; background:var(--warn-soft); color:var(--ink); font-size:0.78rem; line-height:1.35;}
   .phone-header .greet{font-family:var(--display); font-size:1.3rem; font-weight:700;}
   .phone-header .sub{font-size:0.78rem; color:var(--muted); margin-top:2px;}
@@ -5930,6 +5936,8 @@ function studentToRow(s){
     physical_limitations: s.physicalLimitations || null, medical_notes: s.medicalNotes || null,
     weight_log_photos: (s.weightLogPhotos || []).map(stripPhotoState)
   };
+  // telefone e registo de contactos (migração 0022): só se a base de dados já as tem; só o profissional os altera
+  if (contactColumnsAvailable){ row.phone = s.phone || null; row.contact_log = s.contactLog || []; }
   // colunas do módulo de treino (migração 0019): só se a base de dados já as tem
   // Cada papel só escreve o que é seu (uma cópia antiga nunca apaga sessões novas nem choca com o programa mudado):
   // o aluno envia as sessões e nunca o programa; o profissional envia o programa e nunca as sessões.
@@ -5964,6 +5972,7 @@ function rowToStudent(r){
     medicalConditions: r.medical_conditions || null, currentMedication: r.current_medication || null,
     physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
     weightLogPhotos: normalizePhotos(r.weight_log_photos),
+    phone: r.phone || null, contactLog: Array.isArray(r.contact_log) ? r.contact_log : [], createdAt: r.created_at || null,
     trainingProgram: r.training_program || null,
     workoutLogs: normalizeWorkoutLogs(r.workout_logs),
     // cópia fiel do que está na base de dados: é ISTO que se grava de volta (a versão normalizada serve só para mostrar —
@@ -5986,20 +5995,237 @@ function rowToStudent(r){
 // que só depende da política de UPDATE já existente. Criar um aluno novo é
 // sempre feito pelo profissional, através de insertStudent() (insert
 // explícito), nunca por aqui.
+/* ---------- Gravação na base de dados: só o que mudou, agrupada e com fila (funciona sem rede) ----------
+   Cada alteração entra primeiro numa fila guardada no telemóvel (localStorage) e só depois segue para o Supabase. Se não houver
+   rede, a fila espera e é enviada quando a ligação voltar; nada se perde ao fechar a app. Só se enviam as colunas que mudaram
+   (comparadas com a última versão aceite pelo servidor), por isso um aluno nunca reenvia — nem pode apagar — dados que só o
+   profissional altera. O aluno também guarda uma cópia da sua ficha para conseguir abrir a app sem ligação. */
+var PERSIST_DEBOUNCE_MS = 500;
+var OUTBOX_KEY = "evolve_outbox_v1";
+var SNAPSHOT_KEY = "evolve_snapshot_v1";
+var OUTBOX_RETRY_MS = 15000;
+var TRAINING_COLUMNS = ["training_program", "workout_logs"];
+var CONTACT_COLUMNS = ["phone", "contact_log"];
+var contactColumnsAvailable = true; // migração 0022 (telefone e registo de contactos)
+var outboxMem = null;
+var persistTimers = {}, persistStudents = {};
+var outboxFlushPromise = null, outboxRetryTimer = null;
+
+function jsonOf(v){ try { return JSON.stringify(v === undefined ? null : v); } catch (e) { return "null"; } }
+function rowBaseline(row){ var b = {}; Object.keys(row).forEach(function(k){ b[k] = jsonOf(row[k]); }); return b; }
+// última versão de cada coluna aceite pelo servidor; não enumerável para nunca entrar em cópias nem em comparações da ficha
+function setSyncBaseline(s, baseline){ try { Object.defineProperty(s, "_sync", {value: baseline, writable: true, configurable: true, enumerable: false}); } catch (e) {} }
+function ensureSyncBaseline(s){ if (s && !s._sync){ try { setSyncBaseline(s, rowBaseline(studentToRow(s))); } catch (e) {} } }
+function rowPatch(row, baseline){
+  if (!baseline) return row;
+  var p = {};
+  Object.keys(row).forEach(function(k){ if (jsonOf(row[k]) !== baseline[k]) p[k] = row[k]; });
+  return p;
+}
+
+function outboxRead(){
+  if (outboxMem) return outboxMem;
+  try { var v = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "{}"); outboxMem = v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { outboxMem = {}; }
+  return outboxMem;
+}
+function outboxWrite(){ try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(outboxMem || {})); } catch (e) {} }
+function outboxCount(){ return Object.keys(outboxRead()).length; }
+function outboxAdd(id, patch, full){
+  var ob = outboxRead(), cur = ob[id] || {cols: {}, full: false};
+  Object.keys(patch).forEach(function(k){ cur.cols[k] = patch[k]; });
+  cur.full = cur.full || !!full;
+  cur.ts = Date.now();
+  ob[id] = cur;
+  outboxWrite();
+}
+// ao abrir a app com alterações ainda por enviar, a ficha mostra-as já (o servidor ainda não as tem)
+function outboxOverlay(rows){
+  var ob = outboxRead();
+  return (rows || []).map(function(r){
+    var e = ob[r.id];
+    if (!e) return r;
+    var copy = Object.assign({}, r);
+    Object.keys(e.cols).forEach(function(k){ copy[k] = e.cols[k]; });
+    return copy;
+  });
+}
+
+// cópia da ficha do próprio aluno para abrir sem rede (nunca se guarda a lista de alunos do profissional neste dispositivo)
+function snapshotRead(uid){
+  try { var v = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null"); return v && v.uid === uid && Array.isArray(v.rows) ? v : null; } catch (e) { return null; }
+}
+function snapshotWrite(uid, rows){ try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({uid: uid, ts: Date.now(), rows: rows})); } catch (e) {} }
+function snapshotApplyPatch(id, patch){
+  if (authRole !== "student") return;
+  try {
+    var v = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null");
+    if (!v || !Array.isArray(v.rows)) return;
+    v.rows.forEach(function(r){ if (r.id === id) Object.keys(patch).forEach(function(k){ r[k] = patch[k]; }); });
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(v));
+  } catch (e) {}
+}
+function offlineDataWipe(){ outboxMem = {}; try { localStorage.removeItem(OUTBOX_KEY); localStorage.removeItem(SNAPSHOT_KEY); } catch (e) {} syncPillUpdate(); }
+
+// indicador discreto no topo: sem ligação / alterações por enviar
+function syncPillUpdate(){
+  var el = document.getElementById("syncPill");
+  if (!el){
+    el = document.createElement("div");
+    el.id = "syncPill"; el.className = "sync-pill hidden";
+    el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite");
+    el.addEventListener("click", function(){ outboxFlush(); });
+    document.body.appendChild(el);
+  }
+  var n = outboxCount() + Object.keys(persistStudents).filter(function(id){ return !outboxRead()[id]; }).length;
+  var offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  var text = "";
+  if (offline) text = "Sem ligação" + (n ? " · " + n + (n === 1 ? " alteração guardada" : " alterações guardadas") + " neste telemóvel" : "");
+  else if (n) text = outboxFlushPromise ? "A enviar…" : "⏳ " + n + (n === 1 ? " alteração por enviar" : " alterações por enviar");
+  el.textContent = text;
+  el.classList.toggle("hidden", !text || !sbReady);
+}
+
+function outboxErrorIsTransient(res){
+  var e = (res && res.error) || {}, msg = String(e.message || ""), st = res && res.status;
+  if (!st || st >= 500 || st === 401 || st === 408 || st === 429) return true; // sem resposta do servidor, sessão a renovar ou servidor ocupado
+  return /failed to fetch|network|timeout|load failed|jwt/i.test(msg);
+}
+function withTimeout(promise, ms){
+  return new Promise(function(resolve, reject){
+    var t = setTimeout(function(){ reject(new Error("timeout")); }, ms);
+    Promise.resolve(promise).then(function(v){ clearTimeout(t); resolve(v); }, function(e){ clearTimeout(t); reject(e); });
+  });
+}
+
+// o pedido à fila: só as colunas que mudaram desde a última versão aceite (síncrono, é seguro chamar ao fechar a app)
+function persistPrepare(id){
+  var s = persistStudents[id];
+  clearTimeout(persistTimers[id]); delete persistTimers[id]; delete persistStudents[id];
+  if (!s) return;
+  var row;
+  try { row = studentToRow(s); } catch (e) { console.error("Supabase: não foi possível preparar a gravação", id, e); return; }
+  var patch = rowPatch(row, s._sync);
+  var pending = outboxRead()[id];
+  if (pending) Object.keys(pending.cols).forEach(function(k){
+    // uma alteração desfeita antes de seguir tem de substituir a que está na fila
+    if (!(k in patch) && k in row && jsonOf(row[k]) !== jsonOf(pending.cols[k])) patch[k] = row[k];
+  });
+  if (!Object.keys(patch).length) return;
+  outboxAdd(id, patch, !s._sync);
+  snapshotApplyPatch(id, patch);
+}
+function persistPrepareAll(){ Object.keys(persistStudents).forEach(persistPrepare); }
+
+// devolve "queued" se já se sabe que não há rede (a alteração fica guardada no telemóvel), "sent" caso contrário
 function persistStudent(s){
-  if (!sbReady) return;
-  sb.from("students").update(studentToRow(s)).eq("id", s.id).then(function(res){
-    if (res && res.error){
-      console.error("Supabase: falha ao guardar", s.id, res.error.message);
-      if (trainingColumnsAvailable && /training_program|workout_logs/.test(res.error.message || "")){
-        // A migração 0019 ainda não foi aplicada: grava tudo o resto e avisa, em vez de perder as outras alterações
-        trainingColumnsAvailable = false;
-        showToast("⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase (SQL Editor). O resto foi guardado.");
-        persistStudent(s);
-        return;
-      }
-      showToast("⚠ Não foi possível guardar — verifica a tua ligação");
+  if (!sbReady) return "local";
+  persistStudents[s.id] = s;
+  clearTimeout(persistTimers[s.id]);
+  persistTimers[s.id] = setTimeout(function(){ persistPrepare(s.id); outboxFlush(); }, PERSIST_DEBOUNCE_MS);
+  syncPillUpdate();
+  return typeof navigator !== "undefined" && navigator.onLine === false ? "queued" : "sent";
+}
+
+function outboxAcked(id, cols){
+  var ob = outboxRead(), entry = ob[id], s = findStudent(id);
+  if (s){
+    if (!s._sync && entry && entry.full) setSyncBaseline(s, rowBaseline(cols));
+    else if (s._sync) Object.keys(cols).forEach(function(k){ s._sync[k] = jsonOf(cols[k]); });
+  }
+  if (entry){
+    Object.keys(cols).forEach(function(k){ if (k in entry.cols && jsonOf(entry.cols[k]) === jsonOf(cols[k])) delete entry.cols[k]; });
+    if (!Object.keys(entry.cols).length) delete ob[id];
+  }
+  outboxWrite();
+}
+
+// envia a fila de um aluno; resolve com true se ficou tudo enviado ou descartado e false se foi só um problema de ligação
+function outboxSendOne(id){
+  var entry = outboxRead()[id];
+  if (!entry) return Promise.resolve(true);
+  var cols = Object.assign({}, entry.cols);
+  if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
+  if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
+  if (!Object.keys(cols).length){ delete outboxRead()[id]; outboxWrite(); return Promise.resolve(true); }
+  return Promise.resolve(sb.from("students").update(cols).eq("id", id)).then(function(res){
+    if (!res || !res.error){ outboxAcked(id, cols); return true; }
+    var msg = String(res.error.message || "");
+    if (trainingColumnsAvailable && /training_program|workout_logs/.test(msg)){
+      // a migração 0019 ainda não foi aplicada: grava tudo o resto e avisa, em vez de perder as outras alterações
+      trainingColumnsAvailable = false;
+      showToast("⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase (SQL Editor). O resto foi guardado.");
+      return outboxSendOne(id);
     }
+    if (contactColumnsAvailable && /\bphone\b|contact_log/.test(msg)){
+      contactColumnsAvailable = false;
+      showToast("⚠ O telefone e o registo de contactos ainda não podem ser guardados: falta correr a migração 0022 no Supabase.");
+      return outboxSendOne(id);
+    }
+    if (outboxErrorIsTransient(res)) return false;
+    // recusa do servidor (permissões ou formato): repetir não adianta e bloquearia as alterações seguintes
+    console.error("Supabase: gravação recusada", id, msg);
+    delete outboxRead()[id]; outboxWrite();
+    showToast("⚠ Não foi possível guardar uma alteração: " + (msg || "o servidor recusou"));
+    return true;
+  }, function(){ return false; });
+}
+
+function outboxFlush(){
+  if (!sbReady) return Promise.resolve(false);
+  if (outboxFlushPromise) return outboxFlushPromise;
+  if (typeof navigator !== "undefined" && navigator.onLine === false){ syncPillUpdate(); return Promise.resolve(false); }
+  persistPrepareAll();
+  var ids = Object.keys(outboxRead());
+  if (!ids.length){ syncPillUpdate(); return Promise.resolve(true); }
+  var allOk = true, chain = Promise.resolve();
+  ids.forEach(function(id){ chain = chain.then(function(){ return outboxSendOne(id); }).then(function(ok){ if (!ok) allOk = false; }); });
+  outboxFlushPromise = chain.then(function(){
+    outboxFlushPromise = null;
+    clearTimeout(outboxRetryTimer);
+    if (outboxCount()) outboxRetryTimer = setTimeout(function(){ outboxFlush(); }, OUTBOX_RETRY_MS);
+    syncPillUpdate();
+    return allOk && !outboxCount();
+  }, function(){ outboxFlushPromise = null; syncPillUpdate(); return false; });
+  syncPillUpdate();
+  return outboxFlushPromise;
+}
+// no arranque: tenta enviar o que ficou por enviar, sem esperar mais do que alguns segundos
+function outboxFlushAndWait(){
+  if (!outboxCount()) return Promise.resolve(true);
+  return withTimeout(outboxFlush(), 8000).catch(function(){ return false; });
+}
+
+/* ---------- Dados frescos para o profissional ----------
+   A lista de alunos só era lida ao entrar. Agora volta a ler-se quando o profissional regressa à app (no máximo de minuto a minuto)
+   ou toca em "Atualizar". Nunca se troca a ficha de um aluno com alterações por enviar nem a que está aberta no ecrã. */
+var lastStudentsLoad = 0, proRefreshPromise = null;
+var PRO_REFRESH_MIN_MS = 60000;
+function proRefreshStudents(force){
+  if (authRole !== "professional" || !sbReady || (typeof navigator !== "undefined" && navigator.onLine === false)) return Promise.resolve(false);
+  if (!force && Date.now() - lastStudentsLoad < PRO_REFRESH_MIN_MS) return Promise.resolve(false);
+  if (proRefreshPromise) return proRefreshPromise;
+  proRefreshPromise = withTimeout(sb.from("students").select("*"), 15000).then(function(res){
+    proRefreshPromise = null;
+    if (!res || res.error || !Array.isArray(res.data)) return false;
+    lastStudentsLoad = Date.now();
+    var byId = {}, ob = outboxRead();
+    STUDENTS.forEach(function(st){ byId[st.id] = st; });
+    STUDENTS = res.data.map(function(r){
+      var cur = byId[r.id];
+      if (cur && (persistStudents[r.id] || ob[r.id] || state.proSelectedId === r.id)) return cur;
+      return rowToStudent(r);
+    });
+    return true;
+  }, function(){ proRefreshPromise = null; return false; });
+  return proRefreshPromise;
+}
+// redesenha só o que é seguro: a lista de alunos, e só se não houver nada a meio (ficha aberta, janela aberta)
+function proRefreshAndRender(force){
+  return proRefreshStudents(force).then(function(changed){
+    if (changed && authRole === "professional" && state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild){
+      renderProDashboardMain();
+    }
+    return changed;
   });
 }
 
@@ -6008,7 +6234,8 @@ function persistStudent(s){
 // atualizar um aluno já existente — usa persistStudent().
 function insertStudent(s){
   if (!sbReady) return;
-  sb.from("students").insert(studentToRow(s)).then(function(res){
+  var row = studentToRow(s);
+  sb.from("students").insert(row).then(function(res){
     if (res && res.error){
       console.error("Supabase: falha ao criar aluno", s.id, res.error.message);
       if (trainingColumnsAvailable && /training_program|workout_logs/.test(res.error.message || "")){
@@ -6017,8 +6244,15 @@ function insertStudent(s){
         insertStudent(s);
         return;
       }
+      if (contactColumnsAvailable && /\bphone\b|contact_log/.test(res.error.message || "")){
+        contactColumnsAvailable = false; // migração 0022 por aplicar: cria o aluno sem telefone nem registo de contactos
+        insertStudent(s);
+        return;
+      }
       showToast("⚠ Não foi possível criar o aluno — verifica a tua ligação");
+      return;
     }
+    setSyncBaseline(s, rowBaseline(row));
   });
 }
 
@@ -6879,6 +7113,7 @@ function previewBannerHtml(s){
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
   if (!s) return;
+  ensureSyncBaseline(s); // antes de qualquer alteração do dia
   ensureFreshDay(s);
   var showSwitcher = authRole !== "student";
   var optsHtml = showSwitcher ? STUDENTS.map(function(st){ return "<option value=\"" + st.id + "\"" + (st.id===s.id?" selected":"") + ">" + escapeHtml(st.name) + "</option>"; }).join("") : "";
@@ -6948,7 +7183,10 @@ function renderAlunoTab(s){
   if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
   else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
   else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
-  else el.innerHTML = tplCheckin(sv) + tplEvolucaoAluno(sv, {editable:false}); // Progresso: check-in da semana + evolução
+  else {
+    el.innerHTML = tplCheckin(sv) + tplEvolucaoAluno(sv, {editable:false}); // Progresso: check-in da semana + evolução
+    lazyPhotos(s, function(){ if (state.alunoStudentId === s.id && state.alunoTab === "evolucao" && !modalRoot.firstChild) renderAlunoTab(s); });
+  }
   restoreTabUi(el, keep);
   wireAlunoTab(s); // escrita: sempre sobre o student real, nunca sobre a vista
 }
@@ -8373,8 +8611,8 @@ function wireWorkoutLogger(s, el, rerender){
       });
       return;
     }
-    persistStudent(s);
-    showToast("✓ Treino guardado");
+    var how = persistStudent(s);
+    showToast(how === "queued" ? "✓ Treino guardado neste telemóvel — segue assim que houver rede" : "✓ Treino guardado");
     finish();
   });
 }
@@ -9604,6 +9842,20 @@ function resolvePhotoUrls(students, expirySeconds){
   return Promise.all(jobs);
 }
 
+// Os URLs temporários das fotos só se pedem quando a evolução do aluno é aberta (antes eram pedidos para todos os alunos no arranque).
+// _resolvedUrl === undefined = ainda não pedido; null = pedido e falhou (não se repete, para não entrar em ciclo).
+var photoResolving = {};
+function hasUnresolvedPhotos(s){
+  return (Array.isArray(s.photos) ? s.photos : []).concat(Array.isArray(s.weightLogPhotos) ? s.weightLogPhotos : []).some(function(p){
+    return p && typeof p.path === "string" && p.path && p._resolvedUrl === undefined;
+  });
+}
+function lazyPhotos(s, redraw){
+  if (!sbReady || photoResolving[s.id] || !hasUnresolvedPhotos(s)) return;
+  photoResolving[s.id] = true;
+  resolvePhotoUrls([s]).then(function(){ delete photoResolving[s.id]; redraw(); }, function(){ delete photoResolving[s.id]; });
+}
+
 // data-path identifica a foto a remover (removePhoto() apaga do Storage e do
 // registo do aluno). Uma foto só sem "path" (fallback dataUrl do modo local)
 // não tem nada para remover no Storage — nesse caso o botão só tira do array.
@@ -10290,6 +10542,7 @@ function renderProDashboardMain(){
 
   html += "<div style=\"display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; margin-bottom:14px;\">" +
     (demoCount ? "<button type=\"button\" class=\"btn btn-sm\" id=\"toggleDemo\" style=\"flex:1 1 150px; min-height:44px;\">" + (state.showDemoStudents ? "Ocultar contas de demonstração" : "Mostrar contas de demonstração (" + demoCount + ")") + "</button>" : "") +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"btnRefresh\" style=\"flex:0 1 110px; min-height:44px;\" aria-label=\"Atualizar a lista de alunos\">↻ Atualizar</button>" +
     "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\" style=\"flex:1 1 150px; min-height:44px;\">+ Convidar aluno</button>" +
   "</div>";
 
@@ -10352,6 +10605,9 @@ function renderProDashboardMain(){
     });
   });
   document.getElementById("btnInvite").addEventListener("click", openInviteModal);
+  document.getElementById("btnRefresh").addEventListener("click", function(){
+    proRefreshAndRender(true).then(function(ok){ showToast(ok ? "✓ Lista atualizada" : "Não foi possível atualizar — verifica a ligação"); });
+  });
   var toggleDemoBtn = document.getElementById("toggleDemo");
   if (toggleDemoBtn) toggleDemoBtn.addEventListener("click", function(){
     state.showDemoStudents = !state.showDemoStudents;
@@ -10626,6 +10882,7 @@ function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === 
 var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
+  ensureSyncBaseline(s);
   var main = document.getElementById("proMain");
   var group = proNavGroupOf(state.proTab);
   var subtabs = group.tabs.length > 1 ? "<div class=\"pro-subtabs\">" + group.tabs.map(function(k){
@@ -10690,7 +10947,10 @@ function renderProTabContent(s){
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
   else if (state.proTab==="treino") el.innerHTML = tplProTreino(s);
-  else if (state.proTab==="evolucao") el.innerHTML = tplEvolucaoAluno(s, {editable:true});
+  else if (state.proTab==="evolucao"){
+    el.innerHTML = tplEvolucaoAluno(s, {editable:true});
+    lazyPhotos(s, function(){ if (state.proSelectedId === s.id && state.proTab === "evolucao" && !modalRoot.firstChild) renderProTabContent(s); });
+  }
   else if (state.proTab==="checkins") el.innerHTML = tplProCheckins(s);
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
   else el.innerHTML = tplProHistorico(s);
@@ -13177,9 +13437,61 @@ function offerToSaveCredential(email, password){
    continuam a verificar a MESMA tabela de forma independente — o pior que
    acontece é a UI mostrar o ecrã errado, sem nenhum dado real a fugir. */
 function checkIsProfessional(){
-  return sb.from("professionals").select("user_id").maybeSingle().then(function(res){
+  // true/false; null = não foi possível perguntar (sem rede) — nesse caso o aluno pode abrir a cópia guardada neste telemóvel
+  return withTimeout(sb.from("professionals").select("user_id").maybeSingle(), 10000).then(function(res){
+    if (res && res.error && outboxErrorIsTransient(res)) return null;
     return !!(res && res.data);
-  }).catch(function(){ return false; });
+  }).catch(function(){ return null; });
+}
+
+// Sem ligação ao servidor: o aluno abre a última cópia da sua ficha (a fila de alterações por enviar já está lá incluída);
+// o profissional nunca guarda dados dos alunos no dispositivo, por isso vê o ecrã de "sem ligação" com o botão de tentar de novo.
+function bootFromSnapshot(session, isProfessional){
+  var snap = isProfessional === true ? null : snapshotRead(session.user.id);
+  if (!snap){
+    hideAllScreens();
+    document.getElementById("connectionErrorScreen").classList.remove("hidden");
+    return Promise.resolve();
+  }
+  showToast("Sem ligação: a mostrar a última cópia guardada neste telemóvel");
+  return finishBoot(snap.rows, false, true);
+}
+
+// Entra na app com as fichas já lidas (do servidor ou da cópia guardada)
+function finishBoot(rows, isProfessional, offline){
+  STUDENTS = rows.map(rowToStudent);
+  lastStudentsLoad = Date.now();
+  // a primeira ligação pode ser lenta: o catálogo extra não pode prender o arranque. As fotos vêm só quando se abre a evolução.
+  var extras = offline ? Promise.resolve() : withTimeout(Promise.all([loadCustomFoods(), loadFoodProducts()]), 12000).catch(function(){});
+  return extras.then(function(){
+    document.getElementById("signOutBtn").classList.remove("hidden");
+    if (isProfessional){
+      authRole = "professional";
+      hideAllScreens();
+      document.getElementById("modeSwitch").classList.remove("hidden");
+      document.getElementById("alunoApp").classList.remove("hidden");
+      document.getElementById("proApp").classList.remove("hidden");
+      state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
+      setMode("pro");
+    } else if (STUDENTS.length){
+      authRole = "student";
+      STUDENTS.forEach(ensureSyncBaseline); // versão de partida: daqui em diante só se enviam as colunas que mudarem
+      hideAllScreens();
+      document.getElementById("modeSwitch").classList.add("hidden");
+      document.getElementById("alunoApp").classList.remove("hidden");
+      state.alunoStudentId = STUDENTS[0].id;
+      state.mode = "aluno";
+      document.getElementById("protoRibbon").classList.add("hidden"); // o aluno não precisa do aviso de protótipo
+      renderAlunoShell();
+    } else {
+      authRole = null;
+      hideAllScreens();
+      document.getElementById("noStudentScreen").classList.remove("hidden");
+      document.getElementById("signOutBtn").classList.remove("hidden");
+    }
+    syncPillUpdate();
+    if (!offline) outboxFlush();
+  });
 }
 
 function handleSession(session){
@@ -13189,6 +13501,7 @@ function handleSession(session){
   var email = session.user.email;
 
   checkIsProfessional().then(function(isProfessional){
+    if (isProfessional === null) return bootFromSnapshot(session, null);
     // Reclamar o convite passa por uma função no servidor (claim_student_row),
     // não por um UPDATE direto: confirmámos que um UPDATE direto na tabela,
     // mesmo com a política RLS correta e a condição validada como verdadeira,
@@ -13197,36 +13510,15 @@ function handleSession(session){
     var claim = isProfessional ? Promise.resolve() : sb.rpc("claim_student_row");
 
     return Promise.resolve(claim).then(function(){
-      return sb.from("students").select("*");
-    }).then(function(res){
-      STUDENTS = (res.data || []).map(rowToStudent);
-      return Promise.all([resolvePhotoUrls(STUDENTS), loadCustomFoods(), loadFoodProducts()]);
+      return outboxFlushAndWait(); // alterações feitas sem rede seguem antes de se ler a ficha
     }).then(function(){
-      document.getElementById("signOutBtn").classList.remove("hidden");
-      if (isProfessional){
-        authRole = "professional";
-        hideAllScreens();
-        document.getElementById("modeSwitch").classList.remove("hidden");
-        document.getElementById("alunoApp").classList.remove("hidden");
-        document.getElementById("proApp").classList.remove("hidden");
-        state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
-        setMode("pro");
-      } else if (STUDENTS.length){
-        authRole = "student";
-        hideAllScreens();
-        document.getElementById("modeSwitch").classList.add("hidden");
-        document.getElementById("alunoApp").classList.remove("hidden");
-        state.alunoStudentId = STUDENTS[0].id;
-        state.mode = "aluno";
-        document.getElementById("protoRibbon").classList.add("hidden"); // o aluno não precisa do aviso de protótipo
-        renderAlunoShell();
-      } else {
-        authRole = null;
-        hideAllScreens();
-        document.getElementById("noStudentScreen").classList.remove("hidden");
-        document.getElementById("signOutBtn").classList.remove("hidden");
-      }
-    });
+      return withTimeout(sb.from("students").select("*"), 15000);
+    }).then(function(res){
+      if (!res || res.error) return bootFromSnapshot(session, isProfessional);
+      var rows = outboxOverlay(res.data || []);
+      if (!isProfessional) snapshotWrite(session.user.id, rows);
+      return finishBoot(rows, isProfessional, false);
+    }, function(){ return bootFromSnapshot(session, isProfessional); });
   }).catch(function(err){
     showLoading("Erro ao carregar a tua conta: " + (err && err.message ? err.message : "tenta novamente."));
   });
@@ -13329,6 +13621,9 @@ document.getElementById("recoveryForm").addEventListener("submit", function(e){
 });
 
 function doSignOut(){
+  persistPrepareAll();
+  if (outboxCount() && !window.confirm("Há alterações que ainda não foram enviadas e perder-se-iam ao sair. Sair mesmo assim?")) return;
+  offlineDataWipe(); // a cópia da ficha e a fila ficam só enquanto a sessão estiver iniciada
   restTimerStop();
   wlDraftWipe();
   sb.auth.signOut().then(function(){ authRole = null; showAuthScreen("signin"); });
@@ -13369,6 +13664,19 @@ function boot(){
       document.getElementById("recoveryScreen").classList.remove("hidden");
     }
   });
+}
+
+// ligação/rede: enviar a fila quando volta, avisar quando se perde, e atualizar a lista do profissional ao regressar à app
+window.addEventListener("online", function(){ syncPillUpdate(); outboxFlush(); proRefreshAndRender(false); });
+window.addEventListener("offline", function(){ syncPillUpdate(); });
+window.addEventListener("pagehide", function(){ persistPrepareAll(); });
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden"){ persistPrepareAll(); outboxFlush(); return; }
+  outboxFlush();
+  proRefreshAndRender(false);
+});
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
 }
 
 boot();
