@@ -1,0 +1,85 @@
+// Google Agenda: reconhecer o aluno no título do evento, normalizar eventos da API, plano de sincronização e definições.
+require("./setup")();
+var appSource = require("./extract-app")();
+eval(appSource);
+var check = require("./check")();
+var fs = require("fs");
+var store = {};
+global.localStorage = {getItem: function(k){ return k in store ? store[k] : null; }, setItem: function(k, v){ store[k] = String(v); }, removeItem: function(k){ delete store[k]; }};
+var today = localTodayISO();
+function d(n){ return addDaysISO(today, -n); }
+STUDENTS = [{id: "a", name: "Isabel Carvalho", active: true}, {id: "b", name: "Ricardo Rocha", active: true}, {id: "c", name: "Ricardo Jafe", active: true}, {id: "m", name: "Mãe + Pai", active: true}, {id: "x", name: "Ana Silva", active: true}, {id: "y", name: "Ana Silva Santos", active: true}, {id: "z", name: "Zé Inativo", active: false}];
+function m(t, al){ var r = matchEventStudent(t, al || {}); return r ? r.id : null; }
+
+// ---- quem é o aluno de um evento ----
+check.check("1. 'PT 60 - Nome' reconhece o aluno pela parte depois do hífen", m("PT 60 - Isabel Carvalho") === "a" && m("PT 60 - Ricardo Rocha") === "b");
+check.check("2. Aceita hífen longo, maiúsculas e acentos diferentes", m("pt 60 – isabel carvalho") === "a" && m("PT 60 — ISABEL CARVALHO") === "a");
+check.check("3. O título pode ser só o nome", m("Isabel Carvalho") === "a" && m("isabel carvalho") === "a");
+check.check("4. 'PT Duo 60 - Mãe + Pai' reconhece o aluno com esse nome", m("PT Duo 60 - Mãe + Pai") === "m");
+check.check("5. O nome completo dentro de um título maior também serve (se for só um aluno)", m("Sessão extra Isabel Carvalho 18h") === "a");
+check.check("6. Dois alunos no mesmo título é ambíguo (não conta para nenhum)", m("Reunião Isabel Carvalho e Ricardo Rocha") === null);
+check.check("7. Nome incompleto ou desconhecido não conta (Ricardo sozinho tem dois)", m("PT 60 - Ricardo") === null && m("Dentista") === null && m("") === null);
+check.check("8. Se um nome está dentro de outro mais comprido, ganha o mais comprido", m("PT 60 - Ana Silva Santos") === "y" && m("PT 60 - Ana Silva") === "x");
+check.check("9. Um alias definido à mão tem prioridade", m("Isabel C.", {"isabel c.": "a"}) === "a" && m("PT 60 - Isabel Carvalho", {"pt 60 - isabel carvalho": "b"}) === "b");
+
+// ---- eventos da API ----
+var n = normalizeCalendarEvent({id: "abc_20261013T070000Z", summary: "  PT 60 - Isabel Carvalho ", colorId: 11, status: "confirmed", start: {dateTime: "2026-10-13T07:00:00+01:00"}});
+check.check("10. Um evento da API fica com id, título, dia e hora locais e a cor", n && n.id === "abc_20261013T070000Z" && n.title === "PT 60 - Isabel Carvalho" && /^\d{4}-\d{2}-\d{2}$/.test(n.date) && /^\d{2}:\d{2}$/.test(n.time) && n.colorId === "11");
+check.check("11. Eventos de dia inteiro ficam sem hora; sem título, sem início ou inválidos são ignorados", normalizeCalendarEvent({id: "1", summary: "X", start: {date: "2026-10-13"}}).time === null && normalizeCalendarEvent({id: "1", start: {dateTime: "2026-10-13T07:00:00Z"}}) === null && normalizeCalendarEvent({id: "1", summary: "X"}) === null && normalizeCalendarEvent({id: "1", summary: "X", start: {dateTime: "lixo"}}) === null && normalizeCalendarEvent(null) === null);
+check.check("12. Eventos cancelados vêm marcados", normalizeCalendarEvent({id: "1", summary: "X", status: "cancelled", start: {date: "2026-10-13"}}).cancelled === true);
+
+// ---- janela ----
+studio.packs = [{id: "p", student_id: "a", starts_on: d(50), expires_on: null}]; studio.sessions = []; studio.loaded = true; studio.available = true; studio.slotsAvailable = true;
+check.check("13. A janela começa no pacote ainda em vigor mais antigo (50 dias) e acaba hoje", calendarWindow(today).from === d(120) || calendarWindow(today).from === d(50) ? calendarWindow(today).from <= d(50) : false);
+studio.packs = [{id: "p", student_id: "a", starts_on: d(900), expires_on: null}];
+check.check("14. Nunca vai além de 400 dias para trás", calendarWindow(today).from === d(400));
+studio.packs = [];
+check.check("15. Sem pacotes lê os últimos 120 dias", calendarWindow(today).from === d(120) && calendarWindow(today).to === today);
+
+// ---- plano de sincronização ----
+function evt(id, title, daysAgo, time, color, cancelled){ return {id: id, title: title, date: d(daysAgo), time: time || "10:00", colorId: color || "10", cancelled: !!cancelled}; }
+var win = {from: d(30), to: today};
+studio.sessions = [];
+var plan = planCalendarSync({events: [evt("1", "PT 60 - Isabel Carvalho", 5), evt("2", "PT 60 - Ricardo Rocha", 4, "18:00", "11"), evt("3", "Dentista", 3), evt("4", "PT 60 - Isabel Carvalho", -2), evt("5", "PT 60 - Isabel Carvalho", 6, "10:00", "10", true), evt("6", "PT 60 - Zé Inativo", 3), evt("7", "PT 60 - Isabel Carvalho", 40)], today: today, window: win, aliases: {}});
+check.check("16. Só entram os eventos de alunos ativos, até hoje, dentro da janela e não cancelados", plan.insert.length === 2 && plan.insert.map(function(x){ return x.external_id; }).join() === "1,2" && plan.matched === 2);
+check.check("17. Cor 11 = faltou, as outras = feita; origem calendário; hora do evento", plan.insert[0].status === "feita" && plan.insert[1].status === "faltou" && plan.insert.every(function(x){ return x.source === "calendario"; }) && plan.insert[1].time === "18:00");
+check.check("18. Os títulos sem aluno ficam na lista (com contagem), os futuros e cancelados não", plan.unmatched["Dentista"] === 1 && Object.keys(plan.unmatched).length === 1);
+// já sincronizado + alterações
+studio.sessions = [
+  {id: "s1", student_id: "a", date: d(5), time: "10:00", status: "feita", source: "calendario", external_id: "1"},
+  {id: "s2", student_id: "b", date: d(4), time: "18:00", status: "feita", source: "calendario", external_id: "2"},
+  {id: "s9", student_id: "a", date: d(8), time: "10:00", status: "feita", source: "calendario", external_id: "9"},
+  {id: "old", student_id: "a", date: d(60), time: "10:00", status: "feita", source: "calendario", external_id: "8"},
+  {id: "man", student_id: "a", date: d(7), time: "10:00", status: "faltou", source: "manual", external_id: null}];
+var plan2 = planCalendarSync({events: [evt("1", "PT 60 - Isabel Carvalho", 5), evt("2", "PT 60 - Ricardo Rocha", 4, "18:00", "11"), evt("3b", "PT 60 - Isabel Carvalho", 7)], today: today, window: win, aliases: {}});
+check.check("19. Uma sessão já registada com o mesmo estado não gera trabalho", !plan2.update.some(function(u){ return u.id === "s1"; }));
+check.check("20. Cor mudada para Tomate atualiza o estado da sessão para faltou", plan2.update.length === 1 && plan2.update[0].id === "s2" && plan2.update[0].patch.status === "faltou");
+check.check("21. Um evento apagado (dentro da janela) remove a sessão; fora da janela não se mexe", plan2.remove.join() === "s9");
+check.check("22. Uma sessão registada à mão no mesmo dia/hora ganha: o evento não se conta outra vez", plan2.insert.length === 0);
+var plan3 = planCalendarSync({events: [{id: "1", title: "PT 60 - Isabel Carvalho", date: d(4), time: "09:00", colorId: "10", cancelled: false}], today: today, window: win, aliases: {}});
+check.check("23. Um evento que mudou de dia e de hora atualiza a sessão em vez de a duplicar", plan3.update.some(function(u){ return u.id === "s1" && u.patch.date === d(4) && u.patch.time === "09:00"; }));
+check.check("24. Sem evento nenhum, as sessões do calendário na janela são removidas e as manuais ficam", planCalendarSync({events: [], today: today, window: win, aliases: {}}).remove.sort().join() === "s1,s2,s9");
+
+// ---- definições e ecrã ----
+(async function(){
+  sbReady = false; store = {};
+  calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.useAsSource = true; calSettings.aliases = {"x": "a"};
+  await calSaveSettings();
+  calSettings.clientId = ""; calSettings.useAsSource = false; calSettings.aliases = {};
+  await calLoadSettings();
+  check.check("25. As definições guardam-se e voltam a ler-se (sem tokens)", calSettings.clientId === "123.apps.googleusercontent.com" && calSettings.useAsSource === true && calSettings.aliases.x === "a" && /googleusercontent/.test(store[CAL_LOCAL_KEY]) && !/token/i.test(store[CAL_LOCAL_KEY]));
+  check.check("26. Com ID e opção ativa, o calendário é a fonte; sem ID não", calUsesCalendar() === true && (function(){ calSettings.clientId = ""; var r = calUsesCalendar(); calSettings.clientId = "123.apps.googleusercontent.com"; return r === false; })());
+  studio.slotsAvailable = true; calSettings.available = true; calSettings.lastSync = null; calSettings.clientId = "";
+  var h0 = calendarCardHtml();
+  check.check("27. Sem ID de cliente o cartão explica os passos e pede o ID", /id="gcClient"/.test(h0) && /Origens JavaScript autorizadas/.test(h0) && /calendar\.readonly|Calendar API/.test(h0));
+  calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.lastSync = {at: new Date().toISOString(), events: 40, matched: 30, inserted: 5, updated: 1, removed: 0, errors: 0, unmatched: [{title: "Dentista", n: 2}], warnUsedBefore: ["Ana"]};
+  var h1 = calendarCardHtml();
+  check.check("28. Ligado, mostra sincronizar, a fonte, o último resumo e os eventos sem aluno", /id="gcSync"/.test(h1) && /id="gcToggle"/.test(h1) && /40 eventos lidos/.test(h1) && /Dentista/.test(h1) && /data-gc-alias="0"/.test(h1) && /aulas já dadas/.test(h1));
+  studio.slotsAvailable = false;
+  check.check("29. Sem as migrações 0024/0025 avisa em vez de falhar", /0024/.test(calendarCardHtml()) && (function(){ studio.slotsAvailable = true; calSettings.available = false; var t = calendarCardHtml(); calSettings.available = true; return /0025/.test(t); })());
+  var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0025_google_calendar.sql", "utf8");
+  check.check("30. A migração 0025: definições só para profissionais, 'calendario' como origem e id do evento único", /create table if not exists studio_settings/.test(mig) && /exists \(select 1 from professionals where user_id = auth\.uid\(\)\)/.test(mig) && /source in \('manual', 'agenda', 'calendario'\)/.test(mig) && /sessions_calendar_unique on sessions\(external_id\) where source = 'calendario'/.test(mig) && !/drop table|delete from|truncate/i.test(mig));
+  check.check("31. O pedido de autorização é só de leitura e o token não é guardado", appSource.indexOf('var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"') >= 0 && !/localStorage\.setItem\([^)]*access_token/.test(appSource) && !/calSettings\.token/.test(appSource));
+  check.check("32. Mexer numa sessão do calendário na app desliga-a do calendário", /ses\.source === "calendario" \? \{status: status, source: "manual"\}/.test(appSource));
+  check.summarize();
+})().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

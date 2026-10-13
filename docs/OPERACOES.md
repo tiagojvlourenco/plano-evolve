@@ -104,8 +104,24 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - [ ] Importar os pacotes que estão a decorrer: Estúdio → "Importar pacotes que já estão a decorrer" (uma linha por aluno: nome; aulas; início; valor; aulas já dadas). As aulas já dadas vêm do "em falta" da folha de cálculo.
 - [ ] Definir o horário semanal de cada aluno (ficha → Pacotes → Horário semanal). A app conta sozinha cada sessão depois de passar; só precisas de marcar as exceções na Agenda do Estúdio.
 - [ ] Durante 1 ou 2 semanas, comparar o "Resumo de treinos" da app com o e-mail do script. Quando bater certo, apaga o *trigger* semanal do Google Apps Script (função `listarTriggers` / "Recriar trigger semanal" do menu da folha).
-- A app **não lê o Google Calendar**: o horário semanal substitui o calendário para contar aulas. Aulas que não seguem o horário (extra, mudadas de dia) registam-se na secção "Sessão fora do horário". A "falta" (cor 11 no calendário) marca-se como "Faltou"; por omissão também gasta uma sessão, como no script.
+- O horário semanal conta as aulas sem precisares do Google Agenda (ver 8e para ler o calendário a sério). Aulas que não seguem o horário (extra, mudadas de dia) registam-se na secção "Sessão fora do horário". A "falta" (cor 11 no calendário) marca-se como "Faltou"; por omissão também gasta uma sessão, como no script.
 - O limite de "a acabar" passa a ser o número de aulas por semana do aluno (mínimo 2). No script, a fórmula `(aulas/4)/13` arredondada dava quase sempre 1.
+
+## 8e. Migração 0025 e ligação ao Google Agenda (só leitura)
+
+- [ ] Correr `supabase/migrations/0025_google_calendar.sql` (depois da 0024; é repetível). Cria `studio_settings` (só profissionais), `sessions.external_id` e a origem `calendario`.
+- [ ] **Google Cloud Console** (uma vez, com a conta Google que tem a agenda):
+  1. Criar um projeto (ou usar um existente) e ativar a **Google Calendar API**.
+  2. *Ecrã de consentimento OAuth*: tipo **Externo**, nome da app, o teu e-mail; adicionar o âmbito `https://www.googleapis.com/auth/calendar.readonly`; adicionar o teu e-mail como *utilizador de teste*.
+  3. *Credenciais → Criar credenciais → ID de cliente OAuth → Aplicação Web*. Em **Origens JavaScript autorizadas** pôr o endereço da app (`https://tiagojvlourenco.github.io`, sem barra no fim nem caminho). Não é preciso URI de redirecionamento.
+  4. Copiar o **ID de cliente** (`…apps.googleusercontent.com`) para Estúdio → Google Agenda e guardar.
+  5. Em modo *Teste* a autorização caduca ao fim de ~7 dias (pede para voltar a autorizar). Para não repetir, publicar a app no ecrã de consentimento (*Publicar app*); para uso próprio com um só âmbito de leitura, não precisa de verificação extensa (aparece o aviso "app não verificada" e carregas em *Avançadas → continuar*).
+- [ ] Estúdio → Google Agenda → **Sincronizar**. Abre a janela de autorização da Google; a app lê os eventos desde o pacote mais antigo ainda em vigor (por omissão 120 dias, máximo 400) até hoje, e cria/atualiza/remove as sessões `calendario`.
+- Como reconhece o aluno: título `PT 60 - Nome` (parte depois do último " - "), o título igual ao nome, ou o nome completo dentro do título (se só um aluno bater). Títulos que não batem aparecem na lista "sem aluno" e podes associá-los a um aluno (alias, guardado nas definições). Eventos de dia inteiro e cancelados são ignorados; a cor **Tomate (11)** = faltou, as restantes = feita; só contam eventos até ao fim do dia de hoje.
+- Se a fonte for o calendário, a geração automática do horário semanal fica em pausa (para não contar duas vezes). Uma sessão do calendário que editas na Agenda passa a manual e a sincronização deixa de lhe mexer.
+- Acrescentar o que já foi dado: se um pacote tem "aulas já dadas" > 0 **e** o calendário cobre essas aulas, são contadas duas vezes. A app avisa no resumo da sincronização; põe "já dadas" a 0 nesses pacotes.
+- Segurança: o *token* de acesso fica só na memória (nunca é guardado nem enviado para o Supabase) e o âmbito é só de leitura. Só o ID de cliente e os alias ficam guardados (`studio_settings`, ou `localStorage` em modo local).
+- Limites: sincronizar exige um clique (a Google abre uma janela); sem o clique não há leitura em segundo plano.
 
 **Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
 

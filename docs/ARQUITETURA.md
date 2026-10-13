@@ -83,6 +83,9 @@ Pacotes de sessões (`total`, `price`, `starts_on`/`expires_on`, regras `missed_
 ### `session_slots` e contagem automática (0024)
 `session_slots` guarda o horário semanal de um aluno (`weekday` 1=segunda…7=domingo, `time`, `counts_from`, `generated_until`). `studioAutoSessions()` (ao abrir a app, ao abrir o Estúdio, ao voltar à app e ao criar um horário) cria como **feitas** (`sessions.source = 'agenda'`) as sessões do horário que já passaram (a de hoje só depois da hora + 1 h), desconta-as ao pacote que caduca primeiro e avança `generated_until`; nunca duplica (uma sessão já registada nesse dia/hora, ou sem hora, ocupa o lugar; índice único parcial no servidor). As exceções (faltou, cancelou, mudou de dia) marcam-se na **Agenda** do Estúdio. `session_packs.used_before` = aulas já dadas antes de usar a app; `studioImportPacks()` importa uma linha por aluno (nome; aulas; início; valor; aulas já dadas). O **Resumo de treinos** (`studioSummaryRows`) substitui o e-mail semanal: valor, total, progresso, em falta, "aguarda renovação" e aulas extra (sessões sem pacote depois do último pacote; um pacote novo desconta-as). O menu Estúdio mostra quantos alunos precisam de atenção.
 
+### `studio_settings`, `sessions.external_id` e Google Agenda (0025)
+`studio_settings (key, value jsonb)` guarda definições do Estúdio (chave `google_calendar`: `clientId`, `useAsSource`, `aliases`, `lastSync`); só profissionais. `sessions.source` aceita também `calendario` e `external_id` guarda o id do evento (índice único parcial por `external_id` quando `source = 'calendario'`). Fluxo: Google Identity Services (`initTokenClient`, âmbito `calendar.readonly`, token só em memória) → `fetchCalendarEvents` (Calendar API v3, `singleEvents=true`, paginação) → `normalizeCalendarEvent` → `matchEventStudent` (alias › nome exato › parte depois do último " - " › nome completo único no título › primeiro+último) → `planCalendarSync` (inserir/atualizar/remover, dedup contra sessões não-calendário, cor 11 = faltou, só até ao fim de hoje) → `applyCalendarPlan`. `calUsesCalendar()` pausa a geração do horário semanal. Testes: `tests/gcal.test.js` (lógica) e `tests/gcal-browser.test.js` (ecrã, com o script da Google e a API intercetados).
+
 ### `professionals`
 `user_id` (PK → `auth.users`), `email`, `created_at`. Só se lê a própria linha; só se gere pelo SQL Editor (`supabase/manage_professionals.sql`).
 
@@ -152,7 +155,7 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
 | `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
-| `supabase/migrations/0001…0024_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `supabase/migrations/0001…0025_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |

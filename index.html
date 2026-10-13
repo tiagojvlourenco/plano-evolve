@@ -13013,6 +13013,7 @@ var agendaRunning = null;
 // conta as sessões do horário que já passaram (desconta ao pacote certo) e avança "contado até" de cada horário; devolve quantas criou
 function studioAutoSessions(){
   if (!studio.loaded || !studio.available || !studio.slotsAvailable) return Promise.resolve(0);
+  if (calUsesCalendar()) return Promise.resolve(0); // o Google Agenda é a fonte: o horário semanal fica em pausa
   if (agendaRunning) return agendaRunning;
   var now = new Date(), today = localTodayISO(), nowInfo = {date: today, minutes: now.getHours() * 60 + now.getMinutes()};
   var due = agendaDue(nowInfo);
@@ -13047,7 +13048,45 @@ function studioAutoSessions(){
 // lê os dados do estúdio e conta as sessões do horário que já passaram
 function studioRefresh(){
   var mode = sbReady; // se a ligação à base de dados mudar entretanto (testes, início de sessão), não se conta nada com os dados de outro modo
-  return studioLoad().then(function(ok){ return ok && sbReady === mode ? studioAutoSessions() : 0; }).then(function(n){ updateStudioBadge(); return n; });
+  return Promise.all([studioLoad(), calLoadSettings()]).then(function(r){ var ok = r[0]; return ok && sbReady === mode ? studioAutoSessions() : 0; }).then(function(n){ updateStudioBadge(); return n; });
+}
+function wireCalendarCard(main, redraw){
+  var card = main.querySelector("#gcalCard");
+  if (!card) return;
+  function out(msg, bad){ var o = card.querySelector("#gcOut") || card.querySelector("#gcErr"); if (o){ o.textContent = msg; o.style.color = bad ? "var(--critical)" : ""; o.style.display = "block"; } }
+  var save = card.querySelector("#gcSave");
+  if (save) save.addEventListener("click", function(){
+    var id = card.querySelector("#gcClient").value.trim();
+    if (!/^[\w.\-]+\.apps\.googleusercontent\.com$/i.test(id)){ out("Isto não parece um ID de cliente do Google (termina em .apps.googleusercontent.com).", true); return; }
+    calSettings.clientId = id; save.disabled = true;
+    calSaveSettings().then(function(r){ if (r.error){ calSettings.clientId = ""; save.disabled = false; out(r.error, true); return; } showToast("✓ Guardado — agora sincroniza"); redraw(); });
+  });
+  var sync = card.querySelector("#gcSync");
+  if (sync) sync.addEventListener("click", function(){
+    var cal = card.querySelector("#gcCal").value.trim() || "primary";
+    if (cal !== calSettings.calendarId){ calSettings.calendarId = cal; }
+    sync.disabled = true; out("A pedir autorização ao Google e a ler a agenda…");
+    runCalendarSync().then(function(sum){ showToast("✓ Agenda sincronizada"); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
+  });
+  var tog = card.querySelector("#gcToggle");
+  if (tog) tog.addEventListener("click", function(){
+    if (!calSettings.useAsSource && !window.confirm("Usar o Google Agenda como fonte das sessões? O horário semanal deixa de contar sessões (as já contadas ficam).")) return;
+    calSettings.useAsSource = !calSettings.useAsSource;
+    calSaveSettings().then(function(r){ if (r.error){ calSettings.useAsSource = !calSettings.useAsSource; showToast("⚠ " + r.error); } redraw(); });
+  });
+  var off = card.querySelector("#gcOff");
+  if (off) off.addEventListener("click", function(){
+    if (!window.confirm("Desligar o Google Agenda? As sessões já contadas ficam; deixa de se ler o calendário.")) return;
+    calSettings.clientId = ""; calSettings.useAsSource = false; calSettings.lastSync = null;
+    calSaveSettings().then(function(){ redraw(); });
+  });
+  card.querySelectorAll("[data-gc-alias]").forEach(function(sel){ sel.addEventListener("change", function(){
+    var u = calSettings.lastSync && calSettings.lastSync.unmatched[parseInt(sel.getAttribute("data-gc-alias"), 10)];
+    if (!u || !sel.value) return;
+    calSettings.aliases[calTitleKey(u.title)] = sel.value;
+    calSettings.lastSync.unmatched = calSettings.lastSync.unmatched.filter(function(x){ return x !== u; });
+    calSaveSettings().then(function(){ showToast("✓ Associado — fica para as próximas sincronizações"); redraw(); });
+  }); });
 }
 function studioAfterAutoSessions(n){
   if (n > 0 && state.mode === "pro" && !modalRoot.firstChild){
@@ -13161,6 +13200,243 @@ function studioImportPacks(text){
     });
   });
   return chain.then(function(){ return report; });
+}
+
+// ---- Google Agenda: ler os eventos e contá-los como sessões (migração 0025) ----
+// A app pede ao Google, de cada vez que se sincroniza, autorização só de leitura (calendar.readonly). O token vive só na memória.
+// Cada evento cujo título é o nome de um aluno vira uma sessão "feita" (cor Tomate/11 = "faltou", como no script antigo); tal como lá,
+// contam-se os eventos até ao fim de hoje. O calendário é a fonte: se o evento mudar de dia/hora ou desaparecer, a sessão acompanha-o.
+// Mexer numa sessão na app (Agenda → Alterar) desliga-a do calendário (passa a "manual") e a sincronização deixa-a em paz.
+var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+var CAL_LOCAL_KEY = "evolve_gcal_v1";
+var CAL_DEFAULT_BACK_DAYS = 120, CAL_MAX_BACK_DAYS = 400;
+var CAL_FALTA_COLOR = "11";
+var calSettings = {clientId: "", calendarId: "primary", useAsSource: false, aliases: {}, lastSync: null, loaded: false, available: true};
+
+function calLoadSettings(){
+  var done = function(v){
+    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.lastSync = v.lastSync || null; }
+    calSettings.loaded = true; return true;
+  };
+  if (!sbReady){ try { return Promise.resolve(done(JSON.parse(localStorage.getItem(CAL_LOCAL_KEY) || "null"))); } catch (e) { return Promise.resolve(done(null)); } }
+  return Promise.resolve(sb.from("studio_settings").select("value").eq("key", "google_calendar").maybeSingle().then(function(r){ return r; })).then(function(res){
+    if (res && res.error){ calSettings.available = false; calSettings.loaded = true; return false; }
+    calSettings.available = true;
+    return done(res && res.data ? res.data.value : null);
+  }, function(){ calSettings.available = false; calSettings.loaded = true; return false; });
+}
+function calSettingsValue(){ return {clientId: calSettings.clientId, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, aliases: calSettings.aliases, lastSync: calSettings.lastSync}; }
+function calSaveSettings(){
+  if (!sbReady){ try { localStorage.setItem(CAL_LOCAL_KEY, JSON.stringify(calSettingsValue())); } catch (e) {} return Promise.resolve({}); }
+  return Promise.resolve(sb.from("studio_settings").upsert({key: "google_calendar", value: calSettingsValue(), updated_at: new Date().toISOString()}).then(function(r){ return r; })).then(function(res){
+    return res && res.error ? {error: "Não foi possível guardar as definições (a migração 0025 já foi corrida?)."} : {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function calUsesCalendar(){ return !!(calSettings.useAsSource && calSettings.clientId); }
+
+// ---- eventos ----
+// {id, title, date, time, colorId, cancelled} a partir de um evento da API do Google (hora local do dispositivo)
+function normalizeCalendarEvent(ev){
+  if (!ev || !ev.id || !ev.start) return null;
+  var title = String(ev.summary || "").trim();
+  if (!title) return null;
+  var date = null, time = null;
+  if (ev.start.dateTime){
+    var d = new Date(ev.start.dateTime);
+    if (isNaN(d.getTime())) return null;
+    date = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); time = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  } else if (ev.start.date && isIsoDate(ev.start.date)) date = ev.start.date;
+  if (!date) return null;
+  return {id: String(ev.id).slice(0, 200), title: title, date: date, time: time, colorId: ev.colorId ? String(ev.colorId) : "", cancelled: ev.status === "cancelled"};
+}
+function calTitleKey(t){ return exLibFold(t); }
+// o aluno de um evento. Os títulos costumam trazer mais do que o nome ("PT 60 - Isabel Carvalho"), por isso procura, por ordem:
+// alias definido à mão; título igual ao nome; a parte depois do último " - " igual ao nome; o nome completo de um só aluno dentro do título
+// (se houver vários, o mais comprido); primeiro+último nome se for único.
+function matchEventStudent(title, aliases){
+  var key = calTitleKey(title);
+  if (aliases && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
+  var all = STUDENTS.filter(function(s){ return !s.isDemo || state.showDemoStudents; });
+  function unique(list){ return list.length === 1 ? list[0] : null; }
+  var exact = all.filter(function(s){ return exLibFold(s.name) === key; });
+  if (exact.length) return unique(exact);
+  var parts = String(title).split(/\s+[-–—]\s+/), tail = parts.length > 1 ? calTitleKey(parts[parts.length - 1]) : "";
+  if (tail){
+    var viaTail = all.filter(function(s){ return exLibFold(s.name) === tail; });
+    if (viaTail.length) return unique(viaTail);
+  }
+  var padded = " " + key + " ";
+  var inside = all.filter(function(s){ var n = exLibFold(s.name); return n.indexOf(" ") > 0 && padded.indexOf(" " + n + " ") >= 0; });
+  if (inside.length){
+    var longest = Math.max.apply(null, inside.map(function(s){ return exLibFold(s.name).length; }));
+    var top = inside.filter(function(s){ return exLibFold(s.name).length === longest; });
+    // dois alunos diferentes no mesmo título é ambíguo; só vale se os outros nomes forem parte do mais comprido ("Ana Silva" e "Ana Silva Santos")
+    if (top.length === 1 && inside.every(function(s){ return exLibFold(top[0].name).indexOf(exLibFold(s.name)) >= 0; })) return top[0];
+    return null;
+  }
+  return matchStudentByName(tail || title);
+}
+// a janela a ler: do início do pacote ainda relevante mais antigo até ao fim de hoje
+function calendarWindow(today){
+  var from = addDaysISO(today, -CAL_DEFAULT_BACK_DAYS), limit = addDaysISO(today, -CAL_MAX_BACK_DAYS);
+  studio.packs.forEach(function(p){ if (p.starts_on && p.starts_on <= today && (!p.expires_on || p.expires_on >= addDaysISO(today, -30)) && p.starts_on < from) from = p.starts_on; });
+  if (from < limit) from = limit;
+  return {from: from, to: today};
+}
+// o que há a fazer para as sessões ficarem iguais ao calendário: {insert[], update[], remove[], unmatched{titulo: n}, matched}
+function planCalendarSync(opts){
+  var today = opts.today, win = opts.window, aliases = opts.aliases || {};
+  var plan = {insert: [], update: [], remove: [], unmatched: {}, matched: 0};
+  var present = {};
+  var byExt = {};
+  studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
+  opts.events.forEach(function(ev){
+    if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
+    var st = matchEventStudent(ev.title, aliases);
+    if (!st){ plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1; return; }
+    if (!isStudentActive(st)) return;
+    plan.matched++;
+    present[ev.id] = true;
+    var status = ev.colorId === CAL_FALTA_COLOR ? "faltou" : "feita", ex = byExt[ev.id];
+    if (ex){
+      var patch = {};
+      if (ex.student_id !== st.id) patch.student_id = st.id;
+      if (ex.date !== ev.date) patch.date = ev.date;
+      if ((ex.time || null) !== (ev.time || null)) patch.time = ev.time;
+      if (ex.status !== status) patch.status = status;
+      if (Object.keys(patch).length) plan.update.push({id: ex.id, patch: patch});
+      return;
+    }
+    // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes
+    var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && (!x.time || !ev.time || x.time === ev.time); });
+    if (dup) return;
+    plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: ev.id});
+  });
+  // sessões vindas do calendário cujo evento já não existe (apagado, cancelado ou renomeado) dentro da janela lida
+  studio.sessions.forEach(function(x){
+    if (x.source === "calendario" && x.external_id && !present[x.external_id] && x.date >= win.from && x.date <= today) plan.remove.push(x.id);
+  });
+  plan.insert.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
+  return plan;
+}
+
+// ---- Google (autorização só de leitura + eventos) ----
+function loadGoogleIdentity(){
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
+  return new Promise(function(resolve, reject){
+    var sc = document.createElement("script");
+    sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
+    sc.onload = function(){ resolve(); };
+    sc.onerror = function(){ reject(new Error("Não foi possível carregar o Google — verifica a ligação.")); };
+    document.head.appendChild(sc);
+  });
+}
+function googleAccessToken(clientId){
+  return loadGoogleIdentity().then(function(){
+    return new Promise(function(resolve, reject){
+      var client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId, scope: CAL_SCOPE,
+        callback: function(resp){ if (resp && resp.access_token) resolve(resp.access_token); else reject(new Error(resp && resp.error === "access_denied" ? "Não autorizaste o acesso à agenda." : "O Google recusou a autorização" + (resp && resp.error ? " (" + resp.error + ")" : "") + ". Confirma o ID de cliente e as origens autorizadas.")); },
+        error_callback: function(err){ reject(new Error(err && err.type === "popup_closed" ? "Fechaste a janela do Google antes de autorizar." : "Não foi possível abrir a janela do Google (o browser bloqueou o pop-up?).")); }
+      });
+      client.requestAccessToken({prompt: ""});
+    });
+  });
+}
+function fetchCalendarEvents(token, calendarId, fromISO, toISO){
+  var out = [];
+  var timeMin = new Date(fromISO + "T00:00:00").toISOString(), timeMax = new Date(addDaysISO(toISO, 1) + "T00:00:00").toISOString();
+  function page(pageToken){
+    var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calendarId || "primary") + "/events?singleEvents=true&orderBy=startTime&maxResults=2500" +
+      "&timeMin=" + encodeURIComponent(timeMin) + "&timeMax=" + encodeURIComponent(timeMax) + "&fields=" + encodeURIComponent("nextPageToken,items(id,summary,start,end,colorId,status)") + (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+    return fetch(url, {headers: {Authorization: "Bearer " + token}}).then(function(res){
+      if (res.status === 401) throw new Error("A autorização expirou — tenta sincronizar outra vez.");
+      if (res.status === 403) throw new Error("O Google recusou o acesso à agenda: confirma que a Google Calendar API está ativada no teu projeto.");
+      if (res.status === 404) throw new Error("Agenda não encontrada: confirma o nome/ID da agenda (por omissão, a principal).");
+      if (!res.ok) throw new Error("O Google respondeu com o erro " + res.status + ".");
+      return res.json();
+    }).then(function(j){
+      (j.items || []).forEach(function(it){ var n = normalizeCalendarEvent(it); if (n) out.push(n); });
+      return j.nextPageToken ? page(j.nextPageToken) : out;
+    });
+  }
+  return page(null);
+}
+
+// aplica o plano: remove, atualiza e cria (os pacotes decidem-se por ordem de data, contando as que acabámos de decidir)
+function applyCalendarPlan(plan){
+  var res = {inserted: 0, updated: 0, removed: 0, errors: 0};
+  var virtual = [];
+  plan.insert.forEach(function(row){
+    var pk = pickPackForSession(row.student_id, row.date);
+    row.pack_id = pk ? pk.id : null;
+    var v = {id: "virtual-" + virtual.length, student_id: row.student_id, pack_id: row.pack_id, date: row.date, time: row.time, status: row.status};
+    virtual.push(v); studio.sessions.push(v);
+  });
+  studio.sessions = studio.sessions.filter(function(x){ return virtual.indexOf(x) < 0; });
+  var chain = Promise.resolve();
+  plan.remove.forEach(function(id){ chain = chain.then(function(){ return studioDelete("sessions", id).then(function(r){ if (r.error) res.errors++; else res.removed++; }); }); });
+  plan.update.forEach(function(u){ chain = chain.then(function(){ return studioUpdate("sessions", u.id, u.patch).then(function(r){ if (r.error) res.errors++; else res.updated++; }); }); });
+  return chain.then(function(){ return studioInsertMany("sessions", plan.insert); }).then(function(r){
+    if (r.error){
+      if (plan.insert.length > 1) return plan.insert.reduce(function(c, row){ return c.then(function(){ return studioInsert("sessions", row).then(function(x){ if (x.error) res.errors++; else res.inserted++; }); }); }, Promise.resolve());
+      res.errors += plan.insert.length;
+    } else res.inserted += r.data.length;
+  }).then(function(){ return res; });
+}
+var calSyncing = false;
+// pede autorização, lê o calendário e deixa as sessões iguais; devolve o resumo para mostrar
+function runCalendarSync(){
+  if (calSyncing) return Promise.reject(new Error("Já está a sincronizar."));
+  if (!calSettings.clientId) return Promise.reject(new Error("Falta o ID de cliente do Google."));
+  calSyncing = true;
+  var today = localTodayISO(), win = calendarWindow(today);
+  return googleAccessToken(calSettings.clientId).then(function(token){ return fetchCalendarEvents(token, calSettings.calendarId, win.from, win.to); }).then(function(events){
+    var plan = planCalendarSync({events: events, today: today, window: win, aliases: calSettings.aliases});
+    var warnings = studio.packs.filter(function(p){ return Number(p.used_before) > 0 && packUsage(p, today).active; }).map(function(p){ return nameOf(p.student_id); });
+    return applyCalendarPlan(plan).then(function(r){
+      var summary = {at: new Date().toISOString(), events: events.length, matched: plan.matched, inserted: r.inserted, updated: r.updated, removed: r.removed, errors: r.errors,
+        unmatched: Object.keys(plan.unmatched).sort(function(a, b){ return plan.unmatched[b] - plan.unmatched[a]; }).slice(0, 15).map(function(t){ return {title: t, n: plan.unmatched[t]}; }), warnUsedBefore: warnings, from: win.from};
+      calSettings.lastSync = summary;
+      return calSaveSettings().then(function(){ return summary; });
+    });
+  }).then(function(s){ calSyncing = false; return s; }, function(e){ calSyncing = false; throw e; });
+}
+function calendarCardHtml(){
+  var cs = calSettings, ls = cs.lastSync;
+  var html = "<div class=\"card\" id=\"gcalCard\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Google Agenda</div>";
+  if (!studio.slotsAvailable) return html + "<p class=\"muted-p\">Para ligar o Google Agenda falta correr a migração <strong>0024</strong> (e depois a 0025) no SQL Editor do Supabase.</p></div>";
+  if (!cs.available){ return html + "<p class=\"muted-p\">Falta correr a migração <strong>0025</strong> no SQL Editor do Supabase (<code>supabase/migrations/0025_google_calendar.sql</code>) para ligar o Google Agenda.</p></div>"; }
+  if (!cs.clientId){
+    html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Lê a tua agenda do Google e conta como sessões os eventos que têm o nome de um aluno (a cor Tomate conta como falta). Só pede permissão de <strong>leitura</strong>.</p>" +
+      "<div class=\"checkin-field\"><label for=\"gcClient\">ID de cliente do Google (OAuth)</label><input type=\"text\" id=\"gcClient\" placeholder=\"123456-abc.apps.googleusercontent.com\" autocomplete=\"off\"></div>" +
+      "<p class=\"muted-p\" id=\"gcErr\" style=\"color:var(--critical); display:none;\"></p>" +
+      "<button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSave\">Guardar</button>" +
+      "<details class=\"perfil-section\" style=\"margin-top:12px;\"><summary class=\"eyebrow\">Como obter o ID de cliente (uma vez, ~10 min)</summary><ol class=\"muted-p\" style=\"margin:8px 0 0 18px; line-height:1.5;\">" +
+      "<li>Abre <strong>console.cloud.google.com</strong> e cria um projeto (ex.: EVOLVE).</li>" +
+      "<li><strong>APIs e serviços → Biblioteca</strong>: procura <strong>Google Calendar API</strong> e ativa.</li>" +
+      "<li><strong>Ecrã de consentimento OAuth</strong>: tipo <em>Externo</em>, nome EVOLVE, o teu email; em Âmbitos acrescenta <code>calendar.readonly</code>; em Utilizadores de teste acrescenta o teu email.</li>" +
+      "<li><strong>Credenciais → Criar credenciais → ID de cliente OAuth</strong>: aplicação Web; em <em>Origens JavaScript autorizadas</em> põe <code>" + escapeHtml(typeof location !== "undefined" && location.origin && location.origin !== "null" ? location.origin : "https://tiagojvlourenco.github.io") + "</code>.</li>" +
+      "<li>Copia o ID de cliente e cola aqui. (Para não teres de voltar a autorizar de 7 em 7 dias, publica a aplicação em <em>Produção</em> no ecrã de consentimento.)</li></ol></details></div>";
+    return html;
+  }
+  html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + (cs.useAsSource ? "✓ É a fonte das sessões (o horário semanal fica em pausa)." : "Ainda não é a fonte das sessões: o horário semanal continua a contar.") + "</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSync\">⟳ Sincronizar agora</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"gcToggle\">" + (cs.useAsSource ? "Voltar ao horário semanal" : "Usar como fonte das sessões") + "</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"gcOff\">Desligar</button></div>" +
+    "<div class=\"checkin-field\" style=\"max-width:320px;\"><label for=\"gcCal\">Agenda (por omissão a principal)</label><input type=\"text\" id=\"gcCal\" value=\"" + escapeHtml(cs.calendarId) + "\" autocomplete=\"off\"></div>" +
+    "<p class=\"muted-p\" id=\"gcOut\" style=\"margin-top:8px;\">" + (ls ? calendarSummaryText(ls) : "Ainda não sincronizaste. A primeira vez pede autorização ao Google.") + "</p>";
+  if (ls && ls.unmatched && ls.unmatched.length){
+    html += "<div class=\"eyebrow\" style=\"margin:12px 0 6px;\">Eventos sem aluno</div><p class=\"muted-p\" style=\"margin-bottom:6px;\">Se algum destes é um aluno com o nome escrito de outra forma, associa-o (fica guardado para as próximas vezes).</p>" +
+      ls.unmatched.map(function(u, i){ return "<div class=\"history-row\" style=\"align-items:center; gap:6px; flex-wrap:wrap;\"><div class=\"hlabel\" style=\"flex:1 1 120px;\">" + escapeHtml(u.title) + " <span class=\"muted-p\">×" + u.n + "</span></div><select class=\"mini-select\" data-gc-alias=\"" + i + "\"><option value=\"\">Associar a…</option>" + visibleStudentsForDashboard().filter(isStudentActive).map(function(st){ return "<option value=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</option>"; }).join("") + "</select></div>"; }).join("");
+  }
+  return html + "</div>";
+}
+function calendarSummaryText(ls){
+  var days = Math.floor((Date.now() - new Date(ls.at).getTime()) / 86400000);
+  var t = "Última sincronização " + (days <= 0 ? "hoje" : "há " + days + (days === 1 ? " dia" : " dias")) + ": " + ls.events + " eventos lidos, " + ls.matched + " de alunos · " + ls.inserted + " novas, " + ls.updated + " atualizadas, " + ls.removed + " removidas" + (ls.errors ? " · ⚠ " + ls.errors + " com erro" : "") + ".";
+  if (ls.warnUsedBefore && ls.warnUsedBefore.length) t += " ⚠ Pacotes com 'aulas já dadas' maior que 0 (" + ls.warnUsedBefore.slice(0, 4).join(", ") + "): o calendário também conta essas aulas — põe 0.";
+  return t;
 }
 
 // dados de demonstração (só no modo local, sem Supabase)
@@ -13397,6 +13673,8 @@ function renderProStudioMain(){
     proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
     proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + "</div>";
 
+  html += calendarCardHtml();
+
   // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
   var sumRows = studioSummaryRows(today);
   html += "<div class=\"card\" id=\"studioSummary\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Resumo de treinos</div>";
@@ -13471,9 +13749,10 @@ function renderProStudioMain(){
     if (!sl || !status) return;
     sel.disabled = true;
     var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
-    var done = ses ? studioUpdate("sessions", ses.id, {status: status}) : (function(){ var pk = pickPackForSession(sl.student_id, studioView.date); return studioInsert("sessions", {student_id: sl.student_id, pack_id: pk ? pk.id : null, date: studioView.date, time: sl.time, status: status}); })();
+    var done = ses ? studioUpdate("sessions", ses.id, ses.source === "calendario" ? {status: status, source: "manual"} : {status: status}) : (function(){ var pk = pickPackForSession(sl.student_id, studioView.date); return studioInsert("sessions", {student_id: sl.student_id, pack_id: pk ? pk.id : null, date: studioView.date, time: sl.time, status: status}); })();
     done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
   }); });
+  wireCalendarCard(main, redraw);
   var impGo = main.querySelector("#impGo");
   if (impGo) impGo.addEventListener("click", function(){
     var out = main.querySelector("#impOut"); impGo.disabled = true; out.textContent = "A importar…";
