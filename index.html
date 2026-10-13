@@ -141,6 +141,7 @@
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
+  .preview-banner{display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; padding:9px 12px; border:1px solid var(--warn); border-radius:12px; background:var(--warn-soft); color:var(--ink); font-size:0.78rem; line-height:1.35;}
   .phone-header .greet{font-family:var(--display); font-size:1.3rem; font-weight:700;}
   .phone-header .sub{font-size:0.78rem; color:var(--muted); margin-top:2px;}
   select.student-switch{border:1px solid var(--line-strong); background:var(--surface); border-radius:9px; padding:6px 10px; font-size:0.75rem; font-weight:600;}
@@ -6871,6 +6872,10 @@ function consumedTotals(student){
   return t;
 }
 
+// o profissional vê a app como o aluno a vê, mas o que registar fica na ficha desse aluno: avisa-se (sem bloquear)
+function previewBannerHtml(s){
+  return "<div class=\"preview-banner\" id=\"previewBanner\" role=\"note\"><span aria-hidden=\"true\">👁</span><span>A ver como <strong>" + escapeHtml(s.name) + "</strong>. O que registares fica guardado na ficha de " + escapeHtml(s.name.split(" ")[0]) + ".</span></div>";
+}
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
   if (!s) return;
@@ -6883,6 +6888,7 @@ function renderAlunoShell(){
   var activeTab = state.alunoTab === "treino" ? "hoje" : state.alunoTab;
   var icon = function(paths){ return "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" + paths + "</svg>"; };
   alunoRoot.innerHTML =
+    (showSwitcher ? previewBannerHtml(s) : "") +
     "<div class=\"phone-header\">" +
       "<div><div class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</div>" + (dateLine ? "<div class=\"sub\">" + escapeHtml(dateLine) + "</div>" : "") + "</div>" +
       (showSwitcher ? "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" : "") +
