@@ -62,7 +62,7 @@ function freshStudent(overrides){
 
 // 4. A lista completa de alunos já não aparece por omissão — só dentro de state.dashboardListMode
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 1900);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 3600);
   check.check("4. A lista só é construída dentro de um if (state.dashboardListMode)", fnSrc.indexOf("if (state.dashboardListMode)") >= 0);
 })();
 
@@ -158,10 +158,10 @@ function freshStudent(overrides){
     overeatingMealsPerWeek:null, hardestFoodToResist:null, waterIntake:null
   });
   var html = tplProPerfil(s);
-  // Dados pessoais, Rotina de trabalho, Alimentação, Hidratação, Dados
+  // Dados pessoais, Contacto, Rotina de trabalho, Alimentação, Hidratação, Dados
   // médicos, Personalizar — sem "Contexto" (só aparece com weekendNote
   // real, testado a seguir).
-  check.check("13. Usa <details> para as 6 secções sem Contexto legacy", (html.match(/<details/g) || []).length === 6);
+  check.check("13. Usa <details> para as 7 secções (com Contacto) sem Contexto legacy", (html.match(/<details/g) || []).length === 7);
   check.check("13. Nenhuma secção começa aberta (Fase 11: nada à vista por omissão)", (html.match(/<details class="perfil-section" open>/g) || []) .length === 0);
   check.check("13. Mostra a data de nascimento formatada", html.indexOf(fmtDatePt("1994-03-10")) >= 0);
 })();

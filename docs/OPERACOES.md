@@ -86,9 +86,16 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - [ ] App testada num telemóvel real (não só emulação) — ecrã de login, refeição, modais, check-in.
 - [ ] `npm test` passa (ver resultado no relatório desta fase).
 
+## 8b. Migração 0022 (telefone, contactos e alunos novos)
+
+- [ ] Correr `supabase/migrations/0022_contact_and_onboarding.sql` no SQL Editor (é repetível). Sem ela a app funciona, mas o telefone e o registo de contactos não ficam guardados (a app avisa uma vez) e o painel de retenção esquece os contactos ao recarregar.
+- Depois de correr: as fichas que já existem ficam sem data de criação e **não** contam como "alunos novos"; as novas (e só elas) entram no cartão de onboarding durante 30 dias.
+
+**Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
+
 ## 9. Riscos e limitações que ficam por resolver nesta fase
 
-- **Dependência de CDN sem versão fixa**: `supabase-js@2` carrega sempre a última versão da major 2 via jsdelivr — uma alteração de comportamento nessa biblioteca pode afetar a app sem aviso. Recomenda-se fixar uma versão exata numa fase futura.
+- **Bibliotecas guardadas no site** (resolvido): o Supabase JS (`vendor/supabase.js`, versão 2.117.3) e as fontes (`fonts/`) já não vêm de CDNs. Para atualizar o Supabase JS, ver `vendor/README.md` e subir `VERSION` em `sw.js`; o service worker serve a versão guardada até a `VERSION` mudar.
 - **Sem backup automatizado fora do Supabase**: dependemos inteiramente das garantias do plano Supabase; não há uma cópia externa agendada.
 - **Sem monitorização de erros em produção**: erros no browser de um aluno real só chegam ao profissional se o aluno os reportar — não há nenhum serviço de monitorização (deliberadamente, por instrução desta fase).
 - **Teste em telemóvel físico**: a validação desta fase foi feita por emulação de viewport (375×812); recomenda-se um teste round-trip num telemóvel Android e iOS reais antes do lançamento.

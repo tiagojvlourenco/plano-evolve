@@ -150,6 +150,16 @@ function fixtureRow(id, name){
   await pp.waitForTimeout(1300);
   var pw1 = await pp.evaluate(function(b){ return window.__fake.writes.slice(b); }, wBefore);
   check.check("25. Desativar um aluno grava uma só gravação", pw1.length === 1);
+  // gravação do profissional com a ficha aberta: só a coluna do telefone
+  await pp.locator("[data-open]").first().click();
+  await pp.click('[data-sub="perfil"]');
+  await pp.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
+  var wb = await pp.evaluate(function(){ return window.__fake.writes.length; });
+  await pp.fill("#contactPhone", "912 345 678");
+  await pp.click("#saveContactPhone");
+  await pp.waitForTimeout(1300);
+  var pw2 = await pp.evaluate(function(b){ return window.__fake.writes.slice(b); }, wb);
+  check.check("25b. Guardar o telefone no perfil grava só a coluna do telefone (e nada mais da ficha)", pw2.length === 1 && pw2[0].cols.join(",") === "phone" && pw2[0].payload.phone === "912 345 678");
   await pr.ctx.close();
 
   check.check("26. Nenhum erro de JavaScript durante os testes", errors.length === 0);

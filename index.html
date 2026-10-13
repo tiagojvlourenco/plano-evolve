@@ -146,7 +146,7 @@
     }
   }
   .phone-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px;}
-  .sync-pill{position:fixed; top:calc(env(safe-area-inset-top,0px) + 6px); left:50%; transform:translateX(-50%); z-index:95; max-width:92vw; padding:5px 12px; border-radius:999px; border:1px solid var(--warn); background:var(--surface-3); color:var(--ink); font-size:0.72rem; font-weight:600; line-height:1.3; text-align:center; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.35);}
+  .sync-pill{position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 86px); left:50%; transform:translateX(-50%); z-index:95; max-width:92vw; padding:5px 12px; border-radius:999px; border:1px solid var(--warn); background:var(--surface-3); color:var(--ink); font-size:0.72rem; font-weight:600; line-height:1.3; text-align:center; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,0.35);}
   .preview-banner{display:flex; gap:8px; align-items:flex-start; margin-bottom:12px; padding:9px 12px; border:1px solid var(--warn); border-radius:12px; background:var(--warn-soft); color:var(--ink); font-size:0.78rem; line-height:1.35;}
   .phone-header .greet{font-family:var(--display); font-size:1.3rem; font-weight:700;}
   .phone-header .sub{font-size:0.78rem; color:var(--muted); margin-top:2px;}
@@ -10546,6 +10546,9 @@ function renderProDashboardMain(){
     "<button type=\"button\" class=\"btn primary\" id=\"btnInvite\" style=\"flex:1 1 150px; min-height:44px;\">+ Convidar aluno</button>" +
   "</div>";
 
+  // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
+  html += tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents);
+
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
   // (incluindo inativos, para poderes reativar alguém); cada linha tem o interruptor ativo/inativo.
@@ -10587,11 +10590,21 @@ function renderProDashboardMain(){
   main.querySelectorAll("[data-open]").forEach(function(el){
     el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   });
+  main.querySelectorAll("[data-contact]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var st = findStudent(btn.getAttribute("data-contact"));
+      if (st) openContactModal(st, btn.getAttribute("data-reason"), function(){ renderProDashboardMain(); });
+    });
+  });
+  main.querySelectorAll("[data-open-student]").forEach(function(btn){
+    btn.addEventListener("click", function(){ state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+  });
   main.querySelectorAll("[data-active-toggle]").forEach(function(input){
     input.addEventListener("click", function(e){ e.stopPropagation(); });
     input.addEventListener("change", function(){
       var s = findStudent(input.getAttribute("data-active-toggle"));
       if (!s) return;
+      ensureSyncBaseline(s); // antes de alterar: só se grava a coluna "active"
       s.active = input.checked;
       persistStudent(s);
       renderProDashboardMain();
@@ -10652,6 +10665,7 @@ function openOnboardingForm(){
     "<div class=\"onb-section-title\">Informações pessoais</div>" +
     "<div class=\"onb-field\"><label>Nome completo</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
     "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
+    "<div class=\"onb-field\"><label>Telefone / WhatsApp (opcional)</label><input type=\"tel\" id=\"obPhone\" placeholder=\"912 345 678\" autocomplete=\"off\"></div>" +
     "<p class=\"muted-p\" id=\"obError\" style=\"color:var(--critical); display:none; margin:-6px 0 10px;\"></p>" +
     "<div class=\"onb-field\"><label>Género</label><select id=\"obSex\"><option>Masculino</option><option>Feminino</option><option>Outro</option><option>Prefiro não dizer</option></select></div>" +
     "<div class=\"onb-row\">" +
@@ -10840,7 +10854,9 @@ function openOnboardingForm(){
       planHistory:[],
       lastCheckinDaysAgo:0,
       fromOnboarding:true,
-      inviteEmail: inviteEmail || null
+      inviteEmail: inviteEmail || null,
+      phone: normalizePhone(sheet.querySelector("#obPhone").value).ok ? sheet.querySelector("#obPhone").value.trim().slice(0, 30) : null,
+      createdAt: new Date().toISOString()
     };
 
     STUDENTS.push(newStudent);
@@ -10982,6 +10998,15 @@ function tplProPerfil(s){
     "</select></div>" +
   "<p class=\"muted-p\" style=\"margin-top:6px;\">Usado para calcular a manutenção (separador Nutrição) e sugerir alvos — mais preciso do que só o nº de treinos.</p>" +
   "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveActivityLevel\" style=\"margin-top:8px;\">Guardar nível de atividade</button>");
+
+  html += perfilSection("Contacto", false,
+    "<div class=\"field-row\">" + fRow("Email do convite", s.inviteEmail ? escapeHtml(s.inviteEmail) : "—") + "</div>" +
+    "<div class=\"checkin-field\" style=\"margin-top:10px; max-width:260px;\"><label for=\"contactPhone\">Telefone / WhatsApp</label>" +
+      "<input type=\"tel\" id=\"contactPhone\" value=\"" + escapeHtml(s.phone || "") + "\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
+    "<p class=\"muted-p\" id=\"contactPhoneErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveContactPhone\" style=\"margin-top:8px;\">Guardar telefone</button>" +
+    (contactEntries(s, "contacto").length ? "<div class=\"eyebrow\" style=\"margin:16px 0 6px;\">Últimos contactos</div>" + contactEntries(s, "contacto").slice(-5).reverse().map(function(e){
+      return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(e.date)) + " · " + escapeHtml(CONTACT_CHANNEL_LABELS[e.channel] || "Contacto") + "</div><div class=\"muted-p\">" + escapeHtml((CONTACT_REASONS[e.reason] || CONTACT_REASONS.generico).label) + "</div></div>"; }).join("") : ""));
 
   html += perfilSection("Dados médicos", false,
     "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
@@ -12474,6 +12499,274 @@ function coachBadgesHtml(badges){
   return (badges || []).map(function(b){ return "<span class=\"pill " + b.tone + "\" title=\"" + escapeHtml(b.hint) + "\">" + escapeHtml(b.label) + "</span>"; }).join("");
 }
 
+/* ---------- Retenção: quem contactar hoje, onboarding de alunos novos e pulso do estúdio ----------
+   Tudo calculado no telemóvel/computador a partir dos dados que a app já tem (registos, check-ins, treinos, pedidos de ajuda).
+   O telefone e o registo de contactos (migração 0022) servem para não contactar duas vezes a mesma pessoa e para abrir o WhatsApp
+   com a mensagem já escrita — a app nunca envia mensagens sozinha. */
+var CONTACT_RECENT_DAYS = 3;       // quem foi contactado há menos disto não volta à lista
+var CONTACT_SNOOZE_DAYS = 7;
+var CONTACT_QUEUE_MAX = 8;
+var CONTACT_LOG_MAX = 50;
+var ONBOARDING_WINDOW_DAYS = 30;   // um aluno é "novo" durante este tempo
+var ONBOARDING_STALL_DAYS = 7;     // sem nenhum registo passado este tempo = onboarding parado
+var PLAN_OLD_DAYS = 42;
+var CHECKIN_LATE_DAYS = 10;
+
+var CONTACT_REASONS = {
+  "pedido-ajuda": {label: "Pedido de ajuda por tratar", template: "Olá {nome}! Recebi o teu pedido na app e já estou a tratar disso. Respondo-te ainda hoje."},
+  "onboarding": {label: "Onboarding parado", template: "Olá {nome}! Bem-vindo(a) à EVOLVE! Já conseguiste abrir a app e ver o teu plano? Se tiveres alguma dúvida nesta primeira semana, diz-me — estou aqui para ajudar."},
+  "sem-registos": {label: "Sem registos", template: "Olá {nome}! Reparei que há uns dias não registas nada na app. Está tudo bem? Se precisares de ajustar o plano ou de ajuda para retomar, diz-me."},
+  "adesao-a-cair": {label: "Adesão a cair", template: "Olá {nome}! Vi que as últimas semanas têm sido mais difíceis de cumprir. Queres que ajustemos alguma coisa para ficar mais fácil de manter?"},
+  "sem-checkin": {label: "Check-in em atraso", template: "Olá {nome}! Falta o check-in desta semana na app — demora 1 minuto e ajuda-me a ajustar o teu plano à tua semana."},
+  "estagnado": {label: "Peso estagnado", template: "Olá {nome}! O peso está parado há algumas semanas. Vamos rever o plano juntos? Diz-me quando te dá jeito falar."},
+  "plano-antigo": {label: "Plano sem ajustes há semanas", template: "Olá {nome}! Já passaram algumas semanas desde o último ajuste do teu plano. Queres marcar uma revisão rápida?"},
+  "aniversario": {label: "Faz anos hoje", template: "Parabéns, {nome}! 🎉 Que este novo ano venha cheio de saúde e energia. Um abraço da equipa EVOLVE!"},
+  "boa-noticia": {label: "Boa notícia para partilhar", template: "Olá {nome}! Só para te dizer que estás a fazer um excelente trabalho — os teus registos mostram uma evolução muito boa. Continua assim! 💪"},
+  "generico": {label: "Contacto", template: "Olá {nome}! Como estás a correr a semana? Diz-me se precisas de alguma coisa."}
+};
+
+function studentFirstName(s){ return String(s && s.name || "").trim().split(/\s+/)[0] || ""; }
+// 9 dígitos portugueses (fixo 2xx ou móvel 9xx) ganham o indicativo 351; com + ou 00 mantém-se o país indicado
+function normalizePhone(raw){
+  var t = String(raw == null ? "" : raw).trim();
+  if (!t) return {ok: false, digits: ""};
+  var plus = /^\+/.test(t) || /^00/.test(t);
+  var d = t.replace(/\D/g, "");
+  if (/^00/.test(t)) d = d.replace(/^00/, "");
+  if (!plus && /^[29]\d{8}$/.test(d)) d = "351" + d;
+  return {ok: d.length >= 9 && d.length <= 15, digits: d};
+}
+function whatsappUrl(phone, text){
+  var n = normalizePhone(phone);
+  return n.ok ? "https://wa.me/" + n.digits + (text ? "?text=" + encodeURIComponent(text) : "") : "";
+}
+function contactMessageFor(reasonKey, s){
+  var r = CONTACT_REASONS[reasonKey] || CONTACT_REASONS.generico;
+  return r.template.replace(/\{nome\}/g, studentFirstName(s));
+}
+
+function contactEntries(s, kind){ return (Array.isArray(s.contactLog) ? s.contactLog : []).filter(function(e){ return e && e.kind === kind && isIsoDate(e.date); }); }
+function lastContactOf(s){
+  var list = contactEntries(s, "contacto").sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var e = list[list.length - 1];
+  return e ? {date: e.date, daysAgo: daysSinceDate(e.date), channel: e.channel || "", reason: e.reason || ""} : null;
+}
+function isSnoozed(s, today){
+  return contactEntries(s, "adiado").some(function(e){ return isIsoDate(e.until) && e.until >= today; });
+}
+function addDaysISO(iso, n){ var d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function contactLogAdd(s, entry){
+  ensureSyncBaseline(s); // antes de alterar, para só se gravar a coluna do registo de contactos
+  var log = (Array.isArray(s.contactLog) ? s.contactLog : []).concat([Object.assign({date: todayISO()}, entry)]);
+  s.contactLog = log.slice(-CONTACT_LOG_MAX);
+  persistStudent(s);
+}
+
+// Onboarding: o que falta fazer a um aluno novo (só alunos com data de criação conhecida, nos primeiros 30 dias)
+function onboardingOf(s){
+  var hasProgram = trainingProgramOf(s).days.some(function(d){ return d.exercises.length > 0; });
+  var steps = [
+    {key: "plano", label: "Plano de alimentação", done: (s.meals || []).length > 0},
+    {key: "treino", label: "Programa de treino", done: hasProgram},
+    {key: "convite", label: "Conta criada pelo aluno", done: !!s.authUserId, na: !s.inviteEmail},
+    {key: "pesagem", label: "Primeira pesagem", done: (s.weights || []).length > 0},
+    {key: "checkin", label: "Primeiro check-in", done: (s.checkins || []).length > 0},
+    {key: "sessao", label: "Primeira sessão de treino", done: (s.workoutLogs || []).length > 0, na: !hasProgram},
+    {key: "fotos", label: "Fotos iniciais", done: (s.photos || []).length > 0, na: !s.allowPhotos}
+  ];
+  var counted = steps.filter(function(x){ return !x.na; });
+  var done = counted.filter(function(x){ return x.done; }).length;
+  var created = s.createdAt ? String(s.createdAt).slice(0, 10) : null;
+  var days = isIsoDate(created) ? daysSinceDate(created) : null;
+  var complete = done === counted.length;
+  var inOnboarding = days != null && days <= ONBOARDING_WINDOW_DAYS && !complete;
+  var records = (s.checkins || []).length + (s.workoutLogs || []).length;
+  return {steps: steps, done: done, total: counted.length, complete: complete, daysSince: days, inOnboarding: inOnboarding,
+    stalled: inOnboarding && days >= ONBOARDING_STALL_DAYS && records === 0};
+}
+
+function isBirthdayToday(s, today){
+  return isIsoDate(s.birthDate) && s.birthDate.slice(5) === today.slice(5);
+}
+function lastPlanChangeDays(s){
+  var dates = (s.planHistory || []).map(function(h){ return h && h.date; }).filter(isIsoDate).sort();
+  return dates.length ? daysSinceDate(dates[dates.length - 1]) : null;
+}
+// Motivos para contactar um aluno, do mais urgente para o menos urgente: [{key, label, weight, hint}]
+function contactReasonsFor(s, today){
+  var out = [], badges = computeCoachBadges(s), by = {};
+  badges.forEach(function(b){ by[b.key] = b; });
+  var ob = onboardingOf(s), idle = daysSinceLastRecord(s);
+  var help = pendingHelpFor(s.id);
+  if (help) out.push({key: "pedido-ajuda", label: help === 1 ? "1 pedido de ajuda por tratar" : help + " pedidos de ajuda por tratar", weight: 100, hint: "O aluno pediu ajuda na app."});
+  if (ob.stalled) out.push({key: "onboarding", label: "Sem nenhum registo há " + ob.daysSince + " dias (aluno novo)", weight: 85, hint: "Ainda não fez nenhum check-in nem treino."});
+  if (by["sem-registos"] && !ob.inOnboarding){
+    var crit = by["sem-registos"].tone === "critical" || idle == null;
+    out.push({key: "sem-registos", label: idle == null ? "Nunca registou nada" : "Sem registos há " + idle + " dias", weight: crit ? 90 : 55, hint: by["sem-registos"].hint});
+  }
+  if (by["adesao-a-cair"]) out.push({key: "adesao-a-cair", label: "Adesão a cair", weight: 50, hint: by["adesao-a-cair"].hint});
+  var late = computeLastCheckinDaysAgo(s);
+  if (late !== 999 && late >= CHECKIN_LATE_DAYS && !by["sem-registos"]) out.push({key: "sem-checkin", label: "Check-in há " + late + " dias", weight: 35, hint: "Último check-in há " + late + " dias."});
+  if (by["estagnado"] || by["estagnado-a-treinar"]) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
+  var planDays = lastPlanChangeDays(s);
+  if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
+  if (isBirthdayToday(s, today)) out.push({key: "aniversario", label: "Faz anos hoje", weight: 25, hint: "Um parabéns fortalece a relação."});
+  if (by["sobrecarga"] || by["alta-adesao"]) out.push({key: "boa-noticia", label: by["sobrecarga"] ? "Pronto para subir carga" : "Adesão muito boa", weight: 15, hint: "Uma mensagem positiva também retém alunos."});
+  return out.sort(function(a, b){ return b.weight - a.weight; });
+}
+
+// A lista "quem contactar hoje": exclui inativos, quem foi contactado há pouco e quem foi adiado
+function computeContactQueue(students, today){
+  today = today || todayISO();
+  var items = [], recent = 0, snoozed = 0;
+  students.forEach(function(s){
+    if (!isStudentActive(s)) return;
+    var reasons = contactReasonsFor(s, today);
+    if (!reasons.length) return;
+    if (isSnoozed(s, today)){ snoozed++; return; }
+    var last = lastContactOf(s);
+    var urgent = reasons[0].weight >= 100;
+    if (last && last.daysAgo != null && last.daysAgo < CONTACT_RECENT_DAYS && !urgent){ recent++; return; }
+    var idle = daysSinceLastRecord(s);
+    items.push({s: s, reasons: reasons, score: reasons[0].weight + Math.min(10, (reasons.length - 1) * 3), idle: idle == null ? 999 : idle, last: last});
+  });
+  // empate: quem está há mais tempo sem registar primeiro
+  items.sort(function(a, b){ return b.score - a.score || b.idle - a.idle || String(a.s.name).localeCompare(String(b.s.name), "pt"); });
+  return {items: items, shown: items.slice(0, CONTACT_QUEUE_MAX), more: Math.max(0, items.length - CONTACT_QUEUE_MAX), recent: recent, snoozed: snoozed};
+}
+
+// Pulso do estúdio: poucos números que dizem se a retenção está saudável
+function studioPulse(students, today){
+  today = today || todayISO();
+  var active = students.filter(isStudentActive);
+  var withRecords = 0, atRisk = 0, adh = [], sessions = 0, newcomers = 0, activated = 0;
+  active.forEach(function(s){
+    var idle = daysSinceLastRecord(s);
+    if (idle != null && idle <= 7) withRecords++;
+    var reasons = contactReasonsFor(s, today);
+    if (reasons.some(function(r){ return r.key === "onboarding" || r.key === "adesao-a-cair" || (r.key === "sem-registos" && r.weight >= 55); })) atRisk++;
+    var a = avgAdherence((s.checkins || []).slice(-3));
+    if (a != null) adh.push(a);
+    sessions += sessionsInLastDays(s, 7).length;
+    var ob = onboardingOf(s);
+    if (ob.daysSince != null && ob.daysSince <= ONBOARDING_WINDOW_DAYS){
+      newcomers++;
+      var firstLog = (s.workoutLogs || []).map(function(l){ return l.date; }).filter(isIsoDate).sort()[0];
+      var created = String(s.createdAt).slice(0, 10);
+      if (firstLog && Math.round((new Date(firstLog + "T00:00:00Z") - new Date(created + "T00:00:00Z")) / 86400000) <= 7) activated++;
+    }
+  });
+  return {
+    active: active.length,
+    recordsPct: active.length ? Math.round(withRecords / active.length * 100) : null,
+    atRisk: atRisk,
+    adherence: adh.length ? Math.round(adh.reduce(function(x, y){ return x + y; }, 0) / adh.length * 10) / 10 : null,
+    sessions7d: sessions,
+    newcomers: newcomers, activated: activated
+  };
+}
+
+var CONTACT_CHANNEL_LABELS = {whatsapp: "WhatsApp", telefone: "Telefone", presencial: "Presencial", outro: "Outro"};
+function tplContactQueue(students){
+  var q = computeContactQueue(students);
+  var html = "<div class=\"card contact-queue\" id=\"contactQueue\"><div class=\"eyebrow\" style=\"margin-bottom:4px;\">Hoje: quem contactar</div>";
+  if (!q.shown.length){
+    html += "<p class=\"muted-p\">✓ Ninguém precisa de contacto hoje.</p>";
+  } else {
+    html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + plural(q.items.length, "aluno a precisar", "alunos a precisar") + " de uma mensagem, do mais urgente para o menos urgente.</p>";
+    q.shown.forEach(function(it){
+      var top = it.reasons[0];
+      html += "<div class=\"history-row contact-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
+        "<div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(it.s.id) + "\">" + escapeHtml(it.s.name) + "</button></div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + escapeHtml(top.label) + (it.reasons.length > 1 ? " · +" + (it.reasons.length - 1) : "") +
+        (it.last ? " · contactado há " + (it.last.daysAgo === 0 ? "0 dias" : it.last.daysAgo + (it.last.daysAgo === 1 ? " dia" : " dias")) : "") + "</div></div>" +
+        "<button type=\"button\" class=\"btn btn-sm primary\" data-contact=\"" + escapeHtml(it.s.id) + "\" data-reason=\"" + escapeHtml(top.key) + "\">Contactar</button></div>";
+    });
+    if (q.more) html += "<p class=\"muted-p\" style=\"margin-top:8px;\">+ " + plural(q.more, "aluno", "alunos") + " na lista de alertas abaixo.</p>";
+  }
+  var notes = [];
+  if (q.recent) notes.push(plural(q.recent, "contactado", "contactados") + " nos últimos " + CONTACT_RECENT_DAYS + " dias");
+  if (q.snoozed) notes.push(plural(q.snoozed, "adiado", "adiados"));
+  if (notes.length) html += "<p class=\"muted-p\" style=\"margin-top:8px; font-size:0.74rem;\">Fora da lista: " + notes.join(" · ") + ".</p>";
+  return html + "</div>";
+}
+function tplOnboardingCard(students){
+  var rows = students.filter(isStudentActive).map(function(s){ return {s: s, ob: onboardingOf(s)}; }).filter(function(r){ return r.ob.inOnboarding; })
+    .sort(function(a, b){ return (b.ob.stalled - a.ob.stalled) || (a.ob.done / a.ob.total) - (b.ob.done / b.ob.total); });
+  if (!rows.length) return "";
+  var html = "<div class=\"card\" id=\"onboardingCard\"><div class=\"eyebrow\" style=\"margin-bottom:4px;\">Alunos novos (primeiros " + ONBOARDING_WINDOW_DAYS + " dias)</div>";
+  rows.forEach(function(r){
+    var missing = r.ob.steps.filter(function(x){ return !x.na && !x.done; }).slice(0, 3).map(function(x){ return x.label; });
+    html += "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
+      "<div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.s.id) + "\">" + escapeHtml(r.s.name) + "</button>" +
+      (r.ob.stalled ? " <span class=\"pill critical\">parado</span>" : "") + "</div>" +
+      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Há " + r.ob.daysSince + (r.ob.daysSince === 1 ? " dia" : " dias") + " · falta: " + escapeHtml(missing.join(", ")) + "</div>" +
+      "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + Math.round(r.ob.done / r.ob.total * 100) + "%\"></div></div></div>" +
+      "<div class=\"hval\">" + r.ob.done + "/" + r.ob.total + "</div></div>";
+  });
+  return html + "</div>";
+}
+function tplStudioPulse(students){
+  var p = studioPulse(students);
+  if (!p.active) return "";
+  function kpi(label, value, hint){ return "<div class=\"pulse-kpi\" title=\"" + escapeHtml(hint) + "\"><div class=\"num\" style=\"font-size:1.25rem; font-weight:700;\">" + value + "</div><div class=\"muted-p\" style=\"font-size:0.72rem;\">" + label + "</div></div>"; }
+  return "<details class=\"perfil-section\" id=\"studioPulse\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Pulso do estúdio</summary>" +
+    "<div class=\"pulse-grid\" style=\"display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-top:12px;\">" +
+      kpi("com registos (7 dias)", p.recordsPct == null ? "—" : p.recordsPct + "%", "Alunos ativos com algum registo (peso, check-in ou treino) nos últimos 7 dias.") +
+      kpi("em risco", String(p.atRisk), "Sem registos há mais de uma semana, adesão a cair ou onboarding parado.") +
+      kpi("adesão média", p.adherence == null ? "—" : String(p.adherence).replace(".", ",") + "/10", "Média da adesão dos 3 últimos check-ins de cada aluno.") +
+      kpi("sessões (7 dias)", String(p.sessions7d), "Treinos registados pelos alunos na última semana.") +
+      (p.newcomers ? kpi("alunos novos ativados", p.activated + "/" + p.newcomers, "Alunos dos últimos 30 dias que fizeram o 1.º treino na primeira semana.") : "") +
+    "</div></details>";
+}
+
+function openContactModal(s, reasonKey, onDone){
+  var reasons = contactReasonsFor(s, todayISO());
+  var reason = CONTACT_REASONS[reasonKey] ? reasonKey : "generico";
+  var label = (reasons.filter(function(r){ return r.key === reason; })[0] || {label: CONTACT_REASONS[reason].label}).label;
+  var hasPhone = normalizePhone(s.phone).ok;
+  var sheet = openModal("<div class=\"mtitle\">Contactar " + escapeHtml(s.name) + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(label) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s)) + "</textarea></div>" +
+    (hasPhone ? "<a class=\"btn primary\" id=\"ctWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none; margin-bottom:8px;\">Abrir no WhatsApp</a>"
+      : "<div class=\"checkin-field\"><label for=\"ctPhone\">Sem telefone na ficha — acrescenta para abrir o WhatsApp</label><input type=\"tel\" id=\"ctPhone\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
+        "<button type=\"button\" class=\"btn btn-sm\" id=\"ctSavePhone\" style=\"margin-bottom:8px;\">Guardar telefone</button>") +
+    "<p class=\"muted-p\" id=\"ctErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<div class=\"checkin-field\"><label for=\"ctChannel\">Já contactei por</label><select id=\"ctChannel\" class=\"mini-select\" style=\"width:100%;\">" +
+      Object.keys(CONTACT_CHANNEL_LABELS).map(function(k){ return "<option value=\"" + k + "\">" + CONTACT_CHANNEL_LABELS[k] + "</option>"; }).join("") + "</select></div>" +
+    "<button type=\"button\" class=\"btn\" id=\"ctDone\" style=\"width:100%; margin-bottom:8px;\">✓ Marcar como contactado</button>" +
+    "<button type=\"button\" class=\"btn\" id=\"ctSnooze\" style=\"width:100%;\">Adiar " + CONTACT_SNOOZE_DAYS + " dias</button>");
+  var msg = sheet.querySelector("#ctMsg");
+  function finish(text){ closeModal(); showToast(text); if (onDone) onDone(); }
+  var wa = sheet.querySelector("#ctWa");
+  if (wa){
+    var sync = function(){ wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); };
+    sync(); msg.addEventListener("input", sync);
+    wa.addEventListener("click", function(){
+      sync();
+      contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: reason});
+      setTimeout(function(){ finish("✓ Contacto registado"); }, 300);
+    });
+  }
+  var savePhone = sheet.querySelector("#ctSavePhone");
+  if (savePhone) savePhone.addEventListener("click", function(){
+    var raw = sheet.querySelector("#ctPhone").value, n = normalizePhone(raw), err = sheet.querySelector("#ctErr");
+    if (!n.ok){ err.textContent = "Número inválido: indica 9 dígitos (ex.: 912 345 678) ou com indicativo (+351…)."; err.style.display = "block"; return; }
+    ensureSyncBaseline(s);
+    s.phone = raw.trim().slice(0, 30); persistStudent(s);
+    closeModal(); openContactModal(s, reasonKey, onDone);
+  });
+  sheet.querySelector("#ctDone").addEventListener("click", function(){
+    contactLogAdd(s, {kind: "contacto", channel: sheet.querySelector("#ctChannel").value, reason: reason});
+    finish("✓ Contacto registado");
+  });
+  sheet.querySelector("#ctSnooze").addEventListener("click", function(){
+    contactLogAdd(s, {kind: "adiado", reason: reason, until: addDaysISO(todayISO(), CONTACT_SNOOZE_DAYS)});
+    finish("Adiado " + CONTACT_SNOOZE_DAYS + " dias");
+  });
+}
+
+
 function signalPillClass(sig){
   if (sig.status === "atencao") return sig.severity === "high" ? "critical" : "warn";
   if (sig.status === "positivo") return "good";
@@ -13150,6 +13443,16 @@ function wireProTab(s){
     persistStudent(s);
     showToast("Nível de atividade guardado");
     setTimeout(function(){ saveAL.textContent = "Guardar nível de atividade"; }, 1400);
+  });
+
+  var savePh = el.querySelector("#saveContactPhone");
+  if (savePh) savePh.addEventListener("click", function(){
+    var raw = el.querySelector("#contactPhone").value.trim(), err = el.querySelector("#contactPhoneErr");
+    if (raw && !normalizePhone(raw).ok){ err.textContent = "Número inválido: indica 9 dígitos (ex.: 912 345 678) ou com indicativo (+351…)."; err.style.display = "block"; return; }
+    err.style.display = "none";
+    s.phone = raw ? raw.slice(0, 30) : null;
+    persistStudent(s);
+    showToast("Telefone guardado");
   });
 
   var saveMed = el.querySelector("#saveMedical");
