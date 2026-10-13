@@ -27,31 +27,46 @@ self.addEventListener("activate", function(event){
   }).then(function(){ return self.clients.claim(); }));
 });
 
-function networkFirst(request){
+// só se guarda como "a página" uma resposta boa, em HTML e da app (um portal de Wi-Fi ou uma página de erro nunca substituem a cópia boa)
+function isAppPage(res, text){ return res && res.ok && /text\/html/i.test(res.headers.get("Content-Type") || "") && text.indexOf('id="alunoApp"') >= 0; }
+
+function networkFirst(event){
+  var request = event.request;
   return new Promise(function(resolve){
     var settled = false;
-    var timer = setTimeout(function(){
-      // rede lenta: se há cópia guardada usa-a já (a rede continua a tentar e atualiza a cópia)
-      caches.match("index.html").then(function(hit){ if (hit && !settled){ settled = true; resolve(hit); } });
-    }, NAV_TIMEOUT_MS);
+    function fallback(){
+      return caches.match("index.html").then(function(hit){
+        if (hit && !settled){ settled = true; resolve(hit); }
+        return !!hit;
+      });
+    }
+    var timer = setTimeout(fallback, NAV_TIMEOUT_MS); // rede lenta: usa já a cópia guardada, se existir
     fetch(request, {cache: "no-cache"}).then(function(res){
       clearTimeout(timer);
-      if (res && res.ok){ var copy = res.clone(); caches.open(VERSION).then(function(c){ c.put("index.html", copy); }); }
-      if (!settled){ settled = true; resolve(res); }
+      if (settled) return;
+      if (!res || res.status >= 500){ // servidor com problemas: a cópia boa vale mais
+        return fallback().then(function(had){ if (!had && !settled){ settled = true; resolve(res); } });
+      }
+      var copy = res.clone();
+      event.waitUntil(copy.text().then(function(text){
+        if (isAppPage(res, text)) return caches.open(VERSION).then(function(c){ return c.put("index.html", new Response(text, {headers: copy.headers})); });
+      }).catch(function(){}));
+      settled = true; resolve(res);
     }).catch(function(){
       clearTimeout(timer);
-      caches.match("index.html").then(function(hit){
-        if (!settled){ settled = true; resolve(hit || new Response("Sem ligação e sem cópia guardada. Abre a app uma vez com internet.", {status: 503, headers: {"Content-Type": "text/plain; charset=utf-8"}})); }
+      fallback().then(function(had){
+        if (!had && !settled){ settled = true; resolve(new Response("Sem ligação e sem cópia guardada. Abre a app uma vez com internet.", {status: 503, headers: {"Content-Type": "text/plain; charset=utf-8"}})); }
       });
     });
   });
 }
 
-function cacheFirst(request){
+function cacheFirst(event){
+  var request = event.request;
   return caches.match(request).then(function(hit){
     if (hit) return hit;
     return fetch(request).then(function(res){
-      if (res && res.ok){ var copy = res.clone(); caches.open(VERSION).then(function(c){ c.put(request, copy); }); }
+      if (res && res.ok){ var copy = res.clone(); event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, copy); }).catch(function(){})); }
       return res;
     });
   });
@@ -64,6 +79,6 @@ self.addEventListener("fetch", function(event){
   // as animações dos exercícios são servidas pelo mesmo site mas com endereço absoluto (EXERCISE_MEDIA_BASE)
   var sameSite = url.origin === self.location.origin;
   if (!sameSite) return;
-  if (req.mode === "navigate"){ event.respondWith(networkFirst(req)); return; }
-  event.respondWith(cacheFirst(req).catch(function(){ return Response.error(); }));
+  if (req.mode === "navigate"){ event.respondWith(networkFirst(event)); return; }
+  event.respondWith(cacheFirst(event).catch(function(){ return Response.error(); }));
 });

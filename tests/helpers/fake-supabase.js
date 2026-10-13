@@ -45,13 +45,15 @@ module.exports = function fakeSupabaseSource(initial){
       if (t === "students"){
         if (this.op === "select"){
           F.selects.push("students");
+          var eqId = (this.filters.filter(function(f){ return f[0] === "id"; })[0] || [])[1];
+          if (eqId !== undefined){ var one = F.rows.filter(function(r){ return r.id === eqId; })[0]; return {data: one ? clone(one) : null, error: null, status: 200}; }
           return {data: clone(F.rows), error: null, status: 200};
         }
         var id = (this.filters.filter(function(f){ return f[0] === "id"; })[0] || [])[1];
         if (this.op === "update"){
           var row = F.rows.filter(function(r){ return r.id === id; })[0];
           F.writes.push({table: t, op: "update", id: id, cols: Object.keys(this.payload), payload: clone(this.payload)});
-          if (!row) return {data: null, error: null, status: 200};
+          if (!row) return {data: [], error: null, status: 200};
           var bad = null;
           if (F.role !== "professional"){
             Object.keys(this.payload).forEach(function(k){
@@ -60,7 +62,7 @@ module.exports = function fakeSupabaseSource(initial){
           }
           if (bad) return {data: null, error: {message: "Só o profissional pode alterar estes dados do plano.", code: "P0001"}, status: 400};
           Object.keys(this.payload).forEach(function(k){ row[k] = clone(this.payload[k]); }, this);
-          return {data: null, error: null, status: 204};
+          return {data: [{id: id}], error: null, status: 200};
         }
         if (this.op === "insert"){ F.rows.push(clone(this.payload)); F.writes.push({table: t, op: "insert", id: this.payload.id, cols: Object.keys(this.payload)}); return {data: null, error: null, status: 201}; }
       }

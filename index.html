@@ -6028,7 +6028,9 @@ function outboxRead(){
   try { var v = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "{}"); outboxMem = v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { outboxMem = {}; }
   return outboxMem;
 }
-function outboxWrite(){ try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(outboxMem || {})); } catch (e) {} }
+var outboxStorageOk = true; // falso se o telemóvel não deixou guardar a fila (sem espaço / modo privado): as alterações só existem em memória
+function outboxWrite(){ try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(outboxMem || {})); outboxStorageOk = true; } catch (e) { outboxStorageOk = false; } return outboxStorageOk; }
+function cloneJson(v){ return JSON.parse(jsonOf(v)); } // cópia independente: a ficha continua a mudar enquanto o pedido segue
 function outboxCount(){ return Object.keys(outboxRead()).length; }
 function outboxAdd(id, patch, full){
   var ob = outboxRead(), cur = ob[id] || {cols: {}, full: false};
@@ -6079,7 +6081,7 @@ function syncPillUpdate(){
   var n = outboxCount() + Object.keys(persistStudents).filter(function(id){ return !outboxRead()[id]; }).length;
   var offline = typeof navigator !== "undefined" && navigator.onLine === false;
   var text = "";
-  if (offline) text = "Sem ligação" + (n ? " · " + n + (n === 1 ? " alteração guardada" : " alterações guardadas") + " neste telemóvel" : "");
+  if (offline) text = "Sem ligação" + (n ? (outboxStorageOk ? " · " + n + (n === 1 ? " alteração guardada" : " alterações guardadas") + " neste telemóvel" : " · não feches a app: as alterações ainda não estão guardadas") : "");
   else if (n) text = outboxFlushPromise ? "A enviar…" : "⏳ " + n + (n === 1 ? " alteração por enviar" : " alterações por enviar");
   el.textContent = text;
   el.classList.toggle("hidden", !text || !sbReady);
@@ -6111,6 +6113,8 @@ function persistPrepare(id){
     if (!(k in patch) && k in row && jsonOf(row[k]) !== jsonOf(pending.cols[k])) patch[k] = row[k];
   });
   if (!Object.keys(patch).length) return;
+  // a ficha é alterada no sítio (marcar outra refeição, registar outro treino): a fila guarda cópias, nunca referências vivas
+  Object.keys(patch).forEach(function(k){ patch[k] = cloneJson(patch[k]); });
   outboxAdd(id, patch, !s._sync);
   snapshotApplyPatch(id, patch);
 }
@@ -6119,6 +6123,7 @@ function persistPrepareAll(){ Object.keys(persistStudents).forEach(persistPrepar
 // devolve "queued" se já se sabe que não há rede (a alteração fica guardada no telemóvel), "sent" caso contrário
 function persistStudent(s){
   if (!sbReady) return "local";
+  lastLocalWriteAt = Date.now();
   persistStudents[s.id] = s;
   clearTimeout(persistTimers[s.id]);
   persistTimers[s.id] = setTimeout(function(){ persistPrepare(s.id); outboxFlush(); }, PERSIST_DEBOUNCE_MS);
@@ -6139,35 +6144,102 @@ function outboxAcked(id, cols){
   outboxWrite();
 }
 
-// envia a fila de um aluno; resolve com true se ficou tudo enviado ou descartado e false se foi só um problema de ligação
-function outboxSendOne(id){
+// depois de a ficha mudar por causa do servidor, o ecrã atual mostra a versão certa (sem tocar numa janela aberta)
+function redrawAfterSync(){
+  try {
+    if (modalRoot && modalRoot.firstChild) return;
+    if (state.mode === "aluno") renderAlunoShell();
+    else if (authRole === "professional") renderProShell();
+  } catch (e) {}
+}
+// repõe a ficha com a versão do servidor (no próprio objeto, para o resto da app continuar a vê-la)
+function reconcileStudentFromServer(id){
+  return Promise.resolve(sb.from("students").select("*").eq("id", id).maybeSingle()).then(function(res){
+    var row = res && res.data;
+    var s = findStudent(id);
+    if (!row || !s) return false;
+    Object.assign(s, rowToStudent(row));
+    setSyncBaseline(s, rowBaseline(studentToRow(s)));
+    snapshotApplyPatch(id, row);
+    redrawAfterSync();
+    return true;
+  }, function(){ return false; });
+}
+// treinos recusados porque outro aparelho já acrescentou sessões: junta por id (as do servidor primeiro) e reenvia
+function mergeWorkoutLogsAndResend(id){
   var entry = outboxRead()[id];
-  if (!entry) return Promise.resolve(true);
-  var cols = Object.assign({}, entry.cols);
-  if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
-  if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
-  if (!Object.keys(cols).length){ delete outboxRead()[id]; outboxWrite(); return Promise.resolve(true); }
-  return Promise.resolve(sb.from("students").update(cols).eq("id", id)).then(function(res){
+  var local = entry && entry.cols.workout_logs;
+  if (!Array.isArray(local)) return Promise.resolve(false);
+  return Promise.resolve(sb.from("students").select("workout_logs").eq("id", id).maybeSingle()).then(function(res){
+    var server = res && res.data && Array.isArray(res.data.workout_logs) ? res.data.workout_logs : null;
+    if (!server) return false;
+    var have = {};
+    server.forEach(function(l){ if (l && l.id) have[l.id] = true; });
+    var merged = server.concat(local.filter(function(l){ return l && l.id && !have[l.id]; }));
+    return Promise.resolve(sb.from("students").update({workout_logs: merged}).eq("id", id).select("id")).then(function(r2){
+      if (r2 && r2.error) return false;
+      var s = findStudent(id);
+      if (s){ s.workoutLogsRaw = merged.slice(); s.workoutLogs = normalizeWorkoutLogs(merged); if (!s._sync) ensureSyncBaseline(s); else s._sync.workout_logs = jsonOf(merged); }
+      var e = outboxRead()[id];
+      if (e){ delete e.cols.workout_logs; if (!Object.keys(e.cols).length) delete outboxRead()[id]; outboxWrite(); }
+      snapshotApplyPatch(id, {workout_logs: merged});
+      redrawAfterSync();
+      return true;
+    });
+  }, function(){ return false; });
+}
+
+// envia as colunas pendentes de um aluno; resolve com true se ficou tudo enviado ou descartado e false se foi só um problema de ligação
+function outboxSendCols(id, cols){
+  if (!Object.keys(cols).length) return Promise.resolve(true);
+  return Promise.resolve(sb.from("students").update(cols).eq("id", id).select("id")).then(function(res){
+    if (res && !res.error && Array.isArray(res.data) && res.data.length === 0){
+      // o servidor não alterou nenhuma linha (sem permissão ou ficha inexistente): não se pode dar como enviado
+      res = {error: {message: "ficha não encontrada ou sem permissão", code: "0"}, status: 400};
+    }
     if (!res || !res.error){ outboxAcked(id, cols); return true; }
     var msg = String(res.error.message || "");
-    if (trainingColumnsAvailable && /training_program|workout_logs/.test(msg)){
+    if (trainingColumnsAvailable && /training_program|workout_logs/.test(msg) && /column|schema|does not exist/i.test(msg)){
       // a migração 0019 ainda não foi aplicada: grava tudo o resto e avisa, em vez de perder as outras alterações
       trainingColumnsAvailable = false;
       showToast("⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase (SQL Editor). O resto foi guardado.");
       return outboxSendOne(id);
     }
-    if (contactColumnsAvailable && /\bphone\b|contact_log/.test(msg)){
+    if (contactColumnsAvailable && /\bphone\b|contact_log/.test(msg) && /column|schema|does not exist/i.test(msg)){
       contactColumnsAvailable = false;
       showToast("⚠ O telefone e o registo de contactos ainda não podem ser guardados: falta correr a migração 0022 no Supabase.");
       return outboxSendOne(id);
     }
     if (outboxErrorIsTransient(res)) return false;
-    // recusa do servidor (permissões ou formato): repetir não adianta e bloquearia as alterações seguintes
-    console.error("Supabase: gravação recusada", id, msg);
-    delete outboxRead()[id]; outboxWrite();
-    showToast("⚠ Não foi possível guardar uma alteração: " + (msg || "o servidor recusou"));
-    return true;
+    var keys = Object.keys(cols);
+    if (keys.length > 1){
+      // uma coluna recusada não pode levar as outras consigo: reenvia-se uma a uma
+      var chain = Promise.resolve(true);
+      keys.forEach(function(k){ var one = {}; one[k] = cols[k]; chain = chain.then(function(ok){ return outboxSendCols(id, one).then(function(ok2){ return ok && ok2; }); }); });
+      return chain;
+    }
+    // uma só coluna recusada pelo servidor
+    var col = keys[0];
+    var settle = col === "workout_logs" ? mergeWorkoutLogsAndResend(id) : Promise.resolve(false);
+    return settle.then(function(merged){
+      if (merged) return true;
+      console.error("Supabase: gravação recusada", id, col, msg);
+      var e = outboxRead()[id];
+      if (e){ delete e.cols[col]; if (!Object.keys(e.cols).length) delete outboxRead()[id]; outboxWrite(); }
+      showToast("⚠ Uma alteração não foi aceite pelo servidor (" + (msg || "recusada") + "). A ficha foi atualizada com a versão do servidor.");
+      return reconcileStudentFromServer(id).then(function(){ return true; });
+    });
   }, function(){ return false; });
+}
+function outboxSendOne(id){
+  var entry = outboxRead()[id];
+  if (!entry) return Promise.resolve(true);
+  var cols = {};
+  Object.keys(entry.cols).forEach(function(k){ cols[k] = entry.cols[k]; });
+  if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
+  if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
+  if (!Object.keys(cols).length){ delete outboxRead()[id]; outboxWrite(); return Promise.resolve(true); }
+  return outboxSendCols(id, cols);
 }
 
 function outboxFlush(){
@@ -6182,7 +6254,8 @@ function outboxFlush(){
   outboxFlushPromise = chain.then(function(){
     outboxFlushPromise = null;
     clearTimeout(outboxRetryTimer);
-    if (outboxCount()) outboxRetryTimer = setTimeout(function(){ outboxFlush(); }, OUTBOX_RETRY_MS);
+    // ficou alterações novas na fila enquanto se enviava: seguem já; se foi falha de ligação, repete-se mais tarde
+    if (outboxCount()) outboxRetryTimer = setTimeout(function(){ outboxFlush(); }, allOk ? 50 : OUTBOX_RETRY_MS);
     syncPillUpdate();
     return allOk && !outboxCount();
   }, function(){ outboxFlushPromise = null; syncPillUpdate(); return false; });
@@ -6198,22 +6271,30 @@ function outboxFlushAndWait(){
 /* ---------- Dados frescos para o profissional ----------
    A lista de alunos só era lida ao entrar. Agora volta a ler-se quando o profissional regressa à app (no máximo de minuto a minuto)
    ou toca em "Atualizar". Nunca se troca a ficha de um aluno com alterações por enviar nem a que está aberta no ecrã. */
-var lastStudentsLoad = 0, proRefreshPromise = null;
+var lastStudentsLoad = 0, proRefreshPromise = null, lastLocalWriteAt = 0;
 var PRO_REFRESH_MIN_MS = 60000;
 function proRefreshStudents(force){
   if (authRole !== "professional" || !sbReady || (typeof navigator !== "undefined" && navigator.onLine === false)) return Promise.resolve(false);
   if (!force && Date.now() - lastStudentsLoad < PRO_REFRESH_MIN_MS) return Promise.resolve(false);
+  if (modalRoot && modalRoot.firstChild) return Promise.resolve(false); // uma janela aberta pode ter referências às fichas
   if (proRefreshPromise) return proRefreshPromise;
+  var started = Date.now();
   proRefreshPromise = withTimeout(sb.from("students").select("*"), 15000).then(function(res){
     proRefreshPromise = null;
     if (!res || res.error || !Array.isArray(res.data)) return false;
+    // houve alterações locais durante a leitura, ou abriu-se uma janela: esta leitura já pode estar desatualizada
+    if (lastLocalWriteAt > started || (modalRoot && modalRoot.firstChild)) return false;
     lastStudentsLoad = Date.now();
     var byId = {}, ob = outboxRead();
     STUDENTS.forEach(function(st){ byId[st.id] = st; });
+    // as fichas já existentes atualizam-se no próprio objeto (o resto da app guarda referências para elas)
     STUDENTS = res.data.map(function(r){
       var cur = byId[r.id];
-      if (cur && (persistStudents[r.id] || ob[r.id] || state.proSelectedId === r.id)) return cur;
-      return rowToStudent(r);
+      if (!cur) return rowToStudent(r);
+      if (persistStudents[r.id] || ob[r.id] || state.proSelectedId === r.id) return cur;
+      Object.assign(cur, rowToStudent(r));
+      setSyncBaseline(cur, null); // volta a tirar-se a versão de partida quando for aberta
+      return cur;
     });
     return true;
   }, function(){ proRefreshPromise = null; return false; });
@@ -13757,7 +13838,7 @@ function bootFromSnapshot(session, isProfessional){
     return Promise.resolve();
   }
   showToast("Sem ligação: a mostrar a última cópia guardada neste telemóvel");
-  return finishBoot(snap.rows, false, true);
+  return finishBoot(outboxOverlay(snap.rows), false, true); // a fila é idempotente: se a cópia já a incluía, nada muda
 }
 
 // Entra na app com as fichas já lidas (do servidor ou da cópia guardada)
