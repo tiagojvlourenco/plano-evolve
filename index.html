@@ -10086,8 +10086,9 @@ function renderProCatalogMain(){
         "<div class=\"f\"><label>Grupo</label><select id=\"catalogGroupFilter\"><option value=\"\">Todos</option>" +
           PRO_PLAN_GROUPS.map(function(g){ return "<option value=\"" + g + "\"" + (f.group===g?" selected":"") + ">" + groupLabel(g) + "</option>"; }).join("") +
         "</select></div>" +
-        "<div class=\"f\"><label>Estado</label><select id=\"catalogStatusFilter\"><option value=\"\">Todos</option>" +
+        "<div class=\"f\"><label>Estado</label><select id=\"catalogStatusFilter\"><option value=\"\">Ativos (sem rejeitados)</option>" +
           Object.keys(VERIFICATION_STATUS_LABELS).map(function(st){ return "<option value=\"" + st + "\"" + (f.status===st?" selected":"") + ">" + VERIFICATION_STATUS_LABELS[st] + "</option>"; }).join("") +
+          "<option value=\"todos\"" + (f.status==="todos"?" selected":"") + ">Todos, incluindo rejeitados</option>" +
         "</select></div>" +
       "</div>" +
     "</div>" +
@@ -10124,7 +10125,9 @@ function catalogFilteredProducts(){
   return (state.catalogProducts || []).filter(function(p){
     if (q && (p._k || (p.name + "\n" + p.brand + "\n" + (p.ean || "")).toLowerCase()).indexOf(q) === -1) return false;
     if (f.group && p.food_group !== f.group) return false;
-    if (f.status && p.verification_status !== f.status) return false;
+    // por omissão os rejeitados (ex.: repetidos limpos) ficam escondidos; aparecem em "Rejeitado" ou "Todos, incluindo rejeitados"
+    if (!f.status && p.verification_status === "rejected") return false;
+    if (f.status && f.status !== "todos" && p.verification_status !== f.status) return false;
     if (f.retailer && !(p.food_product_retailers || []).some(function(r){ return r.retailer === f.retailer; })) return false;
     return true;
   });
