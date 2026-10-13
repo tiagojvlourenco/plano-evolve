@@ -539,10 +539,13 @@
   .pd-name{font-weight:700;} .pd-meta{font-size:0.78rem; color:var(--muted);}
   .pd-ex{margin:6px 0 0; padding-left:18px; font-size:0.84rem; color:var(--muted);}
   .prog-day .btn{min-height:44px;}
-  .seg{display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; border:1px solid var(--line-strong); border-radius:14px; background:var(--surface);}
+  .seg{display:grid; grid-template-columns:repeat(auto-fit, minmax(0, 1fr)); gap:4px; padding:4px; border:1px solid var(--line-strong); border-radius:14px; background:var(--surface);}
   .seg button{min-height:44px; border:none; border-radius:10px; background:transparent; color:var(--muted); font-size:0.82rem; font-weight:700; cursor:pointer; font-family:var(--sans);}
   .seg button.on{background:var(--accent); color:var(--accent-ink);}
   .seg button:focus-visible{outline:2px solid var(--accent-strong); outline-offset:1px;}
+  .shop-item{cursor:pointer; align-items:center; gap:10px;}
+  .shop-item input[type=checkbox]{width:22px; height:22px; vertical-align:middle; margin-right:6px; accent-color:var(--accent);}
+  .shop-item.done .fname{text-decoration:line-through; opacity:0.55;}
   .ci-nudge{display:flex; align-items:center; justify-content:space-between; gap:14px; border-color:var(--accent);}
   .ci-nudge .btn{min-height:48px; min-width:84px;}
   @media (min-width:1100px){ .aluno-tabs > .seg{column-span:all;} }
@@ -2752,10 +2755,13 @@ function resolveGroup(g){ return (g && FOOD_GROUPS[g]) ? g : (OLD_GROUP_ALIASES[
 var GROUP_PRIORITY_KEY = { carnes:"p", cereais:"c", gorduras:"f" };
 var PRIORITY_LABEL = { p:"proteína", c:"hidratos", f:"gordura" };
 
-function computeEquivalentAlternative(original, altBase){
-  var priorityKey = GROUP_PRIORITY_KEY[resolveGroup(original.group)];
+// mode "kcal": iguala as calorias da linha (em vez do macro prioritário do grupo). Nos grupos sem macro prioritário
+// (lacticínios, fruta, vegetais, snacks, bebidas) iguala sempre as calorias, para a troca não mudar o total da refeição.
+function computeEquivalentAlternative(original, altBase, mode){
+  var priorityKey = mode === "kcal" ? "kcal" : (GROUP_PRIORITY_KEY[resolveGroup(original.group)] || "kcal");
   var altDb = FOOD_DB[altBase.name];
-  if (!priorityKey || !altDb) return altBase;
+  if (!altDb) return altBase;
+  if (priorityKey === "kcal" && parseQtyAmount(original.qty).kind === "fixed") return altBase; // "à vontade" não se converte em gramas
 
   var originalNutri = foodNutrition(original.name, original.qty);
   var targetVal = originalNutri[priorityKey];
@@ -2774,6 +2780,20 @@ function computeEquivalentAlternative(original, altBase){
     return { name: altBase.name, qty: units + " unid." };
   }
   return altBase;
+}
+
+// Quão diferente é a alternativa (já na porção equivalente): calorias que "mudam de macro" + diferença de calorias, em fração das calorias da linha. Menor = mais parecida.
+function substitutionDistance(original, alt){
+  var a = foodNutrition(original.name, original.qty), b = foodNutrition(alt.name, alt.qty);
+  var base = Math.max(a.kcal, 50);
+  return (Math.abs(a.p - b.p) * 4 + Math.abs(a.c - b.c) * 4 + Math.abs(a.f - b.f) * 9 + Math.abs(a.kcal - b.kcal)) / base;
+}
+// "≈ 152 kcal (+3)" — calorias da alternativa na porção sugerida e diferença face ao alimento original
+function substitutionKcalNote(original, alt){
+  var a = Math.round(foodNutrition(original.name, original.qty).kcal), b = Math.round(foodNutrition(alt.name, alt.qty).kcal);
+  if (!a && !b) return "";
+  var d = b - a;
+  return "≈ " + b + " kcal" + (d ? " (" + (d > 0 ? "+" : "−") + Math.abs(d) + ")" : "");
 }
 
 function logSubstitution(s, meal, from, to){
@@ -6145,8 +6165,9 @@ function openModal(innerHtml, opts){
   return sheet;
 }
 
-function openSubstitution(f, onConfirm, s, meal){
+function openSubstitution(f, onConfirm, s, meal, opts){
   var sheet = openModal("");
+  var proMode = !!(opts && opts.pro); // o profissional também usa isto no editor do plano: sem o bloqueio do aluno nem o limite de alternativas
 
   // Trava central: nenhuma sugestão de alimento sai daqui (nem a lista de
   // alternativas nem o "não encontrei substituição, pergunta ao profissional")
@@ -6154,7 +6175,7 @@ function openSubstitution(f, onConfirm, s, meal){
   // chamadas a openSubstitution em toda a app (detalhe da refeição, plano,
   // "não tenho isto", pouco tempo, trocar refeição) passam por aqui, por isso
   // basta esta verificação para cobrir todas elas.
-  if (s && hasUnmappedDietaryRisk(s)){
+  if (s && hasUnmappedDietaryRisk(s) && !proMode){
     renderDietRiskBlocked(sheet, s, meal, "sem_alimento", "Pedido de alternativa segura para " + f.name + ".");
     return sheet;
   }
@@ -6162,11 +6183,24 @@ function openSubstitution(f, onConfirm, s, meal){
   var priorityKey = GROUP_PRIORITY_KEY[resolveGroup(f.group)];
   var usingManualList = !!(f.allowedSubs && f.allowedSubs.length);
   var baseOptions = optionsFor(f, s).filter(function(o){ return o.name !== f.name; });
-  if (!usingManualList && s){
-    var max = SUBSTITUTION_LEVEL_MAX[computeFlexibilityProfile(s).substitutionLevel];
-    if (isFinite(max)) baseOptions = baseOptions.slice(0, max);
+  // "key": iguala o macro prioritário do grupo (como sempre); "kcal": iguala as calorias. Sem macro prioritário é sempre "kcal".
+  var eqMode = priorityKey ? "key" : "kcal";
+  var options = [], bestIdx = {};
+  function buildOptions(){
+    var scored = baseOptions.map(function(o){
+      var alt = computeEquivalentAlternative(f, o, eqMode);
+      return {alt: alt, d: substitutionDistance(f, alt)};
+    });
+    if (!usingManualList) scored.sort(function(a, b){ return a.d - b.d; }); // as mais parecidas primeiro (a lista manual do profissional mantém a ordem dele)
+    if (!usingManualList && s && !proMode){
+      var max = SUBSTITUTION_LEVEL_MAX[computeFlexibilityProfile(s).substitutionLevel];
+      if (isFinite(max)) scored = scored.slice(0, max);
+    }
+    options = scored.map(function(x){ return x.alt; });
+    bestIdx = {};
+    scored.slice(0, 3).forEach(function(x, i){ if (!usingManualList && x.d < 0.6) bestIdx[i] = true; });
   }
-  var options = baseOptions.map(function(o){ return computeEquivalentAlternative(f, o); });
+  buildOptions();
 
   // Fase 16: a base do INSA pode tornar "options" muito maior do que antes
   // (alunos em nível "Flexível" não têm limite de alternativas — ver
@@ -6182,10 +6216,11 @@ function openSubstitution(f, onConfirm, s, meal){
     var shown = indices.slice(0, FOOD_SEARCH_RENDER_CAP);
     var html = shown.map(function(idx){
       var o = options[idx];
-      var badge = priorityKey ? "≈ mesma " + PRIORITY_LABEL[priorityKey] : "";
+      var badge = eqMode === "key" ? "≈ mesma " + PRIORITY_LABEL[priorityKey] : "≈ mesmas calorias";
+      var note = substitutionKcalNote(f, o);
       return "<div class=\"food-item\" data-idx=\"" + idx + "\" style=\"cursor:pointer;\">" +
-        "<span class=\"fname\">" + o.name + "</span>" +
-        "<span><span class=\"fqty\">" + escapeHtml(o.qty) + "</span>" + (badge ? "<span class=\"swap-hint\">" + badge + "</span>" : "") + "</span>" +
+        "<span class=\"fname\">" + escapeHtml(o.name) + (bestIdx[idx] ? " <span class=\"pill good\" style=\"font-size:0.65rem;\">mais semelhante</span>" : "") + "</span>" +
+        "<span><span class=\"fqty\">" + escapeHtml(o.qty) + "</span><span class=\"swap-hint\">" + badge + (note ? " · " + note : "") + "</span></span>" +
       "</div>";
     }).join("");
     if (indices.length > shown.length) html += "<p class=\"muted-p\" style=\"margin:4px 0;\">+" + (indices.length - shown.length) + " mais — continua a escrever para afinar</p>";
@@ -6206,7 +6241,10 @@ function openSubstitution(f, onConfirm, s, meal){
       "<div class=\"food-item\" style=\"border-bottom:2px solid var(--line); margin-bottom:10px; padding-bottom:10px;\">" +
         "<span class=\"fname\">" + escapeHtml(f.name) + "</span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" +
       "</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes:</p>";
+      (proMode && s && hasUnmappedDietaryRisk(s) ? "<p class=\"muted-p\" style=\"margin-bottom:8px; color:var(--warn);\">⚠ Este aluno tem alergias/restrições em texto livre: confirma que a alternativa é segura.</p>" : "") +
+      (priorityKey ? "<div class=\"seg\" style=\"margin-bottom:10px;\"><button type=\"button\" data-eq-mode=\"key\" class=\"" + (eqMode === "key" ? "on" : "") + "\">Igualar " + PRIORITY_LABEL[priorityKey] + "</button>" +
+        "<button type=\"button\" data-eq-mode=\"kcal\" class=\"" + (eqMode === "kcal" ? "on" : "") + "\">Igualar calorias</button></div>" : "") +
+      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes (mais parecidas primeiro):</p>";
     if (!options.length){
       html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Não encontrei uma substituição definida para este alimento.</p>" +
         "<button type=\"button\" class=\"btn\" id=\"askProfessional\" style=\"width:100%;\">Perguntar ao profissional</button>";
@@ -6217,6 +6255,9 @@ function openSubstitution(f, onConfirm, s, meal){
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
     sheet.querySelector(".mclose button").addEventListener("click", closeModal);
     wireOptionsList();
+    sheet.querySelectorAll("[data-eq-mode]").forEach(function(b){
+      b.addEventListener("click", function(){ eqMode = b.getAttribute("data-eq-mode"); buildOptions(); renderList(); });
+    });
     var searchInput = sheet.querySelector("#subSearch");
     if (searchInput) searchInput.addEventListener("input", function(){
       sheet.querySelector("#subOptionsList").innerHTML = optionsHtml(searchInput.value);
@@ -7355,13 +7396,94 @@ function tplCheckin(s){
 }
 
 // Plano: Alimentação | Treino (o seletor só aparece se há programa de treino)
+/* ---------- Lista de compras semanal ----------
+   Soma, por alimento, o que o plano ativo pede em N dias (o plano repete-se todos os dias) e arredonda a embalagens inteiras quando se
+   conhece o tamanho. Usa o plano e não a troca do dia (f.original). Os "comprados" ficam guardados neste telemóvel e recomeçam a cada semana. */
+var SHOP_DAY_CHOICES = [3, 5, 7];
+function shopWeekKey(){
+  var d = new Date(); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // segunda-feira desta semana
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function shopStoreKey(s){ return "evolve_shop_v1:" + s.id + ":" + shopWeekKey(); }
+function shopLoadChecked(s){
+  try { var v = JSON.parse(localStorage.getItem(shopStoreKey(s)) || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; }
+}
+function shopSaveChecked(s, checked){
+  try {
+    localStorage.setItem(shopStoreKey(s), JSON.stringify(checked));
+    var prefix = "evolve_shop_v1:" + s.id + ":";
+    for (var i = localStorage.length - 1; i >= 0; i--){ // semanas antigas já não servem
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0 && k !== shopStoreKey(s)) localStorage.removeItem(k);
+    }
+  } catch (e) {}
+}
+function shopFmtAmount(n, unit){
+  n = Math.round(n);
+  if (unit === "g" && n >= 1000) return String(Math.round(n / 100) / 10).replace(".", ",") + " kg";
+  if (unit === "ml" && n >= 1000) return String(Math.round(n / 100) / 10).replace(".", ",") + " L";
+  return n + " " + unit;
+}
+function shopLine(it){
+  var parts = [], size = packSizeOf(it.name);
+  [["grams", "g"], ["ml", "ml"]].forEach(function(p){
+    var total = it[p[0]];
+    if (!(total > 0)) return;
+    if (size > 0){ // embalagem conhecida: compra-se em embalagens inteiras
+      var packs = Math.ceil(total / size - 0.0001);
+      parts.push(packs + (packs === 1 ? " embalagem" : " embalagens") + " de " + shopFmtAmount(size, p[1]) + " (" + shopFmtAmount(packs * size, p[1]) + ")");
+    } else parts.push(shopFmtAmount(total, p[1]));
+  });
+  if (it.units > 0) parts.push(Math.round(it.units) + " unid.");
+  if (!parts.length && it.free) parts.push("à vontade");
+  return parts.join(" + ");
+}
+function shoppingListFor(s, days){
+  days = days > 0 ? days : 7;
+  var map = {};
+  (s.meals || []).forEach(function(m){ (m.foods || []).forEach(function(f0){
+    var f = f0.original || f0, a = parseQtyAmount(f.qty);
+    var it = map[f.name] || (map[f.name] = {name: f.name, group: resolveGroup(f.group || groupOfFood(f.name)), grams: 0, ml: 0, units: 0, free: false});
+    if (a.kind === "fixed") it.free = true;
+    else if (a.kind === "unit") it.units += a.value * days;
+    else if (/\bml\b/i.test(String(f.qty))) it.ml += a.value * days;
+    else it.grams += a.value * days;
+  }); });
+  var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
+  var groups = {};
+  Object.keys(map).forEach(function(n){ (groups[map[n].group] = groups[map[n].group] || []).push(map[n]); });
+  var order = Object.keys(FOOD_GROUPS).filter(function(g){ return groups[g]; }).concat(Object.keys(groups).filter(function(g){ return !FOOD_GROUPS[g]; }));
+  return order.map(function(g){
+    return {group: g, label: groupLabel(g), items: groups[g].sort(function(a, b){ return cmp(a.name, b.name); }).map(function(it){ return {name: it.name, qty: shopLine(it)}; })};
+  });
+}
+function tplShoppingList(s){
+  var days = SHOP_DAY_CHOICES.indexOf(state.shopDays) >= 0 ? state.shopDays : 7;
+  var list = shoppingListFor(s, days);
+  var html = tabHead("Lista de compras", "Para " + days + " dias, com base no teu plano de alimentação atual");
+  if (!list.length) return html + "<div class=\"card\" style=\"text-align:center;\"><p class=\"muted-p\">Ainda não há alimentos no teu plano para compor uma lista.</p></div>";
+  var checked = shopLoadChecked(s), total = 0, done = 0;
+  list.forEach(function(g){ g.items.forEach(function(it){ total++; if (checked[it.name]) done++; }); });
+  html += "<div class=\"seg\" style=\"margin-bottom:10px;\">" + SHOP_DAY_CHOICES.map(function(d){
+    return "<button type=\"button\" data-shop-days=\"" + d + "\" aria-pressed=\"" + (d === days) + "\" class=\"" + (d === days ? "on" : "") + "\">" + d + " dias</button>";
+  }).join("") + "</div>" +
+    "<div style=\"display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;\"><span class=\"muted-p\" id=\"shopProgress\">" + done + " de " + total + " comprados</span>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"shopClear\">Limpar marcados</button></div>";
+  list.forEach(function(g){
+    html += "<div class=\"card\" style=\"margin-bottom:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">" + escapeHtml(g.label) + "</div>" + g.items.map(function(it){
+      return "<label class=\"food-item shop-item" + (checked[it.name] ? " done" : "") + "\"><span class=\"fname\"><input type=\"checkbox\" data-shop=\"" + escapeHtml(it.name) + "\"" + (checked[it.name] ? " checked" : "") + "> " + escapeHtml(it.name) + "</span><span class=\"fqty\">" + escapeHtml(it.qty) + "</span></label>";
+    }).join("") + "</div>";
+  });
+  return html;
+}
+
 function tplPlanoTabs(s){
-  var hasProgram = workoutDaysWithExercises(s).length > 0;
-  var sec = hasProgram && state.planoSection === "treino" ? "treino" : "alimentacao";
-  var seg = hasProgram ? "<div class=\"seg\">" +
-    "<button type=\"button\" data-plano-sec=\"alimentacao\" aria-pressed=\"" + (sec === "alimentacao") + "\" class=\"" + (sec === "alimentacao" ? "on" : "") + "\">Alimentação</button>" +
-    "<button type=\"button\" data-plano-sec=\"treino\" aria-pressed=\"" + (sec === "treino") + "\" class=\"" + (sec === "treino" ? "on" : "") + "\">Treino</button></div>" : "";
-  return seg + (sec === "treino" ? tplTrainingProgramCard(s) : tplPlano(s));
+  var hasProgram = workoutDaysWithExercises(s).length > 0, hasMeals = (s.meals || []).length > 0;
+  var sec = hasProgram && state.planoSection === "treino" ? "treino" : (hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao");
+  function segBtn(id, label){ return "<button type=\"button\" data-plano-sec=\"" + id + "\" aria-pressed=\"" + (sec === id) + "\" class=\"" + (sec === id ? "on" : "") + "\">" + label + "</button>"; }
+  var seg = hasProgram || hasMeals ? "<div class=\"seg\">" + segBtn("alimentacao", "Alimentação") + (hasProgram ? segBtn("treino", "Treino") : "") + (hasMeals ? segBtn("compras", "Compras") : "") + "</div>" : "";
+  return seg + (sec === "treino" ? tplTrainingProgramCard(s) : sec === "compras" ? tplShoppingList(s) : tplPlano(s));
 }
 
 // Plano > Treino: o programa da semana, com um botão para iniciar qualquer dia
@@ -7404,6 +7526,31 @@ function wireTrainingNav(s, el){
   if (back) back.addEventListener("click", function(){ go("hoje"); });
   el.querySelectorAll("[data-plano-sec]").forEach(function(b){
     b.addEventListener("click", function(){ state.planoSection = b.getAttribute("data-plano-sec"); renderAlunoTab(s); });
+  });
+  el.querySelectorAll("[data-shop-days]").forEach(function(b){
+    b.addEventListener("click", function(){ state.shopDays = parseInt(b.getAttribute("data-shop-days"), 10); renderAlunoTab(s); });
+  });
+  function shopRefreshProgress(){
+    var boxes = el.querySelectorAll("[data-shop]"), n = 0;
+    boxes.forEach(function(cb){ if (cb.checked) n++; });
+    var p = el.querySelector("#shopProgress");
+    if (p) p.textContent = n + " de " + boxes.length + " comprados";
+  }
+  el.querySelectorAll("[data-shop]").forEach(function(cb){
+    cb.addEventListener("change", function(){
+      var checked = shopLoadChecked(s), name = cb.getAttribute("data-shop");
+      if (cb.checked) checked[name] = 1; else delete checked[name];
+      shopSaveChecked(s, checked);
+      var row = cb.closest ? cb.closest(".shop-item") : null;
+      if (row) row.classList.toggle("done", cb.checked);
+      shopRefreshProgress();
+    });
+  });
+  var shopClear = el.querySelector("#shopClear");
+  if (shopClear) shopClear.addEventListener("click", function(){
+    shopSaveChecked(s, {});
+    el.querySelectorAll("[data-shop]").forEach(function(cb){ cb.checked = false; var row = cb.closest ? cb.closest(".shop-item") : null; if (row) row.classList.remove("done"); });
+    shopRefreshProgress();
   });
   var ci = el.querySelector("#goCheckin");
   if (ci) ci.addEventListener("click", function(){ state.ciOpen = true; go("evolucao"); });
@@ -9286,7 +9433,7 @@ function renderProDashboardMain(){
     });
     var rows = listStudents.map(function(st){
       var al = computeDashboardAlerts(st);
-      return {s: st, alerts: al, crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st), pending: pendingHelpFor(st.id)};
+      return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st), pending: pendingHelpFor(st.id)};
     }).sort(function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
     var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
     html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
@@ -9294,7 +9441,7 @@ function renderProDashboardMain(){
     rows.forEach(function(r){
       var st = r.s;
       var badges = (r.pending ? "<span class=\"pill critical\">" + plural(r.pending, "pedido de ajuda", "pedidos de ajuda") + "</span>" : "") + (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
-        (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "");
+        (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "") + coachBadgesHtml(r.coach);
       html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
         "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
           "<div class=\"avatar\">" + escapeHtml(st.initials) + "</div>" +
@@ -9909,7 +10056,8 @@ function tplPlanoMealEditor(m, midx){
     return "<div class=\"food-item\" style=\"cursor:default;\">" +
       "<span class=\"fname\">" + escapeHtml(f.name) + (f.group ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">(" + escapeHtml(groupLabel(f.group)) + ")</span>" : "") + packWasteHint(f) + "</span>" +
       "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" +
-        "<button type=\"button\" class=\"assess-del\" data-edit-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:8px;\" aria-label=\"Editar alimento\">✏️</button>" +
+        "<button type=\"button\" class=\"assess-del\" data-suggest-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:8px;\" aria-label=\"Sugerir alternativas\" title=\"Sugerir alternativas\">🔄</button>" +
+        "<button type=\"button\" class=\"assess-del\" data-edit-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:4px;\" aria-label=\"Editar alimento\">✏️</button>" +
         "<button type=\"button\" class=\"assess-del\" data-del-food=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-left:4px;\" aria-label=\"Remover alimento\">✕</button>" +
       "</span>" +
     "</div>" + tplEditFoodForm(midx, fidx, f);
@@ -11153,6 +11301,41 @@ function computeDashboardAlerts(s){
   return (s.alerts || []).concat(computed);
 }
 
+/* ---------- Badges de ação no dashboard do profissional ----------
+   Regras sobre os sinais já calculados (computeStudentSignals) e sobre os registos do aluno, para o profissional ver de relance
+   quem precisa de contacto, quem está encalhado apesar de treinar bem e quem está pronto para progredir. */
+var BADGE_NO_RECORD_WARN_DAYS = 7;
+var BADGE_NO_RECORD_CRITICAL_DAYS = 14;
+var BADGE_HIGH_ADHERENCE = 8.5;
+var BADGE_ADHERENCE_DROP = 1.5;
+// dias desde o registo mais recente do aluno (check-in, pesagem ou sessão de treino); null se nunca registou nada
+function daysSinceLastRecord(s){
+  var dates = (s.checkins || []).map(function(c){ return c.date; })
+    .concat((s.weights || []).map(function(w){ return w.date; }))
+    .concat((s.workoutLogs || []).map(function(l){ return l.date; })).filter(Boolean).sort();
+  return dates.length ? daysSinceDate(dates[dates.length - 1]) : null;
+}
+function avgAdherence(list){ return list.length ? list.reduce(function(a, c){ return a + (Number(c.adherence) || 0); }, 0) / list.length : null; }
+function computeCoachBadges(s){
+  var by = {};
+  computeStudentSignals(s).forEach(function(x){ by[x.key] = x; });
+  var out = [], idle = daysSinceLastRecord(s);
+  if (idle == null) out.push({key: "sem-registos", label: "Sem registos", tone: "", hint: "O aluno ainda não registou check-ins, pesagens nem treinos."});
+  else if (idle >= BADGE_NO_RECORD_WARN_DAYS) out.push({key: "sem-registos", label: "Sem registos há " + idle + " d", tone: idle >= BADGE_NO_RECORD_CRITICAL_DAYS ? "critical" : "warn", hint: "Último check-in, pesagem ou treino registado " + daysAgoLabel(idle) + ". Vale a pena contactar."});
+  var stalled = !!(by.peso && by.peso.status === "atencao" && /estagnad/.test(by.peso.text));
+  var training = (by.progressao_carga && by.progressao_carga.status === "positivo") || (by.sessoes && by.sessoes.status === "positivo");
+  if (stalled && training) out.push({key: "estagnado-a-treinar", label: "Peso estagnado, treino a evoluir", tone: "warn", hint: "O treino está a correr bem mas o peso não se mexe: revê as calorias ou considera recomposição corporal."});
+  else if (stalled) out.push({key: "estagnado", label: "Peso estagnado", tone: "warn", hint: by.peso.text});
+  var recent = (s.checkins || []).slice(-3), before = (s.checkins || []).slice(-6, -3);
+  var now = avgAdherence(recent), prev = avgAdherence(before);
+  if (now != null && prev != null && prev - now >= BADGE_ADHERENCE_DROP) out.push({key: "adesao-a-cair", label: "Adesão a cair", tone: "warn", hint: "Adesão média de " + prev.toFixed(1).replace(".", ",") + " para " + now.toFixed(1).replace(".", ",") + " /10 nos últimos check-ins."});
+  else if (now != null && recent.length >= 2 && now >= BADGE_HIGH_ADHERENCE && (idle == null || idle < BADGE_NO_RECORD_WARN_DAYS)) out.push({key: "alta-adesao", label: "Alta adesão", tone: "good", hint: "Adesão média de " + now.toFixed(1).replace(".", ",") + "/10: bom momento para dar mais autonomia ou progredir."});
+  return out;
+}
+function coachBadgesHtml(badges){
+  return (badges || []).map(function(b){ return "<span class=\"pill " + b.tone + "\" title=\"" + escapeHtml(b.hint) + "\">" + escapeHtml(b.label) + "</span>"; }).join("");
+}
+
 function signalPillClass(sig){
   if (sig.status === "atencao") return sig.severity === "high" ? "critical" : "warn";
   if (sig.status === "positivo") return "good";
@@ -11609,6 +11792,23 @@ function wireProTab(s){
     });
   });
 
+  // Sugerir alternativas (profissional): mesmas alternativas do aluno, mais parecidas primeiro e com a porção recalculada; ao escolher troca o alimento no plano
+  el.querySelectorAll("[data-suggest-food]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var midx = parseInt(btn.getAttribute("data-suggest-food"), 10), fidx = parseInt(btn.getAttribute("data-fidx"), 10);
+      var m = s.meals[midx], oldFood = m && m.foods[fidx];
+      if (!oldFood) return;
+      openSubstitution(oldFood, function(chosen){
+        m.foods[fidx] = food(chosen.name, chosen.qty, oldFood.group, oldFood.required);
+        logFoodEdited(s, m.name, oldFood, m.foods[fidx]);
+        closeModal();
+        renderProTabContent(s);
+        persistStudent(s);
+        showToast("✓ Alimento substituído");
+      }, s, m, {pro: true});
+    });
+  });
+
   el.querySelectorAll("[data-save-food-edit]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var midx = parseInt(btn.getAttribute("data-save-food-edit"),10);
@@ -11952,7 +12152,7 @@ function wireProTab(s){
     persistStudent(s);
     if (softWarns.length) showToast("Guardado. Confirma: " + softWarns[0] + (softWarns.length > 1 ? " (+" + (softWarns.length - 1) + ")" : ""));
   });
-  el.querySelectorAll(".assess-del").forEach(function(btn){
+  el.querySelectorAll(".assess-del[data-idx]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var sorted = s.assessments.slice().sort(compareAssessmentsDesc);
       var idx = parseInt(btn.getAttribute("data-idx"),10);

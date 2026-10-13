@@ -31,7 +31,7 @@ Barra inferior com 3 separadores:
 | Separador | Conteúdo (templates) |
 |---|---|
 | **Hoje** (`hoje`) | `tplHoje` = Ação do Dia + `tplTodayWorkout` + `tplTodayMeals` |
-| **Plano** (`plano`) | `tplPlanoTabs` com secção Alimentação (`tplPlano`, `tplMealFixed/Choice/Builder`) e Treino (`tplTrainingProgramCard`) |
+| **Plano** (`plano`) | `tplPlanoTabs` com secções Alimentação (`tplPlano`, `tplMealFixed/Choice/Builder`), Treino (`tplTrainingProgramCard`) e Compras (`tplShoppingList`: lista semanal agregada do plano, comprados guardados em `localStorage` por aluno e semana) |
 | **Progresso** (`evolucao`) | `tplEvolucaoAluno` (peso, avaliações, perímetros, pregas, fotos, adesão) + `tplCheckin` |
 | *(ecrã cheio)* `treino` | `tplTreinoScreen` / `tplWorkoutLogger` (registo de séries, descanso automático; rascunho em `localStorage` `evolve_wl_draft_v1`) — conta como "Hoje" na barra |
 
@@ -39,6 +39,7 @@ Barra inferior com 3 separadores:
 Barra lateral:
 
 - **Alunos** (`proView = "dashboard"`) → `renderProDashboardMain()`: lista ordenada por atenção (pedidos pendentes → críticos → alertas → dias sem registo), com indicador de pedidos de ajuda pendentes (`state.pendingHelp`).
+  Cada aluno mostra também badges de ação (`computeCoachBadges`): sem registos, peso estagnado (com ou sem treino a evoluir), adesão a cair e alta adesão.
 - **Catálogo** (`proView = "catalog"`) → `renderProCatalogMain()` / `renderCatalogList()`.
 - **Aluno aberto** (`state.proSelectedId`) → `renderProDetailMain()` com 4 áreas (`PRO_NAV`):
 

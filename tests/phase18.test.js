@@ -47,7 +47,7 @@ var check = require("./check")();
 
 // 5. Liga o evento "toggle" do add-food-details a focar o input
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 28000);
   check.check("5. Liga .add-food-details ao evento toggle", fnSrc.indexOf('querySelectorAll(".add-food-details")') >= 0 && fnSrc.indexOf('addEventListener("toggle"') >= 0);
   check.check("5. Só foca quando abre (details.open), não ao fechar", fnSrc.indexOf("if (!details.open) return;") >= 0);
   check.check("5. Foca o campo de pesquisa af-food dentro do details", /details\.querySelector\("\.af-food"\)/.test(fnSrc));
