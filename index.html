@@ -8373,6 +8373,267 @@ function wireWorkoutLogger(s, el, rerender){
   });
 }
 
+/* ---------- Biblioteca de exercícios (partilhada pelo estúdio) ----------
+   Lista base no código, por grupo muscular; a demonstração é uma pesquisa de vídeo (o PT pode trocá-la por um vídeo do estúdio).
+   O que os profissionais acrescentam ou corrigem fica na tabela exercise_library (partilhada por todos); em modo local, neste browser.
+   Um exercício guardado com o mesmo nome de um da lista base substitui-o; apagá-lo repõe o original. */
+var EXERCISE_GROUPS = ["Peito", "Costas", "Ombros", "Bíceps", "Tríceps", "Quadríceps", "Posteriores", "Glúteos", "Gémeos", "Core"];
+var EX_LIB_LOCAL_KEY = "evolve_exercise_library_v1";
+// [nome, equipamento, "ponto 1|ponto 2|ponto 3", nota opcional]
+var EXERCISE_SEED = {
+  "Peito": [
+    ["Supino reto com barra", "Barra", "Omoplatas juntas e para baixo|Barra desce ao meio do peito, cotovelos a ~45°|Pés firmes no chão"],
+    ["Supino reto com halteres", "Halteres", "Omoplatas fixas no banco|Desce com controlo até ao alongamento do peito|Junta os halteres sem os bater em cima"],
+    ["Supino inclinado com halteres", "Halteres", "Banco a 30°, omoplatas juntas|Pega neutra ou semi-neutra, cotovelos a ~45°|Não deixes os ombros subirem para as orelhas", "Bom para ombro sensível com pega neutra"],
+    ["Supino inclinado com barra", "Barra", "Banco a 30°, peito alto|Barra desce à parte alta do peito|Empurra em linha reta, sem arquear em excesso"],
+    ["Press de peito na máquina", "Máquina", "Ajusta o banco: pegas à altura do peito|Empurra sem bloquear os cotovelos|Contrai o peito no fim", "Estável e seguro para ombro sensível"],
+    ["Press inclinado na máquina Smith", "Smith", "Omoplatas juntas e para baixo|Desce à parte alta do peito|Pés bem apoiados"],
+    ["Crucifixo no cabo (baixo para cima)", "Cabo", "Cotovelo ligeiramente fletido e fixo|Faz um arco como se abraçasses|Termina à altura do peito"],
+    ["Crucifixo na máquina (peck deck)", "Máquina", "Peito aberto, omoplatas atrás|Cotovelos ligeiramente fletidos|Controla a volta, sem deixar o peso bater"],
+    ["Crossover no cabo (alto para baixo)", "Cabo", "Peito aberto, tronco ligeiramente inclinado|Cotovelos ligeiramente fletidos|Junta as mãos à frente do peito"],
+    ["Flexões", "Peso corporal", "Corpo em linha, glúteo e abdómen contraídos|Cotovelos a ~45° do tronco|Peito desce até perto do chão"],
+    ["Flexões com apoio elevado", "Peso corporal", "Mãos num banco ou barra|Corpo em linha reta|Desce com controlo e empurra com força", "Regressão das flexões e boa para o ombro"],
+    ["Fundos nas paralelas (peito)", "Paralelas", "Tronco ligeiramente inclinado à frente|Desce até onde o ombro estiver confortável|Sem balançar", "Evitar com dor no ombro"]
+  ],
+  "Costas": [
+    ["Puxada à frente (pega aberta)", "Cabo", "Peito ao puxador, ombros longe das orelhas|Cotovelos para as ancas|Sem balançar o tronco"],
+    ["Puxada com pega neutra (em V)", "Cabo", "Peito ao puxador|Cotovelos para as ancas|Alonga em cima sem largar as omoplatas", "Pega neutra: mais amiga do ombro"],
+    ["Barra fixa", "Barra fixa", "Começa por baixar as omoplatas|Cotovelos para as ancas|Desce até ao alongamento completo"],
+    ["Remada sentada no cabo", "Cabo", "Peito aberto, costas neutras|Puxa com os cotovelos, não com as mãos|Pausa de 1 s com as omoplatas juntas"],
+    ["Puxada unilateral no cabo", "Cabo", "Ombro baixo, tronco firme|Cotovelo para a anca|Alonga a omoplata em cima sem a largar", "Boa para corrigir assimetrias"],
+    ["Remada com apoio no peito (máquina)", "Máquina", "Peito colado ao apoio|Deprime as omoplatas antes de puxar|Cotovelos junto ao tronco", "Muito estável, boa para ombro sensível"],
+    ["Remada com barra", "Barra", "Tronco a ~45°, costas neutras|Barra sobe ao umbigo|Sem usar o balanço das ancas"],
+    ["Remada com haltere apoiada no banco", "Halteres", "Mão e joelho apoiados, costas planas|Cotovelo vai para a anca|Alonga a omoplata em baixo"],
+    ["Remada em T (T-bar)", "Barra T", "Costas neutras, peito alto|Puxa com os cotovelos|Aperta as omoplatas no topo"],
+    ["Pullover no cabo", "Cabo", "Braços quase esticados|Desce em arco até às coxas|Costelas baixas, sem arquear a lombar"],
+    ["Encolhimentos com halteres", "Halteres", "Sobe os ombros em linha reta, sem rodar|Pausa de 1 s em cima|Desce devagar"]
+  ],
+  "Ombros": [
+    ["Press de ombros com halteres sentado", "Halteres", "Costas encostadas, abdómen firme|Cotovelos ligeiramente à frente do corpo|Sobe sem encolher os ombros", "Evitar com dor acima da cabeça"],
+    ["Press de ombros na máquina", "Máquina", "Costas encostadas ao banco|Empurra sem bloquear os cotovelos|Desce até onde o ombro estiver confortável"],
+    ["Landmine press", "Barra (landmine)", "Empurra para cima e ligeiramente para a frente|Glúteo contraído, tronco firme|Omoplata a deslizar, sem encolher", "Alternativa amiga do ombro ao press vertical"],
+    ["Elevação lateral com halteres", "Halteres", "Sobe o cotovelo, não a mão|Para à altura do ombro|Sem balançar o tronco"],
+    ["Elevação lateral no cabo", "Cabo", "Tensão constante desde o início|Sobe o cotovelo, não a mão|Para abaixo da linha do ombro"],
+    ["Press Arnold", "Halteres", "Começa com as palmas viradas para ti|Roda os punhos ao subir|Costas encostadas, sem arquear", "Evitar com dor acima da cabeça"],
+    ["Elevação frontal com cabo", "Cabo", "Braço quase esticado|Sobe até à altura do ombro|Sem inclinar o tronco para trás"],
+    ["Face pull", "Cabo", "Puxa a corda à altura do rosto|Cotovelos altos, abrem para os lados|Roda os punhos para fora no fim", "Excelente para saúde do ombro"],
+    ["Crucifixo inverso na máquina", "Máquina", "Peito apoiado, ombros baixos|Abre os braços com os cotovelos|Sem encolher os ombros"],
+    ["Rotação externa no cabo", "Cabo", "Cotovelo colado ao tronco a 90°|Roda o antebraço para fora, devagar|Carga leve, séries limpas", "Aquecimento e prevenção do ombro"]
+  ],
+  "Bíceps": [
+    ["Rosca direta com barra", "Barra", "Cotovelos fixos ao lado do tronco|Sem balançar o corpo|Desce com controlo até esticar"],
+    ["Rosca alternada com halteres", "Halteres", "Palmas viradas para cima|Cotovelo fixo|Roda o punho ao subir"],
+    ["Rosca martelo", "Halteres", "Pega neutra, cotovelos fixos|Sem inclinar o tronco|Controla a descida"],
+    ["Rosca inclinada com halteres", "Halteres", "Banco a 45°, braços a pender|Cotovelo para trás do tronco|Alongamento completo em baixo"],
+    ["Rosca no cabo", "Cabo", "Cotovelos fixos|Tensão constante|Pausa de 1 s em cima"],
+    ["Rosca martelo no cabo", "Cabo", "Cotovelo fixo ao lado do tronco|Pega neutra com corda|Pausa de 1 s em cima"],
+    ["Rosca Scott na máquina", "Máquina", "Axilas bem apoiadas no banco|Não deixes o cotovelo sair do apoio|Desce devagar, sem largar o peso"]
+  ],
+  "Tríceps": [
+    ["Extensão de tríceps na polia", "Cabo", "Cotovelos colados ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe"],
+    ["Extensão de tríceps unilateral na polia", "Cabo", "Cotovelo colado ao tronco|Bloqueio completo em baixo|Só o antebraço se mexe"],
+    ["Extensão acima da cabeça no cabo", "Cabo", "Cotovelos apontados para a frente|Alonga bem o tríceps em baixo|Costelas baixas, sem arquear"],
+    ["Press francês com barra EZ", "Barra EZ", "Cotovelos apontam ao teto, fixos|Desce atrás da cabeça com controlo|Estende sem abrir os cotovelos"],
+    ["Press fechado", "Barra", "Pega à largura dos ombros|Cotovelos junto ao tronco|Empurra em linha reta"],
+    ["Fundos em banco", "Peso corporal", "Ombros afastados das orelhas|Cotovelos para trás, juntos|Desce só até onde o ombro estiver confortável", "Evitar com dor no ombro"],
+    ["Fundos nas paralelas (tríceps)", "Paralelas", "Tronco vertical|Cotovelos junto ao corpo|Estende por completo em cima", "Evitar com dor no ombro"]
+  ],
+  "Quadríceps": [
+    ["Agachamento livre com barra", "Barra", "Peito alto, abdómen firme|Joelhos na direção dos pés|Desce com controlo até à amplitude que mantiveres limpa"],
+    ["Agachamento frontal", "Barra", "Cotovelos altos, barra apoiada nos ombros|Tronco vertical|Joelhos para a frente, calcanhares no chão"],
+    ["Agachamento goblet", "Haltere", "Haltere junto ao peito, cotovelos dentro dos joelhos|Tronco vertical|Pés todos apoiados"],
+    ["Leg press 45°", "Máquina", "Lombar colada ao banco|Joelhos na direção dos pés|Amplitude máxima sem a bacia levantar"],
+    ["Leg press unilateral", "Máquina", "Bacia e lombar coladas ao banco|Joelho alinhado com o pé|Amplitude controlada"],
+    ["Hack squat", "Máquina", "Costas e bacia coladas ao apoio|Pés à largura dos ombros|Desce até onde mantiveres a lombar colada"],
+    ["Agachamento búlgaro", "Halteres", "Tronco ligeiramente inclinado à frente|Pé da frente todo apoiado|Desce na vertical, não para a frente"],
+    ["Extensão de pernas", "Máquina", "Bacia colada ao banco|Pausa de 1 s em cima|Desce devagar"],
+    ["Passada andante", "Halteres", "Passos largos, tronco firme|Joelho da frente alinhado com o pé|Desce na vertical"],
+    ["Step-up", "Halteres", "Pé todo apoiado no banco|Empurra com a perna da frente|Desce com controlo"]
+  ],
+  "Posteriores": [
+    ["Peso morto romeno", "Barra ou halteres", "Empurra a anca para trás|Barra colada às pernas, costas neutras|Para quando sentires o alongamento atrás da coxa"],
+    ["Peso morto unilateral com haltere", "Halteres", "Anca para trás, perna de trás em linha com o tronco|Costas neutras|Mantém a bacia nivelada"],
+    ["Peso morto convencional", "Barra", "Costas neutras, peito alto|Empurra o chão com os pés|Barra sempre colada ao corpo"],
+    ["Curl femoral deitado", "Máquina", "Bacia colada ao banco|Sobe sem levantar a anca|Desce em 3 s"],
+    ["Curl femoral sentado", "Máquina", "Anca fixa no banco|Controla a fase de volta com 3 s|Amplitude completa"],
+    ["Hiperextensão a 45°", "Banco romano", "Costas neutras, não hiperestendas|Sobe com os glúteos e posteriores|Cruza os braços ao peito"],
+    ["Nordic curl", "Peso corporal", "Joelhos fixos e corpo em linha|Desce o mais devagar possível|Usa as mãos para ajudar a subir"]
+  ],
+  "Glúteos": [
+    ["Hip thrust", "Barra", "Queixo para o peito, costelas baixas|Empurra pelos calcanhares|Pausa de 2 s com glúteo contraído"],
+    ["Passada reversa", "Halteres", "Passo largo para trás|Tronco ligeiramente inclinado à frente|Empurra pelo calcanhar da frente"],
+    ["Ponte de glúteos", "Peso corporal", "Pés perto do glúteo|Sobe a bacia sem arquear a lombar|Contrai no topo"],
+    ["Abdução na máquina", "Máquina", "Tronco ligeiramente inclinado à frente|Abre com os glúteos, não com o balanço|Controla a volta"],
+    ["Abdução no cabo", "Cabo", "Tronco ligeiramente inclinado|Sem rodar a bacia|Pausa de 1 s no fim"],
+    ["Coice no cabo (kickback)", "Cabo", "Lombar neutra|Estende a anca sem arquear as costas|Contrai o glúteo no fim"],
+    ["Agachamento sumo", "Haltere", "Pés largos, pontas para fora|Joelhos na direção dos pés|Tronco vertical"]
+  ],
+  "Gémeos": [
+    ["Elevação de gémeos em pé", "Máquina ou Smith", "Pausa de 2 s no alongamento|Sobe até à ponta dos pés|Amplitude completa"],
+    ["Elevação de gémeos sentado", "Máquina", "Joelhos a 90°|Pausa de 2 s em baixo|Sobe sem balançar"],
+    ["Elevação de gémeos no leg press", "Máquina", "Só as pontas dos pés na plataforma|Joelhos quase esticados, sem bloquear|Amplitude completa"]
+  ],
+  "Core": [
+    ["Prancha", "Peso corporal", "Corpo em linha, glúteos contraídos|Cotovelos sob os ombros|Respira sem perder a posição"],
+    ["Prancha lateral", "Peso corporal", "Corpo em linha, anca alta|Cotovelo sob o ombro|Não deixes a bacia cair"],
+    ["Dead bug", "Peso corporal", "Zona lombar colada ao chão|Expira ao estender o braço e a perna|Movimento lento e controlado"],
+    ["Crunch abdominal no chão", "Peso corporal", "Lombar colada ao chão|Sobe as costelas em direção à bacia|Pescoço relaxado, olhar ao teto"],
+    ["Pallof press", "Cabo", "Resiste à rotação do tronco|Costelas fechadas, glúteos firmes|Respira sem perder a postura"],
+    ["Elevação de pernas deitado", "Peso corporal", "Lombar colada ao chão|Sobe as pernas esticadas, sem balançar|Desce devagar sem tocar no chão"],
+    ["Crunch no cabo", "Cabo", "Enrola a coluna, não dobres só a anca|Cotovelos para as coxas|Expira no fim"],
+    ["Elevação de pernas suspenso", "Barra fixa", "Sobe a bacia no fim, não só as pernas|Sem balançar|Desce devagar"],
+    ["Roda abdominal", "Roda", "Costelas baixas, lombar neutra|Vai até onde mantiveres o controlo|Volta com o abdómen, não com a anca"],
+    ["Bird dog", "Peso corporal", "Costas neutras, bacia estável|Estende braço e perna opostos|Pausa de 2 s e volta devagar"]
+  ]
+};
+function exLibFold(s){ return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
+function exerciseSearchUrl(name){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent(String(name) + " execução técnica"); }
+function exerciseSeedList(){
+  var out = [];
+  EXERCISE_GROUPS.forEach(function(g){
+    (EXERCISE_SEED[g] || []).forEach(function(r){
+      out.push({name: r[0], group: g, equipment: r[1] || "", cues: parseCues(String(r[2] || "").split("|")), note: r[3] || "", demo: exerciseSearchUrl(r[0]), ownDemo: false, seed: true, id: null});
+    });
+  });
+  return out;
+}
+// limpa e valida um exercício escrito pelo profissional; devolve {entry} ou {error}
+function exLibClean(raw){
+  raw = raw || {};
+  var name = String(raw.name || "").trim().replace(/\s+/g, " ").slice(0, 120);
+  if (!name) return {error: "Dá um nome ao exercício."};
+  var group = EXERCISE_GROUPS.indexOf(raw.group) >= 0 ? raw.group : "";
+  if (!group) return {error: "Escolhe o grupo muscular."};
+  var demoRaw = String(raw.demo || "").trim();
+  if (demoRaw && !cleanDemoUrl(demoRaw)) return {error: "A ligação do vídeo tem de começar por https:// (e não ter espaços)."};
+  return {entry: {name: name, group: group, equipment: String(raw.equipment || "").trim().slice(0, 60), demo: demoRaw ? cleanDemoUrl(demoRaw) : "", cues: parseCues(raw.cues), note: String(raw.note || "").trim().slice(0, 200)}};
+}
+// lista base + o que o estúdio acrescentou/corrigiu (a versão do estúdio substitui a base com o mesmo nome)
+function exerciseLibraryMerged(custom){
+  var byKey = {}, order = [];
+  exerciseSeedList().forEach(function(e){ byKey[exLibFold(e.name)] = e; order.push(exLibFold(e.name)); });
+  (custom || []).forEach(function(c){
+    var cl = exLibClean(c);
+    if (!cl.entry) return;
+    var k = exLibFold(cl.entry.name), base = byKey[k];
+    var e = {name: cl.entry.name, group: cl.entry.group, equipment: cl.entry.equipment || (base ? base.equipment : ""), cues: cl.entry.cues.length ? cl.entry.cues : (base ? base.cues : []), note: cl.entry.note || (base ? base.note : ""),
+      demo: cl.entry.demo || exerciseSearchUrl(cl.entry.name), ownDemo: !!cl.entry.demo, seed: false, overrides: !!base, id: c.id || null};
+    if (!base) order.push(k);
+    byKey[k] = e;
+  });
+  var list = order.map(function(k){ return byKey[k]; });
+  list.sort(function(a, b){
+    var ga = EXERCISE_GROUPS.indexOf(a.group), gb = EXERCISE_GROUPS.indexOf(b.group);
+    return ga !== gb ? ga - gb : a.name.localeCompare(b.name, "pt");
+  });
+  return list;
+}
+function exerciseLibraryFilter(list, group, query){
+  var q = exLibFold(query);
+  return list.filter(function(e){
+    return (!group || e.group === group) && (!q || exLibFold(e.name + " " + e.equipment + " " + e.group + " " + e.note).indexOf(q) >= 0);
+  });
+}
+function exLibLocalRead(){ try { var v = JSON.parse(localStorage.getItem(EX_LIB_LOCAL_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function exLibLocalWrite(list){ try { localStorage.setItem(EX_LIB_LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } }
+function exerciseLibraryCustomList(){
+  if (!sbReady) return Promise.resolve({data: exLibLocalRead()});
+  return sb.from("exercise_library").select("id,name,muscle_group,equipment,demo,cues,note").order("name").then(function(res){
+    if (res.error) return {error: true};
+    return {data: (res.data || []).map(function(r){ return {id: r.id, name: r.name, group: r.muscle_group, equipment: r.equipment, demo: r.demo, cues: r.cues, note: r.note}; })};
+  }).catch(function(){ return {error: true}; });
+}
+// guarda (cria ou atualiza) um exercício do estúdio; editId = id de um exercício do estúdio já existente
+function exerciseLibrarySave(raw, editId, existingCustom){
+  var cl = exLibClean(raw);
+  if (!cl.entry) return Promise.resolve({error: cl.error});
+  var e = cl.entry, k = exLibFold(e.name);
+  var clash = (existingCustom || []).filter(function(c){ return exLibFold(c.name) === k && c.id !== editId; })[0];
+  if (clash) return Promise.resolve({error: "Já existe um exercício do estúdio com esse nome."});
+  if (!sbReady){
+    var list = exLibLocalRead().filter(function(c){ return c.id !== editId && exLibFold(c.name) !== k; });
+    list.push({id: editId || uidShort("x"), name: e.name, group: e.group, equipment: e.equipment, demo: e.demo, cues: e.cues, note: e.note});
+    return Promise.resolve(exLibLocalWrite(list) ? {} : {error: "Não foi possível guardar neste browser."});
+  }
+  var row = {name: e.name, muscle_group: e.group, equipment: e.equipment || null, demo: e.demo || null, cues: e.cues, note: e.note || null};
+  var q = editId ? sb.from("exercise_library").update(row).eq("id", editId) : sb.from("exercise_library").insert(row);
+  return q.then(function(res){
+    return res.error ? {error: "Não foi possível guardar (a migração 0021 já foi corrida no Supabase?)."} : {};
+  }).catch(function(){ return {error: "Não foi possível guardar — tenta novamente."}; });
+}
+function exerciseLibraryDelete(id){
+  if (!sbReady){ exLibLocalWrite(exLibLocalRead().filter(function(c){ return c.id !== id; })); return Promise.resolve({}); }
+  return sb.from("exercise_library").delete().eq("id", id).then(function(res){ return res.error ? {error: true} : {}; }).catch(function(){ return {error: true}; });
+}
+// o que o editor de treino preenche ao escolher um exercício
+function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n")}; }
+function openExerciseLibrary(onPick){
+  var sheet = openModal("<div class=\"mtitle\">Biblioteca de exercícios</div>" +
+    "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Partilhada por todo o estúdio. Escolhe um exercício para o preencher no treino, com demonstração e pontos-chave.</p><div id=\"exLibBody\"><p class=\"muted-p\">A carregar…</p></div>");
+  var body = sheet.querySelector("#exLibBody");
+  var custom = [], group = "", query = "";
+  function listView(){
+    var all = exerciseLibraryMerged(custom), shown = exerciseLibraryFilter(all, group, query);
+    body.innerHTML = "<div class=\"checkin-field\"><input type=\"search\" id=\"exLibQ\" placeholder=\"Procurar exercício…\" value=\"" + escapeHtml(query) + "\" aria-label=\"Procurar exercício\"></div>" +
+      "<div style=\"display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;\"><button type=\"button\" class=\"chip" + (group ? "" : " on") + "\" data-lib-group=\"\">Todos</button>" +
+      EXERCISE_GROUPS.map(function(g){ return "<button type=\"button\" class=\"chip" + (group === g ? " on" : "") + "\" data-lib-group=\"" + escapeHtml(g) + "\">" + escapeHtml(g) + "</button>"; }).join("") + "</div>" +
+      "<div id=\"exLibList\">" + (shown.length ? shown.map(function(e, i){
+        return "<div class=\"food-item\" style=\"cursor:default;\"><span class=\"fname\"><button type=\"button\" class=\"wl-info\" data-lib-pick=\"" + i + "\">" + escapeHtml(e.name) + "</button>" +
+          (e.seed ? "" : " <span class=\"pill\" style=\"font-size:0.62rem;\">estúdio</span>") +
+          "<span class=\"muted-p\" style=\"display:block; font-size:0.74rem;\">" + escapeHtml(e.group + (e.equipment ? " · " + e.equipment : "") + (e.ownDemo ? " · vídeo próprio" : "")) + (e.note ? " · " + escapeHtml(e.note) : "") + "</span></span>" +
+          "<span style=\"white-space:nowrap;\"><a class=\"assess-del\" href=\"" + escapeHtml(e.demo) + "\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"Ver vídeo\" title=\"Ver vídeo\" style=\"text-decoration:none;\">▶</a> " +
+          "<button type=\"button\" class=\"assess-del\" data-lib-edit=\"" + i + "\" aria-label=\"Editar exercício\" title=\"Editar\">✎</button></span></div>";
+      }).join("") : "<p class=\"muted-p\">Nenhum exercício encontrado.</p>") + "</div>" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"exLibNew\" style=\"margin-top:12px; width:100%;\">+ Novo exercício</button>";
+    var q = body.querySelector("#exLibQ");
+    q.addEventListener("input", function(){
+      query = q.value;
+      var pos = q.selectionStart; // a lista é refeita, por isso repõe-se o foco na pesquisa
+      listView();
+      var nq = body.querySelector("#exLibQ"); nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (err) {}
+    });
+    body.querySelectorAll("[data-lib-group]").forEach(function(b){ b.addEventListener("click", function(){ group = b.getAttribute("data-lib-group"); listView(); }); });
+    body.querySelectorAll("[data-lib-pick]").forEach(function(b){ b.addEventListener("click", function(){ var e = shown[parseInt(b.getAttribute("data-lib-pick"), 10)]; closeModal(); onPick(exerciseLibraryFill(e), e); }); });
+    body.querySelectorAll("[data-lib-edit]").forEach(function(b){ b.addEventListener("click", function(){ formView(shown[parseInt(b.getAttribute("data-lib-edit"), 10)]); }); });
+    body.querySelector("#exLibNew").addEventListener("click", function(){ formView(null); });
+  }
+  function formView(e){
+    var isNew = !e, locked = e && e.seed; // um da lista base: o nome fica fixo (guardar cria a versão do estúdio)
+    body.innerHTML = "<div class=\"checkin-field\"><label for=\"exlName\">Nome</label><input type=\"text\" id=\"exlName\" maxlength=\"120\" value=\"" + escapeHtml(e ? e.name : "") + "\"" + (locked || (e && e.overrides) ? " readonly" : "") + "></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlGroup\">Grupo muscular</label><select id=\"exlGroup\" class=\"mini-select\" style=\"width:100%;\">" + EXERCISE_GROUPS.map(function(g){ return "<option" + (e && e.group === g ? " selected" : "") + ">" + escapeHtml(g) + "</option>"; }).join("") + "</select></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlEquip\">Equipamento (opcional)</label><input type=\"text\" id=\"exlEquip\" maxlength=\"60\" value=\"" + escapeHtml(e ? e.equipment : "") + "\"></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlDemo\">Vídeo ou GIF (ligação https)</label><input type=\"url\" id=\"exlDemo\" maxlength=\"500\" placeholder=\"https://…\" value=\"" + escapeHtml(e && e.ownDemo ? e.demo : "") + "\"><p class=\"muted-p\" style=\"font-size:0.74rem;\">Vazio = pesquisa de vídeo no YouTube.</p></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlCues\">Pontos-chave (um por linha, até " + EX_CUES_MAX + ")</label><textarea id=\"exlCues\" rows=\"3\">" + escapeHtml(e ? e.cues.join("\n") : "") + "</textarea></div>" +
+      "<div class=\"checkin-field\"><label for=\"exlNote\">Nota (opcional)</label><input type=\"text\" id=\"exlNote\" maxlength=\"200\" value=\"" + escapeHtml(e ? e.note : "") + "\" placeholder=\"Ex.: amigo do ombro sensível\"></div>" +
+      "<p class=\"muted-p\" id=\"exlErr\" style=\"color:var(--critical); display:none;\"></p>" +
+      "<button type=\"button\" class=\"btn primary\" id=\"exlSave\" style=\"width:100%; margin-bottom:8px;\">Guardar para o estúdio</button>" +
+      (e && !e.seed ? "<button type=\"button\" class=\"btn\" id=\"exlDel\" style=\"width:100%; margin-bottom:8px;\">" + (e.overrides ? "Repor o original" : "Apagar do estúdio") + "</button>" : "") +
+      "<button type=\"button\" class=\"btn\" id=\"exlBack\" style=\"width:100%;\">Voltar</button>";
+    function fail(m){ var er = body.querySelector("#exlErr"); er.textContent = m; er.style.display = "block"; }
+    body.querySelector("#exlBack").addEventListener("click", listView);
+    body.querySelector("#exlSave").addEventListener("click", function(){
+      var go = body.querySelector("#exlSave"); go.disabled = true;
+      exerciseLibrarySave({name: body.querySelector("#exlName").value, group: body.querySelector("#exlGroup").value, equipment: body.querySelector("#exlEquip").value,
+        demo: body.querySelector("#exlDemo").value, cues: body.querySelector("#exlCues").value, note: body.querySelector("#exlNote").value}, e && e.id, custom).then(function(r){
+        if (r.error){ fail(r.error); go.disabled = false; return; }
+        showToast("✓ Exercício guardado"); reload();
+      });
+    });
+    var del = body.querySelector("#exlDel");
+    if (del) del.addEventListener("click", function(){
+      if (!window.confirm(e.overrides ? "Repor o exercício original da lista base?" : "Apagar este exercício da biblioteca do estúdio? Os treinos já montados não mudam.")) return;
+      exerciseLibraryDelete(e.id).then(function(r){ if (r.error) showToast("⚠ Não foi possível apagar"); reload(); });
+    });
+  }
+  function reload(){
+    exerciseLibraryCustomList().then(function(r){
+      if (r.error){ custom = []; listView(); body.insertAdjacentHTML("afterbegin", "<p class=\"muted-p\" style=\"color:var(--critical); margin-bottom:8px;\">Não foi possível carregar os exercícios do estúdio (a migração 0021 já foi corrida no Supabase?). A lista base está disponível.</p>"); return; }
+      custom = r.data; listView();
+    });
+  }
+  reload();
+}
+
 /* ---------- Templates de plano (nutrição e treino) ----------
    O profissional guarda a estrutura de um plano e aplica-a a outro aluno (substituindo ou acrescentando); depois edita à vontade.
    Com Supabase vai para a tabela plan_templates (só profissionais); em modo local fica neste browser. */
@@ -8553,6 +8814,7 @@ function tplProTreino(s){
         `<button type="button" class="assess-del" data-del-ex="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Remover exercício">✕</button></span></div>`;
     });
     html += `<div class="assess-form-grid" style="margin-top:10px;" data-exform="${escapeHtml(d.id)}">` +
+      `<div class="f" style="grid-column:1/-1;"><button type="button" class="btn btn-sm" data-ex-lib style="width:100%;">📚 Escolher da biblioteca</button></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Exercício</label><input type="text" data-ex-name maxlength="120" placeholder="Ex.: Supino com barra"></div>` +
       `<div class="f"><label>Séries</label><input type="number" min="1" max="20" value="3" data-ex-sets></div>` +
       `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps></div>` +
@@ -8629,6 +8891,17 @@ function wireProTreino(s, el){
     if (!addTrainingDay(s, el.querySelector("#newDayName").value)){ showToast("Dá um nome ao dia de treino"); return; }
     logPlanEvent(s, "treino_dia", "Dia de treino adicionado", null, el.querySelector("#newDayName").value);
     persistStudent(s); renderProTabContent(s);
+  });
+  el.querySelectorAll("[data-ex-lib]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = btn.closest("[data-exform]");
+      openExerciseLibrary(function(fill){
+        if (!box) return;
+        box.querySelector("[data-ex-name]").value = fill.name;
+        box.querySelector("[data-ex-demo]").value = fill.demo;
+        box.querySelector("[data-ex-cues]").value = fill.cues;
+      });
+    });
   });
   el.querySelectorAll("[data-add-ex]").forEach(function(btn){
     btn.addEventListener("click", function(){
