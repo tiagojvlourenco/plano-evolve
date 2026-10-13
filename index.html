@@ -282,7 +282,8 @@
   .checkin-history-row:last-child{border-bottom:none;}
 
   .weight-chart-wrap svg{width:100%; max-width:560px; margin-inline:auto; height:auto; display:block;}
-  .stat-grid-4{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px;}
+  .stat-grid-4{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px;}
+  @media (max-width:350px){ .stat-grid-4{grid-template-columns:repeat(2,minmax(0,1fr));} }
   @media (max-width:760px){ .pro-main .stat-grid-4{grid-template-columns:repeat(2,minmax(0,1fr));} }
   .stat-tile{background:var(--surface-2); border-radius:12px; padding:10px 8px; text-align:center;}
   .stat-tile .v{font-family:var(--mono); font-weight:700; font-size:1rem;}
@@ -5679,6 +5680,85 @@ var STUDENTS = [
   }
 ];
 
+/* ---------- Aluna de demonstração completa ("Ana Demo") ----------
+   Uma conta com 12 semanas de histórico (peso, check-ins, avaliações com perímetros e fotos, programa de treino com guia e RIR, sessões registadas)
+   para percorrer toda a app em modo local e apanhar erros. As datas são sempre relativas a hoje. Perfil propositado: peso estagnado há 3 semanas apesar de
+   treinar e aderir bem, digestão fraca, e dois exercícios prontos para subir carga. */
+function buildFullDemoStudent(){
+  function dAgo(n){ return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); }
+  var IMG = {"antes0": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0FTihxVYqGVYioVZgPrMMtl8B24BJzAMF4aky/W2XRI0NDT0Iujn4/6eddEfuT3oaZg40H1idKY4yg29EbpIHOI2HtD29D+ht+weWh40NDQ0dAu6okDHPuYc6HBxhRsaOgzdSVzqhoaOQXcVF7mhV0MPEOe7oaFb0cPEmW5o6Cb0YHGOG3oR9BTxTzc0dCV6ovjYDT0dPV184IaGLkYvIv7mdnOBhoaGhoaGhoaGhoaGht4B7btqTV46ujqXpFHbvQAAAABJRU5ErkJggg==", "antes1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0NTil5/WaB2WYnEWoD6zTDbfgVvACQzDhSHpcr1tlwQNDQ29CPr5uL9nXfRHbg96GiYOdJ8YnSmOckNvhC4Sh7iNB7Q9/U/oLbuHlgcNDQ0N3YKuKNCxjzkHOlxc4YaGDkN3Epe6oaFj0F3FRW7o1dADxPluaOhW9DBxphsaugk9WJzjhl4EPUX80w0NXYmeKD52Q09HTxcfuKGhi9GLiL+53VygoaGhoaGhoaGhoaGhoXdA+65akxdYsdjMMr0y+AAAAABJRU5ErkJggg==", "antes2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0NTil5+WaBVWYoEWoD6zTDbfgVvACQzDhSHperltlwQNDQ29CPr5uL9nXfRHbg96GiYOdJ8YnSmOckNvhC4Sh7iNB7Q9/U/oLbuHlgcNDQ0N3YKuKNCxjzkHOlxc4YaGDkN3Epe6oaFj0F3FRW7o1dADxPluaOhW9DBxphsaugk9WJzjhl4EPUX80w0NXYmeKD52Q09HTxcfuKGhi9GLiL+53VygoaGhoaGhoaGhoaGhoXdA+65akxd1dU+cH2ARpgAAAABJRU5ErkJggg==", "depois0": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUE+SQyfooB0jo3SwDJAerEQydvPgD/AExnwQatvrvVwaNDQ09CTo7/45Z170T24FvQ0TJ7ofjO4UZ7mhF0KHxCluzwPaP/1P6CW7h5YHDQ0NDX0HfaFA5w4DDQ29IjpdfMENDQ0NDQ0NHUcXiaNuaGho6HJ0qTjkhoZOQA8Q97uhp0IPE3e6oaFvoQeLe9ytdDNUtDeChoaGhoaGhoaGhoaGhn4u2rlqIAfJBUlZI6bECAAAAABJRU5ErkJggg==", "depois1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUM+SU4+dsXNklA6XAdKDlUjGbh78AZ7AmA9CbXu9l0uDhoaGngT93T/nzIv+ya2gt2HiRPeD0Z3iLDf0QuiQOMXteUD7p/8JvWT30PKgoaGhoe+gLxTo3GGgoaFXRKeLL7ihoaGhoaGh4+gicdQNDQ0NXY4uFYfc0NAJ6AHifjf0VOhh4k43NPQt9GBxj7uVboaK9kbQ0NDQ0NDQ0NDQ0NDQ0M9FO1cN5ABHtBW9ml+DVAAAAABJRU5ErkJggg==", "depois2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUM+SU48dsVNkkg6YAdKDlUjGbh78AZ7AmA9C7bW9l0uDhoaGngT93T/nzIv+ya2gt2HiRPeD0Z3iLDf0QuiQOMXteUD7p/8JvWT30PKgoaGhoe+gLxTo3GGgoaFXRKeLL7ihoaGhoaGh4+gicdQNDQ0NXY4uFYfc0NAJ6AHifjf0VOhh4k43NPQt9GBxj7uVboaK9kbQ0NDQ0NDQ0NDQ0NDQ0M9FO1cN5ABkyqD+VU/jGwAAAABJRU5ErkJggg=="};
+  function ex(id, name, sets, reps, rest, cues, demo){ return {id: id, name: name, sets: sets, reps: reps, rpe: null, rest: rest, notes: "", demo: demo || null, cues: cues}; }
+  var program = {name: "Hipertrofia 3 dias", days: [
+    {id: "dA", name: "Treino A — Peito e costas", exercises: [
+      ex("eA1", "Supino reto com barra", 3, "8-12", 120, ["Omoplatas juntas e para baixo", "Barra desce ao meio do peito", "Pés firmes no chão"], "https://www.youtube.com/results?search_query=supino+reto+t%C3%A9cnica"),
+      ex("eA2", "Remada com barra", 3, "8-12", 90, ["Costas neutras, anca para trás", "Puxa a barra para o umbigo"]),
+      ex("eA3", "Flexões de braços", 3, "10-15", 60, ["Corpo em prancha", "Cotovelos a 45°"])]},
+    {id: "dB", name: "Treino B — Pernas", exercises: [
+      ex("eB1", "Agachamento", 4, "6-8", 150, ["Joelhos na direção dos pés", "Desce até à paralela", "Peito aberto"]),
+      ex("eB2", "Peso morto romeno", 3, "8-10", 120, ["Barra junto às pernas", "Anca para trás, joelhos ligeiramente fletidos"]),
+      ex("eB3", "Elevação de gémeos", 3, "12-15", 60, ["Amplitude completa", "Pausa em cima"])]},
+    {id: "dC", name: "Treino C — Ombros e braços", exercises: [
+      ex("eC1", "Press de ombros com halteres", 3, "8-12", 90, ["Cotovelos ligeiramente à frente", "Não arquear as costas"]),
+      ex("eC2", "Elevações laterais", 3, "12-15", 60, ["Sobe até à altura do ombro", "Controla a descida"]),
+      ex("eC3", "Rosca de bíceps", 3, "10-12", 60, ["Cotovelos junto ao corpo", "Sem balançar"])]}
+  ]};
+  // sessão k (0 = a mais antiga) de cada exercício: [carga, [reps por série], [rir por série] (só nas últimas 4 sessões)]
+  var plan = {
+    eA1: [[50,[9,9,8]], [52.5,[10,9,9]], [52.5,[10,10,9],[3,3,2]], [55,[12,11,10],[2,2,1]], [55,[12,12,12],[2,1,1]], [55,[12,12,12],[1,1,0]]],
+    eA2: [[40,[10,9,8]], [40,[11,10,9]], [42.5,[10,9,9],[3,2,2]], [42.5,[11,10,10],[2,2,2]], [45,[10,10,9],[2,2,1]], [45,[11,10,10],[2,1,1]]],
+    eA3: [[0,[10,9,8]], [0,[11,10,9]], [0,[12,11,10],[3,2,2]], [0,[12,12,11],[2,2,2]], [0,[13,12,12],[2,2,1]], [0,[14,13,12],[2,1,1]]],
+    eB1: [[70,[8,8,7,6]], [70,[8,8,8,7]], [75,[8,7,6,6],[2,1,1,0]], [75,[8,8,7,6],[2,1,1,0]], [75,[8,7,7,6],[2,1,1,0]], [75,[8,7,7,6],[2,1,0,0]]],
+    eB2: [[60,[9,8,8]], [62.5,[9,9,8]], [62.5,[10,9,9],[3,2,2]], [65,[9,8,8],[3,2,2]], [65,[10,9,9],[2,2,1]], [67.5,[9,8,8],[2,2,1]]],
+    eB3: [[30,[14,13,12]], [30,[15,14,13]], [32.5,[13,12,12],[3,2,2]], [32.5,[14,13,13],[3,2,2]], [32.5,[15,14,14],[2,2,2]], [35,[13,12,12],[2,2,1]]],
+    eC1: [[20,[10,9,8]], [20,[11,10,9]], [22,[9,8,8],[3,2,2]], [22,[10,9,9],[3,2,2]], [24,[9,8,8],[2,2,1]], [24,[10,10,9],[2,2,1]]],
+    eC2: [[8,[13,12,12]], [8,[14,13,12]], [8,[15,14,13],[3,2,2]], [10,[13,12,12],[3,2,2]], [10,[15,15,15],[2,2,1]], [10,[15,15,15],[2,1,1]]],
+    eC3: [[12,[11,10,10]], [12,[12,11,10]], [14,[10,10,9],[3,2,2]], [14,[11,10,10],[3,2,2]], [14,[12,11,11],[2,2,1]], [16,[10,9,9],[2,2,1]]]
+  };
+  var logs = [], order = ["dA", "dB", "dC"], seen = {dA: 0, dB: 0, dC: 0};
+  [41, 38, 36, 34, 31, 29, 27, 24, 22, 20, 17, 15, 13, 10, 8, 6, 3, 1].forEach(function(daysAgo, i){
+    var day = program.days.filter(function(d){ return d.id === order[i % 3]; })[0], k = seen[day.id]++;
+    logs.push({id: "wDemo" + i, date: dAgo(daysAgo), dayId: day.id, dayName: day.name, rpe: 7 + (i % 3 === 1 ? 1 : 0), notes: i === 17 ? "Boa sessão, senti-me forte." : "",
+      entries: day.exercises.map(function(e){
+        var p = plan[e.id][k];
+        return {exerciseId: e.id, name: e.name, sets: p[1].map(function(r, si){ var set = {reps: r, load: p[0]}; if (p[2]) set.rir = p[2][si]; return set; })};
+      })});
+  });
+  var weights = [[84,78.4],[77,77.8],[70,77.2],[63,76.6],[56,76.0],[49,75.4],[42,74.8],[35,74.3],[28,73.7],[21,73.2],[14,73.1],[7,73.1],[0,73.0]].map(function(p){ return {date: dAgo(p[0]), w: p[1]}; });
+  // adesão, fome, energia, treinos, refeições fora, horas de sono, stress, recuperação, qualidade do sono, digestão (os últimos check-ins com digestão baixa)
+  var ci = [[64,7,6,6,3,2,6.5,6,6,6,7],[57,8,6,7,4,1,7,5,6,6,7],[50,8,5,7,4,1,7,5,7,7,7],[43,8,5,7,3,1,7.5,5,7,7,6],[36,9,5,8,4,0,7,4,8,7,6],[29,9,5,8,4,1,7,4,8,8,6],[22,9,4,8,3,1,7,4,7,7,5],[15,9,4,8,4,0,7.5,4,8,8,5],[8,9,5,7,4,1,7,5,7,7,4],[1,9,4,8,4,1,7,4,8,8,4]];
+  var checkins = ci.map(function(c){ return {date: dAgo(c[0]), weight: weights.filter(function(w){ return w.date <= dAgo(c[0]); }).pop().w, adherence: c[1], hunger: c[2], energy: c[3], workouts: c[4], mealsOff: c[5], sleepHours: c[6], stress: c[7], recovery: c[8], sleepQuality: c[9], digestion: c[10], notes: c[0] === 1 ? "Peso parado mas sinto-me forte. Barriga um pouco inchada ao fim do dia." : ""}; });
+  function photo(daysAgo, pos, set, i){ return {date: dAgo(daysAgo), position: pos, dataUrl: IMG[set + i], by: "profissional"}; }
+  var photos = [];
+  ["frente", "lado", "costas"].forEach(function(pos, i){ photos.push(photo(84, pos, "antes", i)); photos.push(photo(7, pos, "depois", i)); });
+  return {
+    id: "demo-ana", isDemo: true, active: true, initials: "AD", name: "Ana Demo (completa)", age: 34, sex: "Feminino", height: 168,
+    weightInitial: 78.4, weightCurrent: 73.0, weightGoal: 68, goal: "Perda de gordura", trainingsPerWeek: 3, trainingDays: [1, 3, 5], trainingType: "Musculação", trainingTime: "18:30",
+    wakeTime: "07:00", sleepTime: "23:00", likes: ["Frango", "Ovos", "Batata-doce"], dislikes: ["Fígado"], avoid: [], allergies: [],
+    mealsPreferred: 5, budget: "Médio", cookTime: "30 min/dia", work: "Escritório", weekendNote: "Almoço fora ao domingo",
+    targets: {kcal: 1900, protein: 140, carbs: 190, fat: 62}, flexibility: 55, flexOverrides: {}, alerts: [],
+    flexHistory: [{date: dAgo(42), from: 35, to: 45, note: "Boa adesão — mais escolha."}, {date: dAgo(14), from: 45, to: 55, note: "Adesão a 9/10 — autonomia maior."}],
+    blockedFoods: [], notes: "Demonstração completa: peso estagnado há 3 semanas apesar de treinar e aderir bem; digestão em queda; Supino e Elevações laterais prontos para subir carga.",
+    meals: [
+      meal("Pequeno-almoço", "07:30", [food("Iogurte grego natural", "200 g", "laticinios"), food("Aveia", "60 g", "cereais"), food("Mirtilos", "80 g", "fruta")]),
+      meal("Meio da manhã", "10:30", [food("Maçã", "1 unid.", "fruta"), food("Frutos secos", "15 g", "gorduras")]),
+      meal("Almoço", "13:00", [food("Frango (peito)", "160 g", "carnes"), food("Arroz (cozido)", "180 g", "cereais"), food("Brócolos", "à vontade", "vegetais"), food("Azeite", "10 ml", "gorduras", false)]),
+      meal("Lanche", "17:00", [food("Banana", "1 unid.", "fruta"), food("Ovos", "2 unid.", "carnes")]),
+      meal("Jantar", "20:30", [food("Pescada", "180 g", "carnes"), food("Batata-doce", "220 g", "cereais"), food("Salada mista", "à vontade", "vegetais")])
+    ],
+    checkins: checkins, weights: weights,
+    assessments: [
+      {date: dAgo(84), weight: 78.4, bodyFat: 33.5, muscle: 27.0, visceral: 9, water: 47.5, waist: 92, hip: 108, chest: 100, arm: 31, thigh: 62},
+      {date: dAgo(42), weight: 74.8, bodyFat: 31.2, muscle: 27.4, visceral: 8, water: 48.6, waist: 87.5, hip: 106, chest: 98.5, arm: 31, thigh: 61},
+      {date: dAgo(7), weight: 73.1, bodyFat: 29.6, muscle: 27.9, visceral: 7, water: 49.8, waist: 84, hip: 104, chest: 97, arm: 31.5, thigh: 59.5}
+    ],
+    allowPhotos: true, photos: photos,
+    planHistory: [{date: dAgo(84), kcal: 2100, flex: 35, label: "Plano 1"}, {date: dAgo(42), kcal: 1950, flex: 45, label: "Plano 2"}, {date: dAgo(14), kcal: 1900, flex: 55, label: "Plano 3"}],
+    substitutionHistory: [], adaptationHistory: [], mealDailyState: null,
+    trainingProgram: program, workoutLogs: logs, lastCheckinDaysAgo: 1
+  };
+}
+STUDENTS.push(buildFullDemoStudent());
+
 function findStudent(id){ for (var i=0;i<STUDENTS.length;i++) if (STUDENTS[i].id===id) return STUDENTS[i]; return null; }
 
 /* ===================== SUPABASE (base de dados real) ===================== */
@@ -7189,10 +7269,10 @@ function tplTodayWorkout(s){
 // refeições por ordem de hora, cada uma com um botão grande para marcar como feita; a próxima fica destacada
 function tplTodayMeals(s){
   var t = s.targets || {}, totals = consumedTotals(s);
-  var order = s.meals.map(function(m, i){ return i; }).sort(function(a, b){
+  var order = s.meals.map(function(m, i){ return i; }).filter(function(i){ return s.meals[i].foods.length; }).sort(function(a, b){
     return (toMinutes(effectiveMealTime(s.meals[a])) || 0) - (toMinutes(effectiveMealTime(s.meals[b])) || 0) || a - b;
   });
-  var planned = s.meals.filter(function(m){ return m.status !== "skipped"; });
+  var planned = s.meals.filter(function(m){ return m.status !== "skipped" && m.foods.length; }); // uma refeição ainda vazia (o profissional está a montá-la) não aparece ao aluno
   var doneN = planned.filter(mealCountsToday).length;
   var nm = getNextMeal(s), nextIdx = nm && !nm.tomorrow ? s.meals.indexOf(nm.meal) : -1; // a mesma "próxima" que a assistente usa; depois da última refeição não há nenhuma
   var pct = t.kcal ? Math.min(100, Math.round((totals.kcal / t.kcal) * 100)) : 0;
@@ -7266,6 +7346,7 @@ function tplPlano(s){
   var html = tabHead("Alimentação", "Nível " + TIER_LABEL[tier] + " · " + TIER_HINT[tier]);
   html += tplTargetsCard(s);
   s.meals.forEach(function(m, idx){
+    if (!m.foods.length) return; // refeição ainda vazia: só o profissional a vê
     var totals = resolvedMealTotals(s, m);
     html += "<div class=\"card plano-meal-card\">" +
       "<div class=\"plano-meal-head\"><span class=\"mname\">" + escapeHtml(m.name) + "</span><span class=\"mtime\">" + escapeHtml(m.time) + "</span></div>";
@@ -8244,10 +8325,10 @@ function applyTrainingTemplate(s, data, mode){
   return {days: days.length};
 }
 function tplTemplatesBar(kind){
-  return "<div class=\"card\" style=\"margin:14px 0;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Templates de " + (kind === "treino" ? "treino" : "alimentação") + "</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Guarda a estrutura deste plano para reutilizares com outros alunos, ou aplica um template guardado — depois editas tudo normalmente.</p>" +
+  return "<details class=\"perfil-section\" style=\"margin:14px 0;\"><summary class=\"eyebrow\">Templates de " + (kind === "treino" ? "treino" : "alimentação") + "</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0 10px;\">Guarda a estrutura deste plano para reutilizares com outros alunos, ou aplica um template guardado — depois editas tudo normalmente.</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" data-tpl-save=\"" + kind + "\">💾 Guardar como template</button>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" data-tpl-apply=\"" + kind + "\">📋 Aplicar template</button></div></div>";
+    "<button type=\"button\" class=\"btn primary btn-sm\" data-tpl-apply=\"" + kind + "\">📋 Aplicar template</button></div></details>";
 }
 function wireTemplates(s, el){
   function after(msg){ closeModal(); persistStudent(s); renderProTabContent(s); showToast(msg); }
@@ -11229,9 +11310,9 @@ function tplEditFoodForm(midx, fidx, f){
     "</div>" +
     "<div class=\"onb-row\" style=\"margin-top:8px; align-items:end;\">" +
       "<div class=\"onb-field ef-qty-wrap\" data-midx=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"margin-bottom:0;\">" + tplEditFoodQty(f.name, amt.value) + "</div>" +
-      "<div class=\"onb-field\" style=\"display:flex; gap:6px; margin-bottom:0;\">" +
-        "<button type=\"button\" class=\"btn primary btn-sm\" data-save-food-edit=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"flex:1;\">Guardar</button>" +
-        "<button type=\"button\" class=\"btn btn-sm\" data-cancel-food-edit=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"flex:1;\">Cancelar</button>" +
+      "<div class=\"onb-field\" style=\"display:flex; gap:6px; flex-wrap:wrap; margin-bottom:0;\">" +
+        "<button type=\"button\" class=\"btn primary btn-sm\" data-save-food-edit=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"flex:1 1 80px; min-width:0;\">Guardar</button>" +
+        "<button type=\"button\" class=\"btn btn-sm\" data-cancel-food-edit=\"" + midx + "\" data-fidx=\"" + fidx + "\" style=\"flex:1 1 80px; min-width:0;\">Cancelar</button>" +
       "</div>" +
     "</div>" +
   "</div>";
