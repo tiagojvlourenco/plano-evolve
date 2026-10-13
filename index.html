@@ -8128,7 +8128,7 @@ function addProgramExercise(s, dayId, ex){
   var rpe = parseFloat(ex.rpe), rest = parseInt(ex.rest, 10);
   var e = {id: uidShort("e"), name: name.slice(0, 120), sets: sets, reps: String(ex.reps || "8-12").trim().slice(0, 20),
     rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(ex.notes || "").trim().slice(0, 200),
-    demo: cleanDemoUrl(ex.demo) || null, cues: parseCues(ex.cues)};
+    demo: cleanDemoUrl(ex.demo) || null, cues: parseCues(ex.cues), group: EXERCISE_GROUPS.indexOf(ex.group) >= 0 ? ex.group : (exerciseGroupFor(name) || null)};
   day.exercises.push(e);
   return e;
 }
@@ -8141,6 +8141,7 @@ function updateProgramExerciseGuide(s, dayId, exId, guide){
   if (raw && !cleanDemoUrl(raw)) return false;
   ex.demo = raw ? cleanDemoUrl(raw) : null;
   ex.cues = parseCues(guide && guide.cues);
+  if (guide && guide.group !== undefined) ex.group = EXERCISE_GROUPS.indexOf(guide.group) >= 0 ? guide.group : (exerciseGroupFor(ex.name) || null);
   return true;
 }
 function removeProgramExercise(s, dayId, exId){
@@ -8491,6 +8492,175 @@ function findProgramExercise(s, exId){
   trainingProgramOf(s).days.forEach(function(d){ d.exercises.forEach(function(e){ if (e.id === exId) out = e; }); });
   return out;
 }
+/* ---------- Volume semanal por grupo muscular, deload e recordes ----------
+   O grupo de cada exercício vem da biblioteca (ou escolhe-se à mão; os antigos adivinham-se pelo nome). O volume é contado em séries por
+   semana, por grupo principal (sem somar os músculos auxiliares): "previstas" = séries do programa (cada dia uma vez por semana) e
+   "feitas" = séries registadas pelo aluno nos últimos 7 dias. As zonas são pontos de partida e dependem do objetivo do aluno. */
+var VOLUME_ZONES = {
+  massa: {lo: 10, hi: 20, label: "ganho de massa"},
+  recomp: {lo: 8, hi: 16, label: "recomposição / perda de gordura"},
+  manutencao: {lo: 6, hi: 10, label: "manutenção"}
+};
+var DELOAD_AFTER_WEEKS = 5;      // sem deload há tanto tempo, com treino regular, já se pode considerar um
+var DELOAD_MIN_GAP_DAYS = 21;    // depois de um deload não se volta a sugerir durante este tempo
+var DELOAD_VOLUME_CUT = 40;      // % de séries a cortar na semana de deload
+var MAIN_GROUPS = ["Peito", "Costas", "Ombros", "Quadríceps", "Posteriores"];
+// por ordem de prioridade (o primeiro que encaixar ganha): "Lying Leg Curl" é Posteriores e não Bíceps; "Leg Press Calf Raise" é Gémeos
+var GROUP_KEYWORDS = [
+  ["Gémeos", /calf|g[eé]meo|panturrilha/i],
+  ["Core", /plank|prancha|crunch|abdomin|dead ?bug|pallof|\bcore\b|leg raise|eleva[cç][aã]o de pernas|rollout|roda abdominal|ab wheel|bird dog|russian/i],
+  ["Posteriores", /deadlift|peso morto|rom[eê]no|romanian|leg curl|curl femoral|hamstring|good morning|hiperext|back extension|nordic/i],
+  ["Glúteos", /hip thrust|glute|gl[uú]te|abdu[cç][aã]o|abduction|kickback|coice|ponte de|sumo|reverse lunge|rear lunge|passada reversa/i],
+  ["Tríceps", /tr[ií]ceps|pushdown|skull|franc[eê]s|close-?grip bench|press fechado|bench dips|fundos em banco|acima da cabe[cç]a/i],
+  ["Bíceps", /curl|rosca|b[ií]ceps/i],
+  ["Quadríceps", /agachamento|squat|leg press|extens[aã]o de pernas|leg extension|hack|lunge|afundo|passada|step-?up|b[uú]lgaro|bulgarian/i],
+  ["Ombros", /ombro|shoulder|lateral raise|eleva[cç][aã]o (lateral|frontal)|front raise|arnold|face pull|military|overhead press|press militar|rear delt|reverse pec|crucifixo inverso|landmine|rota[cç][aã]o externa|external rotation/i],
+  ["Costas", /remada|\brow\b|puxada|pulldown|pull-?up|chin-?up|barra fixa|\blat\b|pullover|shrug|encolhimento|costas|t-bar/i],
+  ["Peito", /supino|bench press|incline.*press|press inclinado|peito|chest|\bfly\b|flyes?|crucifixo|crossover|flex[oõ]es|push-?ups?|\bdips?\b|fundos|pec deck|peck/i]
+];
+var groupIndexCache = null;
+function exerciseGroupIndex(){
+  var custom = typeof exLibCustomCache !== "undefined" ? exLibCustomCache : null;
+  if (groupIndexCache && groupIndexCache.custom === custom) return groupIndexCache.map;
+  var map = {};
+  exerciseLibraryMerged(custom || []).forEach(function(e){ map[exLibFold(e.name)] = e.group; if (e.alias) map[exLibFold(e.alias)] = e.group; });
+  groupIndexCache = {custom: custom, map: map};
+  return map;
+}
+function exerciseGroupFor(name){
+  var n = String(name || "").trim();
+  if (!n) return "";
+  var hit = exerciseGroupIndex()[exLibFold(n)];
+  if (hit) return hit;
+  for (var i = 0; i < GROUP_KEYWORDS.length; i++) if (GROUP_KEYWORDS[i][1].test(n)) return GROUP_KEYWORDS[i][0];
+  return "";
+}
+function exerciseGroupOf(ex){ return ex && EXERCISE_GROUPS.indexOf(ex.group) >= 0 ? ex.group : exerciseGroupFor(ex && ex.name); }
+
+function volumeZoneFor(s){
+  var g = exLibFold(s && s.goal);
+  if (/massa|hipertrof|ganho|volume/.test(g)) return VOLUME_ZONES.massa;
+  if (/manut/.test(g)) return VOLUME_ZONES.manutencao;
+  return VOLUME_ZONES.recomp;
+}
+function weeklyVolume(s){
+  var planned = {}, done = {}, groupById = {}, groupByName = {};
+  trainingProgramOf(s).days.forEach(function(d){ d.exercises.forEach(function(e){
+    var g = exerciseGroupOf(e) || "Sem grupo";
+    planned[g] = (planned[g] || 0) + (Number(e.sets) || 0);
+    groupById[e.id] = g; groupByName[exLibFold(e.name)] = g;
+  }); });
+  sessionsInLastDays(s, 7).forEach(function(l){ (l.entries || []).forEach(function(en){
+    var g = groupById[en.exerciseId] || groupByName[exLibFold(en.name)] || exerciseGroupFor(en.name) || "Sem grupo";
+    var n = (en.sets || []).filter(function(x){ return x && x.reps > 0; }).length;
+    if (n) done[g] = (done[g] || 0) + n;
+  }); });
+  return {planned: planned, done: done};
+}
+// uma linha por grupo com trabalho previsto ou feito; estado face à zona do objetivo (previstas) — "baixo" / "ok" / "alto"
+function volumeRows(s){
+  var v = weeklyVolume(s), z = volumeZoneFor(s), groups = EXERCISE_GROUPS.concat(["Sem grupo"]);
+  var rows = groups.filter(function(g){ return v.planned[g] || v.done[g]; }).map(function(g){
+    var p = v.planned[g] || 0, status = g === "Sem grupo" ? "" : (p === 0 ? "" : p < z.lo ? "baixo" : p > z.hi ? "alto" : "ok");
+    // gémeos e core têm volume próprio mais baixo: só se avisa por excesso
+    if ((g === "Gémeos" || g === "Core") && status === "baixo") status = "ok";
+    return {group: g, planned: p, done: v.done[g] || 0, status: status};
+  });
+  var days = trainingProgramOf(s).days.filter(function(d){ return d.exercises.length; }).length;
+  var missing = days >= 2 ? MAIN_GROUPS.filter(function(g){ return !v.planned[g]; }) : [];
+  return {rows: rows, zone: z, missing: missing, hasProgram: days > 0};
+}
+
+function deloadDates(s){
+  var p = trainingProgramOf(s);
+  return (Array.isArray(p.deloads) ? p.deloads : []).map(function(d){ return d && d.date; }).filter(isIsoDate).sort();
+}
+function entryAvgRir(en){
+  var r = (en.sets || []).filter(function(x){ return x && x.reps > 0 && x.rir != null && isFinite(Number(x.rir)); }).map(function(x){ return Number(x.rir); });
+  return r.length >= 2 ? r.reduce(function(a, b){ return a + b; }, 0) / r.length : null;
+}
+// {level: "sugerir"|"considerar", reasons:[...]} ou null: junta sinais que o app já recolhe (RIR, regressões, energia/sono, semanas sem deload)
+function deloadSuggestion(s){
+  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  if (logs.length < 4) return null;
+  var last = deloadDates(s).slice(-1)[0] || null;
+  if (last && daysSinceDate(last) < DELOAD_MIN_GAP_DAYS) return null;
+  var lastSession = daysSinceDate(logs[logs.length - 1].date);
+  if (lastSession != null && lastSession > 14) return null; // já está parado: não é caso de deload
+  var reasons = [], strong = 0;
+  var hard = logs.slice(-2).map(function(l){ return (l.entries || []).filter(function(en){ var a = entryAvgRir(en); return a != null && a < 1; }).length; });
+  if (hard.length === 2 && hard[0] >= 3 && hard[1] >= 3){ reasons.push("RIR médio abaixo de 1 em 3 ou mais exercícios nas últimas 2 sessões"); strong++; }
+  var seen = {}, regressed = [];
+  logs.forEach(function(l){ (l.entries || []).forEach(function(en){
+    var k = exLibFold(en.name); if (seen[k]) return; seen[k] = true;
+    var h = exerciseHistory(s, en.exerciseId, en.name);
+    if (!h.length || daysSinceDate(h[h.length - 1].date) > SIGNAL_LOAD_WINDOW_DAYS) return;
+    if (progressionStatus(baselineHistory(h)) === "regrediu") regressed.push(en.name);
+  }); });
+  if (regressed.length >= 2){ reasons.push("Cargas a recuar em " + regressed.slice(0, 3).join(", ")); strong++; }
+  var ci = (s.checkins || []).slice(-2);
+  if (ci.length === 2){
+    var vals = [];
+    ci.forEach(function(c){ ["energy", "recovery", "sleepQuality"].forEach(function(k){ var v = Number(c[k]); if (v > 0) vals.push(v); }); });
+    if (vals.length >= 3 && vals.reduce(function(a, b){ return a + b; }, 0) / vals.length <= 4){ reasons.push("Energia, sono e recuperação baixos nos últimos 2 check-ins"); strong++; }
+  }
+  var ref = last || logs[0].date, weeks = Math.floor((daysSinceDate(ref) || 0) / 7);
+  if (weeks >= DELOAD_AFTER_WEEKS) reasons.push(weeks + " semanas de treino" + (last ? " desde o último deload" : " sem nenhum deload registado"));
+  if (!reasons.length) return null;
+  return {level: strong >= 2 || (strong >= 1 && weeks >= DELOAD_AFTER_WEEKS) ? "sugerir" : "considerar", reasons: reasons};
+}
+function registerDeload(s, date){
+  var prog = ensureTrainingProgram(s);
+  var d = isIsoDate(date) ? date : todayISO();
+  if (!Array.isArray(prog.deloads)) prog.deloads = [];
+  if (prog.deloads.some(function(x){ return x && x.date === d; })) return false;
+  prog.deloads = prog.deloads.concat([{date: d}]).slice(-20);
+  return true;
+}
+
+// Novo recorde: melhor marca de sempre num exercício (1RM estimado, ou repetições se não há carga), com pelo menos 2 sessões anteriores
+function detectRecords(s, log){
+  var before = {workoutLogs: (s.workoutLogs || []).filter(function(l){ return l !== log && l.id !== log.id; })};
+  var out = [];
+  (log.entries || []).forEach(function(en){
+    var st = workoutEntryStats(en);
+    if (!st.sets) return;
+    var hist = exerciseHistory(before, en.exerciseId, en.name).filter(function(h){ return h.kind === st.kind; });
+    if (hist.length < 2) return;
+    var best = Math.max.apply(null, hist.map(function(h){ return h.score; }));
+    if (st.score > best) out.push({name: en.name, kind: st.kind, top: st.topSet, score: st.score});
+  });
+  return out;
+}
+function recordMessage(records){
+  if (!records.length) return "";
+  var r = records[0], what = r.kind === "load" ? fmtLoadSet(r.top) : r.score + " repetições";
+  return "🏆 Novo recorde" + (records.length > 1 ? " (+" + (records.length - 1) + ")" : "") + ": " + r.name + " — " + what;
+}
+
+function tplVolumeAndDeload(s){
+  var vr = volumeRows(s), dl = deloadSuggestion(s);
+  if (!vr.hasProgram && !(s.workoutLogs || []).length) return "";
+  var html = "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Volume semanal (séries por grupo)</div>";
+  if (vr.rows.length){
+    var pill = {"baixo": "warn", "ok": "good", "alto": "critical", "": ""}, txt = {"baixo": "abaixo", "ok": "na zona", "alto": "acima", "": "—"};
+    html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Zona de referência para " + escapeHtml(vr.zone.label) + ": " + vr.zone.lo + "–" + vr.zone.hi + " séries por grupo e por semana (compara com as previstas no programa).</p>" +
+      "<div class=\"assess-table-scroll\"><table class=\"assess-table\" id=\"volumeTable\"><thead><tr><th>Grupo</th><th>Previstas</th><th>Feitas (7 d)</th><th>Estado</th></tr></thead><tbody>" +
+      vr.rows.map(function(r){ return "<tr><td class=\"date-cell\" style=\"white-space:normal;\">" + escapeHtml(r.group) + "</td><td>" + r.planned + "</td><td>" + r.done + "</td><td>" + (r.status ? "<span class=\"pill " + pill[r.status] + "\">" + txt[r.status] + "</span>" : "—") + "</td></tr>"; }).join("") +
+      "</tbody></table></div>";
+    if (vr.missing.length) html += "<p class=\"muted-p\" style=\"margin-top:8px;\">Sem trabalho previsto para: " + escapeHtml(vr.missing.join(", ")) + ".</p>";
+  } else html += "<p class=\"muted-p\">Ainda sem exercícios no programa nem sessões registadas.</p>";
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Deload</div>";
+  var dates = deloadDates(s), lastD = dates[dates.length - 1];
+  if (dl){
+    html += "<div class=\"card\" id=\"deloadCard\" style=\"margin-bottom:10px;\"><p style=\"margin-bottom:6px;\"><span class=\"pill " + (dl.level === "sugerir" ? "warn" : "") + "\">" + (dl.level === "sugerir" ? "Sugerir deload" : "Considerar deload") + "</span></p>" +
+      "<ul class=\"muted-p\" style=\"margin:0 0 8px 18px;\">" + dl.reasons.map(function(r){ return "<li>" + escapeHtml(r) + "</li>"; }).join("") + "</ul>" +
+      "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Semana de deload: mantém os exercícios e as cargas, corta cerca de " + DELOAD_VOLUME_CUT + "% das séries, pára 3 repetições antes da falha (RIR 3) e prioriza sono e recuperação. Depois volta ao plano normal.</p>" +
+      "<button type=\"button\" class=\"btn btn-sm primary\" id=\"registerDeload\">Registar deload a começar hoje</button></div>";
+  } else html += "<p class=\"muted-p\">" + (lastD ? "Último deload: " + escapeHtml(fmtDateFullPt(lastD)) + ". " : "") + "Sem sinais de fadiga acumulada neste momento.</p>";
+  return html;
+}
+
 function exerciseInfoHtml(s, ex){
   var cues = parseCues(ex.cues), sg = overloadSuggestion(s, ex), sess = exerciseSessions(s, ex, 6);
   var html = "<div class=\"mtitle\">" + escapeHtml(ex.name) + "</div>" +
@@ -8662,7 +8832,9 @@ function wireWorkoutLogger(s, el, rerender){
     var log = logWorkout(s, {date: todayISO(), dayId: day.id, dayName: day.name, rpe: rpeInput.value, notes: el.querySelector("#wlNotes").value, entries: entries});
     if (!log){ err.textContent = "Marca ✓ pelo menos uma série feita, com repetições."; err.style.display = "block"; return; }
     err.style.display = "none";
+    var records = detectRecords(s, log), recordMsg = recordMessage(records);
     function finish(){
+      if (recordMsg) setTimeout(function(){ showToast(recordMsg); }, 1800); // depois do "Treino guardado"
       // treino feito: nenhum dia fica 'em curso' (o rascunho abandonado de outro dia seria enganador)
       trainingProgramOf(s).days.forEach(function(d){ if (d.id !== day.id) wlDraftClear(s, d.id); });
       wlDraftClear(s, day.id);
@@ -8704,6 +8876,7 @@ function wireWorkoutLogger(s, el, rerender){
    Um exercício guardado com o mesmo nome de um da lista base substitui-o; apagá-lo repõe o original. */
 var EXERCISE_GROUPS = ["Peito", "Costas", "Ombros", "Bíceps", "Tríceps", "Quadríceps", "Posteriores", "Glúteos", "Gémeos", "Core"];
 var EX_LIB_LOCAL_KEY = "evolve_exercise_library_v1";
+var exLibCustomCache = null; // exercícios do estúdio já lidos (para adivinhar o grupo de um exercício pelo nome)
 // animações de 2 fotogramas (Free Exercise DB, domínio público) guardadas na pasta exercises/ do site
 var EXERCISE_MEDIA_BASE = "https://tiagojvlourenco.github.io/plano-evolve/exercises/";
 // [nome em inglês, equipamento, "ponto 1|ponto 2|ponto 3", nota, nome em português (só para a pesquisa), 1 = tem animação em exercises/]
@@ -8894,7 +9067,7 @@ function exerciseLibraryDelete(id){
   return sb.from("exercise_library").delete().eq("id", id).then(function(res){ return res.error ? {error: true} : {}; }).catch(function(){ return {error: true}; });
 }
 // o que o editor de treino preenche ao escolher um exercício
-function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n")}; }
+function exerciseLibraryFill(e){ return {name: e.name, demo: e.demo, cues: e.cues.join("\n"), group: e.group}; }
 function openExerciseLibrary(onPick){
   var sheet = openModal("<div class=\"mtitle\">Biblioteca de exercícios</div>" +
     "<p class=\"muted-p\" style=\"margin:4px 0 10px;\">Partilhada por todo o estúdio. Escolhe um exercício para o preencher no treino, com animação e pontos-chave.</p><div id=\"exLibBody\"><p class=\"muted-p\">A carregar…</p></div>");
@@ -8956,7 +9129,7 @@ function openExerciseLibrary(onPick){
   function reload(){
     exerciseLibraryCustomList().then(function(r){
       if (r.error){ custom = []; listView(); body.insertAdjacentHTML("afterbegin", "<p class=\"muted-p\" style=\"color:var(--critical); margin-bottom:8px;\">Não foi possível carregar os exercícios do estúdio (a migração 0021 já foi corrida no Supabase?). A lista base está disponível.</p>"); return; }
-      custom = r.data; listView();
+      custom = r.data; exLibCustomCache = custom; listView();
     });
   }
   reload();
@@ -9001,7 +9174,7 @@ function nutritionTemplateFrom(s){
 function trainingTemplateFrom(s){
   var p = trainingProgramOf(s);
   return {name: p.name || "", days: p.days.map(function(d){
-    return {name: d.name, exercises: d.exercises.map(function(e){ return {name: e.name, sets: e.sets, reps: e.reps, rpe: e.rpe, rest: e.rest, notes: e.notes, demo: e.demo || null, cues: parseCues(e.cues)}; })};
+    return {name: d.name, exercises: d.exercises.map(function(e){ return {name: e.name, sets: e.sets, reps: e.reps, rpe: e.rpe, rest: e.rest, notes: e.notes, demo: e.demo || null, cues: parseCues(e.cues), group: e.group || null}; })};
   })};
 }
 function templateCounts(kind, data){
@@ -9035,7 +9208,7 @@ function applyTrainingTemplate(s, data, mode){
       var rpe = parseFloat(e.rpe), rest = parseInt(e.rest, 10);
       return {id: uidShort("e"), name: String(e.name).trim().slice(0, 120), sets: Math.min(20, Math.max(1, parseInt(e.sets, 10) || 3)), reps: String(e.reps || "8-12").slice(0, 20),
         rpe: rpe >= 1 && rpe <= 10 ? rpe : null, rest: rest >= 0 && rest <= 900 ? rest : null, notes: String(e.notes || "").slice(0, 200),
-        demo: cleanDemoUrl(e.demo) || null, cues: parseCues(e.cues)};
+        demo: cleanDemoUrl(e.demo) || null, cues: parseCues(e.cues), group: EXERCISE_GROUPS.indexOf(e.group) >= 0 ? e.group : (exerciseGroupFor(e.name) || null)};
     })};
   });
   var prog = ensureTrainingProgram(s);
@@ -9137,7 +9310,7 @@ function tplProTreino(s){
   prog.days.forEach(function(d){
     html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
     d.exercises.forEach(function(e){
-      html += `<div class="food-item" style="cursor:default;"><span class="fname"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button>${cleanDemoUrl(e.demo) || parseCues(e.cues).length ? ' <span class="pill" style="font-size:0.62rem;">guia</span>' : ""}<span class="muted-p" style="display:block; font-size:0.74rem;">${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
+      html += `<div class="food-item" style="cursor:default;"><span class="fname"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button>${cleanDemoUrl(e.demo) || parseCues(e.cues).length ? ' <span class="pill" style="font-size:0.62rem;">guia</span>' : ""}<span class="muted-p" style="display:block; font-size:0.74rem;">${exerciseGroupOf(e) ? escapeHtml(exerciseGroupOf(e)) + " · " : ""}${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
         `<span><button type="button" class="assess-del" data-edit-guide="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Editar demonstração e pontos-chave" title="Demonstração e pontos-chave">🎬</button> ` +
         `<button type="button" class="assess-del" data-del-ex="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Remover exercício">✕</button></span></div>`;
     });
@@ -9148,6 +9321,7 @@ function tplProTreino(s){
       `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps></div>` +
       `<div class="f"><label>RPE alvo</label><input type="number" min="1" max="10" step="0.5" data-ex-rpe></div>` +
       `<div class="f"><label>Descanso (s)</label><input type="number" min="0" max="900" step="15" value="90" data-ex-rest></div>` +
+      `<div class="f" style="grid-column:1/-1;"><label>Grupo muscular (conta para o volume semanal)</label><select data-ex-group class="mini-select" style="width:100%;"><option value="">Automático (pelo nome)</option>${EXERCISE_GROUPS.map(function(g){ return `<option>${escapeHtml(g)}</option>`; }).join("")}</select></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Notas (opcional)</label><input type="text" data-ex-notes placeholder="Tempo 3-1-1, pausa no peito..."></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>GIF / vídeo demonstrativo (ligação https, opcional)</label><input type="url" data-ex-demo maxlength="500" placeholder="https://…/supino.gif"></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Pontos-chave de execução (um por linha, até 3)</label><textarea data-ex-cues rows="3" placeholder="Omoplatas juntas&#10;Barra desce ao peito&#10;Pés firmes no chão"></textarea></div>` +
@@ -9157,6 +9331,8 @@ function tplProTreino(s){
   });
   html += `<div class="assess-form-grid" style="margin-top:6px;"><div class="f" style="grid-column:1/-1;"><label>Novo dia de treino</label><input type="text" id="newDayName" maxlength="80" placeholder="Ex.: Treino B — Inferior"></div>` +
     `<div class="f"><button type="button" class="btn primary btn-sm" id="addTrainingDay" style="width:100%;">+ Dia</button></div></div>`;
+
+  html += tplVolumeAndDeload(s);
 
   // Progressão de carga por exercício
   var names = [];
@@ -9204,15 +9380,20 @@ function wireProTreino(s, el){
       var sheet = openModal("<div class=\"mtitle\">" + escapeHtml(ex.name) + "</div>" +
         "<div class=\"checkin-field\"><label for=\"guideDemo\">GIF / vídeo demonstrativo (ligação https)</label><input type=\"url\" id=\"guideDemo\" maxlength=\"500\" value=\"" + escapeHtml(ex.demo || "") + "\" placeholder=\"https://…/supino.gif\"></div>" +
         "<div class=\"checkin-field\"><label for=\"guideCues\">Pontos-chave de execução (um por linha, até " + EX_CUES_MAX + ")</label><textarea id=\"guideCues\" rows=\"4\">" + escapeHtml(parseCues(ex.cues).join("\n")) + "</textarea></div>" +
+        "<div class=\"checkin-field\"><label for=\"guideGroup\">Grupo muscular</label><select id=\"guideGroup\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Automático (pelo nome)</option>" + EXERCISE_GROUPS.map(function(g){ return "<option" + (ex.group === g ? " selected" : "") + ">" + escapeHtml(g) + "</option>"; }).join("") + "</select></div>" +
         "<p class=\"muted-p\" id=\"guideErr\" style=\"color:var(--critical); display:none;\"></p>" +
         "<button type=\"button\" class=\"btn primary\" id=\"guideSave\" style=\"width:100%;\">Guardar</button>");
       sheet.querySelector("#guideSave").addEventListener("click", function(){
-        if (!updateProgramExerciseGuide(s, parts[0], parts[1], {demo: sheet.querySelector("#guideDemo").value, cues: sheet.querySelector("#guideCues").value})){
+        if (!updateProgramExerciseGuide(s, parts[0], parts[1], {demo: sheet.querySelector("#guideDemo").value, cues: sheet.querySelector("#guideCues").value, group: sheet.querySelector("#guideGroup").value})){
           var e = sheet.querySelector("#guideErr"); e.textContent = "A ligação tem de começar por https:// (e não ter espaços)."; e.style.display = "block"; return;
         }
         closeModal(); persistStudent(s); renderProTabContent(s); showToast("✓ Guia do exercício guardado");
       });
     });
+  });
+  var regDl = el.querySelector("#registerDeload");
+  if (regDl) regDl.addEventListener("click", function(){
+    if (registerDeload(s)){ logPlanEvent(s, "treino_dia", "Deload registado", null, todayISO()); persistStudent(s); showToast("✓ Deload registado — não volta a ser sugerido nas próximas semanas"); renderProTabContent(s); }
   });
   var addDay = el.querySelector("#addTrainingDay");
   if (addDay) addDay.addEventListener("click", function(){
@@ -9228,6 +9409,7 @@ function wireProTreino(s, el){
         box.querySelector("[data-ex-name]").value = fill.name;
         box.querySelector("[data-ex-demo]").value = fill.demo;
         box.querySelector("[data-ex-cues]").value = fill.cues;
+        var gSel = box.querySelector("[data-ex-group]"); if (gSel) gSel.value = fill.group || "";
       });
     });
   });
@@ -9235,7 +9417,7 @@ function wireProTreino(s, el){
     btn.addEventListener("click", function(){
       var box = el.querySelector('[data-exform="' + btn.getAttribute("data-add-ex") + '"]');
       function v(sel){ return box.querySelector(sel).value; }
-      var ex = addProgramExercise(s, btn.getAttribute("data-add-ex"), {name: v("[data-ex-name]"), sets: v("[data-ex-sets]"), reps: v("[data-ex-reps]"), rpe: v("[data-ex-rpe]"), rest: v("[data-ex-rest]"), notes: v("[data-ex-notes]"), demo: v("[data-ex-demo]"), cues: v("[data-ex-cues]")});
+      var ex = addProgramExercise(s, btn.getAttribute("data-add-ex"), {name: v("[data-ex-name]"), sets: v("[data-ex-sets]"), reps: v("[data-ex-reps]"), rpe: v("[data-ex-rpe]"), rest: v("[data-ex-rest]"), notes: v("[data-ex-notes]"), demo: v("[data-ex-demo]"), cues: v("[data-ex-cues]"), group: v("[data-ex-group]")});
       if (!ex){ showToast("Dá um nome ao exercício"); return; }
       if (v("[data-ex-demo]").trim() && !ex.demo) showToast("A ligação da demonstração tem de começar por https:// — guardei o exercício sem ela");
       persistStudent(s); renderProTabContent(s);
@@ -12572,6 +12754,8 @@ function computeCoachBadges(s){
   var now = avgAdherence(recent), prev = avgAdherence(before);
   if (now != null && prev != null && prev - now >= BADGE_ADHERENCE_DROP) out.push({key: "adesao-a-cair", label: "Adesão a cair", tone: "warn", hint: "Adesão média de " + prev.toFixed(1).replace(".", ",") + " para " + now.toFixed(1).replace(".", ",") + " /10 nos últimos check-ins."});
   else if (now != null && recent.length >= 2 && now >= BADGE_HIGH_ADHERENCE && (idle == null || idle < BADGE_NO_RECORD_WARN_DAYS)) out.push({key: "alta-adesao", label: "Alta adesão", tone: "good", hint: "Adesão média de " + now.toFixed(1).replace(".", ",") + "/10: bom momento para dar mais autonomia ou progredir."});
+  var dl = deloadSuggestion(s);
+  if (dl) out.push({key: "deload", label: dl.level === "sugerir" ? "Sugerir deload" : "Considerar deload", tone: dl.level === "sugerir" ? "warn" : "", hint: dl.reasons.join("; ")});
   var ready = trainingProgramOf(s).days.reduce(function(n, d){ return n + d.exercises.filter(function(e){ return overloadSuggestion(s, e); }).length; }, 0);
   if (ready) out.push({key: "sobrecarga", label: ready === 1 ? "Pronto para subir carga" : ready + " exercícios para subir carga", tone: "good", hint: "Atingiu a meta superior de repetições nas últimas sessões: vê a sugestão de sobrecarga em Treino."});
   return out;
