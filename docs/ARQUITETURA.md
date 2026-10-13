@@ -31,7 +31,7 @@ Barra inferior com 3 separadores:
 | Separador | Conteúdo (templates) |
 |---|---|
 | **Hoje** (`hoje`) | `tplHoje` = Ação do Dia + `tplTodayWorkout` + `tplTodayMeals` |
-| **Plano** (`plano`) | `tplPlanoTabs` com secções Alimentação (`tplPlano`, `tplMealFixed/Choice/Builder`), Treino (`tplTrainingProgramCard`) e Compras (`tplShoppingList`: lista semanal agregada do plano, comprados guardados em `localStorage` por aluno e semana) |
+| **Plano** (`plano`) | `tplPlanoTabs` com secções Alimentação (`tplPlano`, `tplMealFixed/Choice/Builder`), Treino (`tplTrainingProgramCard`) e Compras (`tplShoppingList`: lista semanal agregada do plano, com escolha do supermercado — marca própria deduzida da marca, equivalente na loja escolhida em `storeSuggestion`, texto para copiar; comprados e loja guardados em `localStorage` por aluno) |
 | **Progresso** (`evolucao`) | `tplEvolucaoAluno` (peso, avaliações, perímetros, pregas, fotos, adesão) + `tplCheckin` |
 | *(ecrã cheio)* `treino` | `tplTreinoScreen` / `tplWorkoutLogger` (registo de séries, descanso automático; rascunho em `localStorage` `evolve_wl_draft_v1`) — conta como "Hoje" na barra |
 
