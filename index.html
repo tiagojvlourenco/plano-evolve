@@ -12830,6 +12830,28 @@ var PACK_ENDING_SESSIONS = 2;        // "a acabar": restam estas sessões ou men
 var PACK_ENDING_DAYS = 14;           // ...ou falta este tempo para terminar a validade
 var PAYMENT_DUE_SOON_DAYS = 3;
 var ABSENCE_WINDOW_DAYS = 30, ABSENCE_ALERT = 2;
+// validade de cada tipo de pack = duração do pack + 3 meses de margem: um trimestral pago a 14/01 dura até 14/04 e vale até 14/07;
+// o mensal, como se paga todos os meses, vale 3 meses a partir do mês em que paga
+var PACK_VALIDITY_EXTRA_MONTHS = 3;
+var PACK_TYPES = {
+  mensal: {label: "Mensal", lengthMonths: 1, months: 3},
+  trimestral: {label: "Trimestral", lengthMonths: 3, months: 3 + PACK_VALIDITY_EXTRA_MONTHS},
+  semestral: {label: "Semestral", lengthMonths: 6, months: 6 + PACK_VALIDITY_EXTRA_MONTHS},
+  anual: {label: "Anual", lengthMonths: 12, months: 12 + PACK_VALIDITY_EXTRA_MONTHS}
+};
+// meses de validade de um tipo de pack escrito por extenso («Trimestral»…); null se não for um tipo conhecido
+function packTypeMonths(text){
+  var k = String(text == null ? "" : text).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
+  return Object.prototype.hasOwnProperty.call(PACK_TYPES, k) ? PACK_TYPES[k].months : null;
+}
+// soma meses a uma data AAAA-MM-DD sem passar ao mês seguinte (30/11 + 3 meses = 28/02 ou 29/02, não 2/03)
+function addMonthsISO(iso, n){
+  var d = new Date(iso + "T00:00:00Z"), day = d.getUTCDate();
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n);
+  var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last));
+  return d.toISOString().slice(0, 10);
+}
 var SESSION_STATUS = {
   feita: {label: "Feita", short: "✓ Feita"},
   faltou: {label: "Faltou", short: "✗ Faltou"},
@@ -12838,7 +12860,7 @@ var SESSION_STATUS = {
   agendada: {label: "Agendada", short: "◷ Agendada"}   // prevista (da folha); não gasta aulas do pacote
 };
 var PAYMENT_METHODS = {mbway: "MB WAY", transferencia: "Transferência", multibanco: "Multibanco", numerario: "Numerário", outro: "Outro"};
-var studio = {packs: [], sessions: [], payments: [], slots: [], loaded: false, available: true, slotsAvailable: false};
+var studio = {packs: [], sessions: [], payments: [], slots: [], loaded: false, available: true, slotsAvailable: false, sharedAvailable: true};
 
 function studioLocalRead(){
   try { var v = JSON.parse(localStorage.getItem(STUDIO_LOCAL_KEY) || "null"); if (v && Array.isArray(v.packs)) return v; } catch (e) {}
@@ -12867,7 +12889,7 @@ function studioLoad(){
     var v = studioLocalRead();
     if (v){ studio.packs = v.packs; studio.sessions = v.sessions || []; studio.payments = v.payments || []; studio.slots = v.slots || []; }
     else { studioSeedDemo(); studioLocalWrite(); }
-    studio.loaded = true; studio.available = true; studio.slotsAvailable = true;
+    studio.loaded = true; studio.available = true; studio.slotsAvailable = true; studio.sharedAvailable = true;
     return Promise.resolve(true);
   }
   var since = new Date(Date.now() - STUDIO_HISTORY_DAYS * 86400000).toISOString().slice(0, 10), today = localTodayISO();
@@ -12886,6 +12908,7 @@ function studioLoad(){
   }).then(function(all){
     if (!all){ studio.available = false; studio.loaded = true; return false; }
     studio.packs = all.packs; studio.sessions = all.sessions; studio.payments = all.payments;
+    studio.sharedAvailable = !all.packs.length || Object.prototype.hasOwnProperty.call(all.packs[0], "shared_with"); // falta correr a migração 0028?
     studio.available = true; studio.loaded = true;
     return Promise.resolve(sb.from("session_slots").select("*").order("weekday").then(function(r){ return r; })).then(function(sr){
       studio.slotsAvailable = !!(sr && !sr.error); studio.slots = studio.slotsAvailable ? (sr.data || []) : [];
@@ -12936,21 +12959,46 @@ function packUsage(pack, today){
   var started = !pack.starts_on || pack.starts_on <= today;
   return {used: used, total: total, remaining: remaining, pct: total ? Math.min(100, Math.round(used / total * 100)) : 0, expired: expired, exhausted: remaining === 0,
     daysLeft: daysLeft, active: started && !expired && remaining > 0,
-    ending: started && !expired && remaining > 0 && (remaining <= Math.max(PACK_ENDING_SESSIONS, weeklySlotsOf(pack.student_id)) || (daysLeft != null && daysLeft <= PACK_ENDING_DAYS))};
+    ending: started && !expired && remaining > 0 && (remaining <= Math.max(PACK_ENDING_SESSIONS, weeklySlotsOfPack(pack)) || (daysLeft != null && daysLeft <= PACK_ENDING_DAYS))};
 }
 function packsOf(studentId){ return studio.packs.filter(function(p){ return p.student_id === studentId; }); }
+// ---- pacotes partilhados (migração 0028): casais que treinam sozinhos e juntos com um só pagamento ----
+// um pacote tem um dono (student_id) e, em shared_with, os outros alunos que também podem gastar as suas aulas; as sessões de todos descontam ao mesmo pacote
+function sharedIdsOf(pack){ return pack && Array.isArray(pack.shared_with) ? pack.shared_with.filter(function(x, i, a){ return typeof x === "string" && x && a.indexOf(x) === i; }) : []; }
+// os pacotes que um aluno pode gastar: os seus e os que outros partilham com ele
+function usablePacksOf(studentId){ return studio.packs.filter(function(p){ return p.student_id === studentId || sharedIdsOf(p).indexOf(studentId) >= 0; }); }
+// quem gasta deste pacote: o dono e os alunos com quem está partilhado
+function packMembersOf(pack){ var ids = [pack.student_id]; sharedIdsOf(pack).forEach(function(id){ if (ids.indexOf(id) < 0) ids.push(id); }); return ids; }
+function isSharedPack(pack){ return sharedIdsOf(pack).length > 0; }
+// nomes dos outros alunos do pacote (os apagados ficam de fora)
+function packOtherNames(pack, viewerId){ return packMembersOf(pack).filter(function(id){ return id !== viewerId && findStudent(id); }).map(nameOf); }
+function weeklySlotsOfPack(pack){ return packMembersOf(pack).reduce(function(n, id){ return n + weeklySlotsOf(id); }, 0); }
+// o conjunto de aulas que um aluno pode gastar (os seus pacotes + os partilhados), sem repetir
+function poolOf(studentId, today){
+  var out = {used: 0, total: 0, remaining: 0, packs: 0, shared: false};
+  usablePacksOf(studentId).forEach(function(p){
+    var u = packUsage(p, today); if (u.expired || (p.starts_on && p.starts_on > today)) return;
+    out.used += u.used; out.total += u.total; out.remaining += u.remaining; out.packs++;
+    if (isSharedPack(p) || p.student_id !== studentId) out.shared = true;
+  });
+  return out;
+}
 function activePacksOf(studentId, today){
-  return packsOf(studentId).filter(function(p){ return packUsage(p, today).active; }).sort(function(a, b){
+  return usablePacksOf(studentId).filter(function(p){ return packUsage(p, today).active; }).sort(function(a, b){
     return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : (a.starts_on < b.starts_on ? -1 : 1);
   });
 }
 // o pacote a que uma sessão numa certa data deve ser descontada: o que caduca primeiro, dentro da validade e com sessões por usar
+// (nos pacotes partilhados, a igualdade de validade resolve-se a favor do pacote do próprio aluno; quando o seu acaba, gasta o do outro)
 function pickPackForSession(studentId, date){
   var d = isIsoDate(date) ? date : localTodayISO();
-  return packsOf(studentId).filter(function(p){
+  return usablePacksOf(studentId).filter(function(p){
     var u = packUsage(p, d);
     return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d);
-  }).sort(function(a, b){ return (a.expires_on || "9999") < (b.expires_on || "9999") ? -1 : (a.expires_on || "9999") > (b.expires_on || "9999") ? 1 : 0; })[0] || null;
+  }).sort(function(a, b){
+    var ea = a.expires_on || "9999", eb = b.expires_on || "9999";
+    return ea < eb ? -1 : ea > eb ? 1 : ((a.student_id === studentId ? 0 : 1) - (b.student_id === studentId ? 0 : 1));
+  })[0] || null;
 }
 function sessionsOfStudent(studentId){ return studio.sessions.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }); }
 function paymentStatus(p, today){
@@ -12969,7 +13017,7 @@ function studentById(id){ return findStudent(id); }
 // resumo de um aluno para o painel de retenção e para a ficha
 function studentStudioSummary(studentId, today){
   today = today || localTodayISO();
-  var packs = packsOf(studentId).map(function(p){ return {pack: p, u: packUsage(p, today)}; });
+  var packs = usablePacksOf(studentId).map(function(p){ return {pack: p, u: packUsage(p, today), shared: p.student_id !== studentId || isSharedPack(p), foreign: p.student_id !== studentId}; });
   var overdue = paymentsOfStudent(studentId).filter(function(p){ return paymentStatus(p, today) === "atrasado"; });
   var since = addDaysISO(today, -ABSENCE_WINDOW_DAYS);
   var absences = studio.sessions.filter(function(x){ return x.student_id === studentId && x.date >= since && (x.status === "faltou" || x.status === "cancelada_tarde"); }).length;
@@ -13201,15 +13249,16 @@ function studioAfterAutoSessions(n){
 
 // ---- pacote atual, aulas extra e renovação (o que o resumo semanal por e-mail mostrava) ----
 function currentPackOf(studentId, today){
-  var list = packsOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : a.starts_on > b.starts_on ? -1 : 0; });
-  var active = list.filter(function(p){ return packUsage(p, today).active; })[0];
+  var list = usablePacksOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : a.starts_on > b.starts_on ? -1 : 0; });
+  var actives = list.filter(function(p){ return packUsage(p, today).active; });
+  var active = actives.filter(function(p){ return p.student_id === studentId; })[0] || actives[0];
   if (active) return active;
   var started = list.filter(function(p){ return !p.starts_on || p.starts_on <= today; });
   return started[0] || list[0] || null;   // sem nenhum a decorrer: o mais recente
 }
 // aulas dadas fora de qualquer pacote, depois de o último pacote ter começado (as "aulas extra" à espera de renovação)
 function extrasOf(studentId, today){
-  var last = packsOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : -1; })[0];
+  var last = usablePacksOf(studentId).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : -1; })[0];
   if (!last) return {n: 0, since: null};
   var list = studio.sessions.filter(function(x){ return x.student_id === studentId && !x.pack_id && x.date >= last.starts_on && (x.status === "feita" || x.status === "faltou" || x.status === "cancelada_tarde"); })
     .sort(function(a, b){ return a.date < b.date ? -1 : 1; });
@@ -13226,7 +13275,7 @@ function studioSummaryRows(today){
     var hasActive = activePacksOf(st.id, today).length > 0;
     var renew = !hasActive && (u.exhausted || u.expired);
     var pending = pk.starts_on > today;
-    rows.push({student: st, pack: pk, u: u, extras: ex, weekly: weeklySlotsOf(st.id),
+    rows.push({student: st, pack: pk, u: u, extras: ex, weekly: weeklySlotsOf(st.id), pool: poolOf(st.id, today), others: packOtherNames(pk, st.id),
       state: renew ? "renovar" : (!pending && u.ending ? "acabar" : (pending ? "pendente" : "normal"))});
   });
   var rank = {renovar: 0, acabar: 1, normal: 2, pendente: 3};
@@ -13246,11 +13295,12 @@ function updateStudioBadge(){
 // um pacote novo desconta as aulas extra já dadas desde a sua data de início
 function attachExtrasToPack(pack){
   var capacity = Math.max(0, (Number(pack.total) || 0) - (Number(pack.used_before) || 0));
-  var list = studio.sessions.filter(function(x){ return x.student_id === pack.student_id && !x.pack_id && x.date >= pack.starts_on && sessionConsumes(pack, x); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; }).slice(0, capacity);
+  var members = packMembersOf(pack);
+  var list = studio.sessions.filter(function(x){ return members.indexOf(x.student_id) >= 0 && !x.pack_id && x.date >= pack.starts_on && sessionConsumes(pack, x); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; }).slice(0, capacity);
   return list.reduce(function(chain, x){ return chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: pack.id}).then(function(r){ return n + (r.error ? 0 : 1); }); }); }, Promise.resolve(0));
 }
 
-// ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas; validade em meses, opcional) ----
+// ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas; validade em meses ou tipo (Mensal, Trimestral, Semestral, Anual), opcional; partilhado com…, opcional) ----
 function parseImportDate(t){
   t = String(t || "").trim();
   var m = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/.exec(t) || (function(){ var q = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(t); return q ? [null, q[3], q[2], q[1]] : null; })();
@@ -13265,9 +13315,12 @@ function parsePackImport(text){
   String(text || "").split(/\r?\n/).forEach(function(line, i){
     if (!line.trim()) return;
     var cols = line.split(/\t|;/).map(function(c){ return c.trim(); });
-    if (cols.length < 3){ errors.push("Linha " + (i + 1) + ": faltam colunas (nome; aulas; data de início; valor; aulas já dadas; validade em meses, opcional)."); return; }
+    if (cols.length < 3){ errors.push("Linha " + (i + 1) + ": faltam colunas (nome; aulas; data de início; valor; aulas já dadas; validade em meses ou tipo, opcional; partilhado com, opcional)."); return; }
     var total = parseImportNumber(cols[1]), start = parseImportDate(cols[2]);
-    var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0, months = cols[5] ? parseImportNumber(cols[5]) : 0;
+    var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0;
+    // a validade pode vir em meses (6) ou pelo tipo do pack (Trimestral = 6 meses: duração + 3)
+    var typeMonths = cols[5] ? packTypeMonths(cols[5]) : null, months = cols[5] ? (typeMonths != null ? typeMonths : parseImportNumber(cols[5])) : 0;
+    var shareWith = cols[6] ? cols[6].split(/\s*[&|\/]\s*|\s+e\s+/i).map(function(t){ return t.trim(); }).filter(Boolean) : [];
     if (/^(nome|cliente|aluno)$/i.test(cols[0]) && total == null) return; // linha de cabeçalho colada do Sheets
     if (!cols[0]) errors.push("Linha " + (i + 1) + ": falta o nome.");
     else if (total == null || total < 1 || total > 500 || total !== Math.round(total)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): número de aulas inválido.");
@@ -13275,7 +13328,7 @@ function parsePackImport(text){
     else if (cols[3] && (price == null || price < 0)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): valor inválido.");
     else if (used == null || used < 0 || used > total || used !== Math.round(used)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): aulas já dadas inválidas (0 a " + total + ").");
     else if (months == null || months < 0 || months > 36 || months !== Math.round(months)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): validade inválida (meses, 0 a 36; vazio = sem validade).");
-    else rows.push({name: cols[0], total: total, start: start, price: price, used: used, months: months});
+    else rows.push({name: cols[0], total: total, start: start, price: price, used: used, months: months, shareWith: shareWith});
   });
   return {rows: rows, errors: errors};
 }
@@ -13298,9 +13351,20 @@ function studioImportPacks(text){
       if (!st){ report.errors.push(r.name + ": não encontrei um aluno com este nome."); return; }
       if (packsOf(st.id).some(function(p){ return p.starts_on === r.start && Number(p.total) === r.total; })){ report.skipped.push(st.name + " (já tem este pacote)"); return; }
       // sem validade, a não ser que a linha traga os meses (um pacote de 26 aulas demora quase sempre mais do que 3 meses com pausas e férias)
-      var exp = null; if (r.months > 0){ var d = new Date(r.start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + r.months); exp = d.toISOString().slice(0, 10); }
+      var exp = r.months > 0 ? addMonthsISO(r.start, r.months) : null;
       var row = {student_id: st.id, name: "Pacote " + r.total + " aulas", total: r.total, price: r.price, starts_on: r.start, expires_on: exp, missed_consumes: true, late_cancel_consumes: true};
       if (studio.slotsAvailable) row.used_before = r.used;
+      // «partilhado com»: o pacote também pode ser gasto por esses alunos (casais)
+      var shareIds = [];
+      (r.shareWith || []).forEach(function(nm){
+        var other = matchStudentByName(nm);
+        if (!other) report.errors.push(st.name + ": não encontrei o aluno «" + nm + "» para partilhar o pacote.");
+        else if (other.id !== st.id && shareIds.indexOf(other.id) < 0) shareIds.push(other.id);
+      });
+      if (shareIds.length){
+        if (studio.sharedAvailable) row.shared_with = shareIds;
+        else report.errors.push(st.name + ": " + SHARED_MIGRATION_MSG);
+      }
       return studioInsert("packs", row).then(function(x){ if (x.error) report.errors.push(st.name + ": " + x.error); else report.created++; });
     });
   });
@@ -13762,13 +13826,18 @@ function sessionStatusPill(status, date){
   if (status === "agendada" && isIsoDate(date) && date < localTodayISO()){ tone = "warn"; label = "Agendada · por confirmar"; } // a data já passou e não há evento na agenda
   return "<span class=\"pill " + tone + "\">" + escapeHtml(label) + "</span>";
 }
-function packBarHtml(pack, u){
+function packBarHtml(pack, u, viewerId){
+  var foreign = !!viewerId && pack.student_id !== viewerId;
+  var others = packMembersOf(pack).filter(function(id){ return id !== viewerId && (!foreign || id !== pack.student_id) && findStudent(id); }).map(nameOf);
+  var shareLine = foreign ? "Pacote de " + nameOf(pack.student_id) + (others.length ? " · também com " + others.join(", ") : "") : others.length ? "Partilhado com " + others.join(", ") : "";
   return "<div class=\"history-row\" style=\"align-items:flex-start;\"><div style=\"min-width:0;flex:1;\">" +
     "<div class=\"hlabel\">" + escapeHtml(pack.name) + (u.expired ? " <span class=\"pill\">caducado</span>" : u.exhausted ? " <span class=\"pill\">esgotado</span>" : u.ending ? " <span class=\"pill warn\">a acabar</span>" : "") + "</div>" +
     "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
       (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
+    (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
-    "<button type=\"button\" class=\"assess-del\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></div>";
+    (foreign ? "" : "<span style=\"display:flex; gap:6px; align-items:center;\"><button type=\"button\" class=\"btn btn-sm\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
+    "<button type=\"button\" class=\"assess-del\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></span>") + "</div>";
 }
 function paymentRowHtml(p, today, withName){
   var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
@@ -13784,7 +13853,7 @@ function tplProSessoes(s){
   if (!studio.available) return studioUnavailableHtml();
   var today = localTodayISO(), sum = studentStudioSummary(s.id, today);
   var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pacotes</div>";
-  html += sum.packs.length ? sum.packs.map(function(x){ return packBarHtml(x.pack, x.u); }).join("") : "<p class=\"muted-p\">Ainda sem pacotes. Cria o primeiro abaixo.</p>";
+  html += sum.packs.length ? sum.packs.map(function(x){ return packBarHtml(x.pack, x.u, s.id); }).join("") : "<p class=\"muted-p\">Ainda sem pacotes. Cria o primeiro abaixo.</p>";
 
   var ex0 = extrasOf(s.id, today);
   if (ex0.n && !sum.hasActive) html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--critical);\">🔄 Aguarda renovação · +" + ex0.n + (ex0.n === 1 ? " aula extra" : " aulas extra") + " desde " + escapeHtml(fmtDateFullPt(ex0.since)) + " (descontam-se ao próximo pacote).</p>";
@@ -13812,7 +13881,11 @@ function tplProSessoes(s){
     "<div class=\"f\"><label>Preço (€)</label><input type=\"number\" id=\"pkPrice\" min=\"0\" step=\"0.5\" placeholder=\"250\"></div>" +
     "<div class=\"f\"><label>Início</label><input type=\"date\" id=\"pkStart\" value=\"" + today + "\"></div>" +
     (studio.slotsAvailable ? "<div class=\"f\"><label>Aulas já dadas (antes da app)</label><input type=\"number\" id=\"pkUsed\" min=\"0\" max=\"500\" value=\"0\"></div>" : "") +
+    "<div class=\"f\"><label>Tipo de pack</label><select id=\"pkType\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Outro (indico a validade)</option>" + Object.keys(PACK_TYPES).map(function(k){ return "<option value=\"" + k + "\">" + PACK_TYPES[k].label + " · " + PACK_TYPES[k].months + " meses</option>"; }).join("") + "</select></div>" +
     "<div class=\"f\"><label>Validade (meses, 0 = sem)</label><input type=\"number\" id=\"pkMonths\" min=\"0\" max=\"36\" value=\"3\"></div>" +
+    "<p class=\"muted-p\" style=\"grid-column:1/-1; font-size:0.76rem;\">A validade é a duração do pack + " + PACK_VALIDITY_EXTRA_MONTHS + " meses (trimestral pago a 14/01: dura até 14/04 e vale até 14/07). O mensal vale 3 meses desde o mês em que paga.</p>" +
+    (studio.sharedAvailable ? "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Partilhado com (casais: um só pagamento)</label><select id=\"pkShare\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Ninguém</option>" +
+      studentsForSharing(s.id).map(function(st){ return "<option value=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</option>"; }).join("") + "</select></div>" : "") +
     "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkMissed\" checked> Faltar sem aviso gasta uma sessão</label>" +
     "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkLate\" checked> Cancelar tarde gasta uma sessão</label>" +
     "<label class=\"f\" style=\"grid-column:1/-1; display:flex; gap:8px; align-items:center;\"><input type=\"checkbox\" id=\"pkCharge\" checked> Criar a cobrança (vence no início, se tiver preço)</label>" +
@@ -13947,14 +14020,25 @@ function wireProSessoes(s, el){
     if (price != null && !(price >= 0)) return fail("#pkErr", "O preço não pode ser negativo.");
     var usedBefore = el.querySelector("#pkUsed") ? parseInt(el.querySelector("#pkUsed").value, 10) || 0 : 0;
     if (usedBefore < 0 || usedBefore > total) return fail("#pkErr", "As aulas já dadas têm de estar entre 0 e " + total + ".");
-    var exp = null; if (months > 0){ var d = new Date(start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + months); exp = d.toISOString().slice(0, 10); }
+    var exp = months > 0 ? addMonthsISO(start, months) : null;
+    var partner = el.querySelector("#pkShare") ? el.querySelector("#pkShare").value : "";
     pkAdd.disabled = true;
     studioInsert("packs", Object.assign({student_id: s.id, name: name.slice(0, 80), total: total, price: price, starts_on: start, expires_on: exp,
-      missed_consumes: el.querySelector("#pkMissed").checked, late_cancel_consumes: el.querySelector("#pkLate").checked}, studio.slotsAvailable ? {used_before: usedBefore} : {})).then(function(r){
+      missed_consumes: el.querySelector("#pkMissed").checked, late_cancel_consumes: el.querySelector("#pkLate").checked}, studio.slotsAvailable ? {used_before: usedBefore} : {}, partner ? {shared_with: [partner]} : {})).then(function(r){
       if (r.error){ pkAdd.disabled = false; return fail("#pkErr", r.error); }
       var charge = price > 0 && el.querySelector("#pkCharge").checked ? studioInsert("payments", {student_id: s.id, pack_id: r.data.id, amount: price, due_on: start}) : Promise.resolve({});
-      Promise.all([charge, attachExtrasToPack(r.data)]).then(function(res){ showToast(res[0].error ? "Pacote criado, mas a cobrança não foi guardada" : "✓ Pacote criado" + (res[1] ? " · " + res[1] + (res[1] === 1 ? " aula extra descontada" : " aulas extra descontadas") : "")); studioRerender(s); });
+      // o outro aluno também passa a poder gastar o pacote que já tinha (se tiver), para os dois acabarem juntos
+      var back = partner ? studioGrantReciprocal(r.data, [partner], []) : Promise.resolve({});
+      Promise.all([charge, back, attachExtrasToPack(r.data)]).then(function(res){ showToast(res[0].error ? "Pacote criado, mas a cobrança não foi guardada" : "✓ Pacote criado" + (partner ? " e partilhado" : "") + (res[2] ? " · " + res[2] + (res[2] === 1 ? " aula extra descontada" : " aulas extra descontadas") : "")); studioRerender(s); });
     });
+  });
+  var pkType = el.querySelector("#pkType"), pkNameEl = el.querySelector("#pkName"), pkNameTouched = false;
+  if (pkNameEl) pkNameEl.addEventListener("input", function(){ pkNameTouched = true; });
+  if (pkType) pkType.addEventListener("change", function(){
+    var t = PACK_TYPES[pkType.value];
+    if (!t) return;
+    el.querySelector("#pkMonths").value = String(t.months);
+    if (!pkNameTouched) pkNameEl.value = "Pack " + t.label.toLowerCase();
   });
   var slAdd = el.querySelector("#slAdd");
   if (slAdd) slAdd.addEventListener("click", function(){
@@ -13985,8 +14069,66 @@ function wireProSessoes(s, el){
   });
   wireStudioCommon(el, function(){ studioRerender(s); });
 }
+// alunos com quem se pode partilhar um pacote (ativos, menos o próprio)
+function studentsForSharing(ownerId){
+  return STUDENTS.filter(function(st){ return st.id !== ownerId && isStudentActive(st) && (!st.isDemo || state.showDemoStudents); })
+    .sort(function(a, b){ return String(a.name).localeCompare(String(b.name), "pt", {sensitivity: "base"}); });
+}
+var SHARED_MIGRATION_MSG = "Para partilhar pacotes falta correr a migração 0028 no SQL Editor do Supabase (ficheiro supabase/migrations/0028_shared_packs.sql) e recarregar a app.";
+// o aluno com quem se partilha passa a poder gastar também os pacotes dele que ainda têm aulas (e deixa de poder, nos removidos); assim os dois gastam do mesmo conjunto
+function studioGrantReciprocal(pack, added, removed){
+  var today = localTodayISO(), errors = 0;
+  var jobs = [];
+  studio.packs.forEach(function(q){
+    if (q.id === pack.id) return;
+    var cur = sharedIdsOf(q), has = cur.indexOf(pack.student_id) >= 0;
+    if (added.indexOf(q.student_id) >= 0 && !has){ var u = packUsage(q, today); if (!u.expired && u.remaining > 0) jobs.push({id: q.id, next: cur.concat([pack.student_id])}); }
+    else if (removed.indexOf(q.student_id) >= 0 && has) jobs.push({id: q.id, next: cur.filter(function(x){ return x !== pack.student_id; })});
+  });
+  return jobs.reduce(function(c, j){ return c.then(function(){ return studioUpdate("packs", j.id, {shared_with: j.next}).then(function(r){ if (r.error) errors++; }); }); }, Promise.resolve()).then(function(){ return errors ? {error: "Não foi possível atualizar " + errors + (errors === 1 ? " pacote" : " pacotes") + " do outro aluno."} : {}; });
+}
+function studioSetPackSharing(pack, ids, reciprocal){
+  if (!studio.sharedAvailable) return Promise.resolve({error: SHARED_MIGRATION_MSG});
+  ids = (ids || []).filter(function(id, i, a){ return id && id !== pack.student_id && a.indexOf(id) === i; });
+  var before = sharedIdsOf(pack);
+  var added = ids.filter(function(id){ return before.indexOf(id) < 0; }), removed = before.filter(function(id){ return ids.indexOf(id) < 0; });
+  return studioUpdate("packs", pack.id, {shared_with: ids}).then(function(r){
+    if (r.error) return {error: /shared_with/.test(r.error) ? SHARED_MIGRATION_MSG : r.error};
+    return reciprocal ? studioGrantReciprocal(pack, added, removed) : {};
+  });
+}
+function openSharePackModal(pack, onDone){
+  var cur = sharedIdsOf(pack), owner = findStudent(pack.student_id);
+  var cands = studentsForSharing(pack.student_id);
+  cur.forEach(function(id){ var st = findStudent(id); if (st && !cands.some(function(c){ return c.id === id; })) cands.push(st); });
+  var sheet = openModal("<div class=\"mtitle\">Partilhar pacote</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">«" + escapeHtml(pack.name) + "» de " + escapeHtml(owner ? owner.name : "—") + ". Quem estiver marcado pode gastar aulas deste pacote (casais que treinam sozinhos e juntos com um só pagamento): as sessões de todos descontam ao mesmo conjunto e acabam ao mesmo tempo.</p>" +
+    "<div class=\"student-search\" style=\"margin-bottom:10px;\"><span aria-hidden=\"true\">🔎</span><input type=\"search\" id=\"shFilter\" placeholder=\"Procurar aluno…\" aria-label=\"Procurar aluno\" autocomplete=\"off\"></div>" +
+    "<div id=\"shList\" style=\"max-height:42vh; overflow:auto; margin-bottom:10px;\">" + (cands.length ? cands.map(function(st){
+      return "<label class=\"history-row\" data-sh-name=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"display:flex; gap:10px; align-items:center; min-height:44px; cursor:pointer;\"><input type=\"checkbox\" data-sh-id=\"" + escapeHtml(st.id) + "\"" + (cur.indexOf(st.id) >= 0 ? " checked" : "") + "> <span>" + escapeHtml(st.name) + "</span></label>";
+    }).join("") : "<p class=\"muted-p\">Não há outros alunos ativos.</p>") + "</div>" +
+    "<label style=\"display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;\"><input type=\"checkbox\" id=\"shBack\" checked> <span class=\"muted-p\">Dar também a cada um acesso ao seu próprio pacote (partilha nos dois sentidos), para ambos gastarem do conjunto todo.</span></label>" +
+    "<p class=\"muted-p\" id=\"shErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"shGo\" style=\"width:100%;\">Guardar</button>");
+  var filter = sheet.querySelector("#shFilter");
+  filter.addEventListener("input", function(){
+    var q = exLibFold(filter.value);
+    sheet.querySelectorAll("[data-sh-name]").forEach(function(row){ row.style.display = !q || row.getAttribute("data-sh-name").indexOf(q) >= 0 ? "flex" : "none"; });
+  });
+  sheet.querySelector("#shGo").addEventListener("click", function(){
+    var ids = [].slice.call(sheet.querySelectorAll("[data-sh-id]")).filter(function(c){ return c.checked; }).map(function(c){ return c.getAttribute("data-sh-id"); });
+    var btn = sheet.querySelector("#shGo"); btn.disabled = true;
+    studioSetPackSharing(pack, ids, sheet.querySelector("#shBack").checked).then(function(r){
+      if (r.error){ var e = sheet.querySelector("#shErr"); e.textContent = r.error; e.style.display = "block"; btn.disabled = false; return; }
+      closeModal(); showToast(ids.length ? "✓ Pacote partilhado com " + ids.length + (ids.length === 1 ? " aluno" : " alunos") : "✓ Pacote deixou de ser partilhado"); if (onDone) onDone();
+    });
+  });
+}
 // botões que existem na ficha e na visão geral
 function wireStudioCommon(el, redraw){
+  el.querySelectorAll("[data-share-pack]").forEach(function(b){ b.addEventListener("click", function(){
+    var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-share-pack"); })[0];
+    if (pk) openSharePackModal(pk, redraw);
+  }); });
   el.querySelectorAll("[data-del-pack]").forEach(function(b){ b.addEventListener("click", function(){
     if (!window.confirm("Apagar este pacote? As sessões e cobranças registadas ficam, mas sem pacote.")) return;
     studioDelete("packs", b.getAttribute("data-del-pack")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
@@ -14039,6 +14181,7 @@ function renderProStudioMain(){
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
       "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
+      (r.pool.shared && r.others.length ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">👥 Partilha com " + escapeHtml(r.others.join(", ")) + " · no conjunto restam <strong>" + r.pool.remaining + "</strong> de " + r.pool.total + "</div>" : "") +
       (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
   });
   html += "</div>";
@@ -14084,8 +14227,8 @@ function renderProStudioMain(){
       escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
 
   html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
-    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong> (e, se quiseres, uma sexta coluna com a validade em meses; sem ela o pacote não caduca). O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
-    "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9\"></textarea>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong> (e, se quiseres, uma sexta coluna com a validade em meses ou o tipo do pack — <em>Mensal</em> 3, <em>Trimestral</em> 6, <em>Semestral</em> 9, <em>Anual</em> 15 meses, ou seja, a duração + 3 meses; sem ela o pacote não caduca — e uma sétima com o aluno com quem o pacote é partilhado, para casais com um só pagamento). O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
+    "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9; Trimestral; João Silva\"></textarea>" +
     "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
   html += "<details class=\"perfil-section\" id=\"studioImportSched\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as datas previstas (agendadas)</summary>" +
