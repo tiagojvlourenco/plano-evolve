@@ -148,5 +148,20 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   calSettings.ignored = {}; calSettings.ignored[calTitleKey("Marta Alves")] = true;
   check.check("58. Os nomes ignorados não voltam à lista de candidatos nem ao plano", calStudentCandidates([{title: "Marta Alves", n: 5}]).length === 0 && planCalendarSync({events: [evt("ig", "Marta Alves", 2)], today: today, window: win, aliases: {}, ignored: calSettings.ignored}).unmatched["Marta Alves"] === undefined);
   check.check("59. Um nome ignorado chamado 'constructor' não faz tudo desaparecer", calIsIgnored({}, "constructor") === false && calIsIgnored(calSettings.ignored, "Marta Alves") === true);
+  // ---- só eventos que começam por "PT" ----
+  check.check("60. O prefixo aceita 'PT 60 - Nome' e 'PT Duo…' mas não 'Reunião PT' nem 'PTA' nem 'Dentista'", calTitleHasPrefix("PT 60 - Isabel", "PT") && calTitleHasPrefix("pt duo 60 - Mãe + Pai", "PT") && calTitleHasPrefix("PT", "PT") && !calTitleHasPrefix("Reunião PT", "PT") && !calTitleHasPrefix("PTA 10", "PT") && !calTitleHasPrefix("Dentista", "PT"));
+  check.check("61. Prefixo vazio aceita tudo", calTitleHasPrefix("Dentista", "") && calTitleHasPrefix("Dentista", "   "));
+  STUDENTS.length = 0; STUDENTS.push({id: "a", name: "Isabel Carvalho", active: true}, {id: "b", name: "Rita Pilates", active: true});
+  studio.sessions = [{id: "old1", student_id: "b", date: d(3), time: "10:00", status: "feita", source: "calendario", external_id: "p1"}];
+  var pp = planCalendarSync({events: [evt("e1", "PT 60 - Isabel Carvalho", 2), evt("p1", "Pilates - Rita Pilates", 3), evt("z", "Reunião de equipa", 1)], today: today, window: win, aliases: {}, ignored: {}, prefix: "PT"});
+  check.check("62. Com o prefixo 'PT' só entram as aulas PT; os outros eventos nem contam nem vão para a lista", pp.insert.length === 1 && pp.insert[0].external_id === "e1" && Object.keys(pp.unmatched).length === 0);
+  check.check("63. As sessões que vieram de eventos que já não começam por 'PT' são removidas na sincronização", pp.remove.join() === "old1");
+  sbReady = false;
+  store[CAL_LOCAL_KEY] = JSON.stringify({clientId: "x.apps.googleusercontent.com"}); await calLoadSettings();
+  var defPrefix = calSettings.titlePrefix;
+  store[CAL_LOCAL_KEY] = JSON.stringify({clientId: "x.apps.googleusercontent.com", titlePrefix: ""}); await calLoadSettings();
+  var emptyPrefix = calSettings.titlePrefix;
+  store[CAL_LOCAL_KEY] = JSON.stringify({clientId: "x.apps.googleusercontent.com", titlePrefix: "PT"}); await calLoadSettings(); calSettings.titlePrefix = "Treino"; await calSaveSettings(); calSettings.titlePrefix = "x"; await calLoadSettings();
+  check.check("64. Por omissão o prefixo é 'PT'; vazio fica vazio; o que se escreve guarda-se", defPrefix === "PT" && emptyPrefix === "" && calSettings.titlePrefix === "Treino");
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

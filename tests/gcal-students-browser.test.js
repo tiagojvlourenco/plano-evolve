@@ -62,6 +62,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.waitForSelector("#gcalCard");
   await page.fill("#gcClient", "123456-abc.apps.googleusercontent.com"); await page.click("#gcSave");
   await page.waitForSelector("#gcSync");
+  await page.fill("#gcPrefix", ""); // estes testes usam eventos de todos os tipos; o filtro por prefixo tem o seu teste
   await page.click("#gcSync");
   await page.waitForSelector("#gcCreate");
   var names = await page.locator("[data-gc-name]").evaluateAll(function(els){ return els.map(function(e){ return e.value; }); });
