@@ -310,6 +310,8 @@
   .pro-stat-card .l{font-size:0.75rem; color:var(--muted); margin-top:2px;}
 
   .student-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px;}
+  .plano-actions{display:flex; justify-content:flex-end; margin:-4px 0 10px; column-span:all;}
+  .plano-actions .btn{min-height:44px;}
   .plano-supp{border-top:1px dashed var(--line); margin-top:4px;}
   .plano-supp-note{font-size:0.78rem; margin:-2px 0 8px;}
   .student-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;}
@@ -7808,6 +7810,7 @@ function tplPlano(s){
   var tier = flexTier(s.flexibility);
   var profile = computeFlexibilityProfile(s);
   var html = tabHead("Alimentação", "Nível " + TIER_LABEL[tier] + " · " + TIER_HINT[tier]);
+  if (planReadyForExport(s)) html += "<div class=\"plano-actions\"><button type=\"button\" class=\"btn btn-sm\" id=\"exportPlanPdf\">⬇ Plano em PDF (imprimir)</button></div>";
   html += tplTargetsCard(s);
   var creatineIdx = breakfastMealIndex(s.meals);
   s.meals.forEach(function(m, idx){
@@ -8154,6 +8157,273 @@ function tplShoppingList(s){
   return html;
 }
 
+/* ---------- PDF do plano alimentar (para imprimir ou pôr no frigorífico) ----------
+   Escrito à mão, sem bibliotecas: um PDF 1.4 simples com Helvetica (as letras acentuadas do português estão todas no WinAnsi),
+   o logótipo EVOLVE desenhado em vetor a partir do mesmo desenho do SVG da app, e as cores da marca (tinta #0D0F12, laranja #E85D2C).
+   Funciona offline, é síncrono (importante para o navigator.share no iPhone, que exige o toque do utilizador) e não pesa na app.
+   As larguras abaixo são as da Helvetica/Helvetica-Bold (AFM) para os carateres ASCII 32–126; os acentuados usam a largura da letra base. */
+var PDF_PAGE_W = 595.28, PDF_PAGE_H = 841.89;
+var PDF_W_REG = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278, 556,556,556,556,556,556,556,556,556,556, 278,278,584,584,584,556,1015,
+  667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611, 278,278,278,469,556,333,
+  556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500, 334,260,334,584];
+var PDF_W_BOLD = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278, 556,556,556,556,556,556,556,556,556,556, 333,333,584,584,584,611,975,
+  722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611, 333,278,333,584,556,333,
+  556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500, 389,280,389,584];
+var PDF_SPECIAL = {8211: 150, 8212: 151, 8226: 149, 8364: 128, 8220: 147, 8221: 148, 8216: 145, 8217: 146, 8230: 133, 8776: 126};
+var PDF_INK = [13, 15, 18], PDF_ORANGE = [232, 93, 44], PDF_MUTED = [105, 112, 126], PDF_LINE = [214, 218, 224], PDF_SOFT = [244, 245, 247], PDF_WHITE = [255, 255, 255];
+// texto em WinAnsi (um byte por carácter); o que não existe passa à letra base ou a «?»
+function pdfWinAnsi(str){
+  var out = "";
+  String(str == null ? "" : str).split("").forEach(function(ch){
+    var c = ch.charCodeAt(0);
+    if ((c >= 32 && c <= 126) || (c >= 160 && c <= 255)) out += ch;
+    else if (PDF_SPECIAL[c] != null) out += String.fromCharCode(PDF_SPECIAL[c]);
+    else if (c === 9 || c === 10 || c === 13) out += " ";
+    else { var base = ch.normalize("NFD").charAt(0), b = base.charCodeAt(0); out += b >= 32 && b <= 126 ? base : "?"; }
+  });
+  return out;
+}
+function pdfCharW(code, bold){
+  var tbl = bold ? PDF_W_BOLD : PDF_W_REG;
+  if (code >= 32 && code <= 126) return tbl[code - 32];
+  if (code >= 160 && code <= 255){ var b = String.fromCharCode(code).normalize("NFD").charAt(0).charCodeAt(0); return b >= 32 && b <= 126 ? tbl[b - 32] : (bold ? 611 : 556); }
+  return 500;
+}
+function pdfTextW(str, size, bold){
+  var t = pdfWinAnsi(str), w = 0;
+  for (var i = 0; i < t.length; i++) w += pdfCharW(t.charCodeAt(i), bold);
+  return w * size / 1000;
+}
+function pdfWrap(str, maxW, size, bold){
+  var words = String(str == null ? "" : str).split(/\s+/).filter(Boolean), lines = [], cur = "";
+  words.forEach(function(w){
+    var test = cur ? cur + " " + w : w;
+    if (!cur || pdfTextW(test, size, bold) <= maxW) cur = test; else { lines.push(cur); cur = w; }
+  });
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [""];
+}
+// o documento: páginas com operadores de desenho (origem no canto superior esquerdo, em pontos) e a montagem final do ficheiro
+function pdfDoc(){
+  var pages = [], cur = null;
+  function n(v){ return String(Math.round(v * 100) / 100); }
+  function Y(y){ return n(PDF_PAGE_H - y); }
+  function P(x, y){ return n(x) + " " + Y(y); }
+  function col(c){ return (c[0] / 255).toFixed(3) + " " + (c[1] / 255).toFixed(3) + " " + (c[2] / 255).toFixed(3); }
+  function esc(t){ return t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)"); }
+  function roundPath(x, y, w, h, r){
+    var k = r * 0.5523;
+    return [P(x + r, y) + " m", P(x + w - r, y) + " l", P(x + w - r + k, y) + " " + P(x + w, y + r - k) + " " + P(x + w, y + r) + " c", P(x + w, y + h - r) + " l",
+      P(x + w, y + h - r + k) + " " + P(x + w - r + k, y + h) + " " + P(x + w - r, y + h) + " c", P(x + r, y + h) + " l",
+      P(x + r - k, y + h) + " " + P(x, y + h - r + k) + " " + P(x, y + h - r) + " c", P(x, y + r) + " l", P(x, y + r - k) + " " + P(x + r - k, y) + " " + P(x + r, y) + " c h"].join(" ");
+  }
+  var api = {
+    addPage: function(){ cur = []; pages.push(cur); return pages.length - 1; },
+    page: function(i){ cur = pages[i]; },
+    count: function(){ return pages.length; },
+    fillRect: function(x, y, w, h, c){ cur.push(col(c) + " rg " + n(x) + " " + Y(y + h) + " " + n(w) + " " + n(h) + " re f"); },
+    // cartão com cantos redondos: preenchimento e/ou contorno
+    card: function(x, y, w, h, r, fill, stroke, lw){
+      cur.push((fill ? col(fill) + " rg " : "") + (stroke ? col(stroke) + " RG " + n(lw || 0.8) + " w " : "") + roundPath(x, y, w, h, r) + (fill && stroke ? " B" : fill ? " f" : " S"));
+    },
+    line: function(x1, y1, x2, y2, c, lw){ cur.push(col(c) + " RG " + n(lw) + " w 0 J " + P(x1, y1) + " m " + P(x2, y2) + " l S"); },
+    polyline: function(pts, c, lw){ cur.push(col(c) + " RG " + n(lw) + " w 0 J 0 j " + pts.map(function(p, i){ return P(p[0], p[1]) + (i ? " l" : " m"); }).join(" ") + " S"); },
+    circle: function(cx, cy, r, c, lw){
+      var k = r * 0.5523;
+      cur.push(col(c) + " RG " + n(lw) + " w " + P(cx + r, cy) + " m " + P(cx + r, cy + k) + " " + P(cx + k, cy + r) + " " + P(cx, cy + r) + " c " + P(cx - k, cy + r) + " " + P(cx - r, cy + k) + " " + P(cx - r, cy) + " c " +
+        P(cx - r, cy - k) + " " + P(cx - k, cy - r) + " " + P(cx, cy - r) + " c " + P(cx + k, cy - r) + " " + P(cx + r, cy - k) + " " + P(cx + r, cy) + " c h S");
+    },
+    // font: "r" normal, "b" negrito, "i" itálico; align: "l", "r" ou "c" (x é a esquerda, a direita ou o centro)
+    text: function(str, x, y, size, font, c, align){
+      var t = pdfWinAnsi(str), w = pdfTextW(str, size, font === "b"), px = align === "r" ? x - w : align === "c" ? x - w / 2 : x;
+      cur.push("BT /" + (font === "b" ? "F2" : font === "i" ? "F3" : "F1") + " " + n(size) + " Tf " + col(c) + " rg " + P(px, y) + " Td (" + esc(t) + ") Tj ET");
+    },
+    // o ficheiro PDF (cada carácter da cadeia é um byte)
+    output: function(title){
+      var out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n", offsets = [];
+      function add(body){ offsets.push(out.length); out += offsets.length + " 0 obj\n" + body + "\nendobj\n"; }
+      var kids = pages.map(function(p, i){ return (7 + 2 * i) + " 0 R"; }).join(" ");
+      add("<< /Type /Catalog /Pages 2 0 R >>");
+      add("<< /Type /Pages /Kids [" + kids + "] /Count " + pages.length + " >>");
+      ["Helvetica", "Helvetica-Bold", "Helvetica-Oblique"].forEach(function(f){ add("<< /Type /Font /Subtype /Type1 /BaseFont /" + f + " /Encoding /WinAnsiEncoding >>"); });
+      add("<< /Title (" + esc(pdfWinAnsi(title || "Plano alimentar EVOLVE")) + ") /Producer (EVOLVE) /Creator (EVOLVE) >>");
+      pages.forEach(function(ops, i){
+        var stream = ops.join("\n");
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + n(PDF_PAGE_W) + " " + n(PDF_PAGE_H) + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents " + (8 + 2 * i) + " 0 R >>");
+        add("<< /Length " + stream.length + " >>\nstream\n" + stream + "\nendstream");
+      });
+      var xref = out.length, pad = function(v){ return ("0000000000" + v).slice(-10); };
+      out += "xref\n0 " + (offsets.length + 1) + "\n0000000000 65535 f \n" + offsets.map(function(o){ return pad(o) + " 00000 n \n"; }).join("") +
+        "trailer\n<< /Size " + (offsets.length + 1) + " /Root 1 0 R /Info 6 0 R >>\nstartxref\n" + xref + "\n%%EOF\n";
+      var bytes = new Uint8Array(out.length);
+      for (var i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 255;
+      return bytes;
+    }
+  };
+  return api;
+}
+// o logótipo EVOLVE em vetor (mesma geometria do SVG do cabeçalho da app, 1160 × 320)
+function pdfLogo(doc, x, y, w, c){
+  var k = w / 1160, pt = function(px, py){ return [x + px * k, y + py * k]; };
+  [[0, 80], [0, 150], [0, 220], [1000, 80], [1000, 150], [1000, 220]].forEach(function(r){ doc.fillRect(x + r[0] * k, y + r[1] * k, 160 * k, 20 * k, c); });
+  doc.polyline([[240, 80], [320, 240], [400, 80]].map(function(p){ return pt(p[0], p[1]); }), c, 20 * k);
+  doc.polyline([[760, 80], [840, 240], [920, 80]].map(function(p){ return pt(p[0], p[1]); }), c, 20 * k);
+  doc.circle(x + 580 * k, y + 160 * k, 90 * k, c, 20 * k);
+  doc.line(x + 580 * k, y, x + 580 * k, y + 320 * k, c, 20 * k);
+}
+
+// ---- o conteúdo (puro, sem DOM: testa-se em Node) ----
+// o plano só se exporta quando já tem refeições com alimentos (não há um estado «finalizado» no plano)
+function planReadyForExport(s){ return !!(s && (s.meals || []).some(function(m){ return m && m.foods && m.foods.length; })); }
+function localFileDate(){ var d = new Date(); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+function buildPlanDoc(s){
+  var risk = hasUnmappedDietaryRisk(s), canSwap = !risk && computeFlexibilityProfile(s).substitutionsEnabled;
+  // cópia ordenada por hora (sortMealsByTime mexeria no plano guardado)
+  var meals = (s.meals || []).filter(function(m){ return m && m.foods && m.foods.length; }).slice()
+    .sort(function(a, b){ return toMinutes(String(a.time || "99:99")) - toMinutes(String(b.time || "99:99")); });
+  var cr = creatineStatus(s), crIdx = cr.on ? breakfastMealIndex(meals) : -1, hasSwap = false;
+  var t = s.targets || {};
+  function mac(v, mn, mx){ return v != null ? String(Math.round(v)) : (mn != null && mx != null ? Math.round(mn) + "–" + Math.round(mx) : ""); }
+  var out = {
+    name: s.name || "", dateLabel: new Date().toLocaleDateString("pt-PT", {day: "numeric", month: "long", year: "numeric"}), risk: risk,
+    targets: t.kcal > 0 ? {kcal: Math.round(t.kcal), protein: mac(t.protein, t.proteinMin, t.proteinMax), carbs: mac(t.carbs, t.carbsMin, t.carbsMax), fat: mac(t.fat, t.fatMin, t.fatMax)} : null,
+    meals: meals.map(function(m, i){
+      var totals = foodsTotals(m.foods);
+      return {name: m.name, time: m.time, kcal: totals.kcal, p: totals.p, c: totals.c, f: totals.f,
+        foods: m.foods.map(function(f){ var sw = !!f.group && canSwap; if (sw) hasSwap = true; return {name: f.name, qty: f.qty, swap: sw}; }),
+        creatine: i === crIdx ? {g: cr.dose, note: CREATINE_NOTE} : null};
+    })
+  };
+  out.hasSwap = hasSwap;
+  return out;
+}
+
+function renderPlanPdf(plan){
+  var doc = pdfDoc(), W = PDF_PAGE_W, H = PDF_PAGE_H, M = 36, CW = W - 2 * M, GAP = 14, cardW = (CW - GAP) / 2, PAD = 12, FS = 10.5, LH = 13, TS = 12.5, NS = 8.5;
+  var y = 0;
+  // a letra cresce (até 1,4×) enquanto o plano couber numa só página: é para ler à distância, no frigorífico
+  function setScale(sc){ FS = 10.5 * sc; LH = 13 * sc; TS = 12.5 * sc; NS = Math.max(8.5, 8.5 * sc * 0.95); }
+  function continuation(){
+    doc.addPage();
+    pdfLogo(doc, M, 22, 70, PDF_INK);
+    doc.text(plan.name, W - M, 34, 9, "r", PDF_MUTED, "r");
+    doc.fillRect(M, 44, CW, 1.5, PDF_ORANGE);
+    y = 62;
+  }
+  // primeira página: faixa escura com o logótipo, a data e o nome do aluno
+  doc.addPage();
+  doc.fillRect(0, 0, W, 84, PDF_INK);
+  pdfLogo(doc, M, 26, 118, PDF_WHITE);
+  doc.text("PLANO ALIMENTAR", W - M, 40, 12, "b", PDF_WHITE, "r");
+  doc.text(plan.dateLabel, W - M, 57, 9.5, "r", [184, 191, 204], "r");
+  doc.fillRect(0, 84, W, 4, PDF_ORANGE);
+  doc.text(plan.name, M, 124, 22, "b", PDF_INK, "l");
+  y = 140;
+  if (plan.targets){
+    doc.card(M, y, CW, 60, 10, PDF_SOFT, null);
+    doc.text(String(plan.targets.kcal), M + 16, y + 38, 28, "b", PDF_ORANGE, "l");
+    var kw = pdfTextW(String(plan.targets.kcal), 28, true);
+    doc.text("kcal por dia", M + 16 + kw + 6, y + 38, 9.5, "r", PDF_MUTED, "l");
+    [["Proteína", plan.targets.protein], ["Hidratos", plan.targets.carbs], ["Gordura", plan.targets.fat]].forEach(function(m, i){
+      var cx = M + 232 + i * 98;
+      doc.text(m[0], cx, y + 24, 9, "r", PDF_MUTED, "l");
+      doc.text(m[1] ? m[1] + " g" : "—", cx, y + 43, 15, "b", PDF_INK, "l");
+    });
+    y += 60 + 18;
+  } else y += 6;
+
+  // altura de um cartão de refeição
+  function measure(m){
+    var iw = cardW - 2 * PAD, h = PAD + TS + 11;
+    m.foods.forEach(function(f){
+      var qw = pdfTextW(f.qty, FS, true), lines = pdfWrap(f.name + (f.swap ? " *" : ""), iw - qw - 10, FS, false);
+      h += lines.length * LH + 4;
+    });
+    if (m.creatine){
+      h += LH + 4 + pdfWrap(m.creatine.note, iw, NS, false).length * (NS + 2.5) + 4;
+    }
+    return h + 18 + PAD;
+  }
+  function drawCard(m, x, top, h){
+    var iw = cardW - 2 * PAD, ty = top + PAD;
+    doc.card(x, top, cardW, h, 8, PDF_WHITE, PDF_LINE, 0.9);
+    doc.text(pdfWrap(m.name, iw - 50 * TS / 12.5, TS, true)[0], x + PAD, ty + TS * 0.9, TS, "b", PDF_INK, "l");
+    doc.text(m.time || "", x + cardW - PAD, ty + TS * 0.9, TS * 0.9, "b", PDF_ORANGE, "r");
+    ty += TS + 4.5;
+    doc.line(x + PAD, ty, x + cardW - PAD, ty, PDF_LINE, 0.8);
+    ty += 6;
+    m.foods.forEach(function(f){
+      var qw = pdfTextW(f.qty, FS, true), lines = pdfWrap(f.name + (f.swap ? " *" : ""), iw - qw - 10, FS, false);
+      lines.forEach(function(l, i){ doc.text(l, x + PAD, ty + FS * 0.95 + i * LH, FS, "r", PDF_INK, "l"); });
+      doc.text(f.qty, x + cardW - PAD, ty + FS * 0.95, FS, "b", PDF_INK, "r");
+      ty += lines.length * LH + 4;
+    });
+    if (m.creatine){
+      doc.line(x + PAD, ty - 1, x + cardW - PAD, ty - 1, PDF_LINE, 0.5);
+      doc.text("Creatina mono-hidratada", x + PAD, ty + FS * 0.95, FS, "r", PDF_INK, "l");
+      doc.text(m.creatine.g + " g", x + cardW - PAD, ty + FS * 0.95, FS, "b", PDF_ORANGE, "r");
+      ty += LH + 4;
+      var noteLines = pdfWrap(m.creatine.note, iw, NS, false);
+      noteLines.forEach(function(l, i){ doc.text(l, x + PAD, ty + NS * 0.75 + i * (NS + 2.5), NS, "i", PDF_MUTED, "l"); });
+      ty += noteLines.length * (NS + 2.5) + 4;
+    }
+    doc.text(Math.round(m.kcal) + " kcal · P " + Math.round(m.p) + " g · H " + Math.round(m.c) + " g · G " + Math.round(m.f) + " g", x + PAD, top + h - PAD - 2, 8.5, "r", PDF_MUTED, "l");
+  }
+  var bottom = H - 56;
+  function rowHeights(){ var hs = []; for (var k = 0; k < plan.meals.length; k += 2) hs.push(Math.max(measure(plan.meals[k]), plan.meals[k + 1] ? measure(plan.meals[k + 1]) : 0)); return hs; }
+  var scales = [1.4, 1.3, 1.2, 1.1, 1], chosen = 1;
+  for (var si = 0; si < scales.length; si++){
+    setScale(scales[si]);
+    var need = rowHeights().reduce(function(a, h){ return a + h + 12; }, 0);
+    if (y + need <= bottom + 12){ chosen = scales[si]; break; }
+  }
+  setScale(chosen);
+  for (var i = 0; i < plan.meals.length; i += 2){
+    var a = plan.meals[i], b = plan.meals[i + 1], rowH = Math.max(measure(a), b ? measure(b) : 0);
+    if (y + rowH > bottom) continuation();
+    drawCard(a, M, y, rowH);
+    if (b) drawCard(b, M + cardW + GAP, y, rowH);
+    y += rowH + 12;
+  }
+  // rodapé em todas as páginas
+  var total = doc.count();
+  for (var p = 0; p < total; p++){
+    doc.page(p);
+    doc.line(M, H - 40, W - M, H - 40, PDF_LINE, 0.8);
+    doc.text(plan.risk ? "Este plano não tem alimentos alternativos: fala com o teu profissional antes de trocar." : plan.hasSwap ? "* Podes trocar este alimento por um equivalente na app." : "Em caso de dúvida, fala com o teu profissional.", M, H - 26, 8, "r", PDF_MUTED, "l");
+    doc.text("EVOLVE · Página " + (p + 1) + " de " + total, W - M, H - 26, 8, "b", PDF_MUTED, "r");
+  }
+  return doc.output("Plano alimentar EVOLVE - " + plan.name);
+}
+
+// entrega: no telemóvel abre a folha de partilha (imprimir, guardar nos Ficheiros, WhatsApp); no computador descarrega
+function exportPlanPdf(s){
+  if (!planReadyForExport(s)){ showToast("O plano ainda não tem refeições com alimentos."); return false; }
+  var bytes;
+  try { bytes = renderPlanPdf(buildPlanDoc(s)); } catch (e) { showToast("⚠ Não foi possível gerar o PDF"); return false; }
+  var name = "plano-alimentar-" + slug(s.name || "aluno") + "-" + localFileDate() + ".pdf";
+  var blob = new Blob([bytes], {type: "application/pdf"}), file = null;
+  try { file = new File([blob], name, {type: "application/pdf"}); } catch (e) {}
+  if (file && navigator.share && navigator.canShare && navigator.canShare({files: [file]})){
+    navigator.share({files: [file], title: "Plano alimentar EVOLVE"}).catch(function(e){ if (!e || e.name !== "AbortError") pdfDeliver(blob, name); });
+    return true;
+  }
+  pdfDeliver(blob, name);
+  return true;
+}
+function pdfDeliver(blob, name){
+  var url = URL.createObjectURL(blob);
+  var standalone = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  if (standalone){
+    // numa app instalada no iPhone, um descarregamento abre o PDF sem botão de voltar: dá-se uma ligação para tocar
+    openModal("<div class=\"mtitle\">PDF pronto</div><p class=\"muted-p\" style=\"margin-bottom:12px;\">Abre o PDF e usa o botão de partilha do telemóvel para imprimir ou guardar.</p>" +
+      "<a class=\"btn primary\" id=\"pdfOpenLink\" style=\"display:block; text-align:center;\" href=\"" + url + "\" target=\"_blank\" rel=\"noopener\">Abrir PDF</a>");
+  } else {
+    var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  }
+  setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
+}
+
 function tplPlanoTabs(s){
   var hasProgram = workoutDaysWithExercises(s).length > 0, hasMeals = (s.meals || []).length > 0;
   var sec = hasProgram && state.planoSection === "treino" ? "treino" : (hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao");
@@ -8225,6 +8495,8 @@ function wireTrainingNav(s, el){
   });
   var shopStoreSel = el.querySelector("#shopStore");
   if (shopStoreSel) shopStoreSel.addEventListener("change", function(){ shopStoreSet(s, shopStoreSel.value); renderAlunoTab(s); });
+  var pdfBtn = el.querySelector("#exportPlanPdf");
+  if (pdfBtn) pdfBtn.addEventListener("click", function(){ exportPlanPdf(s); });
   var shopCopy = el.querySelector("#shopCopy");
   if (shopCopy) shopCopy.addEventListener("click", function(){
     var text = shoppingListText(s, SHOP_DAY_CHOICES.indexOf(state.shopDays) >= 0 ? state.shopDays : 7, shopStoreGet(s));
@@ -11608,7 +11880,8 @@ function tplProPlano(s){
   }
   html += "<button type=\"button\" class=\"btn primary btn-sm\" id=\"addMealBtn\" style=\"width:100%; margin-top:10px;\">+ Adicionar refeição</button>";
   if (s.meals.length){
-    html += "<button type=\"button\" class=\"btn btn-sm\" id=\"autoAdjustBtn\" style=\"width:100%; margin-top:8px;\">⚖️ Ajustar quantidades aos alvos</button>" +
+    html += "<button type=\"button\" class=\"btn btn-sm\" id=\"proExportPdf\" style=\"width:100%; margin-top:8px;\">⬇ Exportar o plano em PDF (como o aluno o vê)</button>" +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"autoAdjustBtn\" style=\"width:100%; margin-top:8px;\">⚖️ Ajustar quantidades aos alvos</button>" +
       "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">Reescala as quantidades de todos os alimentos (mantendo as proporções entre eles) para a soma do dia bater certo com os alvos acima — inclui vegetais e fruta, só não mexe em alimentos marcados como \"à vontade\".</p>";
   }
   return html;
@@ -14964,6 +15237,8 @@ function wireProTab(s){
   });
   });
 
+  var proPdf = el.querySelector("#proExportPdf");
+  if (proPdf) proPdf.addEventListener("click", function(){ exportPlanPdf(s); });
   var crToggle = el.querySelector("#creatineToggle");
   if (crToggle) crToggle.addEventListener("click", function(){ setCreatineEnabled(s, crToggle.getAttribute("data-on") === "1"); renderProTabContent(s); });
   var crConfirm = el.querySelector("#creatineConfirm");
