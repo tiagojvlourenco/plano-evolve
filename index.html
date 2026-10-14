@@ -9516,17 +9516,18 @@ function computeWeeklyTrend(weights){
 
 function tplEvolucaoAluno(s, opts){
   opts = opts || {};
-  var diff = (s.weightCurrent - s.weightInitial).toFixed(1);
+  var noWeight = s.weightCurrent == null || s.weightInitial == null; // aluno só de estúdio, ainda sem peso
+  var diff = noWeight ? null : (s.weightCurrent - s.weightInitial).toFixed(1);
   var trend = computeWeeklyTrend(s.weights);
   var html = (opts.editable ? "" : tabHead("Progresso", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
-    "<div class=\"hero-row\"><div class=\"hero-num\">" + Number(s.weightCurrent).toFixed(1) + "<small>kg</small></div></div>" +
+    "<div class=\"hero-row\"><div class=\"hero-num\">" + (s.weightCurrent == null ? "—" : Number(s.weightCurrent).toFixed(1) + "<small>kg</small>") + "</div></div>" +
     "<div class=\"weight-chart-wrap\">" + weightSvg(s.weights) + "</div>" +
     "<div class=\"stat-grid-4\">" +
-      statTile("Inicial", s.weightInitial + " kg") +
-      statTile("Atual", s.weightCurrent + " kg") +
+      statTile("Inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
+      statTile("Atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") +
       statTile("Objetivo", (s.weightGoal || "—") + (s.weightGoal ? " kg":"")) +
-      statTile("Diferença", (diff>0?"+":"") + diff + " kg") +
+      statTile("Diferença", diff == null ? "—" : (diff>0?"+":"") + diff + " kg") +
     "</div>" +
     (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência recente: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + trend.toFixed(2) + " kg/semana</span></p>" : "") +
   "</div>";
@@ -10811,13 +10812,15 @@ function visibleStudentsForDashboard(){
 function isStudentActive(s){ return s.active !== false; }
 // aluno criado a partir da agenda que não usa a app: não há registos a esperar dele (migração 0026); com convite ou conta deixa de o ser
 function isStudioOnly(s){ return !!(s && s.studioOnly && !s.inviteEmail && !s.authUserId); }
+// dias sem check-in para o painel (quem não usa a app nunca está "em atraso")
+function dashLateDays(s){ return isStudioOnly(s) ? 0 : computeLastCheckinDaysAgo(s); }
 
 function renderProDashboardMain(){
   var main = document.getElementById("proMain");
   var visible = visibleStudentsForDashboard();
   var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
   var activeStudents = visible.filter(isStudentActive);
-  var pendingCheckins = activeStudents.filter(function(s){ return computeLastCheckinDaysAgo(s)>=7; }).length;
+  var pendingCheckins = activeStudents.filter(function(s){ return dashLateDays(s)>=7; }).length;
   var alertCount = activeStudents.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
   var html = "<div class=\"pro-stat-row\">" +
@@ -10842,13 +10845,13 @@ function renderProDashboardMain(){
   if (state.dashboardListMode){
     var mode = state.dashboardListMode;
     var listStudents = mode === "total" ? visible : activeStudents.filter(function(st){
-      if (mode === "checkins") return computeLastCheckinDaysAgo(st) >= 7;
+      if (mode === "checkins") return dashLateDays(st) >= 7;
       if (mode === "alerts") return computeDashboardAlerts(st).length > 0;
       return true;
     });
     var rows = listStudents.map(function(st){
       var al = computeDashboardAlerts(st);
-      return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: computeLastCheckinDaysAgo(st), pending: pendingHelpFor(st.id)};
+      return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: dashLateDays(st), pending: pendingHelpFor(st.id)};
     }).sort(function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
     var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
     html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
@@ -10860,7 +10863,7 @@ function renderProDashboardMain(){
       html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
         "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
           "<div class=\"avatar\">" + escapeHtml(st.initials) + "</div>" +
-          "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + escapeHtml(st.goal) + "</div>" +
+          "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + (isStudioOnly(st) ? "Só estúdio" : escapeHtml(st.goal)) + "</div>" +
           (badges ? "<div class=\"sr-badges\">" + badges + "</div>" : "") + "</div>" +
         "</div>" +
         "<label class=\"switch\" title=\"" + (isStudentActive(st) ? "Ativo" : "Inativo") + "\">" +
@@ -11269,8 +11272,8 @@ function tplProPerfil(s){
   // fechadas, incluindo "Dados pessoais" — pedido explícito para não ter
   // informação sempre à vista, igual ao resto das secções.
   var html = perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
-    fRow("Idade", s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex) + fRow("Altura", s.height + " cm") +
-    fRow("Peso atual", s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial + " kg") +
+    fRow("Idade", s.age == null ? "—" : s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex || "—") + fRow("Altura", s.height == null ? "—" : s.height + " cm") +
+    fRow("Peso atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
     fRow("Nível de atividade", s.activityLevel || "— (a usar treinos/semana como aproximação)") +
@@ -12744,6 +12747,7 @@ function computeStudentSignals(s){
 }
 
 function computeDashboardAlerts(s){
+  if (isStudioOnly(s)) return s.alerts || []; // sem app, não há sinais de uso a avaliar
   var computed = computeStudentSignals(s).filter(function(sig){ return sig.status === "atencao"; }).map(function(sig){
     return { type: sig.severity === "high" ? "critical" : "warn", text: sig.text };
   });
@@ -13115,7 +13119,7 @@ function wireCalendarCard(main, redraw){
     if (!window.confirm("Criar " + items.length + (items.length === 1 ? " aluno" : " alunos") + " a partir da agenda?")) return;
     create.disabled = true; say("A criar os alunos…");
     createStudentsFromCalendar(items).then(function(r){
-      var msg = "✓ " + r.made.length + (r.made.length === 1 ? " aluno criado" : " alunos criados") + (r.aliasOnly ? " · " + r.aliasOnly + " já existia" + (r.aliasOnly === 1 ? "" : "m") : "") + (r.failed.length ? " · ⚠ falhou: " + r.failed.join(", ") : "");
+      var msg = "✓ " + r.made.length + (r.made.length === 1 ? " aluno criado" : " alunos criados") + (r.aliasOnly ? " · " + r.aliasOnly + " já existia" + (r.aliasOnly === 1 ? "" : "m") + (r.archived.length ? " (arquivado: " + r.archived.join(", ") + ")" : "") : "") + (r.failed.length ? " · ⚠ falhou: " + r.failed.join(", ") : "");
       msg += r.summary ? " · " + r.summary.inserted + " aulas contadas." : (r.made.length ? " · Carrega em Sincronizar para contar as aulas." : "");
       showToast(msg); updateStudioBadge(); redraw();
     }, function(e){ create.disabled = false; say(e && e.message ? e.message : "Não foi possível criar os alunos.", true); });
@@ -13295,9 +13299,10 @@ function calTitleKey(t){ return exLibFold(t); }
 // (se houver vários, o mais comprido); primeiro+último nome se for único.
 function matchEventStudent(title, aliases){
   var key = calTitleKey(title);
-  if (aliases && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
+  if (aliases && Object.prototype.hasOwnProperty.call(aliases, key) && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
   var all = STUDENTS.filter(function(s){ return !s.isDemo || state.showDemoStudents; });
-  function unique(list){ return list.length === 1 ? list[0] : null; }
+  // um arquivado com o mesmo nome de um ativo não torna o nome ambíguo: conta o ativo
+  function unique(list){ var act = list.filter(isStudentActive); if (act.length) list = act; return list.length === 1 ? list[0] : null; }
   var exact = all.filter(function(s){ return exLibFold(s.name) === key; });
   if (exact.length) return unique(exact);
   var parts = String(title).split(/\s+[-–—]\s+/), tail = parts.length > 1 ? calTitleKey(parts[parts.length - 1]) : "";
@@ -13310,6 +13315,7 @@ function matchEventStudent(title, aliases){
   if (inside.length){
     var longest = Math.max.apply(null, inside.map(function(s){ return exLibFold(s.name).length; }));
     var top = inside.filter(function(s){ return exLibFold(s.name).length === longest; });
+    if (top.filter(isStudentActive).length) top = top.filter(isStudentActive);
     // dois alunos diferentes no mesmo título é ambíguo; só vale se os outros nomes forem parte do mais comprido ("Ana Silva" e "Ana Silva Santos")
     if (top.length === 1 && inside.every(function(s){ return exLibFold(top[0].name).indexOf(exLibFold(s.name)) >= 0; })) return top[0];
     return null;
@@ -13326,9 +13332,9 @@ function calendarWindow(today){
 // o que há a fazer para as sessões ficarem iguais ao calendário: {insert[], update[], remove[], unmatched{titulo: n}, matched}
 function planCalendarSync(opts){
   var today = opts.today, win = opts.window, aliases = opts.aliases || {};
-  var plan = {insert: [], update: [], remove: [], unmatched: {}, matched: 0};
-  var present = {};
-  var byExt = {};
+  var plan = {insert: [], update: [], remove: [], unmatched: Object.create(null), matched: 0};
+  var present = Object.create(null);
+  var byExt = Object.create(null);
   studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
   opts.events.forEach(function(ev){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
@@ -13485,7 +13491,7 @@ function calLooksLikeClient(name){
 }
 // títulos sem aluno → um candidato por nome (vários títulos podem trazer o mesmo nome); os que parecem alunos vêm marcados
 function calStudentCandidates(unmatched){
-  var by = {};
+  var by = Object.create(null);
   (unmatched || []).forEach(function(u){
     var name = calCandidateName(u.title), key = calTitleKey(name);
     if (!key) return;
@@ -13497,14 +13503,13 @@ function calStudentCandidates(unmatched){
 function calNewStudent(name){
   var baseId = slug(name) || ("aluno-" + Date.now()), id = baseId, n = 2;
   while (findStudent(id)){ id = baseId + "-" + n; n++; }
-  var profile = {sex: "Feminino", age: 30, height: 170, weight: 70, goal: ONBOARDING_GOAL_OPTIONS[0], trainingsPerWeek: 2};
-  var t = computeSuggestedTargets(profile);
+  // sem peso, objetivo nem alvos inventados: a ficha só tem o nome até ser preenchida (o aluno é "só estúdio")
   return {
-    id: id, initials: initialsOf(name), name: name, age: 30, birthDate: null, sex: "Feminino", height: 170,
-    weightInitial: 70, weightCurrent: 70, weightGoal: null, goal: profile.goal, trainingsPerWeek: 2, trainingType: "—", trainingTime: "—", activityLevel: null,
+    id: id, initials: initialsOf(name), name: name, age: null, birthDate: null, sex: null, height: null,
+    weightInitial: null, weightCurrent: null, weightGoal: null, goal: "—", trainingsPerWeek: 0, trainingType: "—", trainingTime: "—", activityLevel: null,
     wakeTime: "—", sleepTime: "—", likes: [], dislikes: [], avoid: [], allergies: [], mealsPreferred: 5, budget: "—", cookTime: "—", work: "—", weekendNote: "—",
     mealsAtWorkEase: null, usesSupplements: false, supplements: [], dailyEatingDescription: "", overeatingMealsPerWeek: null, hardestFoodToResist: "", waterIntake: null,
-    targets: {kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat}, flexibility: 50, flexOverrides: {}, flexHistory: [], blockedFoods: [], substitutionHistory: [], adaptationHistory: [],
+    targets: {kcal: 0, protein: 0, carbs: 0, fat: 0}, flexibility: 50, flexOverrides: {}, flexHistory: [], blockedFoods: [], substitutionHistory: [], adaptationHistory: [],
     alerts: [], notes: "Criado a partir da agenda do Google (só estúdio). Completa a ficha se o aluno passar a usar a app.", meals: [], checkins: [], weights: [], assessments: [],
     allowPhotos: false, photos: [], weightLogPhotos: [], planHistory: [], lastCheckinDaysAgo: 0, fromOnboarding: false, inviteEmail: null, studioOnly: true, phone: null,
     createdAt: new Date().toISOString()
@@ -13512,14 +13517,15 @@ function calNewStudent(name){
 }
 // items: [{name, titles}]. Cria os alunos (um só pedido de cada vez), guarda os títulos como alias e, se há eventos em memória, conta já as aulas
 function createStudentsFromCalendar(items){
-  var made = [], failed = [], aliasOnly = 0;
+  var made = [], failed = [], aliasOnly = 0, archived = [], done = {};
   var chain = Promise.resolve();
   items.forEach(function(it){
     var name = String(it.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
     if (!name) return;
     chain = chain.then(function(){
-      var existing = STUDENTS.filter(function(x){ return calTitleKey(x.name) === calTitleKey(name) && isStudentActive(x); })[0];
-      if (existing){ it.titles.forEach(function(t){ calSettings.aliases[calTitleKey(t)] = existing.id; }); aliasOnly++; return; }
+      var same = STUDENTS.filter(function(x){ return calTitleKey(x.name) === calTitleKey(name) && (!x.isDemo || state.showDemoStudents); });
+      var existing = same.filter(isStudentActive)[0] || same[0]; // um aluno arquivado com o mesmo nome também é "o mesmo aluno": não se cria outro
+      if (existing){ it.titles.forEach(function(t){ calSettings.aliases[calTitleKey(t)] = existing.id; }); aliasOnly++; if (!isStudentActive(existing)) archived.push(existing.name); return; }
       var st = calNewStudent(name);
       STUDENTS.push(st);
       return Promise.resolve(insertStudent(st)).then(function(ok){
@@ -13529,10 +13535,16 @@ function createStudentsFromCalendar(items){
       });
     });
   });
-  return chain.then(function(){ return calSaveSettings(); }).then(function(){
+  return chain.then(function(){
+    // os títulos já tratados saem da lista guardada (mesmo sem eventos em memória), para não se oferecerem outra vez
+    items.forEach(function(it){ if (failed.indexOf(String(it.name || "").replace(/\s+/g, " ").trim().slice(0, 80)) < 0) it.titles.forEach(function(t){ done[t] = true; }); });
+    if (calSettings.lastSync && calSettings.lastSync.unmatched) calSettings.lastSync.unmatched = calSettings.lastSync.unmatched.filter(function(u){ return !done[u.title]; });
+    return calSaveSettings();
+  }).then(function(saved){
+    if (saved && saved.error) throw new Error("Os alunos foram criados, mas não foi possível guardar as associações: " + saved.error);
     var counted = null;
     if (calLastRun && (made.length || aliasOnly)) counted = calApplyEvents(calLastRun.events, calLastRun.window);
-    return Promise.resolve(counted).then(function(sum){ return {made: made, failed: failed, aliasOnly: aliasOnly, summary: sum}; });
+    return Promise.resolve(counted).then(function(sum){ return {made: made, failed: failed, aliasOnly: aliasOnly, archived: archived, summary: sum}; });
   });
 }
 function calendarCardHtml(){
@@ -13819,7 +13831,7 @@ function renderProStudioMain(){
     proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
     proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + "</div>";
 
-  html += calendarCardHtml();
+  try { html += calendarCardHtml(); } catch (e){ html += "<div class=\"card\"><div class=\"eyebrow\">Google Agenda</div><p class=\"muted-p\">Não foi possível mostrar o cartão. Atualiza a página e sincroniza outra vez.</p></div>"; }
 
   // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
   var sumRows = studioSummaryRows(today);

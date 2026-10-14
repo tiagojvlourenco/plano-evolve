@@ -90,11 +90,15 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   // a ficha abre sem erros
   await page.click('.student-row:has-text("Beatriz Lopes")');
   await page.waitForSelector(".pro-sidebar [data-t]");
-  for (var tab of ["plano", "treino", "progresso", "sessoes"]){
-    var btn = page.locator('.pro-sidebar [data-t="' + tab + '"]');
-    if (await btn.count()) { await btn.click(); await page.waitForTimeout(120); }
+  var bad = [];
+  var tabs = await page.locator(".pro-sidebar [data-t]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-t"); }); });
+  for (var tab of tabs){
+    await page.locator('.pro-sidebar [data-t="' + tab + '"]').click(); await page.waitForTimeout(150);
+    var body = await page.locator("#proMain").evaluate(function(el){ return el.textContent; });
+    var m = body.match(/.{0,40}(NaN|undefined|\bnull\b|Infinity).{0,40}/); if (m) bad.push(tab + ": " + m[0]);
   }
-  check.check("9. A ficha de um aluno criado a partir da agenda abre nos vários separadores sem erros", errors.length === 0);
+  check.check("9. A ficha de um aluno criado da agenda abre em todos os separadores sem erros, 'NaN' nem 'undefined' (" + tabs.join(", ") + ")", errors.length === 0 && bad.length === 0 && tabs.length >= 4);
+  if (bad.length) console.log("separadores com lixo:", bad);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();
   check.summarize();

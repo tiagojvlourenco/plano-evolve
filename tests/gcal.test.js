@@ -125,5 +125,21 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   check.check("48. A coluna studio_only vai na gravação e volta a ler-se", studentToRow(mk({studioOnly: true})).studio_only === true && rowToStudent(Object.assign(studentToRow(mk({studioOnly: true})), {id: "z9"})).studioOnly === true);
   var mig26 = fs.readFileSync(__dirname + "/../supabase/migrations/0026_studio_only_students.sql", "utf8");
   check.check("49. A migração 0026 só acrescenta a coluna (repetível, sem apagar nada)", /add column if not exists studio_only boolean not null default false/.test(mig26) && !/drop |delete from|truncate/i.test(mig26));
+  // ---- achados da revisão (criação em massa) ----
+  check.check("50. Um título 'Constructor' ou '__proto__' não rebenta a lista de candidatos nem o plano", (function(){ try { var c = calStudentCandidates([{title: "Constructor", n: 1}, {title: "PT 60 - __proto__", n: 2}]); var pl = planCalendarSync({events: [evt("e", "Constructor", 2), evt("f", "__proto__", 2)], today: today, window: win, aliases: {}}); return c.length === 2 && Object.keys(pl.unmatched).length === 2 && pl.unmatched["Constructor"] === 1; } catch (e) { return false; } })());
+  check.check("51. Um alias chamado 'constructor' não é lido como alias", m("Constructor", {}) === null && (function(){ try { return matchEventStudent("constructor", {}) === null; } catch (e) { return false; } })());
+  STUDENTS.length = 0; STUDENTS.push({id: "rui", name: "Rui", active: false}, {id: "mar", name: "Maria Silva", active: true, isDemo: true});
+  studio.sessions = [{id: "s1", student_id: "rui", date: d(5), time: "10:00", status: "feita", source: "calendario", external_id: "e1"}];
+  calSettings.aliases = {}; calSettings.lastSync = {unmatched: [{title: "Rui (faltou)", n: 1}, {title: "Maria Silva", n: 2}, {title: "Outro", n: 1}]};
+  calLastRun = null; state.showDemoStudents = false;
+  var before = STUDENTS.length;
+  var res2 = await createStudentsFromCalendar([{name: "Rui", titles: ["Rui (faltou)"]}, {name: "Maria Silva", titles: ["Maria Silva"]}]);
+  check.check("52. Um aluno arquivado com o mesmo nome não é duplicado: o título passa a alias dele", res2.made.length === 1 && res2.archived.join() === "Rui" && calSettings.aliases[calTitleKey("Rui (faltou)")] === "rui" && STUDENTS.filter(function(x){ return x.name === "Rui"; }).length === 1);
+  check.check("53. Um aluno de demonstração oculto não conta como 'já existe': cria-se o aluno real", STUDENTS.filter(function(x){ return x.name === "Maria Silva"; }).length === 2 && !STUDENTS.filter(function(x){ return x.name === "Maria Silva" && !x.isDemo; })[0].isDemo);
+  check.check("54. Os títulos tratados saem da lista guardada, mesmo sem eventos em memória", calSettings.lastSync.unmatched.length === 1 && calSettings.lastSync.unmatched[0].title === "Outro");
+  STUDENTS.length = 0; STUDENTS.push({id: "r1", name: "Rui", active: false}, {id: "r2", name: "Rui", active: true});
+  check.check("55. Um arquivado e um ativo com o mesmo nome: o ativo é o aluno (não é ambíguo)", m("PT 60 - Rui") === "r2" && m("Rui") === "r2");
+  var so = {id: "q1", name: "Q", active: true, studioOnly: true, checkins: [], weights: [], targets: {kcal: 0, protein: 0, carbs: 0, fat: 0}, meals: []};
+  check.check("56. O painel de alunos não dá alertas nem 'check-in em atraso' a um aluno só de estúdio", computeDashboardAlerts(so).length === 0 && dashLateDays(so) === 0 && dashLateDays(Object.assign({}, so, {studioOnly: false})) !== 0);
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });
