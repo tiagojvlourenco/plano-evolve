@@ -6543,7 +6543,12 @@ function computeSuggestedTargets(p){
     var rate = WEIGHT_GOAL_RATE_KG_PER_WEEK;
     if (direction < 0) rate = Math.min(rate, p.weight * MAX_LOSS_PCT_PER_WEEK / 100);
     else rate = Math.min(rate, p.weight * GAIN_PCT_PER_WEEK / 100); // ganho magro: ≈ 0,4% do peso por semana
-    var dailyAdjust = direction * (rate * KCAL_PER_KG) / 7;
+    var legacyAdjust = direction * (rate * KCAL_PER_KG) / 7;
+    // o ponto de partida é um passo pequeno e gradual (cut −10 % da manutenção, bulk +5 %): o ritmo completo nunca entra de uma vez,
+    // só se chega lá com as revisões periódicas do peso (ver PHASE_CFG e computePhaseReview)
+    var startAdjust = direction < 0 ? -clampN(round25(tdee * PHASE_CFG.startCutPct / 100), PHASE_CFG.startCutMin, PHASE_CFG.startCutMax)
+      : clampN(round25(tdee * PHASE_CFG.startBulkPct / 100), PHASE_CFG.startBulkMin, PHASE_CFG.startBulkMax);
+    var dailyAdjust = direction < 0 ? Math.max(legacyAdjust, startAdjust) : Math.min(legacyAdjust, startAdjust);
     if (direction > 0) dailyAdjust = Math.min(dailyAdjust, tdee * MAX_SURPLUS_FRACTION); // nunca mais de +15% da manutenção
     kcal = Math.max(0, Math.round(tdee + dailyAdjust));
     losing = direction < 0;
@@ -6553,12 +6558,7 @@ function computeSuggestedTargets(p){
     losing = adjust < 0;
   }
   if (bmr && losing) kcal = Math.max(kcal, Math.ceil(kcalFloorFor(p.sex, bmr, Math.round(tdee))));
-  var ref = referenceWeightKg(p.weight, p.height, p.leanMass);
-  var protein = Math.round(2.0 * ref);
-  var fat = Math.max(Math.round((kcal*0.27) / 9), Math.round(FAT_MIN_G_PER_KG * ref));
-  var carbsKcal = Math.max(0, kcal - protein*4 - fat*9);
-  var carbs = Math.round(carbsKcal / 4);
-  return {kcal:kcal, protein:protein, carbs:carbs, fat:fat};
+  return macrosForKcal(p.weight, p.height, p.leanMass, kcal);
 }
 
 // Avisos de prescrição para um conjunto de alvos (kcal/macros) de um aluno. Devolve [{level:"critical"|"warn", text}]
@@ -6684,6 +6684,409 @@ function tplCreatineCard(s){
   if (takes) html += "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O aluno disse que já toma creatina: confirma que não duplica a dose.</p>";
   html += "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Nas primeiras semanas retém 0,5 a 1,5 kg de água: não é gordura. A revisão de peso ignora esse período.</p></div>";
   return html;
+}
+
+/* ---------- Fases de peso (cut / bulk / manutenção) com calorias graduais e revisão periódica ----------
+   O peso objetivo define a fase: abaixo do atual = cut, acima = bulk, igual = manutenção. As calorias NUNCA saltam de uma vez para o défice
+   ou excedente total: começam com um passo pequeno (cut: −10 % da manutenção, entre 150 e 300 kcal; bulk: +5 %, entre 100 e 250 kcal) e só
+   mudam quando a tendência REAL do peso o pede, em passos de 100–200 kcal, de 2 em 2 semanas (ou 3 ou 4, à escolha do profissional).
+   Cada mudança é uma proposta que o profissional aprova com um só toque (OK): só então os alvos e as quantidades do plano se ajustam.
+   Base (literatura): ritmo de perda de 0,5–1 % do peso por semana (Helms 2014); 0,7 %/sem preserva mais massa magra e força do que 1,4 %/sem
+   (Garthe 2011); ganho de 0,25–0,5 %/sem em quem treina há menos de ~3 anos, mais lento e com menos excedente em avançados (Iraki 2019);
+   a regra de 7700 kcal/kg sobrestima a perda a prazo porque a manutenção desce ~22 kcal/dia por kg perdido (Hall 2011), por isso o plano guarda-se
+   como % da manutenção atual e a duração é só uma estimativa; ajustes graduais evitam a adaptação metabólica abrupta (Trexler 2014); disponibilidade
+   energética nunca abaixo de ~30 kcal/kg de massa magra (Thomas 2016, Loucks 2011). Os escalões, os passos de 5 %, os tetos de défice (20/25/30 %),
+   a banda de decisão e o limiar de dados são decisões de desenho a partir da prática dos treinadores e do ruído da pesagem (≈ 0,7 kg/dia),
+   NÃO saem de um estudo único: estão aqui, com nome, para o profissional os poder ajustar. A decisão é sempre do profissional. */
+var PHASE_CFG = {
+  gapKg: 0.5,                                  // diferença mínima ao peso objetivo para haver cut ou bulk (o mesmo limiar de computeSuggestedTargets)
+  cut: {A: {rate: 0.50, lo: 0.25, hi: 0.75, cap: 20}, B: {rate: 0.75, lo: 0.50, hi: 1.00, cap: 25}, C: {rate: 1.00, lo: 0.50, hi: 1.25, cap: 30}},   // % do peso/semana e teto de défice (% da manutenção)
+  bulk: {novato: {rate: 0.375, lo: 0.25, hi: 0.50, cap: 15, review: 14}, avancado: {rate: 0.175, lo: 0.10, hi: 0.25, cap: 10, review: 28}},
+  alertLoss: 1.5, alertGain: 0.75,             // acima disto o aviso é imediato (% do peso/semana)
+  startCutPct: 10, startCutMin: 150, startCutMax: 300, startBulkPct: 5, startBulkMin: 100, startBulkMax: 250,
+  stepPct: 5, stepMin: 100, stepMax: 200, safetyStep: 300, maxCum4wk: 400,
+  reviewDays: 14, excludeAfterChange: 7, windowMax: 28, minWeighins: 4, minWeeks: 2, minSpan: 14, fullSpan: 21, shortSpanAct: 0.25, outlierKg: 2,
+  minAdherence: 6, hungerStop: 7, energyStop: 4, goalTol: 0.3, creatineGraceDays: 14,
+  maintDrift: 0.25, maintStep: 100, eaHard: 30
+};
+function round25(n){ return Math.round(n / 25) * 25; }
+function clampN(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+function pt2(n){ return String(Math.round(n * 100) / 100).replace(".", ","); }
+function phaseLabel(p){ return p === "cut" ? "Cut" : p === "bulk" ? "Bulk" : "Manutenção"; }
+function phaseOf(s){
+  var np = s && s.nutritionPhase;
+  return np && (np.phase === "cut" || np.phase === "bulk" || np.phase === "manutencao") && isIsoDate(np.startDate) ? np : null;
+}
+function phaseTypeFor(current, goal){
+  if (!(current > 0) || !(goal > 0) || Math.abs(goal - current) < PHASE_CFG.gapKg) return "manutencao";
+  return goal < current ? "cut" : "bulk";
+}
+function latestBodyFat(s){
+  var list = (s && s.assessments || []).slice().sort(function(x, y){ return compareAssessmentsDesc(x, y); });
+  for (var i = 0; i < list.length; i++) if (list[i].bodyFat > 0 && list[i].bodyFat < 70) return list[i].bodyFat;
+  return null;
+}
+// escalão do corte: mais magro = mais devagar (A), IMC 25–30 (B), IMC ≥ 30 (C)
+function cutTierFor(s, weight){
+  var bmi = s.height > 0 && weight > 0 ? weight / Math.pow(s.height / 100, 2) : null, bf = latestBodyFat(s);
+  if (bf != null && bf < (s.sex === "Feminino" ? 24 : 15)) return "A";
+  if (bmi == null) return "B";
+  return bmi >= 30 ? "C" : bmi >= 25 ? "B" : "A";
+}
+function phaseStepKcal(maint){ return clampN(round25(maint * PHASE_CFG.stepPct / 100), PHASE_CFG.stepMin, PHASE_CFG.stepMax); }
+// calorias do ponto de partida de cada fase (o primeiro passo, pequeno)
+function phaseStartKcal(type, maint){
+  if (type === "cut") return maint - clampN(round25(maint * PHASE_CFG.startCutPct / 100), PHASE_CFG.startCutMin, PHASE_CFG.startCutMax);
+  if (type === "bulk") return maint + clampN(round25(maint * PHASE_CFG.startBulkPct / 100), PHASE_CFG.startBulkMin, PHASE_CFG.startBulkMax);
+  return maint;
+}
+function dayNum(iso){ return Math.round(Date.parse(iso + "T00:00:00Z") / 86400000); }
+// tendência do peso: regressão linear (por data) sobre as pesagens da janela; ignora pesagens a mais de 2 kg da mediana e junta as do mesmo dia
+function phaseWeightFit(weights, fromISO, toISO){
+  var byDay = {};
+  sortWeightsStable(weights || []).forEach(function(w){
+    if (!w || !isIsoDate(w.date) || !(Number(w.w) > 0) || w.date < fromISO || w.date > toISO) return;
+    (byDay[w.date] = byDay[w.date] || []).push(Number(w.w));
+  });
+  var pts = Object.keys(byDay).sort().map(function(d){ var a = byDay[d]; return {date: d, x: dayNum(d), w: a.reduce(function(p, c){ return p + c; }, 0) / a.length}; });
+  if (pts.length >= 5){
+    var sorted = pts.map(function(p){ return p.w; }).sort(function(a, b){ return a - b; }), mid = sorted.length >> 1;
+    var med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    pts = pts.filter(function(p){ return Math.abs(p.w - med) <= PHASE_CFG.outlierKg; });
+  }
+  var n = pts.length;
+  if (n < 2) return {n: n, ok: false, relaxed: false, spanDays: 0, weeks: n ? 1 : 0, slopeKgWk: 0, meanW: n ? pts[0].w : 0, trendNow: n ? pts[0].w : 0};
+  var x0 = pts[0].x, span = pts[n - 1].x - x0, weeks = {};
+  pts.forEach(function(p){ weeks[Math.floor((p.x - x0) / 7)] = true; });
+  var mx = pts.reduce(function(a, p){ return a + (p.x - x0); }, 0) / n, my = pts.reduce(function(a, p){ return a + p.w; }, 0) / n, sxx = 0, sxy = 0;
+  pts.forEach(function(p){ sxx += (p.x - x0 - mx) * (p.x - x0 - mx); sxy += (p.x - x0 - mx) * (p.w - my); });
+  var slope = sxx > 0 ? sxy / sxx : 0, nWeeks = Object.keys(weeks).length;
+  return {n: n, spanDays: span, weeks: nWeeks, slopeKgWk: slope * 7, meanW: my, trendNow: my + slope * (span - mx),
+    ok: n >= PHASE_CFG.minWeighins && nWeeks >= PHASE_CFG.minWeeks && span >= PHASE_CFG.minSpan, relaxed: n >= 3 && span >= 7};
+}
+function phaseEvidenceText(fit, ratePct){
+  var kg = (fit.slopeKgWk >= 0 ? "+" : "−") + pt2(Math.abs(fit.slopeKgWk)) + " kg/semana";
+  return "Peso: " + kg + " (" + (ratePct >= 0 ? "+" : "−") + pt2(Math.abs(ratePct)) + " %/semana) com " + fit.n + " pesagens em " + fit.spanDays + " dias.";
+}
+// a mesma divisão de macros do cálculo inicial: proteína por kg de peso de referência, gordura ≥ 27 % das calorias e ≥ 0,6 g/kg, hidratos o resto
+function macrosForKcal(weight, height, leanMass, kcal){
+  var ref = referenceWeightKg(weight, height, leanMass);
+  var protein = Math.round(2.0 * ref);
+  var fat = Math.max(Math.round((kcal * 0.27) / 9), Math.round(FAT_MIN_G_PER_KG * ref));
+  var carbs = Math.round(Math.max(0, kcal - protein * 4 - fat * 9) / 4);
+  return {kcal: kcal, protein: protein, carbs: carbs, fat: fat};
+}
+function phaseStartTargets(s, type){
+  var maint = computeMaintenanceKcal(s);
+  if (!maint) return null;
+  var kcal = phaseStartKcal(type, maint), bmr = computeBMR(s);
+  if (type === "cut" && bmr) kcal = Math.max(kcal, Math.ceil(kcalFloorFor(s.sex, bmr, maint)));
+  return macrosForKcal(creatineWeightKg(s), s.height, null, kcal);
+}
+function phaseDeficitPct(kcal, maint){ return maint > 0 ? Math.round((kcal - maint) / maint * 1000) / 10 : null; }
+
+// A revisão: devolve null se ainda não há nada a rever; senão {kind, ...}. kinds: ajuste, objetivo, aderencia, limite (pedem atenção) · em-linha, dados (não pedem)
+function computePhaseReview(s, today, opts){
+  today = today || localTodayISO(); opts = opts || {};
+  var np = phaseOf(s);
+  if (!np || !isStudentActive(s) || isStudioOnly(s)) return null;
+  var t = s.targets || {}, kcal = Number(t.kcal) || 0;
+  if (!(kcal > 0)) return null;
+  var every = np.reviewEveryDays > 0 ? np.reviewEveryDays : PHASE_CFG.reviewDays;
+  if (!opts.force){
+    var due = np.nextReviewDate || addDaysISO(np.lastReviewDate || np.startDate, every);
+    if (today < due) return null;
+    if (np.snoozeUntil && today < np.snoozeUntil) return null;
+  }
+  var maint = computeMaintenanceKcal(s);
+  if (!maint) return null;
+  var from = [np.startDate, np.lastChangeDate ? addDaysISO(np.lastChangeDate, PHASE_CFG.excludeAfterChange) : null,
+    np.creatineStartDate ? addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays) : null, addDaysISO(today, -PHASE_CFG.windowMax)]
+    .filter(Boolean).sort().pop();
+  var fit = phaseWeightFit(s.weights, from, today);
+  var out = {studentId: s.id, name: s.name, phase: np.phase, kind: "dados", today: today, maint: maint, currentTargets: {kcal: kcal, protein: t.protein, carbs: t.carbs != null ? t.carbs : t.carbsMax, fat: t.fat != null ? t.fat : t.fatMax},
+    fit: fit, warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
+  var weightNow = fit.n ? fit.trendNow : (Number(s.weightCurrent) || 0);
+  var ratePct = fit.meanW > 0 ? fit.slopeKgWk / fit.meanW * 100 : 0;
+  out.ratePct = ratePct; out.evidence = fit.n >= 2 ? phaseEvidenceText(fit, ratePct) : "";
+  var target = Number(np.targetWeight) > 0 ? Number(np.targetWeight) : (Number(s.weightGoal) > 0 ? Number(s.weightGoal) : null);
+  var step = phaseStepKcal(maint);
+  // no máximo 400 kcal acumuladas em 4 semanas
+  var cum = (np.reviews || []).filter(function(r){ return r.date >= addDaysISO(today, -28) && r.deltaKcal; }).reduce(function(a, r){ return a + Math.abs(r.deltaKcal); }, 0);
+  var room = Math.max(0, PHASE_CFG.maxCum4wk - cum);
+
+  function propose(newKcal, kind, text, extra){
+    newKcal = Math.round(newKcal);
+    var delta = newKcal - kcal;
+    var nt = {kcal: newKcal, protein: out.currentTargets.protein, fat: out.currentTargets.fat, carbs: Math.max(0, Math.round((out.currentTargets.carbs || 0) + delta / 4))};
+    out.kind = kind; out.deltaKcal = delta; out.proposedTargets = nt; out.text = text;
+    out.warnings = nutritionSafetyWarnings(s, nt);
+    if (out.warnings.some(function(w){ return w.level === "critical"; })){
+      out.kind = "limite"; out.proposedTargets = null; out.deltaKcal = 0;
+      out.text = "Este ajuste ficaria abaixo do mínimo de segurança. Em vez de cortar mais, considera uma pausa de 1 semana na manutenção (" + maint + " kcal) ou mais atividade diária.";
+    }
+    if (extra) Object.keys(extra).forEach(function(k){ out[k] = extra[k]; });
+    return out;
+  }
+  function info(kind, text){ out.kind = kind; out.text = text; return out; }
+  function recentAdherence(){ var l = (s.checkins || []).slice(-4); return l.length ? l.reduce(function(a, c){ return a + (Number(c.adherence) || 0); }, 0) / l.length : null; }
+  function hungerEnergyStop(){
+    var l = (s.checkins || []).slice(-4); if (!l.length) return false;
+    var h = l.reduce(function(a, c){ return a + (Number(c.hunger) || 0); }, 0) / l.length, e = l.reduce(function(a, c){ return a + (Number(c.energy) || 0); }, 0) / l.length;
+    return h >= PHASE_CFG.hungerStop || e <= PHASE_CFG.energyStop;
+  }
+  var kgStr = function(n){ return pt2(Math.abs(n)); };
+  var deficitPct = (maint - kcal) / maint * 100;  // > 0 em défice
+
+  // --- objetivo atingido ---
+  if (target && fit.n >= 3){
+    var reached = np.phase === "cut" ? weightNow <= target + PHASE_CFG.goalTol : np.phase === "bulk" ? weightNow >= target - PHASE_CFG.goalTol : false;
+    if (reached){
+      var firstStep = np.phase === "cut" && deficitPct > 3 ? round25(kcal + (maint - kcal) * 0.5) : maint;
+      return propose(firstStep, "objetivo",
+        s.name + " chegou ao peso objetivo (" + pt2(target) + " kg). Sugestão: passar à manutenção" + (firstStep !== maint ? " em 2 passos (esta semana " + firstStep + " kcal e depois " + maint + " kcal)." : " (" + maint + " kcal)."), {exiting: firstStep !== maint});
+    }
+  }
+  // --- manutenção ---
+  if (np.phase === "manutencao"){
+    if (np.exiting && Math.abs(maint - kcal) >= 50) return propose(maint, "ajuste", "Completar a passagem à manutenção: " + kcal + " → " + maint + " kcal (já com o peso atual).", {completesExit: true});
+    if (!fit.ok) return info("dados", "Ainda não há pesagens suficientes (mínimo " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas) para rever a manutenção.");
+    if (Math.abs(ratePct) >= PHASE_CFG.maintDrift && fit.spanDays >= PHASE_CFG.fullSpan){
+      var dir = ratePct > 0 ? -1 : 1, mstep = Math.min(PHASE_CFG.maintStep, room || PHASE_CFG.maintStep);
+      return propose(kcal + dir * mstep, "ajuste", "O peso está a " + (ratePct > 0 ? "subir" : "descer") + " " + pt2(Math.abs(ratePct)) + " %/semana na manutenção. Sugestão: " + (dir > 0 ? "acrescentar " : "retirar ") + mstep + " kcal/dia.");
+    }
+    return info("em-linha", "A manutenção está estável (" + pt2(ratePct) + " %/semana). Não é preciso alterar o plano.");
+  }
+  // --- cut e bulk ---
+  var cfg = np.phase === "cut" ? PHASE_CFG.cut[cutTierFor(s, fit.meanW || weightNow)] : PHASE_CFG.bulk[np.level === "avancado" ? "avancado" : "novato"];
+  var move = np.phase === "cut" ? -ratePct : ratePct;           // % do peso por semana na direção pretendida (negativo = vai ao contrário)
+  var alert = np.phase === "cut" ? PHASE_CFG.alertLoss : PHASE_CFG.alertGain;
+  out.band = [cfg.lo, cfg.hi]; out.targetRate = cfg.rate;
+  // rápido de mais é sempre prioritário (e não espera pelos 14 dias de dados)
+  if (fit.relaxed && move > alert){
+    var back = np.phase === "cut" ? Math.min(kcal + PHASE_CFG.safetyStep, maint) : Math.max(kcal - step, maint);
+    if (back !== kcal) return propose(back, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite de " + pt2(alert) + " %/semana. Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(back - kcal) + " kcal/dia (de " + kcal + " para " + back + ")" + (np.phase === "cut" ? " para proteger a massa magra." : " para limitar o ganho de gordura."), {urgent: true});
+  }
+  if (!fit.ok){
+    var cg = np.creatineStartDate && today < addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays + PHASE_CFG.minSpan);
+    return info("dados", cg ? "Há pouco que o aluno começou ou parou a creatina: a subida inicial de 0,5 a 1,5 kg é retenção de água, não gordura. A revisão espera por pesagens a partir de " + fmtDateFullPt(addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays)) + "." :
+      "Ainda não há pesagens suficientes (mínimo " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas) para propor um ajuste. Pede ao aluno para se pesar 3 vezes por semana, de manhã e em jejum.");
+  }
+  var viol = move < cfg.lo ? cfg.lo - move : move > cfg.hi ? move - cfg.hi : 0;
+  if (viol === 0) return info("em-linha", "A evolução está dentro do previsto (" + pt2(move) + " %/semana, banda " + pt2(cfg.lo) + "–" + pt2(cfg.hi) + "). Não é preciso alterar o plano.");
+  if (fit.spanDays < PHASE_CFG.fullSpan && viol < PHASE_CFG.shortSpanAct) return info("em-linha", "Tendência ainda dentro da margem de erro (" + pt2(move) + " %/semana com " + fit.spanDays + " dias de pesagens). A decisão fica para a próxima revisão.");
+  if (move > cfg.hi){
+    var up = np.phase === "cut" ? Math.min(kcal + step, maint) : Math.max(kcal - step, maint);
+    if (up === kcal) return info("em-linha", "Acima da banda, mas já na manutenção: não há mais o que ajustar.");
+    return propose(up, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do previsto (" + pt2(cfg.rate) + " %/semana). Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(up - kcal) + " kcal/dia (de " + kcal + " para " + up + ").");
+  }
+  // abaixo da banda (estagnou ou vai ao contrário): primeiro a adesão, depois os limites, só então mais um passo
+  var adh = recentAdherence();
+  if (adh != null && adh < PHASE_CFG.minAdherence) return info("aderencia", "A adesão recente é baixa (" + pt2(adh) + "/10). Antes de mexer nas calorias, confirma se o plano está a ser cumprido: a estagnação por incumprimento não se corrige com mais " + (np.phase === "cut" ? "défice." : "excedente."));
+  if (np.phase === "cut" && hungerEnergyStop()) return info("limite", "A fome está alta ou a energia baixa: não propor mais corte. Considera uma pausa de 1 semana na manutenção (" + maint + " kcal) para recuperar energia e adesão.");
+  if (room < 50) return info("limite", "Já houve " + cum + " kcal de alterações nas últimas 4 semanas (máximo " + PHASE_CFG.maxCum4wk + "): esperar pela próxima revisão.");
+  var stepNow = Math.min(step, room), nk;
+  if (np.phase === "cut"){
+    var capKcal = Math.ceil(maint * (1 - cfg.cap / 100) / 25) * 25, bmr0 = computeBMR(s), floor = Math.ceil(kcalFloorFor(s.sex, bmr0 || 0, maint)), lean = latestLeanMass(s);
+    var eaFloor = lean > 0 ? Math.ceil(PHASE_CFG.eaHard * lean) : 0, lowest = Math.max(capKcal, floor, eaFloor);
+    if (kcal <= lowest) return info("limite", "Já estás no limite de segurança do défice (" + pt2(deficitPct) + " % da manutenção, mínimo " + lowest + " kcal). Em vez de cortar mais: pausa de 1 semana na manutenção, mais passos/atividade ou rever o peso objetivo.");
+    nk = Math.max(kcal - stepNow, lowest);
+    return propose(nk, "ajuste", "A perda está a ser de " + pt2(move < 0 ? 0 : move) + " %/semana (" + (move <= 0 ? "estagnou" : "abaixo") + " do previsto, " + pt2(cfg.rate) + " %/semana). Sugestão: reduzir " + (kcal - nk) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos descem " + Math.round((kcal - nk) / 4) + " g).");
+  }
+  var capUp = Math.floor(maint * (1 + cfg.cap / 100) / 25) * 25;
+  if (kcal >= capUp) return info("limite", "Já estás no teto do excedente (+" + pt2((kcal - maint) / maint * 100) + " % da manutenção). Antes de subir mais, confirma a adesão, a proteína, o treino e o sono; se persistir, revê o objetivo.");
+  nk = Math.min(kcal + stepNow, capUp);
+  return propose(nk, "ajuste", "O ganho de peso é de " + pt2(Math.max(0, move)) + " %/semana (abaixo do previsto, " + pt2(cfg.rate) + " %/semana). Sugestão: acrescentar " + (nk - kcal) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos sobem " + Math.round((nk - kcal) / 4) + " g).");
+}
+function phaseNeedsAttention(rv){ return !!rv && (rv.kind === "ajuste" || rv.kind === "objetivo" || rv.kind === "aderencia" || rv.kind === "limite"); }
+function collectPhaseReviews(today){
+  var out = [];
+  (STUDENTS || []).forEach(function(st){
+    if (st.isDemo && !state.showDemoStudents) return;
+    var rv; try { rv = computePhaseReview(st, today); } catch (e) { rv = null; }
+    if (phaseNeedsAttention(rv)) out.push({student: st, review: rv});
+  });
+  return out;
+}
+// aplicar uma proposta (só o profissional): alvos, quantidades do plano, fase e histórico, tudo de uma vez
+function applyPhaseReview(s, rv){
+  if (authRole === "student") return {error: "Só o profissional pode aplicar uma revisão."};
+  if (!rv || !rv.proposedTargets) return {error: "Esta revisão não tem alterações para aplicar."};
+  ensureSyncBaseline(s);
+  var today = localTodayISO(), np = Object.assign({}, s.nutritionPhase), old = s.targets, nt = rv.proposedTargets;
+  logTargetsChange(s, old, nt);
+  s.targets = {kcal: nt.kcal, protein: nt.protein, carbs: nt.carbs, fat: nt.fat};
+  s.fromOnboarding = false;
+  var res = (s.meals || []).length ? autoAdjustPlanQuantities(s) : null;
+  logPlanEvent(s, "fase_revisao", "Revisão " + phaseLabel(np.phase) + ": " + old.kcal + " → " + nt.kcal + " kcal (" + (rv.deltaKcal > 0 ? "+" : "") + rv.deltaKcal + ")" + (res ? "; " + res.changed + " alimentos ajustados" : ""), old.kcal, nt.kcal);
+  var every = np.reviewEveryDays > 0 ? np.reviewEveryDays : PHASE_CFG.reviewDays;
+  np.stage = (np.stage || 0) + 1; np.lastChangeDate = today; np.lastReviewDate = today; np.snoozeUntil = null;
+  np.nextReviewDate = addDaysISO(today, rv.kind === "objetivo" || rv.exiting || rv.completesExit ? 7 : every);
+  np.deficitPct = phaseDeficitPct(nt.kcal, rv.maint);
+  if (rv.kind === "objetivo"){ np.phase = "manutencao"; np.exiting = !!rv.exiting; } else if (rv.completesExit) np.exiting = false;
+  np.reviews = (np.reviews || []).concat([{date: today, kind: rv.kind, deltaKcal: rv.deltaKcal, rate: Math.round((rv.ratePct || 0) * 100) / 100, n: rv.fit ? rv.fit.n : 0}]).slice(-24);
+  s.nutritionPhase = np;
+  persistStudent(s);
+  return {changed: res ? res.changed : 0, from: old.kcal, to: nt.kcal};
+}
+function postponePhaseReview(s, days){
+  ensureSyncBaseline(s);
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase, {snoozeUntil: addDaysISO(localTodayISO(), days || 7)});
+  persistStudent(s);
+}
+// iniciar (ou mudar) a fase; com applyStart usa os alvos de partida da fase, senão ancora-se nos alvos atuais
+function startPhase(s, o){
+  if (authRole === "student") return {error: "Só o profissional pode iniciar uma fase."};
+  var type = o.type === "cut" || o.type === "bulk" ? o.type : "manutencao", today = localTodayISO();
+  ensureSyncBaseline(s);
+  if (!s.targets) s.targets = {kcal: 0, protein: 0, carbs: 0, fat: 0};
+  if (o.targetWeight > 0) s.weightGoal = o.targetWeight;
+  var old = s.nutritionPhase || {}, np = Object.assign({}, old, {phase: type, startDate: today, startWeight: creatineWeightKg(s) || null, targetWeight: o.targetWeight > 0 ? o.targetWeight : (s.weightGoal || null),
+    level: o.level === "avancado" ? "avancado" : "novato", stage: 0, stageStartDate: today, lastChangeDate: today, lastReviewDate: null, snoozeUntil: null, exiting: false, reviews: []});
+  var every = [14, 21, 28].indexOf(Number(o.every)) >= 0 ? Number(o.every) : (type === "bulk" && np.level === "avancado" ? PHASE_CFG.bulk.avancado.review : PHASE_CFG.reviewDays);
+  np.reviewEveryDays = every; np.nextReviewDate = addDaysISO(today, every);
+  var res = null, maint = computeMaintenanceKcal(s);
+  if (o.applyStart){
+    var tg = phaseStartTargets(s, type);
+    if (tg){
+      logTargetsChange(s, s.targets, tg);
+      s.targets = tg; s.fromOnboarding = false;
+      if ((s.meals || []).length) res = autoAdjustPlanQuantities(s);
+    }
+  }
+  np.deficitPct = phaseDeficitPct(s.targets.kcal, maint);
+  // a creatina nova retém água: marca o início (só se o aluno ainda não a tomava)
+  var takes = (s.supplements || []).some(function(x){ return exLibFold(x) === "creatina"; });
+  if (!np.creatineStartDate && !takes && creatineStatus(s).on){ np.creatineStartDate = today; np.creatineOn = true; }
+  s.nutritionPhase = np;
+  logPlanEvent(s, "fase_inicio", "Fase " + phaseLabel(type) + " iniciada" + (np.targetWeight ? " (objetivo " + pt2(np.targetWeight) + " kg)" : "") + ": " + s.targets.kcal + " kcal" + (res ? "; " + res.changed + " alimentos ajustados" : ""), (old.phase || "—"), type);
+  persistStudent(s);
+  return {changed: res ? res.changed : 0};
+}
+// quando o aluno define o peso objetivo (questionário ou ficha), a fase fica definida logo, com as calorias do ponto de partida
+function setPhaseFromGoal(s){
+  var cur = Number(s.weightCurrent) || 0, goal = Number(s.weightGoal) || 0;
+  if (!(cur > 0) || !(goal > 0)) return;
+  var type = phaseTypeFor(cur, goal), today = localTodayISO(), maint = computeMaintenanceKcal(s);
+  var np = Object.assign({}, s.nutritionPhase, {phase: type, startDate: today, startWeight: cur, targetWeight: goal, level: (s.nutritionPhase && s.nutritionPhase.level) || "novato", stage: 0, stageStartDate: today, lastChangeDate: today,
+    lastReviewDate: null, snoozeUntil: null, exiting: false, reviews: [], reviewEveryDays: (s.nutritionPhase && s.nutritionPhase.reviewEveryDays) || PHASE_CFG.reviewDays});
+  np.nextReviewDate = addDaysISO(today, np.reviewEveryDays);
+  np.deficitPct = s.targets && s.targets.kcal && maint ? phaseDeficitPct(s.targets.kcal, maint) : null;
+  s.nutritionPhase = np;
+}
+
+// ---- ecrãs: cartão na Nutrição, janela de início, janela de revisão (um só OK) e aviso ao entrar ----
+function tplPhasePanel(s){
+  var np = phaseOf(s), cur = creatineWeightKg(s), maint = computeMaintenanceKcal(s);
+  var html = "<div class=\"eyebrow section-gap\" style=\"margin-bottom:6px;\">Fase e objetivo de peso</div><div class=\"card\" id=\"phaseCard\" style=\"padding:12px 14px;\">";
+  if (!np){
+    var sug = phaseTypeFor(cur, Number(s.weightGoal) || 0);
+    html += "<p class=\"muted-p\">Sem fase definida" + (s.weightGoal ? " (peso objetivo " + pt2(s.weightGoal) + " kg, o que dá " + phaseLabel(sug) + ")" : "") + ". A fase acompanha o peso de perto: as calorias mudam aos poucos, de " + PHASE_CFG.reviewDays + " em " + PHASE_CFG.reviewDays + " dias, e tu aprovas cada passo com um toque.</p>" +
+      "<button type=\"button\" class=\"btn btn-sm primary\" id=\"phaseStart\">Definir fase</button></div>";
+    return html;
+  }
+  var weeksIn = Math.max(0, Math.floor((dayNum(localTodayISO()) - dayNum(np.startDate)) / 7));
+  html += "<div style=\"display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;\"><span class=\"pill " + (np.phase === "cut" ? "warn" : np.phase === "bulk" ? "good" : "") + "\">" + phaseLabel(np.phase) + "</span><span class=\"muted-p\">desde " + escapeHtml(fmtDateFullPt(np.startDate)) + " · semana " + (weeksIn + 1) + "</span></div>" +
+    "<p class=\"muted-p\">" + (np.startWeight ? "Peso inicial " + pt2(np.startWeight) + " kg" : "") + (np.targetWeight ? " → objetivo " + pt2(np.targetWeight) + " kg" : "") + (cur ? " · agora " + pt2(cur) + " kg" : "") + "</p>" +
+    (maint && s.targets && s.targets.kcal ? "<p class=\"muted-p\">Calorias " + s.targets.kcal + " kcal (" + (s.targets.kcal >= maint ? "+" : "−") + Math.abs(s.targets.kcal - maint) + " kcal, " + pt2(Math.abs(phaseDeficitPct(s.targets.kcal, maint) || 0)) + " % " + (s.targets.kcal >= maint ? "acima" : "abaixo") + " da manutenção de " + maint + " kcal)</p>" : "");
+  var rv = null; try { rv = computePhaseReview(s, localTodayISO(), {force: true}); } catch (e) {}
+  if (rv && rv.evidence) html += "<p class=\"muted-p\">" + escapeHtml(rv.evidence) + "</p>";
+  html += "<p class=\"muted-p\">Próxima revisão: " + escapeHtml(fmtDateFullPt(np.nextReviewDate || addDaysISO(np.startDate, np.reviewEveryDays || PHASE_CFG.reviewDays))) + (np.snoozeUntil ? " (adiada até " + escapeHtml(fmtDateFullPt(np.snoozeUntil)) + ")" : "") + "</p>";
+  var last = (np.reviews || []).slice(-3).reverse();
+  if (last.length) html += "<p class=\"muted-p\" style=\"font-size:0.78rem;\">Últimas revisões: " + last.map(function(r){ return escapeHtml(fmtDateFullPt(r.date)) + (r.deltaKcal ? " (" + (r.deltaKcal > 0 ? "+" : "") + r.deltaKcal + " kcal)" : ""); }).join(" · ") + "</p>";
+  html += "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\"><button type=\"button\" class=\"btn btn-sm primary\" id=\"phaseReviewNow\">Rever agora</button><button type=\"button\" class=\"btn btn-sm\" id=\"phaseStart\">Alterar fase</button></div></div>";
+  return html;
+}
+function openPhaseSetupModal(s, onDone){
+  var np = phaseOf(s), cur = creatineWeightKg(s), goal = Number(s.weightGoal) || (np && np.targetWeight) || 0;
+  var defType = np ? np.phase : phaseTypeFor(cur, goal), maint = computeMaintenanceKcal(s);
+  var sheet = openModal("<div class=\"mtitle\">" + (np ? "Alterar fase" : "Definir fase") + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(s.name) + (cur ? " · peso atual " + pt2(cur) + " kg" : "") + (maint ? " · manutenção " + maint + " kcal" : "") + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"phType\">Fase</label><select id=\"phType\" class=\"mini-select\" style=\"width:100%;\"><option value=\"cut\"" + (defType === "cut" ? " selected" : "") + ">Cut (perder peso)</option><option value=\"bulk\"" + (defType === "bulk" ? " selected" : "") + ">Bulk (ganhar peso)</option><option value=\"manutencao\"" + (defType === "manutencao" ? " selected" : "") + ">Manutenção</option></select></div>" +
+    "<div class=\"checkin-field\"><label for=\"phGoal\">Peso objetivo (kg)</label><input type=\"number\" id=\"phGoal\" step=\"0.5\" min=\"0\" value=\"" + (goal || "") + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"phEvery\">Rever o plano de</label><select id=\"phEvery\" class=\"mini-select\" style=\"width:100%;\"><option value=\"14\">14 em 14 dias</option><option value=\"21\">21 em 21 dias</option><option value=\"28\">28 em 28 dias</option></select></div>" +
+    "<div class=\"checkin-field\" id=\"phLevelBox\"><label for=\"phLevel\">Experiência de treino (no bulk)</label><select id=\"phLevel\" class=\"mini-select\" style=\"width:100%;\"><option value=\"novato\">Menos de ~3 anos a treinar com regularidade</option><option value=\"avancado\">Avançado (mais de ~3 anos)</option></select></div>" +
+    "<label style=\"display:flex; gap:8px; align-items:flex-start; margin:8px 0;\"><input type=\"checkbox\" id=\"phApply\" " + (np ? "" : "checked") + "> <span class=\"muted-p\">Aplicar já as calorias de partida da fase (ponto de partida pequeno e gradual). Se não, a fase começa nos alvos atuais.</span></label>" +
+    "<div id=\"phPreview\" class=\"muted-p\" style=\"margin:6px 0 10px;\"></div>" +
+    "<p class=\"muted-p\" id=\"phErr\" style=\"color:var(--critical); display:none;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"phGo\" style=\"width:100%;\">✓ OK — " + (np ? "alterar" : "iniciar") + "</button>");
+  function read(){ return {type: sheet.querySelector("#phType").value, targetWeight: parseFloat(sheet.querySelector("#phGoal").value) || 0, every: parseInt(sheet.querySelector("#phEvery").value, 10), level: sheet.querySelector("#phLevel").value, applyStart: sheet.querySelector("#phApply").checked}; }
+  function preview(){
+    var o = read(), tg = phaseStartTargets(s, o.type), box = sheet.querySelector("#phPreview");
+    sheet.querySelector("#phLevelBox").style.display = o.type === "bulk" ? "" : "none";
+    if (!tg || !maint){ box.textContent = "Faltam dados (peso, altura, idade) para calcular as calorias."; return; }
+    var cfg = o.type === "cut" ? PHASE_CFG.cut[cutTierFor(s, cur)] : o.type === "bulk" ? PHASE_CFG.bulk[o.level === "avancado" ? "avancado" : "novato"] : null;
+    box.innerHTML = (o.applyStart ? "Calorias de partida: <strong>" + tg.kcal + " kcal</strong> (" + (tg.kcal - maint >= 0 ? "+" : "−") + Math.abs(tg.kcal - maint) + " kcal face à manutenção; atualmente " + (s.targets && s.targets.kcal || "—") + " kcal)." : "As calorias atuais mantêm-se (" + (s.targets && s.targets.kcal || "—") + " kcal).") +
+      (cfg ? " Ritmo previsto: " + pt2(cfg.rate) + " % do peso por semana; as calorias só mudam de " + o.every + " em " + o.every + " dias, em passos de 100–200 kcal, quando o peso o pedir e tu aprovares." : " Revisão a cada " + o.every + " dias; só mexe se o peso derivar.");
+  }
+  sheet.addEventListener("input", preview); sheet.addEventListener("change", preview);
+  if (np && np.reviewEveryDays) sheet.querySelector("#phEvery").value = String(np.reviewEveryDays);
+  if (np && np.level) sheet.querySelector("#phLevel").value = np.level;
+  preview();
+  sheet.querySelector("#phGo").addEventListener("click", function(){
+    var o = read();
+    if (o.type !== "manutencao" && !(o.targetWeight > 0)){ var e = sheet.querySelector("#phErr"); e.textContent = "Indica o peso objetivo."; e.style.display = "block"; return; }
+    var r = startPhase(s, o);
+    if (r.error){ var e2 = sheet.querySelector("#phErr"); e2.textContent = r.error; e2.style.display = "block"; return; }
+    closeModal(); showToast("✓ Fase " + phaseLabel(o.type) + " definida"); if (onDone) onDone();
+  });
+}
+// janela de revisão: uma proposta de cada vez; o OK aplica tudo
+function openPhaseReviewModal(items, i, onDone){
+  items = items.filter(function(x){ return x && x.student; });
+  if (!items.length){ if (onDone) onDone(); return; }
+  i = i || 0;
+  if (i >= items.length){ closeModal(); if (onDone) onDone(); return; }
+  var it = items[i], s = it.student, rv = it.review, hasChange = !!rv.proposedTargets;
+  var ct = rv.currentTargets, pt = rv.proposedTargets;
+  var html = "<div class=\"mtitle\">Revisão do plano de " + escapeHtml(s.name) + "</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + (items.length > 1 ? (i + 1) + " de " + items.length + " · " : "") + "Fase " + phaseLabel(rv.phase) + (rv.urgent ? " · <strong style=\"color:var(--critical);\">urgente</strong>" : "") + "</p>" +
+    (rv.evidence ? "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + escapeHtml(rv.evidence) + (rv.band ? " Previsto " + pt2(rv.band[0]) + "–" + pt2(rv.band[1]) + " %/semana." : "") + "</p>" : "") +
+    "<div class=\"card\" style=\"padding:12px 14px; margin-bottom:10px;\"><p style=\"margin:0;\">" + escapeHtml(rv.text) + "</p></div>";
+  if (hasChange){
+    html += "<div class=\"macro-target-grid\" style=\"margin-bottom:10px;\"><div class=\"f\"><label>Calorias</label><div class=\"v num\">" + ct.kcal + " → " + pt.kcal + "</div></div>" +
+      "<div class=\"f\"><label>Hidratos</label><div class=\"v num\">" + ct.carbs + " → " + pt.carbs + " g</div></div>" +
+      "<div class=\"f\"><label>Proteína</label><div class=\"v num\">" + pt.protein + " g</div></div><div class=\"f\"><label>Gordura</label><div class=\"v num\">" + pt.fat + " g</div></div></div>" +
+      (rv.warnings.length ? "<ul class=\"muted-p\" style=\"padding-left:18px; margin-bottom:10px;\">" + rv.warnings.map(function(w){ return "<li>" + escapeHtml(w.text) + "</li>"; }).join("") + "</ul>" : "") +
+      "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-bottom:10px;\">Ao dares OK, os alvos mudam e as quantidades das refeições reajustam-se sozinhas. A decisão é sempre tua.</p>";
+  }
+  html += "<div style=\"display:flex; flex-direction:column; gap:8px;\"><button type=\"button\" class=\"btn primary\" id=\"prOk\">" + (hasChange ? "✓ OK — aplicar" : "✓ OK — percebido") + "</button>" +
+    "<button type=\"button\" class=\"btn\" id=\"prLater\">Adiar 7 dias</button><button type=\"button\" class=\"btn\" id=\"prOpen\">Ver o aluno</button></div>";
+  var sheet = openModal(html);
+  var next = function(){ openPhaseReviewModal(items, i + 1, onDone); };
+  sheet.querySelector("#prOk").addEventListener("click", function(){
+    if (hasChange){
+      var r = applyPhaseReview(s, rv);
+      if (r.error){ showToast("⚠ " + r.error); return; }
+      showToast("✓ Plano de " + s.name + " atualizado: " + r.from + " → " + r.to + " kcal/dia");
+    } else postponePhaseReview(s, 7);
+    next();
+  });
+  sheet.querySelector("#prLater").addEventListener("click", function(){ postponePhaseReview(s, 7); next(); });
+  sheet.querySelector("#prOpen").addEventListener("click", function(){ closeModal(); state.proSelectedId = s.id; state.proTab = "plano"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+}
+function tplPhaseReviews(){
+  var list = collectPhaseReviews();
+  if (!list.length) return "";
+  return "<div class=\"card\" id=\"phaseReviewsCard\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Revisões de plano · " + list.length + "</div>" +
+    list.map(function(x){
+      return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\"><div class=\"hlabel\">" + escapeHtml(x.student.name) + " <span class=\"pill\">" + phaseLabel(x.review.phase) + "</span></div><div class=\"muted-p\" style=\"font-size:0.78rem;\">" +
+        escapeHtml(x.review.kind === "ajuste" || x.review.kind === "objetivo" ? (x.review.deltaKcal > 0 ? "+" : "") + x.review.deltaKcal + " kcal/dia sugeridas" : x.review.text) + "</div></div>" +
+        "<button type=\"button\" class=\"btn btn-sm primary\" data-phase-review=\"" + escapeHtml(x.student.id) + "\">Rever</button></div>";
+    }).join("") + "</div>";
+}
+function wirePhaseReviews(root, redraw){
+  root.querySelectorAll("[data-phase-review]").forEach(function(b){ b.addEventListener("click", function(){
+    var id = b.getAttribute("data-phase-review"), list = collectPhaseReviews(), idx = list.map(function(x){ return x.student.id; }).indexOf(id);
+    if (idx >= 0) openPhaseReviewModal(list, idx, redraw);
+  }); });
+}
+// ao entrar, o profissional vê logo as revisões à espera (uma vez por sessão)
+function maybeOpenPhaseReviews(){
+  if (authRole !== "professional" || state.phaseReviewShown || modalRoot.firstChild) return;
+  var list = collectPhaseReviews();
+  state.phaseReviewShown = true;
+  if (list.length) openPhaseReviewModal(list, 0, function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild) renderProDashboardMain(); });
 }
 
 function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
@@ -11272,7 +11675,7 @@ function renderProDashboardMain(){
   "</div>";
 
   // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
-  html += tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents);
+  html += tplPhaseReviews() + tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents);
 
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
@@ -11304,6 +11707,7 @@ function renderProDashboardMain(){
     if (searchEl) searchEl.addEventListener("input", function(){ state.dashSearch = searchEl.value; redrawList(); });
     if (sortEl) sortEl.addEventListener("change", function(){ state.dashSort = sortEl.value; redrawList(); });
   }
+  wirePhaseReviews(main, function(){ renderProDashboardMain(); });
   main.querySelectorAll("[data-contact]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var st = findStudent(btn.getAttribute("data-contact"));
@@ -11848,6 +12252,7 @@ function tplProPlano(s){
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
 
+  html += tplPhasePanel(s);
   html += tplCreatineCard(s);
 
   html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">Colar um plano em texto</summary>" +
@@ -15237,6 +15642,14 @@ function wireProTab(s){
   });
   });
 
+  el.querySelectorAll("#phaseStart").forEach(function(b){ b.addEventListener("click", function(){ openPhaseSetupModal(s, function(){ renderProTabContent(s); }); }); });
+  var phNow = el.querySelector("#phaseReviewNow");
+  if (phNow) phNow.addEventListener("click", function(){
+    var rv = computePhaseReview(s, localTodayISO(), {force: true});
+    if (!rv){ showToast("Sem fase definida."); return; }
+    if (!phaseNeedsAttention(rv)){ showToast(rv.text || "Nada a rever por agora."); return; }
+    openPhaseReviewModal([{student: s, review: rv}], 0, function(){ renderProTabContent(s); });
+  });
   var proPdf = el.querySelector("#proExportPdf");
   if (proPdf) proPdf.addEventListener("click", function(){ exportPlanPdf(s); });
   var crToggle = el.querySelector("#creatineToggle");
@@ -15628,6 +16041,7 @@ function wireProTab(s){
     logTargetsChange(s, s.targets, newTargets);
     s.targets = newTargets;
     s.fromOnboarding = true; // reaparece o banner "confirma ou ajusta" no Plano
+    if (s.weightGoal) setPhaseFromGoal(s); // o peso objetivo define a fase (cut, bulk ou manutenção)
     saveWG.textContent = "Guardado ✓";
     persistStudent(s);
     showToast("Peso objetivo guardado — alvos recalculados, revê no separador Plano");
@@ -15997,6 +16411,7 @@ function finishBoot(rows, isProfessional, offline){
     }
     syncPillUpdate();
     if (!offline) outboxFlush();
+    if (isProfessional) setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
     if (isProfessional) studioRefresh().then(function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild) renderProDashboardMain(); });
   });
 }
