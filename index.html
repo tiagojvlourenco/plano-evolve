@@ -13223,7 +13223,7 @@ function attachExtrasToPack(pack){
   return list.reduce(function(chain, x){ return chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: pack.id}).then(function(r){ return n + (r.error ? 0 : 1); }); }); }, Promise.resolve(0));
 }
 
-// ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas) ----
+// ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas; validade em meses, opcional) ----
 function parseImportDate(t){
   t = String(t || "").trim();
   var m = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/.exec(t) || (function(){ var q = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(t); return q ? [null, q[3], q[2], q[1]] : null; })();
@@ -13238,16 +13238,17 @@ function parsePackImport(text){
   String(text || "").split(/\r?\n/).forEach(function(line, i){
     if (!line.trim()) return;
     var cols = line.split(/\t|;/).map(function(c){ return c.trim(); });
-    if (cols.length < 3){ errors.push("Linha " + (i + 1) + ": faltam colunas (nome; aulas; data de início; valor; aulas já dadas)."); return; }
+    if (cols.length < 3){ errors.push("Linha " + (i + 1) + ": faltam colunas (nome; aulas; data de início; valor; aulas já dadas; validade em meses, opcional)."); return; }
     var total = parseImportNumber(cols[1]), start = parseImportDate(cols[2]);
-    var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0;
+    var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0, months = cols[5] ? parseImportNumber(cols[5]) : 0;
     if (/^(nome|cliente|aluno)$/i.test(cols[0]) && total == null) return; // linha de cabeçalho colada do Sheets
     if (!cols[0]) errors.push("Linha " + (i + 1) + ": falta o nome.");
     else if (total == null || total < 1 || total > 500 || total !== Math.round(total)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): número de aulas inválido.");
     else if (!start) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): data de início inválida (usa 31/12/2026 ou 2026-12-31).");
     else if (cols[3] && (price == null || price < 0)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): valor inválido.");
     else if (used == null || used < 0 || used > total || used !== Math.round(used)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): aulas já dadas inválidas (0 a " + total + ").");
-    else rows.push({name: cols[0], total: total, start: start, price: price, used: used});
+    else if (months == null || months < 0 || months > 36 || months !== Math.round(months)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): validade inválida (meses, 0 a 36; vazio = sem validade).");
+    else rows.push({name: cols[0], total: total, start: start, price: price, used: used, months: months});
   });
   return {rows: rows, errors: errors};
 }
@@ -13269,8 +13270,9 @@ function studioImportPacks(text){
       var st = matchStudentByName(r.name);
       if (!st){ report.errors.push(r.name + ": não encontrei um aluno com este nome."); return; }
       if (packsOf(st.id).some(function(p){ return p.starts_on === r.start && Number(p.total) === r.total; })){ report.skipped.push(st.name + " (já tem este pacote)"); return; }
-      var d = new Date(r.start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + 3);
-      var row = {student_id: st.id, name: "Trimestre " + r.total + " aulas", total: r.total, price: r.price, starts_on: r.start, expires_on: d.toISOString().slice(0, 10), missed_consumes: true, late_cancel_consumes: true};
+      // sem validade, a não ser que a linha traga os meses (um pacote de 26 aulas demora quase sempre mais do que 3 meses com pausas e férias)
+      var exp = null; if (r.months > 0){ var d = new Date(r.start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + r.months); exp = d.toISOString().slice(0, 10); }
+      var row = {student_id: st.id, name: "Pacote " + r.total + " aulas", total: r.total, price: r.price, starts_on: r.start, expires_on: exp, missed_consumes: true, late_cancel_consumes: true};
       if (studio.slotsAvailable) row.used_before = r.used;
       return studioInsert("packs", row).then(function(x){ if (x.error) report.errors.push(st.name + ": " + x.error); else report.created++; });
     });
@@ -14055,7 +14057,7 @@ function renderProStudioMain(){
       escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
 
   html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
-    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong>. O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong> (e, se quiseres, uma sexta coluna com a validade em meses; sem ela o pacote não caduca). O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
     "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9\"></textarea>" +
     "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";

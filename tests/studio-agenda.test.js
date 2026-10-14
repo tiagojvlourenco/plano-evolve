@@ -97,8 +97,13 @@ STUDENTS = [mkStudent("a", "Ana Silva"), mkStudent("b", "Rui Costa")];
   check.check("28. Nomes: igual sem acentos/maiúsculas, ou primeiro+último nome se for único", matchStudentByName("ana silva").id === "a" && matchStudentByName("Rúi  Costa") && matchStudentByName("Rui Costa").id === "b" && matchStudentByName("Ana Maria Silva").id === "a" && matchStudentByName("Joana") === null);
   reset(); STUDENTS = [mkStudent("a", "Ana Silva"), mkStudent("b", "Rui Costa")];
   var rep = await studioImportPacks("Ana Silva; 26; 01/10/2026; 520; 9\nNinguém Aqui; 10; 01/10/2026; 100; 0\nRui Costa; 13; 15/09/2026; 260; 0");
-  check.check("29. Importar cria os pacotes (validade de 3 meses, aulas já dadas, preço) e avisa dos nomes que não encontra", rep.created === 2 && rep.errors.some(function(e){ return /Ninguém Aqui/.test(e); }) && studio.packs.filter(function(p){ return p.student_id === "a"; })[0].used_before === 9 && studio.packs.filter(function(p){ return p.student_id === "a"; })[0].expires_on === "2027-01-01");
+  check.check("29. Importar cria os pacotes (sem validade por omissão, aulas já dadas, preço) e avisa dos nomes que não encontra", rep.created === 2 && rep.errors.some(function(e){ return /Ninguém Aqui/.test(e); }) && studio.packs.filter(function(p){ return p.student_id === "a"; })[0].used_before === 9 && studio.packs.filter(function(p){ return p.student_id === "a"; })[0].expires_on === null);
   var rep2 = await studioImportPacks("Ana Silva; 26; 01/10/2026; 520; 9");
+  reset(); STUDENTS = [mkStudent("a", "Ana Silva")];
+  var rep3 = await studioImportPacks("Ana Silva; 26; 01/10/2026; 520; 0; 6\nAna Silva; 13; 01/12/2026; 100; 0; 99");
+  check.check("29b. A sexta coluna opcional dá a validade em meses (6 meses → 01/04/2027); fora de 0-36 é erro", rep3.created === 1 && studio.packs[0].expires_on === "2027-04-01" && rep3.errors.some(function(e){ return /validade inválida/.test(e); }));
+  reset(); STUDENTS = [mkStudent("a", "Ana Silva"), mkStudent("b", "Rui Costa")];
+  await studioImportPacks("Ana Silva; 26; 01/10/2026; 520; 9\nRui Costa; 13; 15/09/2026; 260; 0");
   check.check("30. Importar duas vezes não duplica", rep2.created === 0 && rep2.skipped.length === 1 && studio.packs.length === 2);
 
   // ---- migração e ecrãs ----
