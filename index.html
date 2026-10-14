@@ -12818,6 +12818,22 @@ function studioLocalRead(){
 }
 function studioLocalWrite(){ try { localStorage.setItem(STUDIO_LOCAL_KEY, JSON.stringify({packs: studio.packs, sessions: studio.sessions, payments: studio.payments, slots: studio.slots})); } catch (e) {} }
 var STUDIO_TABLES = {packs: "session_packs", sessions: "sessions", payments: "payments", slots: "session_slots"};
+// o servidor devolve no máximo ~1000 linhas por pedido: com mais sessões (a agenda traz centenas) lê-se por páginas,
+// senão as mais antigas ficavam por ler e a app voltava a tentar criá-las (erros de "duplicada") e contava mal os pacotes
+var STUDIO_PAGE = 500;
+function studioFetchSessions(from){
+  var all = [];
+  function page(n){
+    return Promise.resolve(sb.from("sessions").select("*").gte("date", from).order("date", {ascending: false}).order("id", {ascending: true}).range(n * STUDIO_PAGE, n * STUDIO_PAGE + STUDIO_PAGE - 1).then(function(r){ return r; })).then(function(res){
+      if (!res || res.error) return res || {error: {message: "erro"}};
+      var d = res.data || [];
+      all = all.concat(d);
+      if (d.length < STUDIO_PAGE || n >= 200) return {data: all};
+      return page(n + 1);
+    });
+  }
+  return page(0);
+}
 function studioLoad(){
   if (!sbReady){
     var v = studioLocalRead();
@@ -12835,7 +12851,7 @@ function studioLoad(){
     if (r.some(function(x){ return !x || x.error; })) return null;
     var packs = r[0].data || [], from = since;
     packs.forEach(function(p){ if ((!p.expires_on || p.expires_on >= today) && p.starts_on && p.starts_on < from) from = p.starts_on; });
-    return sb.from("sessions").select("*").gte("date", from).order("date", {ascending: false}).then(function(sr){
+    return studioFetchSessions(from).then(function(sr){
       if (!sr || sr.error) return null;
       return {packs: packs, payments: r[1].data || [], sessions: sr.data || []};
     });
