@@ -12,7 +12,7 @@ module.exports = function fakeSupabaseSource(initial){
     function netFail(){ return {data: null, error: {message: "TypeError: Failed to fetch", details: "", hint: "", code: ""}, status: 0}; }
     function clone(v){ return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
     function Builder(table){
-      this.table = table; this.op = "select"; this.payload = null; this.filters = []; this.single = false;
+      this.table = table; this.op = "select"; this.payload = null; this.filters = []; this.single = false; this.rangeFrom = null; this.rangeTo = null;
     }
     Builder.prototype.select = function(){ if (this.op === "select") this.op = "select"; return this; };
     Builder.prototype.update = function(p){ this.op = "update"; this.payload = p; return this; };
@@ -23,7 +23,8 @@ module.exports = function fakeSupabaseSource(initial){
     Builder.prototype.gte = function(c, v){ this.filters.push([c, v, "gte"]); return this; };
     Builder.prototype.in = function(){ return this; };
     Builder.prototype.neq = function(){ return this; };
-    ["order", "range", "or", "ilike", "like", "is", "not", "lte", "gt", "lt", "contains", "textSearch", "filter", "match"].forEach(function(m){ Builder.prototype[m] = function(){ return this; }; });
+    ["order", "or", "ilike", "like", "is", "not", "lte", "gt", "lt", "contains", "textSearch", "filter", "match"].forEach(function(m){ Builder.prototype[m] = function(){ return this; }; });
+    Builder.prototype.range = function(a, b){ this.rangeFrom = a; this.rangeTo = b; return this; };
     Builder.prototype.limit = function(){ return this; };
     Builder.prototype.maybeSingle = function(){ this.single = true; return this; };
     Builder.prototype.then = function(res, rej){ return Promise.resolve(this.run()).then(res, rej); };
@@ -79,6 +80,10 @@ module.exports = function fakeSupabaseSource(initial){
         var match = function(r){ return filters.every(function(f){ return f[2] === "gte" ? String(r[f[0]]) >= String(f[1]) : r[f[0]] === f[1]; }); };
         if (this.op === "insert"){
           var list = Array.isArray(this.payload) ? this.payload : [this.payload], made = [];
+          if (t === "sessions"){
+            var dup = list.filter(function(p0){ return p0.source === "calendario" && p0.external_id && rows.some(function(r){ return r.source === "calendario" && r.external_id === p0.external_id; }); })[0];
+            if (dup) return {data: null, error: {message: 'duplicate key value violates unique constraint "sessions_calendar_unique"', code: "23505"}, status: 409};
+          }
           list.forEach(function(p0){ var row = Object.assign({id: t + "-" + (rows.length + 1)}, clone(p0)); rows.push(row); made.push(clone(row)); });
           F.writes.push({table: t, op: "insert", cols: Object.keys(list[0] || {}), payload: clone(this.payload), n: list.length});
           return {data: made, error: null, status: 201};
@@ -93,7 +98,10 @@ module.exports = function fakeSupabaseSource(initial){
         if (this.op === "delete"){ F.tables[t] = rows.filter(function(r){ return !match(r); }); F.writes.push({table: t, op: "delete"}); return {data: null, error: null, status: 204}; }
         F.selects.push(t);
         if (this.single) return {data: rows.filter(match).length ? clone(rows.filter(match)[0]) : null, error: null, status: 200};
-        return {data: clone(rows.filter(match)), error: null, status: 200};
+        var found = rows.filter(match);
+        if (this.rangeFrom != null) found = found.slice(this.rangeFrom, this.rangeTo + 1);
+        found = found.slice(0, F.maxRows || 1000); // como o servidor real: no máximo ~1000 linhas por pedido
+        return {data: clone(found), error: null, status: 200};
       }
       F.selects.push(t);
       return {data: this.single ? null : [], error: null, status: 200};
