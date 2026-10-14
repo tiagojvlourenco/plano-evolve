@@ -88,6 +88,9 @@ Pacotes de sessões (`total`, `price`, `starts_on`/`expires_on`, regras `missed_
 
 Nota: o servidor devolve no máximo ~1000 linhas por pedido, por isso `studioFetchSessions` lê as sessões por páginas de 500 (`range`); sem isto, com centenas de sessões vindas da agenda, as mais antigas ficavam por ler, a sincronização tentava recriá-las (erro 23505 do índice único `sessions_calendar_unique`) e os pacotes contavam mal. Teste: `tests/gcal-many-sessions-browser.test.js`.
 
+### Sessões `agendada` (0027)
+`sessions.status = 'agendada'` (+ `source = 'folha'`) guarda as datas previstas importadas da folha de cálculo (`parseScheduleImport` / `studioImportSchedule`). `sessionConsumes` devolve `false` para elas (não gastam aulas) e `planCalendarSync` converte-as (`update` com `source: 'calendario'` e `external_id`) quando um evento do mesmo aluno cai nesse dia, em vez de inserir outra sessão; `applyCalendarPlan` escolhe então o pacote. Nunca são removidas pela sincronização. Teste: `tests/studio-schedule.test.js`.
+
 ### `students.studio_only` e criação a partir da agenda (0026)
 `studio_only` marca alunos criados a partir dos nomes do Google Agenda (`calStudentCandidates` → `createStudentsFromCalendar`: nome = parte depois do último " - ", títulos como alias, `insertStudent` devolve uma promessa para as sessões só serem ligadas depois de a ficha existir, e `calApplyEvents` volta a aplicar os eventos em memória sem nova autorização). `isStudioOnly(s)` = `studioOnly && !inviteEmail && !authUserId`; esses alunos ficam fora dos motivos de retenção ligados ao uso da app (`computeCoachBadges`, `onboardingOf`, `contactReasonsFor`, `studioPulse`). Se a coluna não existir, a app grava sem ela (`studioOnlyColumnAvailable`). Testes: `tests/gcal.test.js` e `tests/gcal-students-browser.test.js`.
 
@@ -160,7 +163,7 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
 | `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
-| `supabase/migrations/0001…0026_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `supabase/migrations/0001…0027_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |
