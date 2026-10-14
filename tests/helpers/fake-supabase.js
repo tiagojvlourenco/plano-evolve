@@ -66,6 +66,12 @@ module.exports = function fakeSupabaseSource(initial){
           return {data: [{id: id}], error: null, status: 200};
         }
         if (this.op === "insert"){ F.rows.push(clone(this.payload)); F.writes.push({table: t, op: "insert", id: this.payload.id, cols: Object.keys(this.payload)}); return {data: null, error: null, status: 201}; }
+        if (this.op === "delete"){
+          F.rows = F.rows.filter(function(r){ return r.id !== id; });
+          ["sessions", "session_packs", "payments", "session_slots"].forEach(function(k){ if (F.tables[k]) F.tables[k] = F.tables[k].filter(function(r){ return r.student_id !== id; }); });
+          F.writes.push({table: t, op: "delete", id: id});
+          return {data: null, error: null, status: 204};
+        }
       }
       if (F.tables[t]){
         if (F.missingTables) return {data: null, error: {message: 'relation "public.' + t + '" does not exist', code: "42P01"}, status: 404};
