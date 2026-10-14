@@ -310,6 +310,11 @@
   .pro-stat-card .l{font-size:0.75rem; color:var(--muted); margin-top:2px;}
 
   .student-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px;}
+  .student-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;}
+  .student-search{flex:1 1 200px; display:flex; align-items:center; gap:8px; border:1px solid var(--line-strong); background:var(--bg); border-radius:10px; padding:0 12px; min-height:44px;}
+  .student-search input{flex:1; min-width:0; border:none; outline:none; background:transparent; color:var(--ink); font-size:16px; font-family:var(--sans); padding:10px 0;}
+  .student-search:focus-within{border-color:var(--accent);}
+  .student-tools .mini-select{min-height:44px;}
   .student-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; cursor:pointer;}
   .student-card:hover{border-color:var(--line-strong);}
   .student-card-top{display:flex; align-items:center; gap:12px;}
@@ -10815,8 +10820,52 @@ function isStudioOnly(s){ return !!(s && s.studioOnly && !s.inviteEmail && !s.au
 // dias sem check-in para o painel (quem não usa a app nunca está "em atraso")
 function dashLateDays(s){ return isStudioOnly(s) ? 0 : computeLastCheckinDaysAgo(s); }
 
+// linhas da lista de alunos: filtradas pela pesquisa (sem distinguir maiúsculas/acentos) e ordenadas por atenção ou por nome
+function studentListRowsHtml(allRows){
+  var q = exLibFold(state.dashSearch || ""), sort = state.dashSort || "atencao";
+  var rows = allRows.filter(function(r){ return !q || exLibFold(r.s.name).indexOf(q) >= 0; });
+  var byName = function(a, b){ return String(a.s.name).localeCompare(String(b.s.name), "pt", {sensitivity: "base"}); };
+  rows.sort(sort === "az" ? byName : sort === "za" ? function(a, b){ return byName(b, a); } :
+    function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days) || byName(a, b); });
+  var html = "";
+  rows.forEach(function(r){
+    var st = r.s;
+    var badges = (r.pending ? "<span class=\"pill critical\">" + plural(r.pending, "pedido de ajuda", "pedidos de ajuda") + "</span>" : "") + (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
+      (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "") + coachBadgesHtml(r.coach);
+    html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
+      "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
+        "<div class=\"avatar\">" + escapeHtml(st.initials) + "</div>" +
+        "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + (isStudioOnly(st) ? "Só estúdio" : escapeHtml(st.goal)) + "</div>" +
+        (badges ? "<div class=\"sr-badges\">" + badges + "</div>" : "") + "</div>" +
+      "</div>" +
+      "<label class=\"switch\" title=\"" + (isStudentActive(st) ? "Ativo" : "Inativo") + "\">" +
+        "<input type=\"checkbox\" data-active-toggle=\"" + st.id + "\"" + (isStudentActive(st) ? " checked" : "") + ">" +
+        "<span class=\"switch-track\"><span class=\"switch-thumb\"></span></span>" +
+      "</label>" +
+    "</div>";
+  });
+  if (!rows.length) html += "<p class=\"muted-p\">" + (q ? "Nenhum aluno com «" + escapeHtml(state.dashSearch) + "»." : "Nenhum aluno para mostrar.") + "</p>";
+  return html;
+}
+function wireStudentList(root){
+  root.querySelectorAll("[data-open]").forEach(function(el){
+    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+  });
+  root.querySelectorAll("[data-active-toggle]").forEach(function(input){
+    input.addEventListener("click", function(e){ e.stopPropagation(); });
+    input.addEventListener("change", function(){
+      var s = findStudent(input.getAttribute("data-active-toggle"));
+      if (!s) return;
+      ensureSyncBaseline(s); // antes de alterar: só se grava a coluna "active"
+      s.active = input.checked;
+      persistStudent(s);
+      renderProDashboardMain();
+    });
+  });
+}
+
 function renderProDashboardMain(){
-  var main = document.getElementById("proMain");
+  var main = document.getElementById("proMain"), dashAllRows = [];
   var visible = visibleStudentsForDashboard();
   var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
   var activeStudents = visible.filter(isStudentActive);
@@ -10849,37 +10898,26 @@ function renderProDashboardMain(){
       if (mode === "alerts") return computeDashboardAlerts(st).length > 0;
       return true;
     });
-    var rows = listStudents.map(function(st){
+    var allRows = dashAllRows = listStudents.map(function(st){
       var al = computeDashboardAlerts(st);
       return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: dashLateDays(st), pending: pendingHelpFor(st.id)};
-    }).sort(function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days); });
-    var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
-    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
-    html += "<div class=\"student-list\">";
-    rows.forEach(function(r){
-      var st = r.s;
-      var badges = (r.pending ? "<span class=\"pill critical\">" + plural(r.pending, "pedido de ajuda", "pedidos de ajuda") + "</span>" : "") + (r.alerts.length ? "<span class=\"pill " + (r.crit ? "critical" : "warn") + "\">" + r.alerts.length + (r.alerts.length === 1 ? " alerta" : " alertas") + "</span>" : "") +
-        (r.days >= 7 ? "<span class=\"pill\">check-in " + (r.days === 999 ? "nunca" : daysAgoLabel(r.days)) + "</span>" : "") + coachBadgesHtml(r.coach);
-      html += "<div class=\"card student-row\" data-id=\"" + st.id + "\">" +
-        "<div class=\"student-row-main\" data-open=\"" + st.id + "\">" +
-          "<div class=\"avatar\">" + escapeHtml(st.initials) + "</div>" +
-          "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + (isStudioOnly(st) ? "Só estúdio" : escapeHtml(st.goal)) + "</div>" +
-          (badges ? "<div class=\"sr-badges\">" + badges + "</div>" : "") + "</div>" +
-        "</div>" +
-        "<label class=\"switch\" title=\"" + (isStudentActive(st) ? "Ativo" : "Inativo") + "\">" +
-          "<input type=\"checkbox\" data-active-toggle=\"" + st.id + "\"" + (isStudentActive(st) ? " checked" : "") + ">" +
-          "<span class=\"switch-track\"><span class=\"switch-thumb\"></span></span>" +
-        "</label>" +
-      "</div>";
     });
-    if (!rows.length) html += "<p class=\"muted-p\">Nenhum aluno para mostrar.</p>";
-    html += "</div>";
+    var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
+    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>" +
+      "<div class=\"student-tools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stuSearch\" placeholder=\"Procurar aluno…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno\" value=\"" + escapeHtml(state.dashSearch || "") + "\"></label>" +
+      "<select id=\"stuSort\" class=\"mini-select\" aria-label=\"Ordenar alunos\">" + [["atencao", "Por atenção"], ["az", "Nome A → Z"], ["za", "Nome Z → A"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + ((state.dashSort || "atencao") === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>";
+    html += "<div class=\"student-list\" id=\"studentListBox\">" + studentListRowsHtml(allRows) + "</div>";
   }
 
   main.innerHTML = html;
-  main.querySelectorAll("[data-open]").forEach(function(el){
-    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
-  });
+  var listBox = main.querySelector("#studentListBox");
+  if (listBox){
+    wireStudentList(listBox);
+    var redrawList = function(){ listBox.innerHTML = studentListRowsHtml(dashAllRows); wireStudentList(listBox); };
+    var searchEl = main.querySelector("#stuSearch"), sortEl = main.querySelector("#stuSort");
+    if (searchEl) searchEl.addEventListener("input", function(){ state.dashSearch = searchEl.value; redrawList(); });
+    if (sortEl) sortEl.addEventListener("change", function(){ state.dashSort = sortEl.value; redrawList(); });
+  }
   main.querySelectorAll("[data-contact]").forEach(function(btn){
     btn.addEventListener("click", function(){
       var st = findStudent(btn.getAttribute("data-contact"));
@@ -10888,17 +10926,6 @@ function renderProDashboardMain(){
   });
   main.querySelectorAll("[data-open-student]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
-  });
-  main.querySelectorAll("[data-active-toggle]").forEach(function(input){
-    input.addEventListener("click", function(e){ e.stopPropagation(); });
-    input.addEventListener("change", function(){
-      var s = findStudent(input.getAttribute("data-active-toggle"));
-      if (!s) return;
-      ensureSyncBaseline(s); // antes de alterar: só se grava a coluna "active"
-      s.active = input.checked;
-      persistStudent(s);
-      renderProDashboardMain();
-    });
   });
   main.querySelectorAll("[data-stat-key]").forEach(function(btn){
     btn.addEventListener("click", function(){
