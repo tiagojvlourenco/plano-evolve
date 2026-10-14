@@ -61,6 +61,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   var saved = await page.evaluate(function(){ return window.__fake.tables.studio_settings[0]; });
   check.check("3. O ID fica guardado nas definições do estúdio (e nenhum token)", saved && saved.key === "google_calendar" && saved.value.clientId === "123456-abc.apps.googleusercontent.com" && JSON.stringify(saved).indexOf("fake-token") < 0);
 
+  await page.fill("#gcPrefix", ""); // estes testes usam eventos de todos os tipos; o filtro por prefixo tem o seu teste
   await page.click("#gcSync");
   await page.waitForFunction(function(){ return window.__fake.tables.sessions.length >= 3; });
   var tok = requests[0];

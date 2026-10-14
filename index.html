@@ -13089,6 +13089,7 @@ function wireCalendarCard(main, redraw){
   if (sync) sync.addEventListener("click", function(){
     var cal = card.querySelector("#gcCal").value.trim() || "primary";
     if (cal !== calSettings.calendarId){ calSettings.calendarId = cal; }
+    var pre = card.querySelector("#gcPrefix"); if (pre) calSettings.titlePrefix = pre.value.trim().slice(0, 30);
     sync.disabled = true; out("A pedir autorização ao Google e a ler a agenda…");
     runCalendarSync().then(function(sum){ showToast("✓ Agenda sincronizada"); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
   });
@@ -13269,11 +13270,11 @@ var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 var CAL_LOCAL_KEY = "evolve_gcal_v1";
 var CAL_DEFAULT_BACK_DAYS = 120, CAL_MAX_BACK_DAYS = 400;
 var CAL_FALTA_COLOR = "11";
-var calSettings = {clientId: "", calendarId: "primary", useAsSource: false, aliases: {}, ignored: {}, lastSync: null, loaded: false, available: true};
+var calSettings = {clientId: "", calendarId: "primary", useAsSource: false, titlePrefix: "PT", aliases: {}, ignored: {}, lastSync: null, loaded: false, available: true};
 
 function calLoadSettings(){
   var done = function(v){
-    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.ignored = v.ignored && typeof v.ignored === "object" ? v.ignored : {}; calSettings.lastSync = v.lastSync || null; }
+    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.titlePrefix = typeof v.titlePrefix === "string" ? v.titlePrefix.trim().slice(0, 30) : "PT"; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.ignored = v.ignored && typeof v.ignored === "object" ? v.ignored : {}; calSettings.lastSync = v.lastSync || null; }
     calSettings.loaded = true; return true;
   };
   if (!sbReady){ try { return Promise.resolve(done(JSON.parse(localStorage.getItem(CAL_LOCAL_KEY) || "null"))); } catch (e) { return Promise.resolve(done(null)); } }
@@ -13283,12 +13284,19 @@ function calLoadSettings(){
     return done(res && res.data ? res.data.value : null);
   }, function(){ calSettings.available = false; calSettings.loaded = true; return false; });
 }
-function calSettingsValue(){ return {clientId: calSettings.clientId, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, aliases: calSettings.aliases, ignored: calSettings.ignored, lastSync: calSettings.lastSync}; }
+function calSettingsValue(){ return {clientId: calSettings.clientId, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, titlePrefix: calSettings.titlePrefix, aliases: calSettings.aliases, ignored: calSettings.ignored, lastSync: calSettings.lastSync}; }
 function calSaveSettings(){
   if (!sbReady){ try { localStorage.setItem(CAL_LOCAL_KEY, JSON.stringify(calSettingsValue())); } catch (e) {} return Promise.resolve({}); }
   return Promise.resolve(sb.from("studio_settings").upsert({key: "google_calendar", value: calSettingsValue(), updated_at: new Date().toISOString()}).then(function(r){ return r; })).then(function(res){
     return res && res.error ? {error: "Não foi possível guardar as definições (a migração 0025 já foi corrida?)."} : {};
   }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+// só contam os eventos cujo título começa pelo prefixo ("PT 60 - Nome", "PT Duo…"); prefixo vazio = todos
+function calTitleHasPrefix(title, prefix){
+  var p = calTitleKey(prefix || "");
+  if (!p) return true;
+  var t = calTitleKey(title);
+  return t.indexOf(p) === 0 && (t.length === p.length || !/[a-z0-9]/.test(t.charAt(p.length)));
 }
 function calIsIgnored(ignored, title){ return !!(ignored && Object.prototype.hasOwnProperty.call(ignored, calTitleKey(title)) && ignored[calTitleKey(title)] === true); }
 function calUsesCalendar(){ return !!(calSettings.useAsSource && calSettings.clientId); }
@@ -13346,13 +13354,14 @@ function calendarWindow(today){
 }
 // o que há a fazer para as sessões ficarem iguais ao calendário: {insert[], update[], remove[], unmatched{titulo: n}, matched}
 function planCalendarSync(opts){
-  var today = opts.today, win = opts.window, aliases = opts.aliases || {}, ignored = opts.ignored || {};
+  var today = opts.today, win = opts.window, aliases = opts.aliases || {}, ignored = opts.ignored || {}, prefix = opts.prefix || "";
   var plan = {insert: [], update: [], remove: [], unmatched: Object.create(null), matched: 0};
   var present = Object.create(null);
   var byExt = Object.create(null);
   studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
   opts.events.forEach(function(ev){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
+    if (!calTitleHasPrefix(ev.title, prefix)) return; // não é uma aula (ex.: reuniões, feriados): nem conta nem aparece na lista
     var st = matchEventStudent(ev.title, aliases);
     if (!st){ if (!calIsIgnored(ignored, ev.title)) plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1; return; }
     present[ev.id] = true; // o evento existe: nunca remover as sessões já registadas (mesmo de alunos arquivados)
@@ -13468,7 +13477,7 @@ var calLastRun = null; // eventos da última leitura (só em memória): permite 
 function calApplyEvents(events, win){
   var today = localTodayISO();
   calLastRun = {events: events, window: win};
-  var plan = planCalendarSync({events: events, today: today, window: win, aliases: calSettings.aliases, ignored: calSettings.ignored});
+  var plan = planCalendarSync({events: events, today: today, window: win, aliases: calSettings.aliases, ignored: calSettings.ignored, prefix: calSettings.titlePrefix});
   var warnings = studio.packs.filter(function(p){ return Number(p.used_before) > 0 && packUsage(p, today).active; }).map(function(p){ return nameOf(p.student_id); });
   return applyCalendarPlan(plan).then(function(r){
     var titles = Object.keys(plan.unmatched).sort(function(a, b){ return plan.unmatched[b] - plan.unmatched[a]; });
@@ -13587,6 +13596,7 @@ function calendarCardHtml(){
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcToggle\">" + (cs.useAsSource ? "Voltar ao horário semanal" : "Usar como fonte das sessões") + "</button>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcOff\">Desligar</button></div>" +
     "<div class=\"checkin-field\" style=\"max-width:320px;\"><label for=\"gcCal\">Agenda (por omissão a principal)</label><input type=\"text\" id=\"gcCal\" value=\"" + escapeHtml(cs.calendarId) + "\" autocomplete=\"off\"></div>" +
+    "<div class=\"checkin-field\" style=\"max-width:320px; margin-top:8px;\"><label for=\"gcPrefix\">Só eventos que começam por (vazio = todos)</label><input type=\"text\" id=\"gcPrefix\" maxlength=\"30\" value=\"" + escapeHtml(cs.titlePrefix) + "\" placeholder=\"PT\" autocomplete=\"off\"></div>" +
     "<p class=\"muted-p\" id=\"gcOut\" style=\"margin-top:8px;\">" + (ls ? calendarSummaryText(ls) : "Ainda não sincronizaste. A primeira vez pede autorização ao Google.") + "</p>";
   if (ls && ls.unmatched && ls.unmatched.length){
     var cands = calStudentCandidates(ls.unmatched);
