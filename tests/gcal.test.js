@@ -107,5 +107,23 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   check.check("38. Com o calendário como fonte a ficha esconde o horário semanal e explica que se conta pelo nome", !/Horário semanal/.test(tabOn) && !/id="slAdd"/.test(tabOn) && /Isabel Carvalho/.test(tabOn) && /1 já contadas/.test(tabOn));
   calSettings.useAsSource = false;
   check.check("39. Sem o calendário como fonte o horário semanal continua disponível", /id="slAdd"/.test(tplProSessoes(STUDENTS[0])));
+  // ---- criar alunos a partir da agenda ----
+  var cands = calStudentCandidates([{title: "PT 60 - Beatriz Lopes", n: 3}, {title: "PT Duo 60 - Mãe + Pai", n: 2}, {title: "Beatriz Lopes", n: 1}, {title: "Dentista", n: 4}, {title: "PT 60", n: 2}, {title: "PT 60 - Rui Costa (online)", n: 1}, {title: "Reunião com a Ana", n: 1}]);
+  var cn = {}; cands.forEach(function(c){ cn[c.name] = c; });
+  check.check("40. O nome é a parte depois do último ' - ', sem parênteses; o mesmo nome em títulos diferentes junta-se", cn["Beatriz Lopes"] && cn["Beatriz Lopes"].n === 4 && cn["Beatriz Lopes"].titles.length === 2 && cn["Rui Costa"] && cn["Mãe + Pai"]);
+  check.check("41. Parecem alunos: nomes; não parecem: compromissos e títulos com números", cn["Beatriz Lopes"].likely && cn["Mãe + Pai"].likely && cn["Rui Costa"].likely && !cn["Dentista"].likely && !cn["PT 60"].likely && !cn["Reunião com a Ana"].likely);
+  check.check("42. Os que parecem alunos vêm primeiro", cands.slice(0, 3).every(function(c){ return c.likely; }));
+  var nst = calNewStudent("Beatriz Lopes");
+  check.check("43. Um aluno criado da agenda é só de estúdio, sem email e sem registos inventados", nst.studioOnly === true && nst.inviteEmail === null && nst.weights.length === 0 && nst.checkins.length === 0 && nst.name === "Beatriz Lopes" && nst.id === "beatriz-lopes");
+  var nst2 = (function(){ STUDENTS.push(nst); var n2 = calNewStudent("Beatriz Lopes"); STUDENTS.pop(); return n2; })();
+  check.check("44. O identificador não repete o de um aluno que já existe", nst2.id === "beatriz-lopes-2");
+  var mk = function(extra){ return Object.assign({id: "z9", name: "Zé", active: true, checkins: [], weights: [], workoutLogs: [], targets: {kcal: 2000, protein: 100, carbs: 200, fat: 60}, createdAt: new Date(Date.now() - 20 * 86400000).toISOString()}, extra || {}); };
+  check.check("45. 'Só estúdio' só vale sem email e sem conta", isStudioOnly(mk({studioOnly: true})) && !isStudioOnly(mk({studioOnly: true, inviteEmail: "a@b.pt"})) && !isStudioOnly(mk({studioOnly: true, authUserId: "u1"})) && !isStudioOnly(mk()));
+  var plain = contactReasonsFor(mk(), today).map(function(r){ return r.key; }), only = contactReasonsFor(mk({studioOnly: true}), today).map(function(r){ return r.key; });
+  check.check("46. Um aluno normal sem registos entra na lista de contactos; um só de estúdio não", (plain.indexOf("sem-registos") >= 0 || plain.indexOf("onboarding") >= 0) && only.indexOf("sem-registos") < 0 && only.indexOf("onboarding") < 0);
+  check.check("47. O pulso do estúdio só conta quem usa a app", studioPulse([mk(), mk({id: "z8", studioOnly: true})], today).active === 1);
+  check.check("48. A coluna studio_only vai na gravação e volta a ler-se", studentToRow(mk({studioOnly: true})).studio_only === true && rowToStudent(Object.assign(studentToRow(mk({studioOnly: true})), {id: "z9"})).studioOnly === true);
+  var mig26 = fs.readFileSync(__dirname + "/../supabase/migrations/0026_studio_only_students.sql", "utf8");
+  check.check("49. A migração 0026 só acrescenta a coluna (repetível, sem apagar nada)", /add column if not exists studio_only boolean not null default false/.test(mig26) && !/drop |delete from|truncate/i.test(mig26));
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

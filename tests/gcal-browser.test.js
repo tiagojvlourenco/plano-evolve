@@ -70,7 +70,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   check.check("5. Os eventos dos alunos viram sessões (títulos 'PT 60 - Nome'), só até hoje", ss.length === 3 && byExt["e1_20261001"] && byExt["e1_20261008"] && byExt["e2"] && !byExt["e5"] && ss.every(function(x){ return x.src === "calendario"; }));
   check.check("6. A cor Tomate (11) conta como falta; as outras como feita", byExt["e2"].st === "faltou" && byExt["e1_20261001"].st === "feita");
   check.check("7. Cada sessão é descontada ao pacote do aluno e guarda a hora", byExt["e1_20261001"].pk === "pk-a" && byExt["e2"].pk === "pk-b" && byExt["e1_20261001"].t === "10:00");
-  var txt = await page.locator("#gcalCard").innerText();
+  var txt = await page.locator("#gcalCard").evaluate(function(el){ return el.textContent; });
   check.check("8. O resumo conta eventos lidos e novas sessões, e lista os eventos sem aluno", /6 eventos lidos/.test(txt) && /3 novas/.test(txt) && /Dentista/.test(txt) && /Mãe \+ Pai/.test(txt));
   var sumTxt = await page.locator("#studioSummary").innerText();
   check.check("9. O Resumo de treinos usa estas sessões (Ana: 2 feitas, faltam 8)", /Ana Teste[\s\S]*?2\/10 feitas/.test(sumTxt));
@@ -85,6 +85,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   check.check("11. Um evento que mudou de dia/hora atualiza a sessão e um evento apagado remove-a", ss2.length === 2 && ss2.filter(function(x){ return x.ext === "e1_20261008"; })[0].t === "11:30" && !ss2.some(function(x){ return x.ext === "e2"; }));
 
   // associar um título à mão
+  await page.evaluate(function(){ document.querySelectorAll('#gcalCard details').forEach(function(d){ d.open = true; }); });
   await page.selectOption('[data-gc-alias="0"]', {index: 0}).catch(function(){});
   var opts = await page.locator('[data-gc-alias] option').allTextContents();
   check.check("12. Os eventos sem aluno podem ser associados a um aluno (lista de alunos no seletor)", opts.some(function(o){ return /Rui Teste/.test(o); }));
