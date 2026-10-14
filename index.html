@@ -12807,7 +12807,8 @@ var SESSION_STATUS = {
   feita: {label: "Feita", short: "✓ Feita"},
   faltou: {label: "Faltou", short: "✗ Faltou"},
   cancelada: {label: "Cancelou a tempo", short: "⊘ Cancelou"},
-  cancelada_tarde: {label: "Cancelou tarde", short: "⊘ Tarde"}
+  cancelada_tarde: {label: "Cancelou tarde", short: "⊘ Tarde"},
+  agendada: {label: "Agendada", short: "◷ Agendada"}   // prevista (da folha); não gasta aulas do pacote
 };
 var PAYMENT_METHODS = {mbway: "MB WAY", transferencia: "Transferência", multibanco: "Multibanco", numerario: "Numerário", outro: "Outro"};
 var studio = {packs: [], sessions: [], payments: [], slots: [], loaded: false, available: true, slotsAvailable: false};
@@ -13225,7 +13226,7 @@ function attachExtrasToPack(pack){
 // ---- importar os pacotes que já estão a decorrer (uma linha por aluno: Nome; aulas; início; valor; aulas já dadas) ----
 function parseImportDate(t){
   t = String(t || "").trim();
-  var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t) || (function(){ var q = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(t); return q ? [null, q[3], q[2], q[1]] : null; })();
+  var m = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/.exec(t) || (function(){ var q = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(t); return q ? [null, q[3], q[2], q[1]] : null; })();
   if (!m) return null;
   var y = +m[1], mo = +m[2], d = +m[3], iso = y + "-" + pad2(mo) + "-" + pad2(d);
   var dt = new Date(iso + "T00:00:00Z");
@@ -13274,6 +13275,52 @@ function studioImportPacks(text){
       return studioInsert("packs", row).then(function(x){ if (x.error) report.errors.push(st.name + ": " + x.error); else report.created++; });
     });
   });
+  return chain.then(function(){ return report; });
+}
+
+// ---- importar as datas previstas da folha de cálculo (uma linha por aluno: Nome; data; data; data…) como sessões "agendadas" ----
+function parseScheduleImport(text){
+  var rows = [], errors = [];
+  String(text || "").split(/\r?\n/).forEach(function(line, i){
+    if (!line.trim()) return;
+    var cut = line.search(/[;\t]/);
+    if (cut < 0){ errors.push("Linha " + (i + 1) + ": falta o nome ou as datas (Nome; 31/12/2026; 07/01/2027; …)."); return; }
+    var name = line.slice(0, cut).trim(), parts = line.slice(cut + 1).split(/[;\t,\s]+/).map(function(t){ return t.trim(); }).filter(Boolean);
+    if (!name){ errors.push("Linha " + (i + 1) + ": falta o nome."); return; }
+    var dates = [], bad = 0;
+    parts.forEach(function(t){ var d = parseImportDate(t); if (d) dates.push(d); else bad++; });
+    if (!dates.length){ errors.push("Linha " + (i + 1) + " (" + name + "): nenhuma data válida."); return; }
+    if (bad) errors.push("Linha " + (i + 1) + " (" + name + "): " + bad + (bad === 1 ? " valor ignorado" : " valores ignorados") + " (não são datas).");
+    rows.push({name: name, dates: dates});
+  });
+  return {rows: rows, errors: errors};
+}
+// cria as sessões agendadas que ainda não existem (conta as que já há em cada dia: importar duas vezes não duplica nem repete as que o Google Agenda já converteu)
+function studioImportSchedule(text){
+  var parsed = parseScheduleImport(text), report = {created: 0, skipped: 0, errors: parsed.errors.slice(), students: 0};
+  var toInsert = [];
+  parsed.rows.forEach(function(r){
+    var st = matchStudentByName(r.name);
+    if (!st){ report.errors.push(r.name + ": não encontrei um aluno com este nome."); return; }
+    report.students++;
+    var want = {}; r.dates.forEach(function(d){ want[d] = (want[d] || 0) + 1; });
+    Object.keys(want).forEach(function(d){
+      var have = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === d; }).length;
+      var need = Math.max(0, want[d] - have);
+      report.skipped += want[d] - need;
+      for (var k = 0; k < need; k++) toInsert.push({student_id: st.id, pack_id: null, date: d, status: "agendada", source: "folha"});
+    });
+  });
+  toInsert.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var chain = Promise.resolve(), size = 200;
+  for (var i = 0; i < toInsert.length; i += size) (function(chunk){
+    chain = chain.then(function(){
+      return studioInsertMany("sessions", chunk).then(function(res){
+        if (res.error) report.errors.push("Não foi possível guardar " + chunk.length + " sessões" + (res.code === "23514" ? " (falta correr a migração 0027 no Supabase)." : "."));
+        else report.created += res.data.length;
+      });
+    });
+  })(toInsert.slice(i, i + size));
   return chain.then(function(){ return report; });
 }
 
@@ -13374,6 +13421,7 @@ function planCalendarSync(opts){
   var plan = {insert: [], update: [], remove: [], unmatched: Object.create(null), matched: 0};
   var present = Object.create(null);
   var byExt = Object.create(null);
+  var claimed = Object.create(null); // sessões agendadas (da folha) que um evento já reivindicou
   studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
   opts.events.forEach(function(ev){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
@@ -13393,8 +13441,17 @@ function planCalendarSync(opts){
       if (Object.keys(patch).length) plan.update.push({id: ex.id, patch: patch});
       return;
     }
-    // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes
-    var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && (!x.time || !ev.time || x.time === ev.time); });
+    // uma sessão agendada (da folha) nesse dia passa a feita/faltou em vez de se criar outra
+    var planned = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === ev.date && x.status === "agendada" && x.source === "folha" && !claimed[x.id]; })[0];
+    if (planned){
+      claimed[planned.id] = true;
+      var pp = {status: status, source: "calendario", external_id: ev.id};
+      if (ev.time) pp.time = ev.time;
+      plan.update.push({id: planned.id, patch: pp});
+      return;
+    }
+    // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes (as agendadas não contam: são só previsões)
+    var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && x.status !== "agendada" && (!x.time || !ev.time || x.time === ev.time); });
     if (dup) return;
     plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: ev.id});
   });
@@ -13459,7 +13516,7 @@ function applyCalendarPlan(plan){
     chain = chain.then(function(){
       var cur = studio.sessions.filter(function(x){ return x.id === u.id; })[0], oldPack;
       var patch = Object.assign({}, u.patch);
-      if (cur && (patch.student_id || patch.date)){
+      if (cur && (patch.student_id || patch.date || patch.source === "calendario")){ // (também ao converter uma sessão agendada: passa a gastar uma aula)
         oldPack = cur.pack_id; cur.pack_id = null;
         var pk = pickPackForSession(patch.student_id || cur.student_id, patch.date || cur.date);
         patch.pack_id = pk ? pk.id : null;
@@ -13670,9 +13727,11 @@ function studioSeedDemo(){
 function studioUnavailableHtml(){
   return "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes e cobranças</div><p class=\"muted-p\">Ainda não é possível usar esta área: falta correr a migração <strong>0023</strong> no SQL Editor do Supabase (ficheiro <code>supabase/migrations/0023_studio_packs.sql</code>) e depois recarregar a app.</p></div>";
 }
-function sessionStatusPill(status){
-  var tone = {feita: "good", faltou: "critical", cancelada: "", cancelada_tarde: "warn"}[status] || "";
-  return "<span class=\"pill " + tone + "\">" + escapeHtml((SESSION_STATUS[status] || {}).label || status) + "</span>";
+function sessionStatusPill(status, date){
+  var tone = {feita: "good", faltou: "critical", cancelada: "", cancelada_tarde: "warn", agendada: ""}[status] || "";
+  var label = (SESSION_STATUS[status] || {}).label || status;
+  if (status === "agendada" && isIsoDate(date) && date < localTodayISO()){ tone = "warn"; label = "Agendada · por confirmar"; } // a data já passou e não há evento na agenda
+  return "<span class=\"pill " + tone + "\">" + escapeHtml(label) + "</span>";
 }
 function packBarHtml(pack, u){
   return "<div class=\"history-row\" style=\"align-items:flex-start;\"><div style=\"min-width:0;flex:1;\">" +
@@ -13739,13 +13798,22 @@ function tplProSessoes(s){
     "<div class=\"f\" style=\"grid-column:1/-1;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"seAdd\" style=\"width:100%;\">Registar</button></div></div>" +
     "<p class=\"muted-p\" style=\"margin-top:6px;\">É descontada ao pacote que caduca primeiro e ainda tem sessões. Se não houver pacote, a sessão fica registada sem pacote.</p>";
 
-  var sess = sessionsOfStudent(s.id).slice(0, 12);
-  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Sessões recentes" + (sum.absences ? " · " + plural(sum.absences, "falta", "faltas") + " nos últimos " + ABSENCE_WINDOW_DAYS + " dias" : "") + "</div>";
-  html += sess.length ? sess.map(function(x){
+  var allSess = sessionsOfStudent(s.id);
+  var upcoming = allSess.filter(function(x){ return x.status === "agendada" && x.date >= today; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var sessRow = function(x){
     var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
-    return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) : "sem pacote") + "</div></div>" +
-      "<span>" + sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
-  }).join("") : "<p class=\"muted-p\">Sem sessões registadas.</p>";
+    return "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 130px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) : "sem pacote") + "</div></div>" +
+      "<span style=\"display:flex; gap:6px; align-items:center; flex-wrap:wrap;\">" + sessionStatusPill(x.status, x.date) +
+      "<select class=\"mini-select\" data-sess-set=\"" + escapeHtml(x.id) + "\" aria-label=\"Alterar estado da sessão\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).filter(function(k){ return k !== x.status; }).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select>" +
+      " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
+  };
+  if (upcoming.length){
+    html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Próximas sessões agendadas · " + upcoming.length + "</div>" + upcoming.slice(0, 10).map(sessRow).join("") +
+      (upcoming.length > 10 ? "<p class=\"muted-p\" style=\"margin-top:6px;\">+ " + (upcoming.length - 10) + " mais, até " + escapeHtml(fmtDateFullPt(upcoming[upcoming.length - 1].date)) + ".</p>" : "");
+  }
+  var sess = allSess.filter(function(x){ return !(x.status === "agendada" && x.date >= today); }).slice(0, 12);
+  html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Sessões recentes" + (sum.absences ? " · " + plural(sum.absences, "falta", "faltas") + " nos últimos " + ABSENCE_WINDOW_DAYS + " dias" : "") + "</div>";
+  html += sess.length ? sess.map(sessRow).join("") : "<p class=\"muted-p\">Sem sessões registadas.</p>";
 
   var pays = paymentsOfStudent(s.id);
   html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Cobranças</div>" + (pays.length ? pays.slice(0, 10).map(function(p){ return paymentRowHtml(p, today, false); }).join("") : "<p class=\"muted-p\">Sem cobranças.</p>") +
@@ -13811,8 +13879,26 @@ function studioAddSession(studentId, date, status, time){
   return studioInsert("sessions", row);
 }
 
+// muda o estado de uma sessão (confirmar uma agendada, marcar falta...); passa a "manual" para a sincronização não lhe mexer
+function studioSetSessionStatus(ses, status){
+  if (!ses || !SESSION_STATUS[status]) return Promise.resolve({error: "Escolhe o estado."});
+  var patch = {status: status};
+  if (ses.source === "calendario" || ses.source === "folha") patch.source = "manual";
+  if (!ses.pack_id && status !== "agendada"){
+    var probe = Object.assign({}, ses, {pack_id: null, status: status});
+    var pk = pickPackForSession(ses.student_id, ses.date);
+    if (pk && sessionConsumes(pk, probe)) patch.pack_id = pk.id;
+  }
+  return studioUpdate("sessions", ses.id, patch);
+}
 function wireProSessoes(s, el){
   function fail(id, msg){ var e = el.querySelector(id); if (e){ e.textContent = msg; e.style.display = "block"; } }
+  el.querySelectorAll("[data-sess-set]").forEach(function(sel){ sel.addEventListener("change", function(){
+    var ses = studio.sessions.filter(function(x){ return x.id === sel.getAttribute("data-sess-set"); })[0];
+    if (!ses || !sel.value) return;
+    sel.disabled = true;
+    studioSetSessionStatus(ses, sel.value).then(function(r){ if (r.error) showToast("⚠ " + r.error); renderProTabContent(s); updateStudioBadge(); });
+  }); });
   var stuRemove = el.querySelector("#stuRemove");
   if (stuRemove) stuRemove.addEventListener("click", function(){
     if (!window.confirm(["Apagar ", s.name, " e tudo o que está ligado (pacotes, sessões, cobranças)? Não dá para desfazer."].join(""))) return;
@@ -13955,7 +14041,7 @@ function renderProStudioMain(){
     html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (u ? "restam " + u.remaining + " de " + u.total : "") + "</div></div><span style=\"display:flex; gap:6px; flex-wrap:wrap;\">" +
       (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
-        : Object.keys(SESSION_STATUS).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
+        : Object.keys(SESSION_STATUS).filter(function(key){ return key !== "agendada"; }).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
   });
   html += "</div>";
 
@@ -13973,6 +14059,11 @@ function renderProStudioMain(){
     "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9\"></textarea>" +
     "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
+  html += "<details class=\"perfil-section\" id=\"studioImportSched\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as datas previstas (agendadas)</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com as datas da folha «Treinos»: <strong>Nome; 20/07/2026; 21/07/2026; …</strong> (datas como 31/12/2026 ou 2026/12/31). Ficam como «agendada» na ficha do aluno, não gastam aulas do pacote, e quando o Google Agenda trouxer essa aula passam a «feita» ou «faltou». Importar duas vezes não duplica.</p>" +
+    "<textarea id=\"schText\" rows=\"5\" placeholder=\"Ana Silva; 20/07/2026; 21/07/2026; 23/07/2026\"></textarea>" +
+    "<p class=\"muted-p\" id=\"schOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"schGo\" style=\"margin-top:8px;\">Importar datas</button></details>";
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"stMonth\">Mês</label><input type=\"month\" id=\"stMonth\" value=\"" + studioView.month + "\"></div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido no mês: " + escapeHtml(eur(k.received)) + " (" + k.receivedN + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
@@ -13990,6 +14081,15 @@ function renderProStudioMain(){
     done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
   }); });
   wireCalendarCard(main, redraw);
+  var schGo = main.querySelector("#schGo");
+  if (schGo) schGo.addEventListener("click", function(){
+    var out = main.querySelector("#schOut"); schGo.disabled = true; out.textContent = "A importar…";
+    studioImportSchedule(main.querySelector("#schText").value).then(function(rep){
+      var msg = "✓ " + rep.created + (rep.created === 1 ? " sessão agendada criada" : " sessões agendadas criadas") + " (" + rep.students + (rep.students === 1 ? " aluno" : " alunos") + ")" + (rep.skipped ? " · " + rep.skipped + " já existiam" : "");
+      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
+      out.textContent = msg; schGo.disabled = false; updateStudioBadge();
+    });
+  });
   var impGo = main.querySelector("#impGo");
   if (impGo) impGo.addEventListener("click", function(){
     var out = main.querySelector("#impOut"); impGo.disabled = true; out.textContent = "A importar…";

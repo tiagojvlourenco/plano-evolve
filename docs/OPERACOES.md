@@ -135,6 +135,14 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - Se um nome da agenda é igual ao de um aluno que já existe (mesmo arquivado), não se cria outro: o título passa a alias desse aluno e a app avisa. Um aluno arquivado nunca perde as aulas já contadas.
 - Os pacotes não vêm da agenda: depois de criar os alunos usa "Importar pacotes que já estão a decorrer" (nome; aulas; início; valor; já dadas) para os criar de uma vez.
 
+## 8g. Migração 0027: sessões «agendadas» (as datas previstas da folha)
+
+- [ ] Correr `supabase/migrations/0027_sessions_agendadas.sql` (depois da 0026; é repetível). `sessions.status` passa a aceitar `agendada` e `sessions.source` aceita `folha`.
+- **Estúdio → Importar as datas previstas (agendadas)**: cola uma linha por aluno com as datas da folha «Treinos» (`Nome; 20/07/2026; 21/07/2026; …`; aceita 31/12/2026 e 2026/12/31). Ficam como «Agendada» na ficha do aluno (Resumo → Pacotes → «Próximas sessões agendadas»), **não gastam aulas do pacote**. As de datas já passadas e sem evento no Google Agenda aparecem como «Agendada · por confirmar».
+- Ao **sincronizar o Google Agenda**, o evento desse dia converte a sessão agendada em «Feita» (ou «Faltou», cor Tomate) e passa a gastar uma aula do pacote certo, em vez de criar outra. A sincronização nunca apaga as sessões da folha. Podes também mudar o estado à mão («Alterar…» na linha da sessão), e a sessão passa a manual.
+- Importar duas vezes não duplica: conta as sessões que já existem em cada dia (incluindo as que o Google Agenda já converteu).
+- Validade dos pacotes importados (sexta coluna de «Importar pacotes que já estão a decorrer»): trimestral/semestral/anual = duração + 3 meses de margem; mensal = 3 meses; exceções à parte.
+
 **Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
 
 ## 9. Riscos e limitações que ficam por resolver nesta fase
