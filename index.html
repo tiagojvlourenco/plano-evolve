@@ -7058,7 +7058,7 @@ function openPhaseReviewModal(items, i, onDone){
     if (hasChange){
       var r = applyPhaseReview(s, rv);
       if (r.error){ showToast("⚠ " + r.error); return; }
-      showToast("✓ Plano de " + s.name + " atualizado: " + r.from + " → " + r.to + " kcal/dia");
+      showToast(["✓ Plano de ", s.name, " atualizado: ", r.from, " → ", r.to, " kcal/dia"].join(""));
     } else postponePhaseReview(s, 7);
     next();
   });
@@ -15552,8 +15552,26 @@ function updateSkinfoldPreview(s, el){
   out.textContent = txt;
 }
 
+// botões da ficha de Nutrição que não são do plano em si: fase de peso, creatina e PDF
+function wireProPlanExtras(s, el){
+  el.querySelectorAll("#phaseStart").forEach(function(b){ b.addEventListener("click", function(){ openPhaseSetupModal(s, function(){ renderProTabContent(s); }); }); });
+  var phNow = el.querySelector("#phaseReviewNow");
+  if (phNow) phNow.addEventListener("click", function(){
+    var rv = computePhaseReview(s, localTodayISO(), {force: true});
+    if (!rv){ showToast("Sem fase definida."); return; }
+    if (!phaseNeedsAttention(rv)){ showToast(rv.text || "Nada a rever por agora."); return; }
+    openPhaseReviewModal([{student: s, review: rv}], 0, function(){ renderProTabContent(s); });
+  });
+  var proPdf = el.querySelector("#proExportPdf");
+  if (proPdf) proPdf.addEventListener("click", function(){ exportPlanPdf(s); });
+  var crToggle = el.querySelector("#creatineToggle");
+  if (crToggle) crToggle.addEventListener("click", function(){ setCreatineEnabled(s, crToggle.getAttribute("data-on") === "1"); renderProTabContent(s); });
+  var crConfirm = el.querySelector("#creatineConfirm");
+  if (crConfirm) crConfirm.addEventListener("click", function(){ confirmCreatine(s); renderProTabContent(s); });
+}
 function wireProTab(s){
   var el = document.getElementById("proTabContent");
+  wireProPlanExtras(s, el);
 
   el.querySelectorAll("[data-goto-tab]").forEach(function(row){
     row.addEventListener("click", function(){
@@ -15642,20 +15660,6 @@ function wireProTab(s){
   });
   });
 
-  el.querySelectorAll("#phaseStart").forEach(function(b){ b.addEventListener("click", function(){ openPhaseSetupModal(s, function(){ renderProTabContent(s); }); }); });
-  var phNow = el.querySelector("#phaseReviewNow");
-  if (phNow) phNow.addEventListener("click", function(){
-    var rv = computePhaseReview(s, localTodayISO(), {force: true});
-    if (!rv){ showToast("Sem fase definida."); return; }
-    if (!phaseNeedsAttention(rv)){ showToast(rv.text || "Nada a rever por agora."); return; }
-    openPhaseReviewModal([{student: s, review: rv}], 0, function(){ renderProTabContent(s); });
-  });
-  var proPdf = el.querySelector("#proExportPdf");
-  if (proPdf) proPdf.addEventListener("click", function(){ exportPlanPdf(s); });
-  var crToggle = el.querySelector("#creatineToggle");
-  if (crToggle) crToggle.addEventListener("click", function(){ setCreatineEnabled(s, crToggle.getAttribute("data-on") === "1"); renderProTabContent(s); });
-  var crConfirm = el.querySelector("#creatineConfirm");
-  if (crConfirm) crConfirm.addEventListener("click", function(){ confirmCreatine(s); renderProTabContent(s); });
   var saveT = el.querySelector("#saveTargets");
   if (saveT) {
     renderTargetWarning(el, s);
