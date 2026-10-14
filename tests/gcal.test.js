@@ -141,5 +141,12 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   check.check("55. Um arquivado e um ativo com o mesmo nome: o ativo é o aluno (não é ambíguo)", m("PT 60 - Rui") === "r2" && m("Rui") === "r2");
   var so = {id: "q1", name: "Q", active: true, studioOnly: true, checkins: [], weights: [], targets: {kcal: 0, protein: 0, carbs: 0, fat: 0}, meals: []};
   check.check("56. O painel de alunos não dá alertas nem 'check-in em atraso' a um aluno só de estúdio", computeDashboardAlerts(so).length === 0 && dashLateDays(so) === 0 && dashLateDays(Object.assign({}, so, {studioOnly: false})) !== 0);
+  // ---- lista mais limpa ----
+  var ca = calStudentCandidates([{title: "Casamento Ana e Rui", n: 1}, {title: "Batizado do João", n: 1}, {title: "Natal", n: 2}, {title: "Dia da Mãe", n: 1}, {title: "Marta Alves", n: 5}]);
+  var cm = {}; ca.forEach(function(c){ cm[c.name] = c; });
+  check.check("57. Casamentos, batizados, Natal e dias de... não parecem alunos", !cm["Casamento Ana e Rui"].likely && !cm["Batizado do João"].likely && !cm["Natal"].likely && !cm["Dia da Mãe"].likely && cm["Marta Alves"].likely);
+  calSettings.ignored = {}; calSettings.ignored[calTitleKey("Marta Alves")] = true;
+  check.check("58. Os nomes ignorados não voltam à lista de candidatos nem ao plano", calStudentCandidates([{title: "Marta Alves", n: 5}]).length === 0 && planCalendarSync({events: [evt("ig", "Marta Alves", 2)], today: today, window: win, aliases: {}, ignored: calSettings.ignored}).unmatched["Marta Alves"] === undefined);
+  check.check("59. Um nome ignorado chamado 'constructor' não faz tudo desaparecer", calIsIgnored({}, "constructor") === false && calIsIgnored(calSettings.ignored, "Marta Alves") === true);
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

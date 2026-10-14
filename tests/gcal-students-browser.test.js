@@ -33,8 +33,15 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
     ev("a1", "PT 60 - Ana Teste", 6, "10:00", "10"),
     ev("b1", "PT 60 - Beatriz Lopes", 5, "11:00", "10"),
     ev("b2", "PT 60 - Beatriz Lopes", 2, "11:00", "11"),
+    ev("b3", "PT 60 - Beatriz Lopes", 1, "11:00", "10"),
     ev("c1", "PT Duo 60 - Mãe + Pai", 4, "17:00", "10"),
+    ev("c2", "PT Duo 60 - Mãe + Pai", 3, "17:00", "10"),
+    ev("c3", "PT Duo 60 - Mãe + Pai", 2, "17:00", "10"),
     ev("d1", "PT 60 - Rui Costa (online)", 3, "08:00", "10"),
+    ev("d2", "PT 60 - Rui Costa (online)", 2, "08:00", "10"),
+    ev("d3", "PT 60 - Rui Costa (online)", 1, "08:00", "10"),
+    ev("y1", "Casamento Ana e Rui", 5, "16:00", "6"),
+    ev("y2", "Marta Pontual", 6, "12:00", "10"),
     ev("x1", "Dentista", 4, "09:00", "6"),
     ev("x2", "Reunião de equipa", 3, "15:00", "6"),
     ev("x3", "PT 60", 1, "12:00", "10")
@@ -61,7 +68,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   var checked = await page.locator("[data-gc-new]").evaluateAll(function(els){ return els.map(function(e){ return e.checked; }); });
   check.check("1. Os nomes que a agenda traz e ainda não são alunos aparecem para criar (nome depois do último ' - ', sem '(online)')", names.indexOf("Beatriz Lopes") >= 0 && names.indexOf("Mãe + Pai") >= 0 && names.indexOf("Rui Costa") >= 0 && names.indexOf("Ana Teste") < 0);
   var pick = {}; names.forEach(function(n, i){ pick[n] = checked[i]; });
-  check.check("2. Só vêm marcados os que parecem alunos (Dentista, Reunião e 'PT 60' ficam por marcar)", pick["Beatriz Lopes"] === true && pick["Mãe + Pai"] === true && pick["Dentista"] === false && pick["Reunião de equipa"] === false && pick["PT 60"] === false);
+  check.check("2. Só vêm marcados os nomes que parecem alunos E aparecem 3 vezes ou mais (Dentista, Reunião, 'PT 60', Casamento e quem só aparece uma vez ficam por marcar)", pick["Beatriz Lopes"] === true && pick["Mãe + Pai"] === true && pick["Rui Costa"] === true && pick["Dentista"] === false && pick["Reunião de equipa"] === false && pick["PT 60"] === false && pick["Casamento Ana e Rui"] === false && pick["Marta Pontual"] === false);
   // corrige um nome antes de criar
   var idx = names.indexOf("Rui Costa");
   await page.fill('[data-gc-name="' + idx + '"]', "Rui Costa Silva");
@@ -78,9 +85,17 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   check.check("5. Não pede autorização outra vez (usa os eventos que acabou de ler)", tokens === tokensBefore);
   var al = await page.evaluate(function(){ return window.__fake.tables.studio_settings[0].value.aliases; });
   check.check("6. Guarda os títulos como alias: nas próximas sincronizações continuam a contar para o aluno certo", Object.keys(al).length >= 3 && Object.keys(al).some(function(k){ return /rui costa/.test(k) && al[k] === made.filter(function(m){ return m.name === "Rui Costa Silva"; })[0].id; }));
+  // ignorar os que não são alunos
+  await page.waitForSelector("#gcIgnore");
+  var leftBefore = await page.locator("[data-gc-name]").count();
+  await page.click("#gcIgnore");
+  await page.waitForFunction(function(){ var s = window.__fake.tables.studio_settings[0]; return s && s.value.ignored && Object.keys(s.value.ignored).length >= 3; });
+  await page.waitForSelector("#gcalCard");
+  check.check("6b. 'Ignorar os não selecionados' limpa a lista e guarda-os como ignorados", leftBefore >= 4 && (await page.locator("[data-gc-name]").count()) === 0);
   // sincronizar outra vez não duplica nem recria alunos
   await page.click("#gcSync"); await page.waitForFunction(function(){ return /0 novas/.test(document.querySelector("#gcOut").textContent); });
   check.check("7. Sincronizar outra vez não duplica sessões nem alunos", (await page.evaluate(function(){ return window.__fake.tables.sessions.length; })) === ss.length && (await page.evaluate(function(){ return window.__fake.rows.length; })) === 4);
+  check.check("7b. Os nomes ignorados não voltam a aparecer nas sincronizações seguintes", (await page.locator("[data-gc-name]").count()) === 0);
   // painel de retenção: não os trata como alunos sem registos
   var reasons = await page.evaluate(function(){ var out = []; STUDENTS_FOR_TEST = null; return out; }).catch(function(){ return []; });
   await page.click("#navDashboard");
@@ -97,9 +112,30 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
     var body = await page.locator("#proMain").evaluate(function(el){ return el.textContent; });
     var m = body.match(/.{0,40}(NaN|undefined|\bnull\b|Infinity).{0,40}/); if (m) bad.push(tab + ": " + m[0]);
   }
+  await page.locator('.pro-sidebar [data-g="resumo"]').click();
+  var subs = await page.locator("[data-sub]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-sub"); }); });
+  for (var sub of subs){
+    await page.locator('[data-sub="' + sub + '"]').click(); await page.waitForTimeout(150);
+    var body2 = await page.locator("#proMain").evaluate(function(el){ return el.textContent; });
+    var m2 = body2.match(/.{0,40}(NaN|undefined|\bnull\b|Infinity).{0,40}/); if (m2) bad.push(sub + ": " + m2[0]);
+  }
+  tabs = tabs.concat(subs);
   check.check("9. A ficha de um aluno criado da agenda abre em todos os separadores sem erros, 'NaN' nem 'undefined' (" + tabs.join(", ") + ")", errors.length === 0 && bad.length === 0 && tabs.length >= 4);
   if (bad.length) console.log("separadores com lixo:", bad);
   if (errors.length) console.log(errors.slice(0, 3));
+  // remover um aluno criado por engano
+  await page.locator('.pro-sidebar [data-g="resumo"]').click();
+  await page.locator('[data-sub="sessoes"]').click();
+  await page.waitForSelector("#stuRemove", {state: "attached"});
+  await page.evaluate(function(){ document.querySelectorAll("#proMain details").forEach(function(d){ d.open = true; }); });
+  var rowsBefore = await page.evaluate(function(){ return window.__fake.rows.length; });
+  await page.click("#stuRemove");
+  await page.waitForFunction(function(n){ return window.__fake.rows.length === n - 1; }, rowsBefore);
+  var left = await page.evaluate(function(id){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === id; }).length; }, beaId);
+  check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta à lista", left === 0 && (await page.locator(".student-row").count()) >= 1 && !(await page.locator('.student-row:has-text("Beatriz Lopes")').count()));
+  await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.click("#gcSync"); await page.waitForFunction(function(){ return /eventos lidos/.test(document.querySelector("#gcOut").textContent); });
+  check.check("11. O aluno apagado não volta: o título fica ignorado e não é recriado", (await page.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.name === "Beatriz Lopes"; }).length; })) === 0 && (await page.locator("[data-gc-name]").count()) === 0);
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e.message.split("\n")[0], (e.stack.split("\n").filter(function(l){ return /gcal-students/.test(l); })[0] || "").trim()); process.exit(1); });
