@@ -310,6 +310,8 @@
   .pro-stat-card .l{font-size:0.75rem; color:var(--muted); margin-top:2px;}
 
   .student-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px;}
+  .plano-supp{border-top:1px dashed var(--line); margin-top:4px;}
+  .plano-supp-note{font-size:0.78rem; margin:-2px 0 8px;}
   .student-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;}
   .student-search{flex:1 1 200px; display:flex; align-items:center; gap:8px; border:1px solid var(--line-strong); background:var(--bg); border-radius:10px; padding:0 12px; min-height:44px;}
   .student-search input{flex:1; min-width:0; border:none; outline:none; background:transparent; color:var(--ink); font-size:16px; font-family:var(--sans); padding:10px 0;}
@@ -5950,6 +5952,7 @@ function studentToRow(s){
   // telefone e registo de contactos (migração 0022): só se a base de dados já as tem; só o profissional os altera
   if (contactColumnsAvailable){ row.phone = s.phone || null; row.contact_log = s.contactLog || []; }
   if (studioOnlyColumnAvailable) row.studio_only = !!s.studioOnly; // migração 0026
+  if (phaseColumnAvailable) row.nutrition_phase = s.nutritionPhase || null; // migração 0029 (fase bulk/cut e creatina)
   // colunas do módulo de treino (migração 0019): só se a base de dados já as tem
   // Cada papel só escreve o que é seu (uma cópia antiga nunca apaga sessões novas nem choca com o programa mudado):
   // o aluno envia as sessões e nunca o programa; o profissional envia o programa e nunca as sessões.
@@ -5985,6 +5988,7 @@ function rowToStudent(r){
     physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
     weightLogPhotos: normalizePhotos(r.weight_log_photos),
     studioOnly: !!r.studio_only,
+    nutritionPhase: r.nutrition_phase && typeof r.nutrition_phase === "object" && !Array.isArray(r.nutrition_phase) ? r.nutrition_phase : null,
     phone: r.phone || null, contactLog: Array.isArray(r.contact_log) ? r.contact_log : [], createdAt: r.created_at || null,
     trainingProgram: r.training_program || null,
     workoutLogs: normalizeWorkoutLogs(r.workout_logs),
@@ -6021,6 +6025,7 @@ var TRAINING_COLUMNS = ["training_program", "workout_logs"];
 var CONTACT_COLUMNS = ["phone", "contact_log"];
 var contactColumnsAvailable = true; // migração 0022 (telefone e registo de contactos)
 var studioOnlyColumnAvailable = true; // migração 0026 (aluno só de estúdio)
+var phaseColumnAvailable = true; // migração 0029 (fase nutricional bulk/cut)
 var outboxMem = null;
 var persistTimers = {}, persistStudents = {};
 var outboxFlushPromise = null, outboxRetryTimer = null;
@@ -6228,6 +6233,11 @@ function outboxSendCols(id, cols){
       studioOnlyColumnAvailable = false; // migração 0026 por aplicar: o resto grava-se na mesma
       return outboxSendOne(id);
     }
+    if (phaseColumnAvailable && /nutrition_phase/.test(msg) && /column|schema|does not exist/i.test(msg)){
+      phaseColumnAvailable = false; // migração 0029 por aplicar: o resto grava-se na mesma
+      showToast("⚠ A fase nutricional ainda não pode ser guardada: falta correr a migração 0029 no Supabase. O resto foi guardado.");
+      return outboxSendOne(id);
+    }
     if (outboxErrorIsTransient(res)) return false;
     var keys = Object.keys(cols);
     if (keys.length > 1){
@@ -6257,6 +6267,7 @@ function outboxSendOne(id){
   if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!studioOnlyColumnAvailable) delete cols.studio_only;
+  if (!phaseColumnAvailable) delete cols.nutrition_phase;
   if (!Object.keys(cols).length){ delete outboxRead()[id]; outboxWrite(); return Promise.resolve(true); }
   return outboxSendCols(id, cols);
 }
@@ -6350,6 +6361,10 @@ function insertStudent(s){
       }
       if (studioOnlyColumnAvailable && /studio_only/.test(res.error.message || "")){
         studioOnlyColumnAvailable = false; // migração 0026 por aplicar: cria o aluno sem a marca "só estúdio"
+        return insertStudent(s);
+      }
+      if (phaseColumnAvailable && /nutrition_phase/.test(res.error.message || "")){
+        phaseColumnAvailable = false; // migração 0029 por aplicar: cria o aluno sem a fase nutricional
         return insertStudent(s);
       }
       showToast("⚠ Não foi possível criar o aluno — verifica a tua ligação");
@@ -6570,6 +6585,103 @@ function nutritionSafetyWarnings(s, t){
   }
   if (carbs != null && carbs < 50 && t.kcal > 0) out.push({level:"warn", text:"Hidratos de " + carbs + " g: muito baixos para treinar com qualidade."});
   return out;
+}
+
+/* ---------- Creatina mono-hidratada em todos os planos ----------
+   A creatina é uma LINHA CALCULADA, nunca guardada em s.meals: aparece sempre no pequeno-almoço (ou na primeira refeição com alimentos),
+   com a dose do peso atual do aluno, e acompanha o peso sozinha. Assim vale para todos os planos (novos e antigos), não há nada para
+   migrar, não desloca os índices das substituições e os alunos (que não escrevem o plano) veem sempre a dose certa.
+   Dose: 0,05 g por kg de peso corporal por dia, arredondada ao grama e limitada a 3–5 g. Base: a posição da ISSN (Kreider 2017) indica
+   3–5 g/dia como manutenção (≈ 0,03 g/kg, que para 60–80 kg daria só 1,8–2,4 g, abaixo dos 3 g que saturam o músculo em ~4 semanas, Hultman 1996);
+   Antonio 2021 refere 3–5 g/dia ou ≈ 0,1 g/kg. 0,05 g/kg com o intervalo 3–5 g é um compromisso prático dentro dessas posições, e não
+   uma norma publicada. Sem fase de carga. O horário é indiferente: o que importa é tomá-la todos os dias (também nos dias sem treino).
+   Pessoas com excesso de peso usam o peso a IMC 25 (como nos g/kg de proteína). */
+var CREATINE_NAME = "Creatina mono-hidratada";
+var CREATINE_NOTE = "Pode ser tomada em qualquer altura do dia.";
+var CREATINE_G_PER_KG = 0.05;
+var CREATINE_MIN_G = 3, CREATINE_MAX_G = 5;
+// condições em que o profissional tem de confirmar antes de a creatina aparecer ao aluno (rins, gravidez e amamentação) — texto livre da ficha
+var CREATINE_CAUTION_RE = /\b(rim|rins|renal|renais|nefr\w*|di[aá]lise|transplant\w*|creatinina|irc|drc|gr[aá]vid\w*|gesta[cç]\w*|amament\w*|lacta\w*)(?![a-z])/i;
+function creatineWeightKg(s){
+  var w = Number(s && s.weightCurrent) || Number(s && s.weight) || 0;
+  if (!(w > 0) && s && s.weights && s.weights.length) w = Number(s.weights[s.weights.length - 1].w) || 0;
+  return w > 0 ? w : 0;
+}
+function creatineDoseG(s){
+  var w = creatineWeightKg(s);
+  if (!w) return null;
+  var ref = referenceWeightKg(w, s.height, null);
+  return Math.min(CREATINE_MAX_G, Math.max(CREATINE_MIN_G, Math.round(ref * CREATINE_G_PER_KG)));
+}
+function creatineCautions(s){
+  var out = [];
+  if (s && Number(s.age) > 0 && Number(s.age) < 18) out.push("tem menos de 18 anos");
+  var text = [s && s.medicalConditions, s && s.currentMedication].filter(Boolean).join(" ; ");
+  if (text && CREATINE_CAUTION_RE.test(text)) out.push("a ficha refere rins, gravidez, amamentação ou medicação a confirmar com o médico");
+  return out;
+}
+function creatineBlocked(s){
+  return !!s && (s.blockedFoods || []).some(function(n){ return exLibFold(n) === exLibFold(CREATINE_NAME); });
+}
+function creatineConfirmed(s){ return !!(s && s.nutritionPhase && s.nutritionPhase.creatineConfirmed === true); }
+// {on: aparece ao aluno, dose, cautions, state: 'on' | 'off' | 'sem-peso' | 'confirmar'}
+function creatineStatus(s){
+  var dose = creatineDoseG(s), cautions = creatineCautions(s);
+  if (creatineBlocked(s)) return {on: false, dose: dose, cautions: cautions, state: "off"};
+  if (dose == null) return {on: false, dose: null, cautions: cautions, state: "sem-peso"};
+  if (cautions.length && !creatineConfirmed(s)) return {on: false, dose: dose, cautions: cautions, state: "confirmar"};
+  return {on: true, dose: dose, cautions: cautions, state: "on"};
+}
+// a refeição onde a creatina aparece: o pequeno-almoço, ou a primeira (por hora) com alimentos; -1 se o plano ainda não tem alimentos
+function breakfastMealIndex(meals){
+  var cands = [];
+  (meals || []).forEach(function(m, i){ if (m && m.foods && m.foods.length) cands.push({m: m, i: i}); });
+  if (!cands.length) return -1;
+  var named = cands.filter(function(x){ return /pequeno[\s-]*almo[cç]o/i.test(String(x.m.name || "")); })[0];
+  if (named) return named.i;
+  cands.sort(function(a, b){ return (toMinutes(String(a.m.time || "99:99")) - toMinutes(String(b.m.time || "99:99"))) || (a.i - b.i); });
+  return cands[0].i;
+}
+function creatineLineHtml(s){
+  var st = creatineStatus(s);
+  if (!st.on) return "";
+  return "<div class=\"food-item plano-supp\"><span class=\"fname\">" + escapeHtml(CREATINE_NAME) + "</span><span><span class=\"fqty\">" + st.dose + " g</span></span></div>" +
+    "<p class=\"muted-p plano-supp-note\">" + escapeHtml(CREATINE_NOTE) + "</p>";
+}
+function setCreatineEnabled(s, on){
+  ensureSyncBaseline(s);
+  var before = creatineBlocked(s);
+  s.blockedFoods = (s.blockedFoods || []).filter(function(n){ return exLibFold(n) !== exLibFold(CREATINE_NAME); });
+  if (!on) s.blockedFoods.push(CREATINE_NAME);
+  logPlanEvent(s, "creatina", on ? "Creatina mono-hidratada incluída no plano" : "Creatina mono-hidratada retirada do plano", before ? "desligada" : "ligada", on ? "ligada" : "desligada");
+  startCreatineClock(s, on);
+  persistStudent(s);
+}
+// a creatina retém 0,5–1,5 kg de água nas primeiras semanas: marca-se quando começa ou pára, para a fase de peso não confundir isso com gordura
+function startCreatineClock(s, on){
+  if (!s.nutritionPhase && !phaseColumnAvailable) return;
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineStartDate: todayISO(), creatineOn: !!on});
+}
+function confirmCreatine(s){
+  ensureSyncBaseline(s);
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineConfirmed: true, creatineStartDate: todayISO(), creatineOn: true});
+  logPlanEvent(s, "creatina", "Creatina mono-hidratada confirmada pelo profissional apesar de: " + creatineCautions(s).join("; "), "por confirmar", "confirmada");
+  persistStudent(s);
+}
+function tplCreatineCard(s){
+  var st = creatineStatus(s), w = creatineWeightKg(s), ref = w ? referenceWeightKg(w, s.height, null) : 0;
+  var takes = (s.supplements || []).some(function(x){ return exLibFold(x) === "creatina"; });
+  var html = "<div class=\"eyebrow section-gap\" style=\"margin-bottom:6px;\">Suplementação</div><div class=\"card\" id=\"creatineCard\" style=\"padding:12px 14px;\">";
+  if (st.state === "sem-peso") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> — a dose calcula-se pelo peso corporal, que ainda não está registado.</p>";
+  else if (st.state === "off") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> está retirada do plano deste aluno" + (st.dose ? " (a dose seria " + st.dose + " g por dia)" : "") + ".</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineToggle\" data-on=\"1\">Incluir no plano</button>";
+  else if (st.state === "confirmar") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> não aparece ao aluno: " + escapeHtml(st.cautions.join("; ")) + ". Só a incluas com indicação do médico.</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineConfirm\">Tenho indicação médica — incluir " + st.dose + " g</button>";
+  else html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + " · " + st.dose + " g por dia</strong>, sempre no pequeno-almoço (≈ " + String(CREATINE_G_PER_KG).replace(".", ",") + " g × " + String(Math.round(ref * 10) / 10).replace(".", ",") + " kg de peso" + (ref < w ? " de referência" : "") + ", entre " + CREATINE_MIN_G + " e " + CREATINE_MAX_G + " g). " + escapeHtml(CREATINE_NOTE) + " Acompanha o peso do aluno sozinha.</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineToggle\" data-on=\"0\">Retirar do plano</button>";
+  if (takes) html += "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O aluno disse que já toma creatina: confirma que não duplica a dose.</p>";
+  html += "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Nas primeiras semanas retém 0,5 a 1,5 kg de água: não é gordura. A revisão de peso ignora esse período.</p></div>";
+  return html;
 }
 
 function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
@@ -7041,7 +7153,7 @@ function openAssistantSwapMeal(s, meal){
 }
 
 function openMealDetail(s, idx){
-  var m = resolveMealsForToday(s)[idx];
+  var allMeals = resolveMealsForToday(s), m = allMeals[idx], creatineHere = breakfastMealIndex(allMeals) === idx;
 
   function render(){
     var profile = computeFlexibilityProfile(s);
@@ -7062,7 +7174,7 @@ function openMealDetail(s, idx){
             "<span class=\"fname\">" + escapeHtml(f.name) + "</span>" +
             "<span><span class=\"fqty\">" + escapeHtml(f.qty) + "</span>" + (canSwap ? "<span class=\"swap-hint\">não tenho isto</span>" : "") + "</span>" +
           "</div>";
-        }).join("") +
+        }).join("") + (creatineHere ? creatineLineHtml(s) : "") +
       "</div>" +
       "<div style=\"display:flex; flex-direction:column; gap:8px;\">" +
         "<button type=\"button\" class=\"btn primary\" id=\"mdComplete\">" + (m.done ? "✓ Concluída — toca para desfazer" : "✓ Marcar como concluída") + "</button>" +
@@ -7697,6 +7809,7 @@ function tplPlano(s){
   var profile = computeFlexibilityProfile(s);
   var html = tabHead("Alimentação", "Nível " + TIER_LABEL[tier] + " · " + TIER_HINT[tier]);
   html += tplTargetsCard(s);
+  var creatineIdx = breakfastMealIndex(s.meals);
   s.meals.forEach(function(m, idx){
     if (!m.foods.length) return; // refeição ainda vazia: só o profissional a vê
     var totals = resolvedMealTotals(s, m);
@@ -7705,6 +7818,7 @@ function tplPlano(s){
     if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s);
     else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
     else html += tplMealChoice(m, idx, s);
+    if (idx === creatineIdx) html += creatineLineHtml(s);
     html += "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
     html += "</div>";
   });
@@ -11462,6 +11576,8 @@ function tplProPlano(s){
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
 
+  html += tplCreatineCard(s);
+
   html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">Colar um plano em texto</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola o plano alimentar (por exemplo \"Refeição 1 (pequeno-almoço)\" seguido dos alimentos, com \"OU\" nas alternativas). Reconheço as refeições e os alimentos da nossa base e mostro uma proposta para reveres antes de aplicar.</p>" +
     "<div class=\"checkin-field\"><textarea id=\"pastedPlanText\" rows=\"8\" placeholder=\"Refeição 1 (pequeno-almoço)&#10;1 fatia de pão integral&#10;50g queijo fresco magro\"></textarea></div>" +
@@ -14848,6 +14964,10 @@ function wireProTab(s){
   });
   });
 
+  var crToggle = el.querySelector("#creatineToggle");
+  if (crToggle) crToggle.addEventListener("click", function(){ setCreatineEnabled(s, crToggle.getAttribute("data-on") === "1"); renderProTabContent(s); });
+  var crConfirm = el.querySelector("#creatineConfirm");
+  if (crConfirm) crConfirm.addEventListener("click", function(){ confirmCreatine(s); renderProTabContent(s); });
   var saveT = el.querySelector("#saveTargets");
   if (saveT) {
     renderTargetWarning(el, s);
