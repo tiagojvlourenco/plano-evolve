@@ -13524,7 +13524,11 @@ function tplProSessoes(s){
 
   var ex0 = extrasOf(s.id, today);
   if (ex0.n && !sum.hasActive) html += "<p class=\"muted-p\" style=\"margin-top:8px; color:var(--critical);\">🔄 Aguarda renovação · +" + ex0.n + (ex0.n === 1 ? " aula extra" : " aulas extra") + " desde " + escapeHtml(fmtDateFullPt(ex0.since)) + " (descontam-se ao próximo pacote).</p>";
-  if (studio.slotsAvailable){
+  if (calUsesCalendar()){
+    var nCal = studio.sessions.filter(function(x){ return x.student_id === s.id && x.source === "calendario"; }).length;
+    html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Google Agenda</div>" +
+      "<p class=\"muted-p\">As aulas contam-se pelo nome na agenda: um evento com «" + escapeHtml(s.name) + "» no título (por exemplo «PT 60 - " + escapeHtml(s.name) + "») conta como aula" + (nCal ? " (" + nCal + " já contadas)" : "") + ". Se na agenda aparece com outro nome, associa-o em Estúdio → Google Agenda, nos títulos sem aluno.</p>";
+  } else if (studio.slotsAvailable){
     var slots = slotsOf(s.id);
     html += "<div class=\"eyebrow\" style=\"margin:22px 0 8px;\">Horário semanal</div>" +
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">As sessões deste horário contam-se sozinhas depois de passarem (como os eventos do calendário). Só precisas de marcar as exceções: faltou, cancelou, mudou de dia.</p>" +
@@ -13718,7 +13722,7 @@ function renderProStudioMain(){
     var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
     html += "<div class=\"card\" id=\"studioAgenda\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Agenda — " + escapeHtml(WEEKDAY_NAMES[isoWeekday(studioView.date)]) + ", " + escapeHtml(fmtDateFullPt(studioView.date)) + "</div>" +
       "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>";
-    if (!agenda.length) html += "<p class=\"muted-p\">Nenhuma sessão agendada neste dia. Define o horário semanal de cada aluno na ficha (separador Pacotes).</p>";
+    if (!agenda.length) html += "<p class=\"muted-p\">Nenhuma sessão neste dia." + (calUsesCalendar() ? " Sincroniza o Google Agenda para trazer as aulas." : " Define o horário semanal de cada aluno na ficha (separador Pacotes).") + "</p>";
     agenda.forEach(function(sl){
       var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
       var past = studioView.date < today || (studioView.date === today);

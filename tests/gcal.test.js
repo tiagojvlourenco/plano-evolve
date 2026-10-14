@@ -102,5 +102,10 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   studio.loaded = true; studio.available = true; studio.slotsAvailable = true; calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.useAsSource = true;
   await studioAutoSessions();
   check.check("37. Com o calendário como fonte o horário semanal avança sem criar aulas, para não haver aulas retroativas ao desligar", studio.slots[0].generated_until === addDaysISO(today, -1) && agendaDue({date: today, minutes: 0}).length === 0);
+  studio.available = true; studio.slotsAvailable = true; studio.packs = []; studio.sessions = [{id: "c1", student_id: "a", date: d(3), time: "10:00", status: "feita", source: "calendario", external_id: "z1"}];
+  var tabOn = tplProSessoes(STUDENTS[0]);
+  check.check("38. Com o calendário como fonte a ficha esconde o horário semanal e explica que se conta pelo nome", !/Horário semanal/.test(tabOn) && !/id="slAdd"/.test(tabOn) && /Isabel Carvalho/.test(tabOn) && /1 já contadas/.test(tabOn));
+  calSettings.useAsSource = false;
+  check.check("39. Sem o calendário como fonte o horário semanal continua disponível", /id="slAdd"/.test(tplProSessoes(STUDENTS[0])));
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });
