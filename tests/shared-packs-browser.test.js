@@ -58,10 +58,16 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   check.check("8b. Ao escrever, a lista vai ficando só com quem tem uma palavra a começar por «di»", (await names()).join("|") === "Álvaro Dias");
   await pg.evaluate(function(){ document.querySelector("[data-stat-key=active]").click(); });   // um redesenho em segundo plano a meio da escrita
   check.check("8c. Um redesenho a meio mantém o texto, o filtro e o foco da lupa", (await names()).join("|") === "Álvaro Dias" && (await pg.inputValue("#stuSearch")) === "di" && await pg.evaluate(function(){ return document.activeElement && document.activeElement.id === "stuSearch"; }));
+  check.check("8c2. Com texto na lupa os cartões de cima escondem-se e a lista fica à vista (logo abaixo dos botões)", await pg.evaluate(function(){
+    var ex = document.getElementById("dashExtras"), box = document.getElementById("studentListBox"), r = box.getBoundingClientRect();
+    return ex.hidden && r.top < window.innerHeight - 100 && /1 resultado/.test(document.getElementById("studentListHead").textContent);
+  }));
   await pg.keyboard.type("a");
   check.check("8d. E continua a filtrar depois do redesenho («dia»)", (await names()).join("|") === "Álvaro Dias");
   await pg.selectOption("#stuSort", "za"); await pg.evaluate(function(){ document.querySelector("[data-stat-key=active]").click(); }); await pg.selectOption("#stuSort", "az");
   check.check("8e. A ordem também responde depois de um redesenho", (await pg.locator("#stuSort").inputValue()) === "az");
+  await pg.fill("#stuSearch", "");
+  check.check("8f. Ao limpar a lupa os cartões voltam e o título perde a contagem", await pg.evaluate(function(){ return !document.getElementById("dashExtras").hidden && !/resultado/.test(document.getElementById("studentListHead").textContent); }));
   await pg.fill("#stuSearch", "");
   await pg.fill("#stuSearch", "");
   await pg.locator('[data-open="s1"]').first().click();
