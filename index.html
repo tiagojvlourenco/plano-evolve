@@ -14905,7 +14905,7 @@ function packBarHtml(pack, u, viewerId){
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Aulas usadas: " + (function(){ var l = packUsageByStudent(pack).map(function(x){ return "<strong>" + escapeHtml(x.name) + "</strong> " + x.n; }); if (Number(pack.used_before) > 0) l.unshift("antes da app " + Number(pack.used_before)); return l.length ? l.join(" · ") : "nenhuma ainda"; })() + "</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
-    (foreign ? "" : "<span style=\"display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:flex-end;\"><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-edit-pack=\"" + escapeHtml(pack.id) + "\" title=\"Mudar aulas, validade ou início\">Editar</button><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
+    (foreign ? "" : "<span style=\"display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:flex-end;\">" + (u.exhausted || u.expired || u.ending ? "<button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(pack.id) + "\" title=\"Novo pacote igual a este, com a cobrança por pagar\">Renovar</button>" : "") + "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-edit-pack=\"" + escapeHtml(pack.id) + "\" title=\"Mudar aulas, validade ou início\">Editar</button><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
     "<button type=\"button\" class=\"assess-del\" style=\"min-width:44px; min-height:44px;\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></span>") + "</div>";
 }
 function paymentRowHtml(p, today, withName){
@@ -15240,6 +15240,23 @@ function autoFixPacks(){
   });
   return chain.then(function(){ return rep; });
 }
+// renovar num toque: novo pacote igual ao anterior (aulas, preço, validade, partilha) a começar na primeira aula que ficou sem pacote (ou hoje) + cobrança por pagar;
+// o contador volta a zero e as aulas extra já dadas passam para ele
+function renewPack(pack){
+  var today = localTodayISO(), ex = extrasOf(pack.student_id, today);
+  var start = ex.since && ex.since >= pack.starts_on ? ex.since : today;
+  var months = pack.expires_on && pack.starts_on ? Math.max(1, Math.round((new Date(pack.expires_on + "T00:00:00Z") - new Date(pack.starts_on + "T00:00:00Z")) / 86400000 / 30.4)) : 0;
+  var row = {student_id: pack.student_id, name: pack.name, total: pack.total, price: pack.price, starts_on: start, expires_on: months ? addMonthsISO(start, months) : null,
+    missed_consumes: pack.missed_consumes !== false, late_cancel_consumes: pack.late_cancel_consumes !== false};
+  if (studio.slotsAvailable) row.used_before = 0;
+  if (studio.sharedAvailable && sharedIdsOf(pack).length) row.shared_with = sharedIdsOf(pack);
+  return studioInsert("packs", row).then(function(r){
+    if (r.error) return {error: r.error};
+    var np = r.data, price = Number(pack.price) || 0;
+    var charge = price > 0 ? studioInsert("payments", {student_id: pack.student_id, pack_id: np.id, amount: price, due_on: today}) : Promise.resolve({});
+    return Promise.all([charge, attachExtrasToPack(np)]).then(function(res){ return {pack: np, moved: res[1], chargeError: res[0] && res[0].error, price: price}; });
+  });
+}
 // um clique: tira a validade ao pacote e conta nele as aulas dadas depois de ele caducar (o aluno parou e voltou)
 function extendPackAndAttach(pack){
   return studioUpdate("packs", pack.id, {expires_on: null}).then(function(r){
@@ -15278,6 +15295,17 @@ function openSharePackModal(pack, onDone){
 }
 // botões que existem na ficha e na visão geral
 function wireStudioCommon(el, redraw){
+  el.querySelectorAll("[data-renew-pack]").forEach(function(b){ b.addEventListener("click", function(){
+    var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-renew-pack"); })[0];
+    if (!pk) return;
+    if (!window.confirm("Renovar «" + pk.name + "» de " + nameOf(pk.student_id) + "? Cria um pacote igual, com " + pk.total + " aulas" + (Number(pk.price) > 0 ? " e uma cobrança de " + eur(pk.price) + " por pagar" : "") + ".")) return;
+    b.disabled = true;
+    renewPack(pk).then(function(r){
+      if (r.error){ showToast("⚠ " + r.error); b.disabled = false; return; }
+      showToast("✓ Pacote renovado" + (r.moved ? " · " + r.moved + (r.moved === 1 ? " aula já dada contada" : " aulas já dadas contadas") : "") + (r.chargeError ? " · ⚠ a cobrança não foi guardada" : r.price > 0 ? " · marca «Pago» quando receberes" : ""));
+      redraw(); updateStudioBadge();
+    });
+  }); });
   el.querySelectorAll("[data-edit-pack]").forEach(function(b){ b.addEventListener("click", function(){
     var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-edit-pack"); })[0];
     if (pk) openEditPackModal(pk, redraw);

@@ -144,6 +144,32 @@ function fixtureRow(id, name){
   check.check("14. D: a aula sem pacote liga-se ao pacote a decorrer", of("d").every(function(x){ return x.pack_id === "pd"; }));
   check.check("15. Nenhum erro de JavaScript (todos)", errors.length === 0);
   await ctx2.close();
+  // ---- renovar num toque ----
+  var ctx3 = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctx3.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("r1", "Rita Renova")]}));
+  await ctx3.addInitScript(function(){
+    function iso(back){ var d = new Date(); d.setDate(d.getDate() - back); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    var T = window.__fake.tables;
+    T.session_packs.push({id: "old", student_id: "r1", name: "Pacote 3 aulas", total: 3, price: 120, starts_on: iso(60), expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0, shared_with: []});
+    [50, 40, 30].forEach(function(b, i){ T.sessions.push({id: "o" + i, student_id: "r1", pack_id: "old", date: iso(b), time: null, status: "feita", source: "calendario", external_id: "o" + i}); });
+    [10, 3].forEach(function(b, i){ T.sessions.push({id: "x" + i, student_id: "r1", pack_id: null, date: iso(b), time: null, status: "feita", source: "calendario", external_id: "x" + i}); });
+  });
+  var p3 = await ctx3.newPage(); p3.setDefaultTimeout(6000);
+  p3.on("pageerror", function(e){ errors.push(e.message); }); p3.on("dialog", function(d){ d.accept(); });
+  await p3.goto(srv.url); await p3.waitForSelector(".student-row");
+  await p3.locator('[data-open="r1"]').first().click();
+  await p3.click('[data-sub="sessoes"]');
+  await p3.waitForSelector("[data-renew-pack]");
+  await p3.click("[data-renew-pack]");
+  await p3.waitForFunction(function(){ return window.__fake.tables.session_packs.length === 2 && window.__fake.tables.payments.length === 1; });
+  var f3 = await p3.evaluate(function(){ var T = window.__fake.tables; return {packs: T.session_packs, pay: T.payments, ses: T.sessions}; });
+  var np = f3.packs.filter(function(x){ return x.id !== "old"; })[0];
+  check.check("16. Renovar cria um pacote igual (3 aulas, 120 €), que começa na primeira aula que ficou sem pacote", np && np.total === 3 && Number(np.price) === 120 && np.used_before === 0 && f3.ses.filter(function(x){ return x.id === "x0"; })[0].pack_id === np.id);
+  check.check("17. As 2 aulas já dadas depois do pacote anterior passam para o novo; o antigo fica como estava", f3.ses.filter(function(x){ return x.pack_id === np.id; }).length === 2 && f3.ses.filter(function(x){ return x.pack_id === "old"; }).length === 3);
+  check.check("18. Cria a cobrança de 120 € por pagar, com o pacote novo", f3.pay[0].amount === 120 && f3.pay[0].pack_id === np.id && !f3.pay[0].paid_on);
+  await p3.waitForFunction(function(){ return /2 de 3 usadas/.test(document.getElementById("proMain").innerText); });
+  check.check("19. A ficha mostra o pacote novo com 2 de 3 usadas (restam 1)", /restam 1/.test(await p3.locator("#proMain").innerText()));
+  await ctx3.close();
   check.check("10. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();
