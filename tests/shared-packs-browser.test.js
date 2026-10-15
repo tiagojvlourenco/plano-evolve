@@ -74,6 +74,15 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   await pg.click("#proBack");
   check.check("9. Ao voltar à lista, a ordem e a pesquisa escolhidas mantêm-se", (await pg.locator("#stuSort").inputValue()) === "az");
 
+  // «Hoje: quem contactar» recolhido, com o número de avisos à frente
+  check.check("9b. «Hoje: quem contactar» vem recolhido, com o número de alunos no cabeçalho", (await pg.locator("#contactToggle").count()) === 1 && (await pg.locator("#contactBody").isHidden()) && /\d/.test(await pg.locator("#contactToggle").innerText()));
+  await pg.click("#contactToggle");
+  check.check("9c. Ao tocar no cabeçalho abre a lista", await pg.locator("#contactBody").isVisible() && (await pg.locator("#contactToggle").getAttribute("aria-expanded")) === "true");
+  await pg.click('[data-stat-key="active"]');   // redesenhar o ecrã: continua aberto
+  check.check("9d. Redesenhar o ecrã mantém o estado escolhido", await pg.locator("#contactBody").isVisible());
+  await pg.click("#contactToggle");
+  check.check("9e. Tocar outra vez recolhe", await pg.locator("#contactBody").isHidden());
+
   // ---- pacote com tipo e partilha ----
   await pg.locator('[data-open="s1"]').first().click();
   await pg.click('[data-sub="sessoes"]');

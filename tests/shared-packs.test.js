@@ -51,10 +51,10 @@ STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno S
   check.check("15. Um só pacote partilhado: o parceiro também o gasta", pickPackForSession("b", today).id === "pk" && pickPackForSession("c", today) === null);
   var r1 = await studioAddSession("b", today, "feita"), r2 = await studioAddSession("a", today, "feita");
   check.check("16. As sessões dos dois descontam ao mesmo pacote", !r1.error && !r2.error && packUsage(studio.packs[0], today).used === 2 && r1.data.pack_id === "pk" && r2.data.pack_id === "pk");
-  // pacote que caduca primeiro ganha ao do próprio aluno
+  // o pacote do próprio aluno gasta-se antes do do parceiro, mesmo que o do parceiro caduque primeiro
   reset();
   studio.packs = [pack("own", "a", 10, {expires_on: d(60)}), pack("other", "b", 10, {expires_on: d(20), shared_with: ["a"]})];
-  check.check("17. Se o pacote partilhado caduca primeiro, gasta-se esse (como nos pacotes normais)", pickPackForSession("a", today).id === "other");
+  check.check("17. O pacote do próprio aluno gasta-se antes do do parceiro (o do parceiro só quando o seu acaba)", pickPackForSession("a", today).id === "own");
   // pacote partilhado ainda não começou / caducado
   studio.packs = [pack("o", "b", 10, {starts_on: d(5), shared_with: ["a"]})];
   check.check("18. Um pacote partilhado que ainda não começou não é escolhido", pickPackForSession("a", today) === null);
