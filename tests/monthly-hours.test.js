@@ -40,11 +40,11 @@ function fixtureRow(id, name, active){
   await pg.evaluate(function(){ document.getElementById("studioImportHours").open = true; });
   await pg.fill("#hrsText", "PT 60 - Ana Silva; 8,66\nPT Duo 60 - Bruno Costa + Carla Dias; 4\nNinguém Existe; 3");
   await pg.click("#hrsGo");
-  await pg.waitForFunction(function(){ return /alunos atualizados/.test(document.getElementById("hrsOut").textContent) || /16,66/.test(document.getElementById("studioKpis").textContent); });
+  await pg.waitForFunction(function(){ return /alunos atualizados/.test(document.getElementById("hrsOut").textContent) || /12,66/.test(document.getElementById("studioKpis").textContent); });
   var kp = await pg.locator("#studioKpis").innerText();
-  check.check("6. O cabeçalho passa a mostrar a soma (16,66 h)", /16,66 h/.test(kp));
+  check.check("6. O cabeçalho passa a mostrar a soma (12,66 h)", /12,66 h/.test(kp));
   var saved = await pg.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r ? r.value : null; });
-  check.check("7. Grava em studio_settings (chave monthly_hours) por id de aluno", saved && saved.s1 === 8.66 && saved.s2 === 4 && saved.s3 === 4);
+  check.check("7. Grava em studio_settings (chave monthly_hours) por id de aluno", saved && saved.s1 === 8.66 && saved.s2 === 2 && saved.s3 === 2);
   // ficha: editar
   await pg.goto(srv.url); await pg.waitForSelector(".student-row");
   await pg.locator('[data-open="s3"]').first().click();

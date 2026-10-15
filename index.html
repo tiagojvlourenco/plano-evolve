@@ -14295,11 +14295,11 @@ function studioImportHours(text){
   var parsed = parseHoursImport(text), report = {saved: 0, errors: parsed.errors.slice()};
   var prev = JSON.parse(JSON.stringify(monthlyHours.map));
   parsed.rows.forEach(function(r){
-    var whole = matchStudentByName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);   // «Ana + Rui» (duo): cada um fica com as horas da linha
+    var whole = matchStudentByName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);   // «Ana + Rui» (duo): as horas da linha dividem-se pelos dois (a aula conta uma só vez)
     names.forEach(function(nm){
       var st = whole || matchStudentByName(nm);
       if (!st) report.errors.push(nm + ": não encontrei um aluno com este nome.");
-      else { monthlyHours.map[st.id] = r.hours; report.saved++; }
+      else { monthlyHours.map[st.id] = Math.round(r.hours / names.length * 100) / 100; report.saved++; }
     });
   });
   if (!report.saved) return Promise.resolve(report);
