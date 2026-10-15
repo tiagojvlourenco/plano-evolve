@@ -171,3 +171,11 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 ## 8j. Horas mensais por aluno (sem migração nova)
 
 As «Horas mensais» da folha «Dados» de cada cliente guardam-se em `studio_settings` (chave `monthly_hours`, `{idDoAluno: horas}`), tabela criada na migração 0025. Importam-se em Estúdio → «Importar as horas mensais» (`Nome; horas`, aceita «PT 60 - Nome» e duos «A + B», cujas horas se dividem pelos dois) ou editam-se na ficha (separador Pacotes). A soma dos alunos ativos aparece no cabeçalho do Estúdio («Horas mensais ativas»).
+
+## 8k. Pacote caducado com aulas dadas depois (o aluno parou e voltou)
+
+Na ficha do aluno (Pacotes): «Editar» muda aulas, aulas já dadas antes da app, início e validade do pacote, e as aulas extra passam para ele. Se o aluno aguarda renovação com aulas extra mas o pacote caducado ainda tem aulas, aparece «Contar estas aulas no pacote caducado (sem validade)». A janela do Google Agenda chega agora às aulas previstas (folha) já passadas e aos pacotes caducados que ainda têm aulas: sincronizar volta a confirmar essas aulas.
+
+Automático para todos: «Sincronizar» (Google Agenda) e o botão «↻ Acertar pacotes» (Estúdio → Resumo de treinos) correm `autoFixPacks()`: as aulas sem pacote contam no pacote com aulas por dar; se o pacote caducou, não há outro mais novo e o aluno continuou a treinar, perde a validade. Um pacote esgotado ou já renovado não se mexe. Eventos de duo («PT Duo 60 - Ana + Rui»), quando os dois nomes são alunos, contam uma aula a cada um (id da sessão = idDoEvento#idDoAluno).
+
+Associação evento → aluno: o título (ou o que vem depois de « - ») tem de ser o nome do aluno; um duo «A + B» conta para os dois; e, se vier só o primeiro ou o último nome («PT 60 - Carina», «PT 60 - Diana»), casa com o aluno cuja ficha tenha essa palavra como primeiro ou último nome, desde que seja um só. Os restantes títulos ficam na lista «sem aluno» do cartão do Google Agenda.
