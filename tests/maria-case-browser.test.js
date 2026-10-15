@@ -45,9 +45,8 @@ function ev(id, title, daysAgo, hhmm){ return {id: id, summary: title, colorId: 
   });
   var page = await ctx.newPage(); page.setDefaultTimeout(8000);
   page.on("pageerror", function(e){ errors.push(e.message); }); page.on("dialog", function(d){ d.accept(); });
-  await page.goto(srv.url);
-  await page.waitForSelector(".student-row");
-  await page.click("#areaGestao"); await page.click("#navStudio");
+  // a sincronização e a ficha com os Pacotes vivem ambas na Gestão (gestao.html), que abre direta no Estúdio
+  await page.goto(srv.url + "gestao.html");
   await page.waitForSelector("#gcalCard");
   await page.fill("#gcClient", "123456-abc.apps.googleusercontent.com"); await page.click("#gcSave");
   await page.waitForSelector("#gcSync");
@@ -60,9 +59,10 @@ function ev(id, title, daysAgo, hhmm){ return {id: id, summary: title, colorId: 
   var feitas = fk.ses.filter(function(x){ return x.st === "feita"; });
   check.check("2. As duas aulas antigas deixam de estar «agendada» e passam a feitas (a agenda confirmou-as)", fk.ses.filter(function(x){ return x.st === "agendada"; }).length === 0 && feitas.length === 10);
   check.check("3. As 10 aulas contam no pacote, que perdeu a validade", feitas.every(function(x){ return x.p === "pkm"; }) && fk.pk.expires_on === null);
-  await page.click("#areaAcomp"); await page.click("#navDashboard"); await page.waitForSelector(".student-row");
-  await page.locator('[data-open="m1"]').first().click();
-  await page.click('[data-sub="sessoes"]');
+  // a ficha do aluno na Gestão mostra só os Pacotes (sem separadores de acompanhamento): abre-se a partir do Estúdio
+  await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.locator('[data-open-student="m1"]').first().click();
+  await page.waitForSelector("#proBack");
   await page.waitForFunction(function(){ return /10 de 13 usadas/.test(document.getElementById("proMain").innerText); });
   var txt = await page.locator("#proMain").innerText();
   check.check("4. A ficha mostra 10 de 13 usadas, restam 3, e nenhuma aula «por confirmar»", /restam 3/.test(txt) && !/por confirmar/i.test(txt));

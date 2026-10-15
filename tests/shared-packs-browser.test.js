@@ -1,5 +1,7 @@
 // Lista de alunos (lupa + ordem A→Z/Z→A) e pacotes partilhados num Chromium real com Supabase simulado:
 // escolher o tipo de pack (validade = duração + 3 meses), partilhar com o parceiro, janela «Partilhar», e as contas dos dois alunos.
+// A lista de alunos vive na app de Acompanhamento (index.html); os pacotes na app de Gestão (gestao.html), que abre direta no Estúdio
+// e mostra a ficha só com os Pacotes — duas páginas, cada uma com o seu Supabase simulado e os mesmos 4 alunos.
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
@@ -83,69 +85,83 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   await pg.click("#contactToggle");
   check.check("9e. Tocar outra vez recolhe", await pg.locator("#contactBody").isHidden());
 
-  // ---- pacote com tipo e partilha ----
-  await pg.locator('[data-open="s1"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
-  await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
-  check.check("10. O formulário tem o tipo de pack e o aluno com quem partilhar (sem a própria Ana)", (await pg.locator("#pkType option").count()) === 5 && (await pg.locator("#pkShare option").count()) === 4 && !(await pg.locator("#pkShare").innerText()).includes("Ana Silva"));
-  await pg.selectOption("#pkType", "trimestral");
-  check.check("11. Escolher «Trimestral» põe 6 meses de validade e o nome do pack", (await pg.locator("#pkMonths").inputValue()) === "6" && (await pg.locator("#pkName").inputValue()) === "Pack trimestral");
-  await pg.fill("#pkName", "Pack casal"); await pg.selectOption("#pkType", "anual");
-  check.check("12. Se o nome já foi escrito à mão, o tipo só muda a validade (15 meses)", (await pg.locator("#pkMonths").inputValue()) === "15" && (await pg.locator("#pkName").inputValue()) === "Pack casal");
-  await pg.selectOption("#pkType", "trimestral");
-  await pg.fill("#pkTotal", "39"); await pg.fill("#pkPrice", "900"); await pg.fill("#pkStart", START);
-  await pg.selectOption("#pkShare", "s2");
-  await pg.click("#pkAdd");
-  await pg.waitForSelector("[data-share-pack]");
-  var fk = await pg.evaluate(function(){ return window.__fake.tables; });
+  await ctx.close();
+
+  // ---- pacote com tipo e partilha (app de Gestão: abre no Estúdio; a ficha mostra só os Pacotes) ----
+  // sem pacotes ainda, ninguém aparece no Estúdio: os alunos entram na lista de Contratos (estado «ativo») e a ficha abre-se a partir daí
+  var gctx = await browser.newContext({viewport: {width: 390, height: 844}});
+  await gctx.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: rows}));
+  await gctx.addInitScript(function(){ window.__fake.tables.studio_settings.push({key: "contracts", value: {s1: {estado: "ativo"}, s2: {estado: "ativo"}, s3: {estado: "ativo"}, s4: {estado: "ativo"}}}); });
+  var gp = await gctx.newPage(); gp.setDefaultTimeout(6000);
+  gp.on("pageerror", function(e){ errors.push(e.message); }); gp.on("dialog", function(d){ d.accept(); });
+  await gp.goto(srv.url + "gestao.html");
+  await gp.waitForSelector("#studioSummary");
+  async function openFicha(id){   // Contratos → o contrato do aluno → o aluno nos participantes
+    if (await gp.locator("#proBack").count()) await gp.click("#proBack");
+    await gp.click("#navContracts");
+    await gp.waitForSelector('[data-open-contract="' + id + '"]');
+    await gp.locator('[data-open-contract="' + id + '"]').first().click();
+    await gp.locator('[data-open-student="' + id + '"]').first().click();
+    await gp.waitForSelector("#proTabContent");
+  }
+  await openFicha("s1");
+  await gp.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
+  check.check("10. O formulário tem o tipo de pack e o aluno com quem partilhar (sem a própria Ana)", (await gp.locator("#pkType option").count()) === 5 && (await gp.locator("#pkShare option").count()) === 4 && !(await gp.locator("#pkShare").innerText()).includes("Ana Silva"));
+  await gp.selectOption("#pkType", "trimestral");
+  check.check("11. Escolher «Trimestral» põe 6 meses de validade e o nome do pack", (await gp.locator("#pkMonths").inputValue()) === "6" && (await gp.locator("#pkName").inputValue()) === "Pack trimestral");
+  await gp.fill("#pkName", "Pack casal"); await gp.selectOption("#pkType", "anual");
+  check.check("12. Se o nome já foi escrito à mão, o tipo só muda a validade (15 meses)", (await gp.locator("#pkMonths").inputValue()) === "15" && (await gp.locator("#pkName").inputValue()) === "Pack casal");
+  await gp.selectOption("#pkType", "trimestral");
+  await gp.fill("#pkTotal", "39"); await gp.fill("#pkPrice", "900"); await gp.fill("#pkStart", START);
+  await gp.selectOption("#pkShare", "s2");
+  await gp.click("#pkAdd");
+  await gp.waitForSelector("[data-share-pack]");
+  var fk = await gp.evaluate(function(){ return window.__fake.tables; });
   check.check("13. O pacote grava a validade (início + 6 meses, a duração do trimestral + 3), o preço e o parceiro", fk.session_packs.length === 1 && fk.session_packs[0].expires_on === addMonthsISO(START, 6) && fk.session_packs[0].total === 39 && fk.session_packs[0].shared_with.join() === "s2");
   check.check("14. E só cria uma cobrança (um pagamento para os dois)", fk.payments.length === 1 && fk.payments[0].student_id === "s1" && fk.payments[0].amount === 900);
-  var tabA = await pg.locator("#proTabContent").innerText();
+  var tabA = await gp.locator("#proTabContent").innerText();
   check.check("15. A ficha da Ana mostra «Partilhado com Bruno Costa»", /Partilhado com Bruno Costa/.test(tabA));
 
   // ---- o parceiro vê o pacote e regista uma sessão que desconta ao mesmo pacote ----
-  await pg.click("#proBack");
-  await pg.locator('[data-open="s2"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
-  var tabB = await pg.locator("#proTabContent").innerText();
-  check.check("16. A ficha do Bruno mostra o pacote da Ana, sem botão de apagar", /Pacote de Ana Silva/.test(tabB) && (await pg.locator("[data-del-pack]").count()) === 0);
-  await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
-  await pg.fill("#seDate", localISO(new Date())); await pg.click("#seAdd");
-  await pg.waitForSelector("[data-del-session]");
-  var fk2 = await pg.evaluate(function(){ return window.__fake.tables; });
+  await openFicha("s2");
+  var tabB = await gp.locator("#proTabContent").innerText();
+  check.check("16. A ficha do Bruno mostra o pacote da Ana, sem botão de apagar", /Pacote de Ana Silva/.test(tabB) && (await gp.locator("[data-del-pack]").count()) === 0);
+  await gp.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
+  await gp.fill("#seDate", localISO(new Date())); await gp.click("#seAdd");
+  await gp.waitForSelector("[data-del-session]");
+  var fk2 = await gp.evaluate(function(){ return window.__fake.tables; });
   check.check("17. A sessão do Bruno fica ligada ao pacote da Ana (um só pacote para os dois)", fk2.sessions.length === 1 && fk2.sessions[0].student_id === "s2" && fk2.sessions[0].pack_id === fk2.session_packs[0].id);
-  check.check("18. O pacote mostra 1 de 39 usadas", /1 de 39 usadas · restam 38/.test(await pg.locator("#proTabContent").innerText()));
+  check.check("18. O pacote mostra 1 de 39 usadas", /1 de 39 usadas · restam 38/.test(await gp.locator("#proTabContent").innerText()));
 
   // ---- janela «Partilhar» ----
-  await pg.click("#proBack");
-  await pg.locator('[data-open="s1"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
-  await pg.locator("[data-share-pack]").first().click();
-  await pg.waitForSelector("#shList");
-  check.check("19. A janela mostra os outros alunos com o Bruno já marcado", (await pg.locator("#shList input").count()) === 3 && (await pg.locator('#shList input[data-sh-id="s2"]').isChecked()));
-  await pg.fill("#shFilter", "zelia");
-  check.check("20. A lupa da janela filtra a lista sem perder as marcas", (await pg.locator("#shList [data-sh-name]:visible").count()) === 1 && (await pg.locator('#shList input[data-sh-id="s2"]').isChecked()));
-  await pg.locator('#shList input[data-sh-id="s4"]').check();
-  await pg.click("#shGo");
-  await pg.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 2; });
-  check.check("21. Guardar partilha também com a Zélia", (await pg.evaluate(function(){ return window.__fake.tables.session_packs[0].shared_with.slice().sort().join(); })) === "s2,s4");
-  await pg.locator("[data-share-pack]").first().click();
-  await pg.waitForSelector("#shList");
-  await pg.locator('#shList input[data-sh-id="s2"]').uncheck(); await pg.locator('#shList input[data-sh-id="s4"]').uncheck();
-  await pg.click("#shGo");
-  await pg.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 0; });
-  check.check("22. Desmarcar todos deixa de partilhar", (await pg.locator("[data-share-pack]").count()) === 1 && !/Partilhado com/.test(await pg.locator("#proTabContent").innerText()));
+  await openFicha("s1");
+  await gp.locator("[data-share-pack]").first().click();
+  await gp.waitForSelector("#shList");
+  check.check("19. A janela mostra os outros alunos com o Bruno já marcado", (await gp.locator("#shList input").count()) === 3 && (await gp.locator('#shList input[data-sh-id="s2"]').isChecked()));
+  await gp.fill("#shFilter", "zelia");
+  check.check("20. A lupa da janela filtra a lista sem perder as marcas", (await gp.locator("#shList [data-sh-name]:visible").count()) === 1 && (await gp.locator('#shList input[data-sh-id="s2"]').isChecked()));
+  await gp.locator('#shList input[data-sh-id="s4"]').check();
+  await gp.click("#shGo");
+  await gp.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 2; });
+  check.check("21. Guardar partilha também com a Zélia", (await gp.evaluate(function(){ return window.__fake.tables.session_packs[0].shared_with.slice().sort().join(); })) === "s2,s4");
+  await gp.locator("[data-share-pack]").first().click();
+  await gp.waitForSelector("#shList");
+  await gp.locator('#shList input[data-sh-id="s2"]').uncheck(); await gp.locator('#shList input[data-sh-id="s4"]').uncheck();
+  await gp.click("#shGo");
+  await gp.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 0; });
+  check.check("22. Desmarcar todos deixa de partilhar", (await gp.locator("[data-share-pack]").count()) === 1 && !/Partilhado com/.test(await gp.locator("#proTabContent").innerText()));
 
   // ---- resumo do estúdio ----
-  await pg.locator("[data-share-pack]").first().click(); await pg.waitForSelector("#shList");
-  await pg.locator('#shList input[data-sh-id="s2"]').check(); await pg.click("#shGo");
-  await pg.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 1; });
-  await pg.click("#proBack"); await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
-  var sum = await pg.locator("#studioSummary").innerText();
+  await gp.locator("[data-share-pack]").first().click(); await gp.waitForSelector("#shList");
+  await gp.locator('#shList input[data-sh-id="s2"]').check(); await gp.click("#shGo");
+  await gp.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 1; });
+  await gp.click("#proBack"); await gp.click("#navStudio"); await gp.waitForSelector("#studioSummary");
+  var sum = await gp.locator("#studioSummary").innerText();
   check.check("23. O resumo do estúdio mostra a partilha e o que resta no conjunto (38 de 39)", /Partilha com/.test(sum) && /restam\s*38\s*de 39/.test(sum.replace(/\n/g, " ")));
 
   check.check("24. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
+  await gctx.close();
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e.message.split("\n")[0], (e.stack.split("\n").filter(function(l){ return /shared-packs-browser/.test(l); })[0] || "").trim()); process.exit(1); });

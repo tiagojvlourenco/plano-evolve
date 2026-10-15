@@ -47,19 +47,19 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
     ev("x3", "PT 60", 1, "12:00", "10")
   ];
   var tokens = 0;
+  // duas apps, duas páginas: a Gestão (gestao.html: sincronizar, criar, apagar) e o Acompanhamento (index.html: lista de alunos e fichas), cada uma com o seu Supabase simulado
+  var packA = {id: "pk-a", student_id: "stu1", name: "Trim", total: 10, price: 200, starts_on: iso(30), expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0};
   var ctx = await browser.newContext({viewport: {width: 390, height: 844}});
   await ctx.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: rows}));
+  await ctx.addInitScript("window.__fake.tables.session_packs.push(" + JSON.stringify(packA) + ");"); // o pacote já existe quando a Gestão abre no Estúdio
   await ctx.route("https://accounts.google.com/gsi/client", function(r){ tokens++; return r.fulfill({status: 200, contentType: "text/javascript", body: "window.google={accounts:{oauth2:{initTokenClient:function(c){return {requestAccessToken:function(){setTimeout(function(){c.callback({access_token:'fake-token'});},10);}};}}}};"}); });
   await ctx.route(/https:\/\/www\.googleapis\.com\/calendar\/v3\/calendars\/.*\/events/, function(r){
     return r.fulfill({status: 200, contentType: "application/json", headers: {"access-control-allow-origin": "*"}, body: JSON.stringify({items: events})});
   });
   var page = await ctx.newPage(); page.setDefaultTimeout(6000);
   page.on("pageerror", function(e){ errors.push(e.message); }); page.on("dialog", function(d){ d.accept(); });
-  await page.goto(srv.url);
-  await page.waitForSelector(".student-row");
-  await page.evaluate(function(d){ window.__fake.tables.session_packs.push({id: "pk-a", student_id: "stu1", name: "Trim", total: 10, price: 200, starts_on: d, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}); }, iso(30));
-  await page.click("#areaGestao"); await page.click("#navStudio");
-  await page.waitForSelector("#gcalCard");
+  await page.goto(srv.url + "gestao.html");
+  await page.waitForSelector("#gcalCard"); // a Gestão abre direta no Estúdio
   await page.fill("#gcClient", "123456-abc.apps.googleusercontent.com"); await page.click("#gcSave");
   await page.waitForSelector("#gcSync");
   await page.fill("#gcPrefix", ""); // estes testes usam eventos de todos os tipos; o filtro por prefixo tem o seu teste
@@ -97,44 +97,59 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.click("#gcSync"); await page.waitForFunction(function(){ return /0 novas/.test(document.querySelector("#gcOut").textContent); });
   check.check("7. Sincronizar outra vez não duplica sessões nem alunos", (await page.evaluate(function(){ return window.__fake.tables.sessions.length; })) === ss.length && (await page.evaluate(function(){ return window.__fake.rows.length; })) === 4);
   check.check("7b. Os nomes ignorados não voltam a aparecer nas sincronizações seguintes", (await page.locator("[data-gc-name]").count()) === 0);
-  // painel de retenção: não os trata como alunos sem registos
+  // painel de retenção: não os trata como alunos sem registos. É no Acompanhamento (outra app, outra página): recebe os alunos e as sessões que a Gestão acabou de criar
   var reasons = await page.evaluate(function(){ var out = []; STUDENTS_FOR_TEST = null; return out; }).catch(function(){ return []; });
-  await page.click("#areaAcomp"); await page.click("#navDashboard");
-  await page.waitForSelector(".student-row");
-  var queue = await page.evaluate(function(){ var q = document.getElementById("contactQueue"); return q ? q.textContent : ""; });
+  var snap = await page.evaluate(function(){ return {rows: window.__fake.rows, tables: window.__fake.tables}; });
+  var ctxA = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctxA.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: snap.rows}));
+  await ctxA.addInitScript("(" + function(t){ Object.keys(t).forEach(function(k){ window.__fake.tables[k] = t[k]; }); }.toString() + ")(" + JSON.stringify(snap.tables) + ");");
+  var pageA = await ctxA.newPage(); pageA.setDefaultTimeout(6000);
+  pageA.on("pageerror", function(e){ errors.push(e.message); }); pageA.on("dialog", function(d){ d.accept(); });
+  await pageA.goto(srv.url);
+  await pageA.waitForSelector(".student-row");
+  await pageA.click("#navDashboard");
+  await pageA.waitForSelector(".student-row");
+  var queue = await pageA.evaluate(function(){ var q = document.getElementById("contactQueue"); return q ? q.textContent : ""; });
   check.check("8. Os alunos 'só estúdio' não aparecem na lista 'quem contactar' por não terem registos", !/Beatriz Lopes|Mãe \+ Pai|Rui Costa Silva/.test(queue));
   // a ficha abre sem erros
-  await page.click('.student-row:has-text("Beatriz Lopes")');
-  await page.waitForSelector(".pro-sidebar [data-t]");
+  await pageA.click('.student-row:has-text("Beatriz Lopes")');
+  await pageA.waitForSelector(".pro-sidebar [data-t]");
   var bad = [];
-  var tabs = await page.locator(".pro-sidebar [data-t]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-t"); }); });
+  var tabs = await pageA.locator(".pro-sidebar [data-t]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-t"); }); });
   for (var tab of tabs){
-    await page.locator('.pro-sidebar [data-t="' + tab + '"]').click(); await page.waitForTimeout(150);
-    var body = await page.locator("#proMain").evaluate(function(el){ return el.textContent; });
+    await pageA.locator('.pro-sidebar [data-t="' + tab + '"]').click(); await pageA.waitForTimeout(150);
+    var body = await pageA.locator("#proMain").evaluate(function(el){ return el.textContent; });
     var m = body.match(/.{0,40}(NaN|undefined|\bnull\b|Infinity).{0,40}/); if (m) bad.push(tab + ": " + m[0]);
   }
-  await page.locator('.pro-sidebar [data-g="resumo"]').click();
-  var subs = await page.locator("[data-sub]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-sub"); }); });
+  await pageA.locator('.pro-sidebar [data-g="resumo"]').click();
+  var subs = await pageA.locator("[data-sub]").evaluateAll(function(els){ return els.map(function(e){ return e.getAttribute("data-sub"); }); });
   for (var sub of subs){
-    await page.locator('[data-sub="' + sub + '"]').click(); await page.waitForTimeout(150);
-    var body2 = await page.locator("#proMain").evaluate(function(el){ return el.textContent; });
+    await pageA.locator('[data-sub="' + sub + '"]').click(); await pageA.waitForTimeout(150);
+    var body2 = await pageA.locator("#proMain").evaluate(function(el){ return el.textContent; });
     var m2 = body2.match(/.{0,40}(NaN|undefined|\bnull\b|Infinity).{0,40}/); if (m2) bad.push(sub + ": " + m2[0]);
   }
   tabs = tabs.concat(subs);
   check.check("9. A ficha de um aluno criado da agenda abre em todos os separadores sem erros, 'NaN' nem 'undefined' (" + tabs.join(", ") + ")", errors.length === 0 && bad.length === 0 && tabs.length >= 4);
   if (bad.length) console.log("separadores com lixo:", bad);
   if (errors.length) console.log(errors.slice(0, 3));
-  // remover um aluno criado por engano
-  await page.locator('.pro-sidebar [data-g="resumo"]').click();
-  await page.locator('[data-sub="sessoes"]').click();
+  await ctxA.close();
+  // remover um aluno criado por engano: o separador Pacotes (com «Remover este aluno») só existe na Gestão, que não tem lista de alunos: abre-se a ficha a partir do Estúdio.
+  // Um aluno só de estúdio sem pacote não aparece no Estúdio, por isso recebe um pacote (como se tivesse sido importado) antes de a Gestão ler os dados de novo.
+  await page.evaluate(function(a){ window.__fake.tables.session_packs.push({id: "pk-bea", student_id: a.id, name: "Trim", total: 10, price: 150, starts_on: a.start, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}); }, {id: beaId, start: iso(30)});
+  await page.click("#navContracts"); await page.waitForSelector("#contractTotals");
+  await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.click('[data-open-student="' + beaId + '"]');
+  await page.waitForSelector("#proBack");
+  check.check("9b. Na Gestão a ficha do aluno abre só com os Pacotes (sem separadores de acompanhamento) e mostra «Remover este aluno»", (await page.locator("[data-sub]").count()) === 0 && (await page.locator("#stuRemove").count()) === 1);
   await page.waitForSelector("#stuRemove", {state: "attached"});
   await page.evaluate(function(){ document.querySelectorAll("#proMain details").forEach(function(d){ d.open = true; }); });
   var rowsBefore = await page.evaluate(function(){ return window.__fake.rows.length; });
   await page.click("#stuRemove");
   await page.waitForFunction(function(n){ return window.__fake.rows.length === n - 1; }, rowsBefore);
+  await page.waitForSelector("#gcalCard");
   var left = await page.evaluate(function(id){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === id; }).length; }, beaId);
-  check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta à lista", left === 0 && (await page.locator(".student-row").count()) >= 1 && !(await page.locator('.student-row:has-text("Beatriz Lopes")').count()));
-  await page.click("#areaGestao"); await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta ao Estúdio", left === 0 && (await page.locator("#proBack").count()) === 0 && (await page.locator("[data-open-student]").count()) >= 1 && !(await page.locator('[data-open-student="' + beaId + '"]').count()));
+  await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   await page.click("#gcSync"); await page.waitForFunction(function(){ return /eventos lidos/.test(document.querySelector("#gcOut").textContent); });
   check.check("11. O aluno apagado não volta: o título fica ignorado e não é recriado", (await page.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.name === "Beatriz Lopes"; }).length; })) === 0 && (await page.locator("[data-gc-name]").count()) === 0);
   await browser.close(); srv.server.close();

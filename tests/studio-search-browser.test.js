@@ -1,4 +1,5 @@
 // Estúdio: lupa (nomes que começam pelas letras) e ordem no resumo de treinos; número da aula na ficha e na agenda do dia. Chromium real.
+// Tudo isto é da Gestão (gestao.html abre direta no Estúdio; a ficha do aluno mostra só os Pacotes e abre-se a partir das linhas do Estúdio).
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
@@ -33,15 +34,14 @@ function fixtureRow(id, name){
   });
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
-  await pg.goto(srv.url); await pg.waitForSelector(".student-row");
+  await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#studioSummary");
   // ---- número da aula na ficha ----
-  await pg.locator('[data-open="a"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
+  await pg.locator('#studioSummary [data-open-student="a"]').first().click();
   await pg.waitForSelector(".history-row .pill");
   var ficha = await pg.locator("#proMain").innerText();
   check.check("1. A ficha mostra «Aula 1/13» e «Aula 2/13» ao lado das sessões da aluna", /Aula 1\/13/.test(ficha) && /Aula 2\/13/.test(ficha));
   // ---- Estúdio ----
-  await pg.click("#proBack"); await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
+  await pg.click("#proBack"); await pg.waitForSelector("#studioSummary");
   var names = function(){ return pg.evaluate(function(){ return [].filter.call(document.querySelectorAll("#studioSummary .studio-row"), function(r){ return !r.hidden; }).map(function(r){ return r.querySelector(".wl-info").textContent.trim(); }); }); };
   check.check("2. O Estúdio tem a lupa e a ordem, e o resumo mostra os 4 alunos", (await pg.locator("#stSearch").count()) === 1 && (await pg.locator("#stSort").count()) === 1 && (await names()).length === 4);
   await pg.focus("#stSearch"); await pg.keyboard.type("br", {delay: 40});

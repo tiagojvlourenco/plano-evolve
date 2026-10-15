@@ -107,10 +107,10 @@ function fixtureRow(id, name){
   });
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
-  await pg.goto(srv.url);
-  await pg.waitForSelector(".student-row");
-  await pg.locator('[data-open="s1"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
+  // os pacotes vivem na app de Gestão (gestao.html), que abre direta no Estúdio; a ficha abre-se a partir daí e mostra só os Pacotes
+  await pg.goto(srv.url + "gestao.html");
+  await pg.waitForSelector('[data-open-student="s1"]');
+  await pg.locator('[data-open-student="s1"]').first().click();
   await pg.waitForSelector("[data-extend-pack]");
   var txt = await pg.locator("#proMain").innerText();
   check.check("3. Mostra «Aguarda renovação · +3 aulas extra» e o botão para as contar no pacote caducado", /Aguarda renovação/.test(txt) && /\+3 aulas extra/.test(txt) && /Contar estas aulas no pacote/i.test(txt));
@@ -151,8 +151,7 @@ function fixtureRow(id, name){
   });
   var p2 = await ctx2.newPage(); p2.setDefaultTimeout(6000);
   p2.on("pageerror", function(e){ errors.push(e.message); }); p2.on("dialog", function(d){ d.accept(); });
-  await p2.goto(srv.url); await p2.waitForSelector(".student-row");
-  await p2.click("#areaGestao"); await p2.click("#navStudio"); await p2.waitForSelector("#fixPacks");
+  await p2.goto(srv.url + "gestao.html"); await p2.waitForSelector("#fixPacks");
   await p2.click("#fixPacks");
   await p2.waitForFunction(function(){ return /acertadas|acertada/.test(document.querySelector(".toast, #toast, [class*=toast]") ? document.querySelector(".toast, #toast, [class*=toast]").innerText : ""); }).catch(function(){});
   await p2.waitForFunction(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === "a"; }).every(function(x){ return x.pack_id === "pa"; }); });
@@ -177,9 +176,8 @@ function fixtureRow(id, name){
   });
   var p3 = await ctx3.newPage(); p3.setDefaultTimeout(6000);
   p3.on("pageerror", function(e){ errors.push(e.message); }); p3.on("dialog", function(d){ d.accept(); });
-  await p3.goto(srv.url); await p3.waitForSelector(".student-row");
-  await p3.locator('[data-open="r1"]').first().click();
-  await p3.click('[data-sub="sessoes"]');
+  await p3.goto(srv.url + "gestao.html"); await p3.waitForSelector('[data-open-student="r1"]');
+  await p3.locator('[data-open-student="r1"]').first().click();
   await p3.waitForSelector("[data-renew-pack]");
   await p3.click("[data-renew-pack]");
   await p3.waitForFunction(function(){ var T = window.__fake.tables; return T.session_packs.length === 2 && T.payments.length === 1 && T.sessions.filter(function(x){ return x.id[0] === "x" && x.pack_id; }).length === 2; });
@@ -202,9 +200,8 @@ function fixtureRow(id, name){
   });
   var p4 = await ctx4.newPage(); p4.setDefaultTimeout(6000);
   p4.on("pageerror", function(e){ errors.push(e.message); }); p4.on("dialog", function(d){ d.accept(); });
-  await p4.goto(srv.url); await p4.waitForSelector(".student-row");
-  await p4.locator('[data-open="q1"]').first().click();
-  await p4.click('[data-sub="sessoes"]');
+  await p4.goto(srv.url + "gestao.html"); await p4.waitForSelector('[data-open-student="q1"]');
+  await p4.locator('[data-open-student="q1"]').first().click();
   await p4.waitForSelector("[data-renew-pack]");
   await p4.click("[data-renew-pack]");
   await p4.waitForFunction(function(){ return window.__fake.tables.session_packs.length === 2; });
@@ -223,8 +220,7 @@ function fixtureRow(id, name){
   });
   var p5 = await ctx5.newPage(); p5.setDefaultTimeout(6000);
   p5.on("pageerror", function(e){ errors.push(e.message); }); p5.on("dialog", function(d){ d.accept(); });
-  await p5.goto(srv.url); await p5.waitForSelector(".student-row");
-  await p5.click("#areaGestao"); await p5.click("#navStudio"); await p5.waitForSelector("#fixPacks");
+  await p5.goto(srv.url + "gestao.html"); await p5.waitForSelector("#fixPacks");
   await p5.click("#fixPacks");
   await p5.waitForFunction(function(){ var p = window.__fake.tables.session_packs[0]; return p && p.expires_on; });
   var n2 = await p5.evaluate(function(){ return window.__fake.tables.session_packs[0]; });

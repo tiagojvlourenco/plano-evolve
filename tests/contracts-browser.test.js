@@ -84,9 +84,8 @@ function fixtureRow(id, name){
   await pg.evaluate(function(){ document.getElementById("contractImport").open = true; });
   await pg.fill("#ctImpText", "PT 45 - Bruno Costa; Anual; Individual; Ativo\nPT Duo 60 - Rui Duo + Eva Duo; Mensal; Duo; Suspenso\nNinguém; Mensal; Individual; Ativo");
   await pg.click("#ctImpGo");
-  await pg.waitForFunction(function(){ return /atualizados/.test(document.getElementById("ctImpOut") ? document.getElementById("ctImpOut").textContent : "") || /Suspenso/.test(document.querySelector("#contractList").innerText); });
+  await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "contracts"; })[0]; return r && r.value.b && r.value.b.modalidade === "anual" && r.value.e && r.value.e.estado === "suspenso"; });
   var imp = await pg.evaluate(function(){ var v = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value; return {b: v.b, d: v.d, e: v.e}; });
-  console.log("DBG", JSON.stringify(imp));
   check.check("15. A importação grava modalidade, minutos (do «PT 45») e estado, e o duo nos dois", imp.b && imp.b.modalidade === "anual" && imp.b.minutos === 45 && imp.d.estado === "suspenso" && imp.e.estado === "suspenso" && imp.d.formato === "duo");
   // financeiro
   await pg.click('[data-ct-tab="financeiro"]'); await pg.waitForSelector("#ctMonth");

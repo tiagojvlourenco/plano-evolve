@@ -2030,6 +2030,12 @@ function renderProStudioMain(){
       (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
   });
   html += "</div>";
+  // alunos ainda sem pacote: sem isto, na app de Gestão não havia como abrir a ficha deles para lhes criar o primeiro pacote
+  var noPack = students.filter(function(st){ return !packsOf(st.id).length && !usablePacksOf(st.id).length; });
+  if (noPack.length){
+    html += "<div class=\"card\" id=\"studioNoPack\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Alunos sem pacote (" + noPack.length + ")</div>" +
+      noPack.map(function(st){ return "<div class=\"studio-row\" data-sname=\"" + escapeHtml(exLibFold(st.name)) + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button><span class=\"muted-p\" style=\"white-space:nowrap;\">Criar pacote →</span></div></div>"; }).join("") + "</div>";
+  }
 
   // agenda do dia (horários semanais)
   if (studio.slotsAvailable){
