@@ -18,6 +18,25 @@ var check = require("./check")();
   check.check("2. Um pacote caducado e esgotado não alarga a janela", w2.from > addDaysISO(today, -250));
 })();
 
+// ---- duo: «PT Duo 60 - Ana + Rui» conta uma aula a cada um ----
+(function(){
+  var today = localTodayISO(), day = addDaysISO(today, -3);
+  STUDENTS.push({id: "duo1", name: "Zita Duo", isDemo: false, active: true}, {id: "duo2", name: "Hugo Duo", isDemo: false, active: true});
+  studio.sessions = []; studio.packs = [];
+  var win = {from: addDaysISO(today, -30), to: today};
+  var ev = {id: "evd", title: "PT Duo 60 - Zita Duo + Hugo Duo", date: day, time: "10:00", colorId: "10"};
+  var plan = planCalendarSync({events: [ev, {id: "evx", title: "PT Duo 60 - Zita Duo + Ninguém Real", date: day, time: "11:00"}], today: today, window: win, aliases: {}, ignored: {}, prefix: "PT"});
+  check.check("2b. Um evento de duo cria uma sessão para cada aluno (id do evento + aluno)", plan.insert.filter(function(x){ return /^evd#/.test(x.external_id); }).map(function(x){ return x.external_id; }).sort().join() === "evd#duo1,evd#duo2");
+  check.check("2c. Se só um dos nomes é aluno, a aula conta só para esse (como antes)", plan.insert.filter(function(x){ return x.external_id === "evx"; }).length === 1 && Object.keys(plan.unmatched).length === 0);
+  studio.sessions = plan.insert.map(function(x, i){ return Object.assign({id: "s" + i, pack_id: null}, x); });
+  var evx = {id: "evx", title: "PT Duo 60 - Zita Duo + Ninguém Real", date: day, time: "11:00"};
+  var plan2 = planCalendarSync({events: [ev, evx], today: today, window: win, aliases: {}, ignored: {}, prefix: "PT"});
+  check.check("2d. Sincronizar outra vez não duplica nem remove", plan2.insert.length === 0 && plan2.remove.length === 0 && plan2.update.length === 0);
+  studio.sessions = studio.sessions.slice(0);
+  var plan3 = planCalendarSync({events: [], today: today, window: win, aliases: {}, ignored: {}, prefix: "PT"});
+  check.check("2e. Se os eventos desaparecem, as sessões saem", plan3.remove.length === 3);
+})();
+
 var pw = null;
 ["playwright", "/opt/node22/lib/node_modules/playwright"].some(function(m){ try { pw = require(m); return true; } catch (e) { return false; } });
 var fs = require("fs");
@@ -73,6 +92,37 @@ function fixtureRow(id, name){
   check.check("8. Guardar grava o novo total e as aulas já dadas", pk.total === 20 && pk.used_before === 2);
   await pg.waitForFunction(function(){ return /5 de 20 usadas/.test(document.getElementById("proMain").innerText); });
   check.check("9. E a contagem passa a 5 de 20 (2 antes da app + 3 sessões)", true);
+  await ctx.close();
+
+  // ---- todos de uma vez: «Acertar pacotes» ----
+  var ctx2 = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctx2.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("a", "Ana A"), fixtureRow("b", "Bia B"), fixtureRow("c", "Carla C"), fixtureRow("d", "Dina D")]}));
+  await ctx2.addInitScript(function(){
+    function iso(back){ var d = new Date(); d.setDate(d.getDate() - back); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    var T = window.__fake.tables, n = 0;
+    function pack(id, st, total, start, exp, used){ T.session_packs.push({id: id, student_id: st, name: "P " + id, total: total, price: 100, starts_on: iso(start), expires_on: exp == null ? null : iso(exp), missed_consumes: true, late_cancel_consumes: true, used_before: used || 0}); }
+    function ses(st, back, packId){ T.sessions.push({id: "s" + (n++), student_id: st, pack_id: packId || null, date: iso(back), time: null, status: "feita", source: "calendario", external_id: "e" + n}); }
+    pack("pa", "a", 13, 250, 70, 0); ses("a", 60); ses("a", 30);               // A: caducou com aulas por dar e voltou a treinar → conta, sem validade
+    pack("pb", "b", 10, 250, 70, 0); pack("pb2", "b", 10, 40, -100, 0);        // B: já renovou (pacote novo a decorrer) → o antigo não se mexe
+    pack("pc", "c", 4, 250, 70, 0); ses("c", 240, "pc"); ses("c", 230, "pc"); ses("c", 220, "pc"); ses("c", 210, "pc"); ses("c", 20);   // C: pacote caducado e esgotado → a aula nova continua extra
+    pack("pd", "d", 10, 30, null, 0); ses("d", 10);                           // D: pacote a decorrer e uma aula sem pacote → liga-se
+  });
+  var p2 = await ctx2.newPage(); p2.setDefaultTimeout(6000);
+  p2.on("pageerror", function(e){ errors.push(e.message); }); p2.on("dialog", function(d){ d.accept(); });
+  await p2.goto(srv.url); await p2.waitForSelector(".student-row");
+  await p2.click("#navStudio"); await p2.waitForSelector("#fixPacks");
+  await p2.click("#fixPacks");
+  await p2.waitForFunction(function(){ return /acertadas|acertada/.test(document.querySelector(".toast, #toast, [class*=toast]") ? document.querySelector(".toast, #toast, [class*=toast]").innerText : ""); }).catch(function(){});
+  await p2.waitForFunction(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === "a"; }).every(function(x){ return x.pack_id === "pa"; }); });
+  var f2 = await p2.evaluate(function(){ var T = window.__fake.tables; return {packs: T.session_packs, ses: T.sessions}; });
+  function packById(id){ return f2.packs.filter(function(x){ return x.id === id; })[0]; }
+  function of(st){ return f2.ses.filter(function(x){ return x.student_id === st; }); }
+  check.check("11. A: as aulas contam no pacote que caducou e este fica sem validade", of("a").every(function(x){ return x.pack_id === "pa"; }) && packById("pa").expires_on === null);
+  check.check("12. B: já tinha pacote novo, o antigo mantém a validade", packById("pb").expires_on !== null);
+  check.check("13. C: pacote esgotado não é alargado e a aula nova continua sem pacote", packById("pc").expires_on !== null && of("c").filter(function(x){ return !x.pack_id; }).length === 1);
+  check.check("14. D: a aula sem pacote liga-se ao pacote a decorrer", of("d").every(function(x){ return x.pack_id === "pd"; }));
+  check.check("15. Nenhum erro de JavaScript (todos)", errors.length === 0);
+  await ctx2.close();
   check.check("10. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();

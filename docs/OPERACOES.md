@@ -175,3 +175,5 @@ As «Horas mensais» da folha «Dados» de cada cliente guardam-se em `studio_se
 ## 8k. Pacote caducado com aulas dadas depois (o aluno parou e voltou)
 
 Na ficha do aluno (Pacotes): «Editar» muda aulas, aulas já dadas antes da app, início e validade do pacote, e as aulas extra passam para ele. Se o aluno aguarda renovação com aulas extra mas o pacote caducado ainda tem aulas, aparece «Contar estas aulas no pacote caducado (sem validade)». A janela do Google Agenda chega agora às aulas previstas (folha) já passadas e aos pacotes caducados que ainda têm aulas: sincronizar volta a confirmar essas aulas.
+
+Automático para todos: «Sincronizar» (Google Agenda) e o botão «↻ Acertar pacotes» (Estúdio → Resumo de treinos) correm `autoFixPacks()`: as aulas sem pacote contam no pacote com aulas por dar; se o pacote caducou, não há outro mais novo e o aluno continuou a treinar, perde a validade. Um pacote esgotado ou já renovado não se mexe. Eventos de duo («PT Duo 60 - Ana + Rui»), quando os dois nomes são alunos, contam uma aula a cada um (id da sessão = idDoEvento#idDoAluno).

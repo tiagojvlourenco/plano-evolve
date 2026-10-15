@@ -14140,7 +14140,7 @@ function wireCalendarCard(main, redraw){
     if (cal !== calSettings.calendarId){ calSettings.calendarId = cal; }
     var pre = card.querySelector("#gcPrefix"); if (pre) calSettings.titlePrefix = pre.value.trim().slice(0, 30);
     sync.disabled = true; out("A pedir autorização ao Google e a ler a agenda…");
-    runCalendarSync().then(function(sum){ showToast("✓ Agenda sincronizada"); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
+    runCalendarSync().then(function(sum){ var fx = sum && sum.fixed; showToast("✓ Agenda sincronizada" + (fx && fx.sessions ? " · " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") : "")); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
   });
   var tog = card.querySelector("#gcToggle");
   if (tog) tog.addEventListener("click", function(){
@@ -14251,9 +14251,9 @@ function updateStudioBadge(){
 }
 // um pacote novo desconta as aulas extra já dadas desde a sua data de início
 function attachExtrasToPack(pack){
-  var capacity = Math.max(0, (Number(pack.total) || 0) - (Number(pack.used_before) || 0));
+  var capacity = packUsage(pack).remaining;   // só o que ainda resta (as sessões já ligadas ao pacote contam)
   var members = packMembersOf(pack);
-  var list = studio.sessions.filter(function(x){ return members.indexOf(x.student_id) >= 0 && !x.pack_id && x.date >= pack.starts_on && sessionConsumes(pack, x); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; }).slice(0, capacity);
+  var list = studio.sessions.filter(function(x){ return members.indexOf(x.student_id) >= 0 && !x.pack_id && x.date >= pack.starts_on && (!pack.expires_on || x.date <= pack.expires_on) && sessionConsumes(pack, x); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; }).slice(0, capacity);
   return list.reduce(function(chain, x){ return chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: pack.id}).then(function(r){ return n + (r.error ? 0 : 1); }); }); }, Promise.resolve(0));
 }
 
@@ -14496,6 +14496,19 @@ function calTitleKey(t){ return exLibFold(t); }
 // o aluno de um evento. Os títulos costumam trazer mais do que o nome ("PT 60 - Isabel Carvalho"), por isso procura, por ordem:
 // alias definido à mão; título igual ao nome; a parte depois do último " - " igual ao nome; o nome completo de um só aluno dentro do título
 // (se houver vários, o mais comprido); primeiro+último nome se for único.
+// «PT Duo 60 - Ana + Rui» → os dois alunos (só se os dois nomes forem alunos da app; senão fica na lista de títulos sem aluno)
+function matchDuoStudents(title){
+  var parts = String(title || "").split(/\s+[-–—]\s+/), tail = parts.length > 1 ? parts[parts.length - 1] : "";
+  if (!/\s[+&]\s/.test(tail)) return null;
+  var names = tail.split(/\s*[+&]\s*/).map(function(t){ return t.trim(); }).filter(Boolean), out = [];
+  if (names.length < 2) return null;
+  for (var k = 0; k < names.length; k++){
+    var st = matchStudentByName(names[k]);
+    if (!st || out.indexOf(st) >= 0) return null;
+    if (isStudentActive(st)) out.push(st);   // (um aluno arquivado do duo não conta; o outro sim)
+  }
+  return out.length ? out : null;
+}
 function matchEventStudent(title, aliases){
   var key = calTitleKey(title);
   if (aliases && Object.prototype.hasOwnProperty.call(aliases, key) && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
@@ -14538,15 +14551,23 @@ function planCalendarSync(opts){
   var byExt = Object.create(null);
   var claimed = Object.create(null); // sessões agendadas (da folha) que um evento já reivindicou
   studio.sessions.forEach(function(x){ if (x.source === "calendario" && x.external_id) byExt[x.external_id] = x; });
+  // um evento de duo («PT Duo 60 - Ana + Rui») conta uma aula a cada um: ganha um id por pessoa (idDoEvento#idDoAluno)
+  var items = [];
   opts.events.forEach(function(ev){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
     if (!calTitleHasPrefix(ev.title, prefix)) return; // não é uma aula (ex.: reuniões, feriados): nem conta nem aparece na lista
     var st = matchEventStudent(ev.title, aliases);
-    if (!st){ if (!calIsIgnored(ignored, ev.title)) plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1; return; }
-    present[ev.id] = true; // o evento existe: nunca remover as sessões já registadas (mesmo de alunos arquivados)
+    if (st){ items.push({ev: ev, st: st, eid: ev.id}); return; }
+    var duo = matchDuoStudents(ev.title);
+    if (duo){ duo.forEach(function(d){ items.push({ev: ev, st: d, eid: ev.id + "#" + d.id}); }); return; }
+    if (!calIsIgnored(ignored, ev.title)) plan.unmatched[ev.title] = (plan.unmatched[ev.title] || 0) + 1;
+  });
+  items.forEach(function(it){
+    var ev = it.ev, st = it.st, eid = it.eid;
+    present[eid] = true; // o evento existe: nunca remover as sessões já registadas (mesmo de alunos arquivados)
     if (!isStudentActive(st)) return;
     plan.matched++;
-    var status = ev.colorId === CAL_FALTA_COLOR ? "faltou" : "feita", ex = byExt[ev.id];
+    var status = ev.colorId === CAL_FALTA_COLOR ? "faltou" : "feita", ex = byExt[eid];
     if (ex){
       var patch = {};
       if (ex.student_id !== st.id) patch.student_id = st.id;
@@ -14560,7 +14581,7 @@ function planCalendarSync(opts){
     var planned = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === ev.date && x.status === "agendada" && x.source === "folha" && !claimed[x.id]; })[0];
     if (planned){
       claimed[planned.id] = true;
-      var pp = {status: status, source: "calendario", external_id: ev.id};
+      var pp = {status: status, source: "calendario", external_id: eid};
       if (ev.time) pp.time = ev.time;
       plan.update.push({id: planned.id, patch: pp});
       return;
@@ -14568,7 +14589,7 @@ function planCalendarSync(opts){
     // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes (as agendadas não contam: são só previsões)
     var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && x.status !== "agendada" && (!x.time || !ev.time || x.time === ev.time); });
     if (dup) return;
-    plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: ev.id});
+    plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: eid});
   });
   // sessões vindas do calendário cujo evento já não existe (apagado, cancelado ou renomeado) dentro da janela lida
   studio.sessions.forEach(function(x){
@@ -14683,7 +14704,9 @@ function runCalendarSync(){
   var today = localTodayISO(), win = calendarWindow(today);
   return googleAccessToken(calSettings.clientId).then(function(token){ return fetchCalendarEvents(token, calSettings.calendarId, win.from, win.to); }).then(function(events){
     return calApplyEvents(events, win);
-  }).then(function(s){ calSyncing = false; return s; }, function(e){ calSyncing = false; throw e; });
+  }).then(function(s){
+    return autoFixPacks().then(function(fix){ s.fixed = fix; calSyncing = false; return s; }, function(){ calSyncing = false; return s; });
+  }, function(e){ calSyncing = false; throw e; });
 }
 
 // ---- criar alunos a partir dos nomes da agenda ----
@@ -15170,6 +15193,30 @@ function openEditPackModal(pack, onDone){
     });
   });
 }
+// automático, para todos os alunos: as aulas dadas sem pacote contam no pacote que ainda tem aulas. Se o pacote caducou, não há outro mais novo
+// e o aluno continuou a treinar, o pacote deixa de caducar (a folha trata-o como o mesmo contrato). Devolve {students, sessions, extended}.
+function autoFixPacks(){
+  var today = localTodayISO(), rep = {students: 0, sessions: 0, extended: 0}, chain = Promise.resolve();
+  visibleStudentsForDashboard().filter(isStudentActive).forEach(function(st){
+    chain = chain.then(function(){
+      if (!extrasOf(st.id, today).n) return;
+      var own = studio.packs.filter(function(p){ return p.student_id === st.id; }).sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : -1; });
+      var steps = Promise.resolve(0), moved = 0;
+      // 1.º os pacotes a decorrer; 2.º o mais recente que caducou com aulas por dar, se nenhum outro começou depois dele
+      usablePacksOf(st.id).filter(function(p){ var u = packUsage(p, today); return u.active; }).forEach(function(p){
+        steps = steps.then(function(){ return attachExtrasToPack(p).then(function(n){ moved += n; }); });
+      });
+      steps = steps.then(function(){
+        if (!extrasOf(st.id, today).n) return;
+        var latest = own[0];
+        if (!latest || !packUsage(latest, today).expired || packUsage(latest, today).remaining <= 0) return;
+        return extendPackAndAttach(latest).then(function(r){ if (!r.error){ rep.extended++; moved += r.n || 0; } });
+      });
+      return steps.then(function(){ if (moved){ rep.students++; rep.sessions += moved; } });
+    });
+  });
+  return chain.then(function(){ return rep; });
+}
 // um clique: tira a validade ao pacote e conta nele as aulas dadas depois de ele caducar (o aluno parou e voltou)
 function extendPackAndAttach(pack){
   return studioUpdate("packs", pack.id, {expires_on: null}).then(function(r){
@@ -15264,7 +15311,7 @@ function renderProStudioMain(){
 
   // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
   var sumRows = studioSummaryRows(today);
-  html += "<div class=\"card\" id=\"studioSummary\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Resumo de treinos</div>";
+  html += "<div class=\"card\" id=\"studioSummary\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;\"><div class=\"eyebrow\">Resumo de treinos</div><button type=\"button\" class=\"btn btn-sm\" id=\"fixPacks\" style=\"min-height:44px;\" title=\"Conta nos pacotes as aulas que ficaram sem pacote\">↻ Acertar pacotes</button></div>";
   if (!sumRows.length) html += "<p class=\"muted-p\">Ainda sem pacotes. Importa os que já estão a decorrer (no fim desta página) ou cria-os na ficha de cada aluno.</p>";
   sumRows.forEach(function(r){
     var flag = r.state === "renovar" ? "🔄 Aguarda renovação" + (r.extras.n ? " · +" + r.extras.n + (r.extras.n === 1 ? " aula extra" : " aulas extra") + " (desde " + escapeHtml(fmtDateFullPt(r.extras.since)) + ")" : "")
@@ -15351,6 +15398,11 @@ function renderProStudioMain(){
     done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
   }); });
   wireCalendarCard(main, redraw);
+  var fixBtn = main.querySelector("#fixPacks");
+  if (fixBtn) fixBtn.addEventListener("click", function(){
+    fixBtn.disabled = true;
+    autoFixPacks().then(function(fx){ showToast(fx.sessions ? "✓ " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
+  });
   var hrsGo = main.querySelector("#hrsGo");
   if (hrsGo) hrsGo.addEventListener("click", function(){
     var out = main.querySelector("#hrsOut"); hrsGo.disabled = true; out.textContent = "A importar…";
