@@ -11746,6 +11746,8 @@ function redrawDashList(){
 function showDashListHead(){ var h = document.getElementById("studentListHead"); if (h && h.scrollIntoView){ try { h.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { h.scrollIntoView(); } } }
 // ligado ao documento uma só vez: um redesenho do ecrã em segundo plano não pode deixar a lupa sem ouvinte
 document.addEventListener("input", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
+document.addEventListener("keyup", function(e){ var t = e.target; if (t && t.id === "stuSearch" && t.value !== (state.dashSearch || "")){ state.dashSearch = t.value; redrawDashList(); } });
+document.addEventListener("compositionend", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
 document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
 document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stuSort"){ state.dashSort = t.value; redrawDashList(); showDashListHead(); } });
 function studentListRowsHtml(allRows){
@@ -11791,6 +11793,7 @@ function wireStudentList(root){
   });
 }
 
+var APP_BUILD = "2026-10-15 · lupa 4";   // sobe quando mudar algo visível: serve para ver se o browser tem a versão mais recente
 function renderProDashboardMain(){
   var main = document.getElementById("proMain"), dashAllRows = [];
   var hadSearchFocus = dashSearchFocused(), searchCaret = hadSearchFocus ? document.activeElement.selectionStart : null;
@@ -11840,6 +11843,7 @@ function renderProDashboardMain(){
     html += "<div class=\"student-list\" id=\"studentListBox\">" + studentListRowsHtml(allRows) + "</div>";
   }
 
+  html += "<p class=\"muted-p\" id=\"appBuild\" style=\"font-size:0.7rem; text-align:center; margin:18px 0 6px;\">Versão " + APP_BUILD + "</p>";
   main.innerHTML = html;
   dashRowsCache = dashAllRows;
   var listBox = main.querySelector("#studentListBox");
