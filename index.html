@@ -14901,7 +14901,7 @@ function packBarHtml(pack, u, viewerId){
   return "<div class=\"history-row\" style=\"align-items:flex-start;\"><div style=\"min-width:0;flex:1;\">" +
     "<div class=\"hlabel\">" + escapeHtml(pack.name) + (u.expired ? " <span class=\"pill\">caducado</span>" : u.exhausted ? " <span class=\"pill\">esgotado</span>" : u.ending ? " <span class=\"pill warn\">a acabar</span>" : "") + "</div>" +
     "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
-      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
+      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : renewMonthsPending(pack) ? " · a validade conta a partir da 1.ª aula" : " · sem validade") + "</div>" +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Aulas usadas: " + (function(){ var l = packUsageByStudent(pack).map(function(x){ return "<strong>" + escapeHtml(x.name) + "</strong> " + x.n; }); if (Number(pack.used_before) > 0) l.unshift("antes da app " + Number(pack.used_before)); return l.length ? l.join(" · ") : "nenhuma ainda"; })() + "</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
@@ -15219,7 +15219,7 @@ function openEditPackModal(pack, onDone){
 // automático, para todos os alunos: as aulas dadas sem pacote contam no pacote que ainda tem aulas. Se o pacote caducou, não há outro mais novo
 // e o aluno continuou a treinar, o pacote deixa de caducar (a folha trata-o como o mesmo contrato). Devolve {students, sessions, extended}.
 function autoFixPacks(){
-  var today = localTodayISO(), rep = {students: 0, sessions: 0, extended: 0}, chain = Promise.resolve();
+  var today = localTodayISO(), rep = {students: 0, sessions: 0, extended: 0, aligned: 0}, chain = alignRenewedPacks().then(function(n){ rep.aligned = n; });
   visibleStudentsForDashboard().filter(isStudentActive).forEach(function(st){
     chain = chain.then(function(){
       if (!extrasOf(st.id, today).n) return;
@@ -15240,14 +15240,32 @@ function autoFixPacks(){
   });
   return chain.then(function(){ return rep; });
 }
+var RENEW_PENDING_PREFIX = "renov:";
+function renewMonthsPending(pack){ var m = pack && typeof pack.notes === "string" ? /^renov:(\d+)$/.exec(pack.notes) : null; return m ? parseInt(m[1], 10) : 0; }
+// pacotes renovados «a contar»: quando a primeira aula entra no pacote, o início e a validade passam a contar dessa aula
+function alignRenewedPacks(){
+  var chain = Promise.resolve(0);
+  studio.packs.filter(function(p){ return renewMonthsPending(p) > 0; }).forEach(function(p){
+    chain = chain.then(function(n){
+      var dates = studio.sessions.filter(function(x){ return x.pack_id === p.id && sessionConsumes(p, x); }).map(function(x){ return x.date; }).sort();
+      if (!dates.length) return n;
+      var first = dates[0], months = renewMonthsPending(p);
+      return studioUpdate("packs", p.id, {starts_on: first, expires_on: addMonthsISO(first, months), notes: null}).then(function(r){ return n + (r.error ? 0 : 1); });
+    });
+  });
+  return chain;
+}
 // renovar num toque: novo pacote igual ao anterior (aulas, preço, validade, partilha) a começar na primeira aula que ficou sem pacote (ou hoje) + cobrança por pagar;
 // o contador volta a zero e as aulas extra já dadas passam para ele
 function renewPack(pack){
   var today = localTodayISO(), ex = extrasOf(pack.student_id, today);
   var start = ex.since && ex.since >= pack.starts_on ? ex.since : today;
   var months = pack.expires_on && pack.starts_on ? Math.max(1, Math.round((new Date(pack.expires_on + "T00:00:00Z") - new Date(pack.starts_on + "T00:00:00Z")) / 86400000 / 30.4)) : 0;
-  var row = {student_id: pack.student_id, name: pack.name, total: pack.total, price: pack.price, starts_on: start, expires_on: months ? addMonthsISO(start, months) : null,
+  // a validade conta a partir da 1.ª aula do pacote novo: se já há aulas dadas, é a data delas; se não, fica «a contar» e acerta-se quando a primeira aula entrar
+  var pending = !(ex.since && ex.since >= pack.starts_on) && months > 0;
+  var row = {student_id: pack.student_id, name: pack.name, total: pack.total, price: pack.price, starts_on: start, expires_on: months && !pending ? addMonthsISO(start, months) : null,
     missed_consumes: pack.missed_consumes !== false, late_cancel_consumes: pack.late_cancel_consumes !== false};
+  if (pending) row.notes = RENEW_PENDING_PREFIX + months;
   if (studio.slotsAvailable) row.used_before = 0;
   if (studio.sharedAvailable && sharedIdsOf(pack).length) row.shared_with = sharedIdsOf(pack);
   return studioInsert("packs", row).then(function(r){
@@ -15452,7 +15470,7 @@ function renderProStudioMain(){
   var fixBtn = main.querySelector("#fixPacks");
   if (fixBtn) fixBtn.addEventListener("click", function(){
     fixBtn.disabled = true;
-    autoFixPacks().then(function(fx){ showToast(fx.sessions ? "✓ " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
+    autoFixPacks().then(function(fx){ showToast(fx.sessions || fx.aligned ? "✓ " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") + (fx.aligned ? " · " + fx.aligned + (fx.aligned === 1 ? " renovação a contar da 1.ª aula" : " renovações a contar da 1.ª aula") : "") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
   });
   var hrsGo = main.querySelector("#hrsGo");
   if (hrsGo) hrsGo.addEventListener("click", function(){

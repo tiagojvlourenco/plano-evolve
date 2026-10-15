@@ -170,6 +170,46 @@ function fixtureRow(id, name){
   await p3.waitForFunction(function(){ return /2 de 3 usadas/.test(document.getElementById("proMain").innerText); });
   check.check("19. A ficha mostra o pacote novo com 2 de 3 usadas (restam 1)", /restam 1/.test(await p3.locator("#proMain").innerText()));
   await ctx3.close();
+  // ---- renovar antes de haver aulas: a validade conta a partir da 1.ª aula do pacote novo ----
+  var ctx4 = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctx4.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("q1", "Quita Renova")]}));
+  await ctx4.addInitScript(function(){
+    function iso(back){ var d = new Date(); d.setDate(d.getDate() - back); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    var T = window.__fake.tables;
+    T.session_packs.push({id: "old", student_id: "q1", name: "Pacote 2 aulas", total: 2, price: 80, starts_on: iso(100), expires_on: iso(100 - 183), missed_consumes: true, late_cancel_consumes: true, used_before: 0, shared_with: []});
+    [60, 40].forEach(function(b, i){ T.sessions.push({id: "o" + i, student_id: "q1", pack_id: "old", date: iso(b), time: null, status: "feita", source: "calendario", external_id: "o" + i}); });
+  });
+  var p4 = await ctx4.newPage(); p4.setDefaultTimeout(6000);
+  p4.on("pageerror", function(e){ errors.push(e.message); }); p4.on("dialog", function(d){ d.accept(); });
+  await p4.goto(srv.url); await p4.waitForSelector(".student-row");
+  await p4.locator('[data-open="q1"]').first().click();
+  await p4.click('[data-sub="sessoes"]');
+  await p4.waitForSelector("[data-renew-pack]");
+  await p4.click("[data-renew-pack]");
+  await p4.waitForFunction(function(){ return window.__fake.tables.session_packs.length === 2; });
+  var n1 = await p4.evaluate(function(){ return window.__fake.tables.session_packs.filter(function(x){ return x.id !== "old"; })[0]; });
+  check.check("20. Sem aulas ainda, o pacote renovado fica «a contar» (sem data de validade e com a marca da duração)", n1.expires_on === null && /^renov:\d+$/.test(n1.notes || ""));
+  check.check("20b. E a ficha avisa que a validade conta a partir da 1.ª aula", /a validade conta a partir da 1\.ª aula/.test(await p4.locator("#proMain").innerText()));
+  await ctx4.close();
+  // a primeira aula do pacote novo entra: o início e a validade passam a contar dessa aula
+  var ctx5 = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctx5.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("w1", "Wanda Renova")]}));
+  await ctx5.addInitScript(function(){
+    function iso(back){ var d = new Date(); d.setDate(d.getDate() - back); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+    var T = window.__fake.tables;
+    T.session_packs.push({id: "nw", student_id: "w1", name: "Pacote 5 aulas", total: 5, price: 100, starts_on: iso(9), expires_on: null, notes: "renov:6", missed_consumes: true, late_cancel_consumes: true, used_before: 0, shared_with: []});
+    [4, 1].forEach(function(b, i){ T.sessions.push({id: "w" + i, student_id: "w1", pack_id: "nw", date: iso(b), time: null, status: "feita", source: "calendario", external_id: "w" + i}); });
+  });
+  var p5 = await ctx5.newPage(); p5.setDefaultTimeout(6000);
+  p5.on("pageerror", function(e){ errors.push(e.message); }); p5.on("dialog", function(d){ d.accept(); });
+  await p5.goto(srv.url); await p5.waitForSelector(".student-row");
+  await p5.click("#navStudio"); await p5.waitForSelector("#fixPacks");
+  await p5.click("#fixPacks");
+  await p5.waitForFunction(function(){ var p = window.__fake.tables.session_packs[0]; return p && p.expires_on; });
+  var n2 = await p5.evaluate(function(){ return window.__fake.tables.session_packs[0]; });
+  var d4 = (function(){ var d = new Date(); d.setDate(d.getDate() - 4); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+  check.check("21. Com a 1.ª aula dentro do pacote, o início passa a ser o dia dessa aula e a validade conta daí (a marca desaparece)", n2.starts_on === d4 && n2.notes === null && n2.expires_on === addMonthsISO(d4, 6));
+  await ctx5.close();
   check.check("10. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();
