@@ -320,6 +320,7 @@
   .student-search:focus-within{border-color:var(--accent);}
   .student-tools .mini-select{min-height:44px;}
   #phaseReviewsCard, #contactQueue, #onboardingCard{margin-bottom:14px;}
+  [data-sname][hidden]{display:none !important;}
   .assess-form-grid .f input[type=checkbox]{width:auto; flex:none; padding:0; margin:0;}
   .student-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; cursor:pointer;}
   .student-card:hover{border-color:var(--line-strong);}
@@ -13966,15 +13967,15 @@ function activePacksOf(studentId, today){
 }
 // o pacote a que uma sessão numa certa data deve ser descontada: o que caduca primeiro, dentro da validade e com sessões por usar
 // (nos pacotes partilhados, a igualdade de validade resolve-se a favor do pacote do próprio aluno; quando o seu acaba, gasta o do outro)
-function pickPackForSession(studentId, date){
+function pickPackForSession(studentId, date, simUsed){
   var d = isIsoDate(date) ? date : localTodayISO();
   var own = studio.packs.filter(function(p){ return p.student_id === studentId; });
   var firstOwnStart = own.reduce(function(m, p){ return p.starts_on && (!m || p.starts_on < m) ? p.starts_on : m; }, null);
   // as aulas de um aluno que tem pacote próprio, dadas antes de esse pacote começar, não gastam o pacote de outra pessoa (eram de um pacote anterior)
   var mayShare = !firstOwnStart || d >= firstOwnStart;
   return usablePacksOf(studentId).filter(function(p){
-    var u = packUsage(p, d);
-    return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d) && (p.student_id === studentId || mayShare);
+    var u = packUsage(p, d), rem = simUsed && simUsed[p.id] != null ? Math.max(0, (Number(p.total) || 0) - simUsed[p.id]) : u.remaining;   // simUsed: contagens simuladas (aulas previstas)
+    return rem > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d) && (p.student_id === studentId || mayShare);
   }).sort(function(a, b){
     // o que caduca primeiro; com a mesma validade, o mais antigo (as aulas que restam no pacote do parceiro gastam-se antes do pacote novo); no empate, o do próprio aluno
     var ea = a.expires_on || "9999", eb = b.expires_on || "9999";
@@ -14001,6 +14002,28 @@ function reassignSharedPackSessions(){
     chain = chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: now}).then(function(r){ if (!r.error) x.pack_id = now; return n + (r.error ? 0 : 1); }); });
   });
   return chain;
+}
+// o número da aula dentro do pacote (todas as pessoas que o gastam, por ordem de data); as previstas (agendadas) levam o número que terão
+function sessionNumberMap(){
+  var map = {}, byTime = function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : (a.time || "") > (b.time || "") ? 1 : (a.id < b.id ? -1 : 1); };
+  var used = {};
+  studio.packs.forEach(function(p){
+    var base = Number(p.used_before) || 0, total = Number(p.total) || 0;
+    var list = studio.sessions.filter(function(x){ return x.pack_id === p.id && sessionConsumes(p, x); }).sort(byTime);
+    list.forEach(function(x, i){ map[x.id] = {n: base + i + 1, total: total, over: base + i + 1 > total}; });
+    used[p.id] = base + list.length;
+  });
+  studio.sessions.filter(function(x){ return x.status === "agendada" && !x.pack_id; }).sort(byTime).forEach(function(x){
+    var pk = pickPackForSession(x.student_id, x.date, used);
+    if (!pk) return;
+    used[pk.id] = (used[pk.id] || 0) + 1;
+    map[x.id] = {n: used[pk.id], total: Number(pk.total) || 0, projected: true};
+  });
+  return map;
+}
+function sessionNumberPill(info){
+  if (!info) return "";
+  return "<span class=\"pill" + (info.projected ? "" : " good") + "\" title=\"" + (info.projected ? "Número previsto da aula no pacote" : "Número da aula no pacote") + "\" style=\"" + (info.projected ? "opacity:.75;" : "") + "\">Aula " + info.n + "/" + info.total + "</span>";
 }
 function sessionsOfStudent(studentId){ return studio.sessions.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }); }
 function paymentStatus(p, today){
@@ -14963,7 +14986,7 @@ function packBarHtml(pack, u, viewerId){
 }
 function paymentRowHtml(p, today, withName){
   var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
-  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
+  return "<div class=\"history-row\"" + (withName ? " data-sname=\"" + escapeHtml(exLibFold(nameOf(p.student_id))) + "\"" : "") + " style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\">" +
     "<div class=\"hlabel\">" + (withName ? "<button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(p.student_id) + "\">" + escapeHtml(nameOf(p.student_id)) + "</button> · " : "") + escapeHtml(eur(p.amount)) + " <span class=\"pill " + tone + "\">" + st + "</span></div>" +
     "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Vence " + escapeHtml(fmtDateFullPt(p.due_on)) + (p.paid_on ? " · pago em " + escapeHtml(fmtDateFullPt(p.paid_on)) + (p.method ? " (" + escapeHtml(PAYMENT_METHODS[p.method] || p.method) + ")" : "") : "") + "</div></div>" +
     "<span style=\"white-space:nowrap;\">" + (p.paid_on ? "" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button> ") +
@@ -15027,9 +15050,10 @@ function tplProSessoes(s){
 
   var allSess = sessionsOfStudent(s.id);
   var upcoming = allSess.filter(function(x){ return x.status === "agendada" && x.date >= today; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var numMap = sessionNumberMap();
   var sessRow = function(x){
     var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
-    return "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 130px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) + (pk.student_id !== x.student_id && findStudent(pk.student_id) ? " · pacote de " + escapeHtml(nameOf(pk.student_id)) : "") : "sem pacote") + "</div></div>" +
+    return "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 130px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + " " + sessionNumberPill(numMap[x.id]) + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) + (pk.student_id !== x.student_id && findStudent(pk.student_id) ? " · pacote de " + escapeHtml(nameOf(pk.student_id)) : "") : "sem pacote") + "</div></div>" +
       "<span style=\"display:flex; gap:6px; align-items:center; flex-wrap:wrap;\">" + sessionStatusPill(x.status, x.date) +
       "<select class=\"mini-select\" data-sess-set=\"" + escapeHtml(x.id) + "\" aria-label=\"Alterar estado da sessão\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).filter(function(k){ return k !== x.status; }).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select>" +
       " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
@@ -15416,8 +15440,33 @@ function wireStudioCommon(el, redraw){
   }); });
 }
 
+/* lupa e ordem no Estúdio: filtra por nome (começa por…) todas as listas com alunos e ordena o resumo de treinos */
+function applyStudioFilter(){
+  var main = document.getElementById("proMain");
+  if (!main || !main.querySelector("#studioTools")) return;
+  var q = exLibFold(studioView.search || ""), rows = [].slice.call(main.querySelectorAll("[data-sname]")), seen = {}, shown = 0;
+  rows.forEach(function(r){ var nm = r.getAttribute("data-sname"), ok = !q || nameStartsWithQuery(nm, q); r.hidden = !ok; if (ok && !seen[nm]){ seen[nm] = true; shown++; } });
+  var box = main.querySelector("#studioSummary");
+  if (box){
+    var list = [].slice.call(box.querySelectorAll(".studio-row")), sort = studioView.sort || "urgencia";
+    var key = function(r){ return r.getAttribute("data-sname"); };
+    list.sort(function(a, b){
+      if (sort === "az") return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
+      if (sort === "za") return key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0;
+      if (sort === "menos") return (Number(a.getAttribute("data-rem")) - Number(b.getAttribute("data-rem"))) || (key(a) < key(b) ? -1 : 1);
+      return Number(a.getAttribute("data-ord")) - Number(b.getAttribute("data-ord"));
+    });
+    list.forEach(function(r){ box.appendChild(r); });
+  }
+  var info = main.querySelector("#stInfo");
+  if (info){ info.hidden = !q; info.textContent = q ? (shown ? shown + (shown === 1 ? " aluno" : " alunos") + " no estúdio" : "Nenhum aluno com «" + studioView.search.trim() + "» no estúdio.") : ""; }
+}
+document.addEventListener("input", function(e){ var t = e.target; if (t && t.id === "stSearch"){ studioView.search = t.value; applyStudioFilter(); } });
+document.addEventListener("keyup", function(e){ var t = e.target; if (t && t.id === "stSearch" && t.value !== (studioView.search || "")){ studioView.search = t.value; applyStudioFilter(); } });
+document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "stSearch"){ studioView.search = t.value; applyStudioFilter(); } });
+document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stSort"){ studioView.sort = t.value; applyStudioFilter(); var b = document.getElementById("studioSummary"); if (b && b.scrollIntoView){ try { b.scrollIntoView({block: "start", behavior: "smooth"}); } catch (err) { b.scrollIntoView(); } } } });
 /* visão geral do estúdio (menu "Estúdio") */
-var studioView = {month: null, date: null};
+var studioView = {month: null, date: null, search: "", sort: "urgencia"};
 function renderProStudioMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; studioRefresh().then(function(){ if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain(); }); return; }
@@ -15429,17 +15478,21 @@ function renderProStudioMain(){
     proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
     proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + proStat(totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "Horas mensais ativas") + "</div>";
 
+  html += "<div class=\"student-tools\" id=\"studioTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stSearch\" placeholder=\"Procurar aluno no estúdio…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno no estúdio\" value=\"" + escapeHtml(studioView.search || "") + "\"></label>" +
+    "<select id=\"stSort\" class=\"mini-select\" aria-label=\"Ordenar o resumo de treinos\">" + [["urgencia", "Por urgência"], ["az", "Nome A → Z"], ["za", "Nome Z → A"], ["menos", "Menos aulas primeiro"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (studioView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"stInfo\" style=\"margin:-6px 0 12px; font-size:0.78rem;\" hidden></p>";
+
   try { html += calendarCardHtml(); } catch (e){ html += "<div class=\"card\"><div class=\"eyebrow\">Google Agenda</div><p class=\"muted-p\">Não foi possível mostrar o cartão. Atualiza a página e sincroniza outra vez.</p></div>"; }
 
   // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
-  var sumRows = studioSummaryRows(today);
+  var sumRows = studioSummaryRows(today), sumOrd = 0;
   html += "<div class=\"card\" id=\"studioSummary\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;\"><div class=\"eyebrow\">Resumo de treinos</div><button type=\"button\" class=\"btn btn-sm\" id=\"fixPacks\" style=\"min-height:44px;\" title=\"Conta nos pacotes as aulas que ficaram sem pacote\">↻ Acertar pacotes</button></div>";
   if (!sumRows.length) html += "<p class=\"muted-p\">Ainda sem pacotes. Importa os que já estão a decorrer (no fim desta página) ou cria-os na ficha de cada aluno.</p>";
   sumRows.forEach(function(r){
     var flag = r.state === "renovar" ? "🔄 Aguarda renovação" + (r.extras.n ? " · +" + r.extras.n + (r.extras.n === 1 ? " aula extra" : " aulas extra") + " (desde " + escapeHtml(fmtDateFullPt(r.extras.since)) + ")" : "")
       : r.state === "acabar" ? "⚠️ A acabar" + (r.u.daysLeft != null && r.u.daysLeft <= PACK_ENDING_DAYS ? " · termina em " + r.u.daysLeft + " dias" : "")
       : r.state === "pendente" ? "Começa a " + escapeHtml(fmtDateFullPt(r.pack.starts_on)) : "";
-    html += "<div class=\"studio-row " + r.state + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
+    html += "<div class=\"studio-row " + r.state + "\" data-sname=\"" + escapeHtml(exLibFold(r.student.name)) + "\" data-ord=\"" + (sumOrd++) + "\" data-rem=\"" + r.u.remaining + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
       "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
@@ -15455,11 +15508,12 @@ function renderProStudioMain(){
     var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
     html += "<div class=\"card\" id=\"studioAgenda\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Agenda — " + escapeHtml(WEEKDAY_NAMES[isoWeekday(studioView.date)]) + ", " + escapeHtml(fmtDateFullPt(studioView.date)) + "</div>" +
       "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>";
+    var agendaNums = sessionNumberMap();
     if (!agenda.length) html += "<p class=\"muted-p\">Nenhuma sessão neste dia." + (calUsesCalendar() ? " Sincroniza o Google Agenda para trazer as aulas." : " Define o horário semanal de cada aluno na ficha (separador Pacotes).") + "</p>";
     agenda.forEach(function(sl){
       var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
       var past = studioView.date < today || (studioView.date === today);
-      html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 150px;\"><div class=\"hlabel\">" + escapeHtml(sl.time) + " · <button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(sl.student_id) + "\">" + escapeHtml(nameOf(sl.student_id)) + "</button></div>" +
+      html += "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(nameOf(sl.student_id))) + "\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 150px;\"><div class=\"hlabel\">" + escapeHtml(sl.time) + " · <button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(sl.student_id) + "\">" + escapeHtml(nameOf(sl.student_id)) + "</button> " + (ses ? sessionNumberPill(agendaNums[ses.id]) : "") + "</div>" +
         "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (ses ? sessionStatusPill(ses.status) + (ses.source === "agenda" ? " contada pelo horário" : "") : (studioView.date > today ? "agendada" : "ainda por contar")) + "</div></div>" +
         "<select class=\"mini-select\" data-sched=\"" + escapeHtml(sl.id) + "\" aria-label=\"Alterar resultado\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select></div>";
     });
@@ -15474,7 +15528,7 @@ function renderProStudioMain(){
   withPack.forEach(function(st){
     var existing = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === studioView.date; });
     var pk = pickPackForSession(st.id, studioView.date), u = pk ? packUsage(pk, studioView.date) : null;
-    html += "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
+    html += "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (u ? "restam " + u.remaining + " de " + u.total : "") + "</div></div><span style=\"display:flex; gap:6px; flex-wrap:wrap;\">" +
       (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
         : Object.keys(SESSION_STATUS).filter(function(key){ return key !== "agendada"; }).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
@@ -15487,7 +15541,7 @@ function renderProStudioMain(){
 
   var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: packActiveMember(p)}; }).filter(function(x){ return x.st && packEndingInPool(x.p, today); });
   html += "<div class=\"card\" id=\"studioEnding\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes a acabar</div>" +
-    (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
+    (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(x.st.name)) + "\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
       escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
 
   html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
@@ -15508,7 +15562,10 @@ function renderProStudioMain(){
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"stMonth\">Mês</label><input type=\"month\" id=\"stMonth\" value=\"" + studioView.month + "\"></div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido no mês: " + escapeHtml(eur(k.received)) + " (" + k.receivedN + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
+  var stHadFocus = document.activeElement && document.activeElement.id === "stSearch", stCaret = stHadFocus ? document.activeElement.selectionStart : null;
   main.innerHTML = html;
+  applyStudioFilter();
+  if (stHadFocus){ var stEl = main.querySelector("#stSearch"); if (stEl){ try { stEl.focus(); if (stCaret != null) stEl.setSelectionRange(stCaret, stCaret); } catch (e) {} } }
 
   var redraw = function(){ renderProStudioMain(); };
   wireStudioCommon(main, redraw);
