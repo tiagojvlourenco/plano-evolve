@@ -11656,7 +11656,9 @@ function renderProShell(){
   if (!selected){
     sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
       "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + studioNavLabel() + "</button>" +
-      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>";
+      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>" +
+      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>" +
+      "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>";
   } else {
     // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
     sidebar += proStudentNavHtml();
@@ -11668,6 +11670,10 @@ function renderProShell(){
   var navDash = document.getElementById("navDashboard"), navCat = document.getElementById("navCatalog");
   if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
   if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
+  var navContracts = document.getElementById("navContracts");
+  if (navContracts) navContracts.addEventListener("click", function(){ state.proSelectedId=null; state.proView="contracts"; contractsView.open = null; studio.loaded = false; contractMeta.loaded = false; renderProShell(); });
+  var navMe = document.getElementById("navMe");
+  if (navMe) navMe.addEventListener("click", function(){ var go = function(){ goToMe(); }; if (!contractMeta.loaded) loadContractMeta().then(go); else go(); });
   var navStudio = document.getElementById("navStudio");
   if (navStudio) navStudio.addEventListener("click", function(){ state.proSelectedId=null; state.proView="studio"; studio.loaded = false; renderProShell(); }); // lê os dados de novo de cada vez que se abre
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
@@ -11705,6 +11711,7 @@ function renderProShell(){
   if (selected) renderProDetailMain(selected);
   else if (state.proView === "catalog") renderProCatalogMain();
   else if (state.proView === "studio") renderProStudioMain();
+  else if (state.proView === "contracts") renderProContractsMain();
   else renderProDashboardMain();
 }
 
@@ -14396,11 +14403,17 @@ function parseHoursImport(text){
   });
   return {rows: rows, errors: errors};
 }
+// «Ana + Rui» (duo): só vale como nome inteiro se houver um aluno com exatamente esse nome; senão partem-se os dois (matchStudentByName aceita «primeiro + último» e enganava-se)
+function matchStudentWholeName(name){
+  if (!/\s\+\s/.test(name)) return matchStudentByName(name);
+  var key = exLibFold(name), all = STUDENTS.filter(function(x){ return !x.isDemo || state.showDemoStudents; }).filter(function(x){ return exLibFold(x.name) === key; });
+  return all.length === 1 ? all[0] : null;
+}
 function studioImportHours(text){
   var parsed = parseHoursImport(text), report = {saved: 0, errors: parsed.errors.slice()};
   var prev = JSON.parse(JSON.stringify(monthlyHours.map));
   parsed.rows.forEach(function(r){
-    var whole = matchStudentByName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);   // «Ana + Rui» (duo): as horas da linha dividem-se pelos dois (a aula conta uma só vez)
+    var whole = matchStudentWholeName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);   // «Ana + Rui» (duo): as horas da linha dividem-se pelos dois (a aula conta uma só vez)
     names.forEach(function(nm){
       var st = whole || matchStudentByName(nm);
       if (!st) report.errors.push(nm + ": não encontrei um aluno com este nome.");
@@ -14440,7 +14453,13 @@ function matchStudentByName(name){
   if (exact.length > 1) return null;
   var parts = key.split(" ").filter(Boolean);
   var loose = all.filter(function(s){ var p = exLibFold(s.name).split(" ").filter(Boolean); return parts.length >= 2 && p[0] === parts[0] && p[p.length - 1] === parts[parts.length - 1]; });
-  return loose.length === 1 ? loose[0] : null;
+  if (loose.length === 1) return loose[0];
+  // só um nome («Carina», «Diana»): vale se for o primeiro ou o último nome de um só aluno
+  if (parts.length === 1 && key.length >= 3){
+    var one = all.filter(function(s){ var p = exLibFold(s.name).split(" ").filter(Boolean); return p.length >= 2 && (p[0] === key || p[p.length - 1] === key); });
+    if (one.length === 1) return one[0];
+  }
+  return null;
 }
 function studioImportPacks(text){
   var parsed = parsePackImport(text), report = {created: 0, skipped: [], errors: parsed.errors.slice()};
@@ -15438,6 +15457,309 @@ function wireStudioCommon(el, redraw){
     var p = studio.payments.filter(function(x){ return x.id === b.getAttribute("data-remind"); })[0], st = p && findStudent(p.student_id);
     if (st) openContactModal(st, "pagamento-atrasado", redraw);
   }); });
+}
+
+/* ---------- Contratos (área só do Tiago): lista, totais, ficha do contrato, financeiro e «Eu» ---------- */
+var CONTRACT_MODALIDADES = {mensal: {label: "Mensal", months: 1}, trimestral: {label: "Trimestral", months: 3}, anual: {label: "Anual", months: 12}};
+var contractMeta = {map: {}, loaded: false, available: true, me: null};
+var CONTRACTS_LOCAL_KEY = "evolve.contractMeta";
+function contractMetaClean(v){
+  var out = {};
+  if (v && typeof v === "object") Object.keys(v).forEach(function(k){
+    var m = v[k]; if (!m || typeof m !== "object") return;
+    var o = {};
+    if (m.formato === "duo" || m.formato === "individual") o.formato = m.formato;
+    if (CONTRACT_MODALIDADES[m.modalidade]) o.modalidade = m.modalidade;
+    var mi = Number(m.minutos); if (mi >= 15 && mi <= 180) o.minutos = Math.round(mi);
+    if (m.estado === "ativo" || m.estado === "suspenso" || m.estado === "cancelado") o.estado = m.estado;
+    out[k] = o;
+  });
+  return out;
+}
+function loadContractMeta(){
+  var fromRows = function(rows){
+    contractMeta.map = contractMetaClean(rows && rows.contracts);
+    var me = rows && rows.personal; contractMeta.me = me && typeof me.studentId === "string" ? me.studentId : null;
+    contractMeta.loaded = true; return true;
+  };
+  if (!sbReady){ try { var l = JSON.parse(localStorage.getItem(CONTRACTS_LOCAL_KEY) || "null") || {}; return Promise.resolve(fromRows({contracts: l.map, personal: {studentId: l.me}})); } catch (e) { return Promise.resolve(fromRows(null)); } }
+  var get = function(key){ return Promise.resolve(sb.from("studio_settings").select("value").eq("key", key).maybeSingle().then(function(r){ return r; })); };
+  return Promise.all([get("contracts"), get("personal")]).then(function(rs){
+    if (rs.some(function(r){ return r && r.error; })){ contractMeta.available = false; contractMeta.loaded = true; return false; }
+    contractMeta.available = true;
+    return fromRows({contracts: rs[0] && rs[0].data ? rs[0].data.value : null, personal: rs[1] && rs[1].data ? rs[1].data.value : null});
+  }, function(){ contractMeta.available = false; contractMeta.loaded = true; return false; });
+}
+function saveContractMeta(which){
+  if (!sbReady){ try { localStorage.setItem(CONTRACTS_LOCAL_KEY, JSON.stringify({map: contractMeta.map, me: contractMeta.me})); } catch (e) {} return Promise.resolve({}); }
+  var row = which === "me" ? {key: "personal", value: {studentId: contractMeta.me || null}} : {key: "contracts", value: contractMetaClean(contractMeta.map)};
+  row.updated_at = new Date().toISOString();
+  return Promise.resolve(sb.from("studio_settings").upsert(row).then(function(r){ return r; })).then(function(res){
+    return res && res.error ? {error: "Não foi possível guardar (a migração 0025 já foi corrida?)."} : {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function contractMetaOf(id){
+  var m = contractMeta.map[id] || {};
+  return {formato: m.formato || "individual", modalidade: m.modalidade || "trimestral", minutos: m.minutos || 60, estado: m.estado || null};
+}
+function contractEstadoOf(st){ var m = contractMeta.map[st.id]; return (m && m.estado) || (isStudentActive(st) ? "ativo" : "cancelado"); }
+var CONTRACT_ESTADO_LABEL = {ativo: "Ativo", suspenso: "Suspenso", cancelado: "Cancelado"};
+function ordinalPt(n){ return n + ".º"; }
+// um contrato por aluno; um duo (os dois marcados como duo e parceiros) conta uma vez
+function contractUnits(today){
+  today = today || localTodayISO();
+  var studs = visibleStudentsForDashboard().filter(function(s){ return packsOf(s.id).length || contractMeta.map[s.id]; });
+  var done = {}, units = [];
+  studs.forEach(function(s){
+    if (done[s.id]) return;
+    var members = [s];
+    if (contractMetaOf(s.id).formato === "duo"){
+      partnersOf(s.id).forEach(function(pid){ var o = findStudent(pid); if (o && !done[pid] && contractMetaOf(pid).formato === "duo" && members.indexOf(o) < 0) members.push(o); });
+    }
+    members.forEach(function(m){ done[m.id] = true; });
+    var ids = members.map(function(m){ return m.id; }), meta = contractMetaOf(s.id);
+    var own = studio.packs.filter(function(p){ return ids.indexOf(p.student_id) >= 0; }).sort(function(a, b){ return a.starts_on < b.starts_on ? -1 : a.starts_on > b.starts_on ? 1 : 0; });
+    var cur = own.length ? (function(){ var act = own.filter(function(p){ return packUsage(p, today).active; }); return act.length ? act[act.length - 1] : own[own.length - 1]; })() : null;
+    var u = cur ? packUsage(cur, today) : null;
+    var hours = ids.reduce(function(a, id){ return a + (hoursOf(id) || 0); }, 0);
+    var price = cur && cur.price != null ? Number(cur.price) : null, total = cur ? Number(cur.total) || 0 : 0;
+    var perSession = price != null && total ? price / total : null;
+    var perMonthSessions = hours ? hours / (meta.minutos / 60) : 0;
+    var weekly = perMonthSessions ? Math.max(1, Math.round(perMonthSessions / 4.33)) : members.reduce(function(a, m){ return a + weeklySlotsOf(m.id); }, 0);
+    var k = cur ? own.indexOf(cur) + 1 : 0;
+    var paidPacks = own.filter(function(p){ return studio.payments.some(function(y){ return y.pack_id === p.id && y.paid_on; }); }).length;
+    var curPays = cur ? studio.payments.filter(function(y){ return y.pack_id === cur.id; }) : [];
+    var unpaid = cur && curPays.length && !curPays.some(function(y){ return y.paid_on; });
+    var packLabel = !cur ? "sem pacote" : unpaid ? ordinalPt(k) + " pack por pagar" : paidPacks > 1 ? ordinalPt(k) + " de " + paidPacks + " packs pagos" : ordinalPt(k) + " pack";
+    units.push({key: ids.slice().sort().join("+"), members: members, ids: ids, name: members.map(function(m){ return m.name; }).join(" + "), meta: meta, estado: contractEstadoOf(s),
+      cur: cur, u: u, packs: own, price: price, total: total, perSession: perSession, hours: hours, perMonthSessions: perMonthSessions,
+      perMonth: perSession != null ? perSession * perMonthSessions : null, weekly: weekly, packLabel: packLabel, duo: members.length > 1});
+  });
+  return units;
+}
+function contractTotals(units){
+  var act = units.filter(function(x){ return x.estado === "ativo"; });
+  return {n: act.length, hours: act.reduce(function(a, x){ return a + x.hours; }, 0), revenue: act.reduce(function(a, x){ return a + (x.perMonth || 0); }, 0)};
+}
+function contractPlanLabel(x){
+  return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
+}
+var contractsView = {tab: "contratos", filter: "todos", search: "", sort: "nome", open: null};
+function renderProContractsMain(){
+  var main = document.getElementById("proMain");
+  if (!studio.loaded || !contractMeta.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; Promise.all([studioRefresh(), loadContractMeta()]).then(function(){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); }); return; }
+  if (!studio.available){ main.innerHTML = studioUnavailableHtml(); return; }
+  var today = localTodayISO();
+  var html = "<div class=\"checkin-tabs\" style=\"display:flex; gap:8px; margin-bottom:12px;\">" + [["contratos", "Contratos"], ["financeiro", "Financeiro"]].map(function(t){
+    return "<button type=\"button\" class=\"btn btn-sm" + (contractsView.tab === t[0] ? " primary" : "") + "\" data-ct-tab=\"" + t[0] + "\" style=\"flex:1; min-height:44px;\">" + t[1] + "</button>"; }).join("") + "</div>";
+  if (contractsView.tab === "financeiro") html += contractsFinanceHtml(today);
+  else if (contractsView.open) html += contractDetailHtml(contractsView.open, today);
+  else html += contractsListHtml(today);
+  main.innerHTML = html;
+  wireContractsMain(main);
+  if (contractsView.tab === "contratos" && !contractsView.open) applyContractsFilter();
+}
+function contractsListHtml(today){
+  var units = contractUnits(today), t = contractTotals(units);
+  var html = "<div class=\"pro-stat-row\" id=\"contractTotals\">" + proStat(t.hours ? fmtHours(t.hours) : "—", "Horas totais contratadas por mês") + proStat(t.n, "Contratos ativos · um duo conta uma vez") + proStat(t.revenue ? eur(t.revenue) : "—", "Receita recorrente por mês") + "</div>";
+  var count = function(f){ return f === "todos" ? units.length : units.filter(function(x){ return x.estado === f; }).length; };
+  html += "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;\">" + [["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["cancelado", "Cancelado"]].map(function(f){
+    return "<button type=\"button\" class=\"btn btn-sm" + (contractsView.filter === f[0] ? " primary" : "") + "\" data-ct-filter=\"" + f[0] + "\" style=\"min-height:44px;\">" + f[1] + " · " + count(f[0]) + "</button>"; }).join("") + "</div>";
+  html += "<div class=\"student-tools\" id=\"contractTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"ctSearch\" placeholder=\"Procurar contrato…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar contrato\" value=\"" + escapeHtml(contractsView.search || "") + "\"></label>" +
+    "<select id=\"ctSort\" class=\"mini-select\" aria-label=\"Ordenar contratos\">" + [["nome", "Nome A → Z"], ["nomeza", "Nome Z → A"], ["valor", "Maior valor"], ["restam", "Menos aulas por dar"], ["horas", "Mais horas"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (contractsView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>";
+  html += "<div id=\"contractList\">";
+  var rows = units.filter(function(x){ return contractsView.filter === "todos" || x.estado === contractsView.filter; });
+  rows.forEach(function(x, i){
+    var pct = x.u ? x.u.pct : 0;
+    html += "<div class=\"card contract-row\" data-cname=\"" + escapeHtml(exLibFold(x.name)) + "\" data-val=\"" + (x.perMonth || 0) + "\" data-rem=\"" + (x.u ? x.u.remaining : 999) + "\" data-hrs=\"" + x.hours + "\" data-ord=\"" + i + "\" style=\"margin-bottom:10px; cursor:pointer;\" data-open-contract=\"" + escapeHtml(x.key) + "\">" +
+      "<div style=\"display:flex; justify-content:space-between; gap:8px; align-items:flex-start;\"><div style=\"min-width:0;\"><div class=\"hlabel\" style=\"font-weight:700;\">" + escapeHtml(x.name) + "</div>" +
+      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (x.duo ? "Duo" : "Individual") + " · " + escapeHtml(contractPlanLabel(x)) + (x.hours ? " · <span class=\"pill warn\">" + escapeHtml(fmtHours(x.hours)) + "</span>" : "") + "</div></div>" +
+      "<div style=\"text-align:right; white-space:nowrap;\"><div class=\"hlabel\">" + (x.price != null ? escapeHtml(eurShort(x.price)) : "—") + "</div><span class=\"pill " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span></div></div>" +
+      (x.u ? "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div><div class=\"muted-p\" style=\"font-size:0.78rem;\"><strong>" + x.u.used + " de " + x.u.total + "</strong> · " + escapeHtml(x.packLabel) + "</div>" : "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + escapeHtml(x.packLabel) + "</div>") + "</div>";
+  });
+  if (!rows.length) html += "<p class=\"muted-p\">Sem contratos neste estado.</p>";
+  html += "</div><p class=\"muted-p\" id=\"ctInfo\" style=\"font-size:0.78rem;\">" + rows.length + " de " + units.length + "</p>";
+  html += "<details class=\"perfil-section\" id=\"contractImport\" style=\"margin:14px 0;\"><summary class=\"eyebrow\">Importar formato, modalidade e estado dos contratos</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por contrato: <strong>Nome; modalidade; formato; estado</strong> (ex.: PT 60 - Ana Silva; Trimestral; Individual; Ativo). O «PT 45» ou «PT 60» do nome dá os minutos; em duos usa «A + B». Estado: Ativo, Suspenso ou Cancelado.</p>" +
+    "<textarea id=\"ctImpText\" rows=\"5\" placeholder=\"PT 60 - Ana Silva; Trimestral; Individual; Ativo\"></textarea><p class=\"muted-p\" id=\"ctImpOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"ctImpGo\" style=\"margin-top:8px;\">Importar</button></details>";
+  return html;
+}
+function applyContractsFilter(){
+  var list = document.getElementById("contractList");
+  if (!list) return;
+  var q = exLibFold(contractsView.search || ""), rows = [].slice.call(list.querySelectorAll("[data-cname]")), shown = 0;
+  rows.forEach(function(r){ var ok = !q || nameStartsWithQuery(r.getAttribute("data-cname"), q); r.hidden = !ok; if (ok) shown++; });
+  var sort = contractsView.sort, key = function(r){ return r.getAttribute("data-cname"); }, num = function(r, a){ return Number(r.getAttribute(a)); };
+  rows.sort(function(a, b){
+    if (sort === "nomeza") return key(a) < key(b) ? 1 : key(a) > key(b) ? -1 : 0;
+    if (sort === "valor") return num(b, "data-val") - num(a, "data-val") || (key(a) < key(b) ? -1 : 1);
+    if (sort === "restam") return num(a, "data-rem") - num(b, "data-rem") || (key(a) < key(b) ? -1 : 1);
+    if (sort === "horas") return num(b, "data-hrs") - num(a, "data-hrs") || (key(a) < key(b) ? -1 : 1);
+    return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
+  });
+  rows.forEach(function(r){ list.appendChild(r); });
+  var info = document.getElementById("ctInfo"); if (info) info.textContent = shown + " de " + rows.length + (q ? " com «" + contractsView.search.trim() + "»" : "");
+}
+document.addEventListener("input", function(e){ var t = e.target; if (t && t.id === "ctSearch"){ contractsView.search = t.value; applyContractsFilter(); } });
+document.addEventListener("keyup", function(e){ var t = e.target; if (t && t.id === "ctSearch" && t.value !== (contractsView.search || "")){ contractsView.search = t.value; applyContractsFilter(); } });
+document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "ctSearch"){ contractsView.search = t.value; applyContractsFilter(); } });
+document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "ctSort"){ contractsView.sort = t.value; applyContractsFilter(); } });
+
+function contractDetailHtml(key, today){
+  var x = contractUnits(today).filter(function(u){ return u.key === key; })[0];
+  if (!x) return "<p class=\"muted-p\">Contrato não encontrado.</p><button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\">← Voltar aos contratos</button>";
+  var since = x.packs.length ? x.packs[0].starts_on : null;
+  var html = "<button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\" style=\"margin-bottom:10px; min-height:44px;\">← Voltar aos contratos</button>" +
+    "<h2 style=\"margin:0 0 4px;\">PT " + x.meta.minutos + " - " + escapeHtml(x.name) + "</h2>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\"><span class=\"pill " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " desde " + escapeHtml(fmtDateFullPt(since)) : "") + "</p>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Termos</div><div class=\"assess-form-grid\">" +
+    "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + (x.duo ? "Duo" : "Individual") + "</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Modalidade</div><div class=\"hlabel\">" + escapeHtml(CONTRACT_MODALIDADES[x.meta.modalidade].label) + "</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Plano</div><div class=\"hlabel\">" + (x.weekly ? x.weekly + "× por semana" : "—") + " · " + x.meta.minutos + " min</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Horas por mês</div><div class=\"hlabel\">" + (x.hours ? escapeHtml(fmtHours(x.hours)) : "—") + "</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Valor do ciclo</div><div class=\"hlabel\">" + (x.price != null ? escapeHtml(eur(x.price)) : "—") + "</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Valor por mês</div><div class=\"hlabel\">" + (x.perMonth != null ? escapeHtml(eur(x.perMonth)) : "—") + (x.perSession != null ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">" + escapeHtml(eur(x.perSession)) + "/sessão</span>" : "") + "</div></div></div>" +
+    (x.u ? "<p class=\"muted-p\" style=\"margin-top:10px;\">Sessões: <strong>" + escapeHtml(x.packLabel) + "</strong> · " + x.u.used + " de " + x.u.total + " gastas" + "</p>" : "") +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctEdit\" style=\"min-height:44px;\">Editar condições</button>" +
+    (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" data-renew-pack=\"" + escapeHtml(x.cur.id) + "\" style=\"min-height:44px;\">Renovar</button>" : "") + "</div></div>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Participantes</div>" + x.members.map(function(m){
+    return "<div class=\"history-row\" style=\"align-items:center;\"><div><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(m.id) + "\">" + escapeHtml(m.name) + "</button> <span class=\"muted-p\">" + (isStudentActive(m) ? "ativo" : "inativo") + "</span></div></div>"; }).join("") +
+    "<p class=\"muted-p\" style=\"margin-top:8px;\">" + (x.duo ? "Contrato duo: treinam os dois ao mesmo tempo e conta uma vez nos totais." : "Contrato individual. Para duplas que treinam juntas, «Editar condições» → formato duo (nos dois alunos). Para duas pessoas a gastar o mesmo pack em sessões individuais, usa «Partilhar» no pacote.") + "</p></div>";
+  var ids = x.ids, nums = sessionNumberMap();
+  var sess = studio.sessions.filter(function(s){ return ids.indexOf(s.student_id) >= 0; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
+  var next = sess.filter(function(s){ return s.status === "agendada" && s.date >= today; }).slice(0, 6), last = sess.filter(function(s){ return !(s.status === "agendada" && s.date >= today); }).slice(-6).reverse();
+  var srow = function(s){ return "<div style=\"padding:3px 0;\">" + escapeHtml(s.date.slice(8) + "/" + s.date.slice(5, 7)) + (s.time ? " · " + escapeHtml(s.time) : "") + (x.duo ? " · " + escapeHtml(nameOf(s.student_id)) : "") + " " + sessionNumberPill(nums[s.id]) + " <span class=\"muted-p\">" + escapeHtml(((SESSION_STATUS[s.status] || {}).label || s.status)) + "</span></div>"; };
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Treinos</div><div style=\"display:grid; grid-template-columns:1fr 1fr; gap:12px;\"><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Próximos</div>" + (next.length ? next.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Últimos</div>" + (last.length ? last.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div></div></div>";
+  var pays = studio.payments.filter(function(p){ return ids.indexOf(p.student_id) >= 0; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; });
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos</div>" + (pays.length ? pays.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos.</p>") + "</div>";
+  html += "<details class=\"perfil-section\" style=\"margin:10px 0;\"><summary class=\"eyebrow\">Arquivo de packs · " + x.packs.length + "</summary>" + (x.packs.length ? x.packs.slice().reverse().map(function(p){ return packBarHtml(p, packUsage(p, today), x.ids[0]); }).join("") : "<p class=\"muted-p\">Sem packs.</p>") + "</details>";
+  return html;
+}
+function contractPaymentRowHtml(p, today){
+  var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
+  var pk = studio.packs.filter(function(q){ return q.id === p.pack_id; })[0];
+  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(p.due_on)) + " · " + escapeHtml(pk ? pk.name : "Cobrança") + " · " + escapeHtml(nameOf(p.student_id)) + "</div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (p.paid_on ? "pago a " + escapeHtml(fmtDateFullPt(p.paid_on)) + (p.method ? " (" + escapeHtml(PAYMENT_METHODS[p.method] || p.method) + ")" : "") : "por pagar") + "</div></div>" +
+    "<span style=\"white-space:nowrap;\"><span class=\"hlabel\">" + escapeHtml(eur(p.amount)) + "</span> <span class=\"pill " + tone + "\">" + st + "</span> " +
+    (p.paid_on ? "<button type=\"button\" class=\"btn btn-sm\" data-unpay=\"" + escapeHtml(p.id) + "\">Desmarcar</button>" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button>") + "</span></div>";
+}
+function contractsFinanceHtml(today){
+  if (!studioView.month) studioView.month = monthOf(today);
+  var month = studioView.month, k = studioKpis(month, today);
+  var inMonth = studio.payments.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
+  var html = "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"ctMonth\">Mês</label><input type=\"month\" id=\"ctMonth\" value=\"" + escapeHtml(month) + "\"></div>" +
+    "<div class=\"pro-stat-row\" style=\"margin-top:10px;\">" + proStat(eurShort(k.received), "Recebido no mês (" + k.receivedN + ")") + proStat(eurShort(k.toCollect), "A receber no mês (" + k.toCollectN + ")") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") + "</div>" +
+    "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos do mês</div>" + (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos neste mês.</p>") + "</div>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctCsv\">⬇ Recebimentos (CSV)</button></div>";
+  return html;
+}
+function wireContractsMain(main){
+  var redraw = function(){ renderProContractsMain(); };
+  main.querySelectorAll("[data-ct-tab]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.tab = b.getAttribute("data-ct-tab"); contractsView.open = null; redraw(); }); });
+  main.querySelectorAll("[data-ct-filter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.filter = b.getAttribute("data-ct-filter"); redraw(); }); });
+  main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
+  var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; redraw(); });
+  var edit = main.querySelector("#ctEdit"); if (edit) edit.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractEditModal(x, redraw); });
+  main.querySelectorAll("[data-unpay]").forEach(function(b){ b.addEventListener("click", function(){ b.disabled = true; studioUpdate("payments", b.getAttribute("data-unpay"), {paid_on: null, method: null}).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); }); }); });
+  var mon = main.querySelector("#ctMonth"); if (mon) mon.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mon.value)){ studioView.month = mon.value; redraw(); } });
+  var csv = main.querySelector("#ctCsv"); if (csv) csv.addEventListener("click", function(){ downloadText("recebimentos-" + studioView.month + ".csv", paymentsCsv(studioView.month)); });
+  main.querySelectorAll("[data-open-student]").forEach(function(btn){ btn.addEventListener("click", function(e){ e.stopPropagation(); state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (err) {} }); });
+  wireStudioCommon(main, redraw);   // Pago, Renovar, Editar/Partilhar/Apagar pacote
+  var imp = main.querySelector("#ctImpGo");
+  if (imp) imp.addEventListener("click", function(){
+    var out = main.querySelector("#ctImpOut"); imp.disabled = true; out.textContent = "A importar…";
+    studioImportContracts(main.querySelector("#ctImpText").value).then(function(rep){
+      var msg = "✓ " + rep.saved + (rep.saved === 1 ? " contrato atualizado" : " contratos atualizados");
+      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
+      out.textContent = msg; imp.disabled = false; if (rep.saved) redraw();
+    });
+  });
+}
+function openContractEditModal(x, onDone){
+  var m = x.meta, hrs = x.hours ? String(Math.round(x.hours * 100) / 100).replace(".", ",") : "";
+  var opt = function(map, cur){ return Object.keys(map).map(function(k){ return "<option value=\"" + k + "\"" + (cur === k ? " selected" : "") + ">" + escapeHtml(map[k].label || map[k]) + "</option>"; }).join(""); };
+  var sheet = openModal("<div class=\"mtitle\">Editar condições</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(x.name) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"ceFormato\">Formato</label><select id=\"ceFormato\" class=\"mini-select\" style=\"width:100%;\"><option value=\"individual\"" + (x.duo ? "" : " selected") + ">Individual</option><option value=\"duo\"" + (m.formato === "duo" ? " selected" : "") + ">Duo (treinam juntos)</option></select></div>" +
+    "<div class=\"checkin-field\"><label for=\"ceMod\">Modalidade</label><select id=\"ceMod\" class=\"mini-select\" style=\"width:100%;\">" + opt(CONTRACT_MODALIDADES, m.modalidade) + "</select></div>" +
+    "<div class=\"checkin-field\"><label for=\"ceMin\">Minutos por sessão</label><input type=\"number\" id=\"ceMin\" min=\"15\" max=\"180\" inputmode=\"numeric\" value=\"" + m.minutos + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ceHrs\">Horas por mês (do contrato inteiro)</label><input type=\"text\" id=\"ceHrs\" inputmode=\"decimal\" value=\"" + escapeHtml(hrs) + "\" placeholder=\"ex.: 8,66\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ceEstado\">Estado</label><select id=\"ceEstado\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(CONTRACT_ESTADO_LABEL).map(function(k){ return "<option value=\"" + k + "\"" + (x.estado === k ? " selected" : "") + ">" + CONTRACT_ESTADO_LABEL[k] + "</option>"; }).join("") + "</select></div>" +
+    "<p class=\"muted-p\" id=\"ceErr\" style=\"color:var(--critical); display:none;\"></p><button type=\"button\" class=\"btn primary\" id=\"ceGo\" style=\"width:100%; margin-top:10px;\">Guardar</button>");
+  sheet.querySelector("#ceGo").addEventListener("click", function(){
+    var err = sheet.querySelector("#ceErr"), fail = function(t){ err.textContent = t; err.style.display = "block"; };
+    var min = parseInt(sheet.querySelector("#ceMin").value, 10), hraw = sheet.querySelector("#ceHrs").value.trim(), h = hraw ? parseImportNumber(hraw) : 0;
+    if (!(min >= 15 && min <= 180)) return fail("Os minutos por sessão têm de estar entre 15 e 180.");
+    if (h == null || h < 0 || h > 400) return fail("Horas por mês inválidas (ex.: 8,66).");
+    var patch = {formato: sheet.querySelector("#ceFormato").value, modalidade: sheet.querySelector("#ceMod").value, minutos: min, estado: sheet.querySelector("#ceEstado").value};
+    var prevMap = JSON.parse(JSON.stringify(contractMeta.map)), prevHours = JSON.parse(JSON.stringify(monthlyHours.map));
+    x.ids.forEach(function(id){ contractMeta.map[id] = Object.assign({}, contractMeta.map[id] || {}, patch); });
+    // as horas são do contrato: repartem-se pelos participantes (um duo conta uma vez)
+    if (h > 0) x.ids.forEach(function(id){ monthlyHours.map[id] = Math.round(h / x.ids.length * 100) / 100; });
+    else x.ids.forEach(function(id){ delete monthlyHours.map[id]; });
+    var btn = sheet.querySelector("#ceGo"); btn.disabled = true;
+    Promise.all([saveContractMeta("contracts"), saveMonthlyHours()]).then(function(rs){
+      var e = rs[0].error || rs[1].error;
+      if (e){ contractMeta.map = prevMap; monthlyHours.map = prevHours; btn.disabled = false; return fail(e); }
+      closeModal(); showToast("✓ Contrato atualizado");
+      if (patch.formato === "duo") contractsView.open = null;   // a chave do contrato muda quando se junta/separa um duo
+      if (onDone) onDone();
+    });
+  });
+}
+// «Nome; modalidade; formato; estado» — o «PT 45/60» do nome dá os minutos; duos «A + B»
+function parseContractsImport(text){
+  var rows = [], errors = [];
+  String(text || "").split(/\r?\n/).forEach(function(line, i){
+    if (!line.trim()) return;
+    var cols = line.split(/\t|;/).map(function(c){ return c.trim(); });
+    if (/^(nome|cliente|aluno)\b/i.test(cols[0]) && !CONTRACT_MODALIDADES[exLibFold(cols[1] || "")]) return;
+    var pm = /^PT(?:\s+Duo)?\s+(\d{2,3})\b/i.exec(cols[0]), minutos = pm ? parseInt(pm[1], 10) : null;
+    var name = cols[0].replace(/^PT(?:\s+[\w.]+)*?\s*[-–]\s*/i, "").trim();
+    var mod = exLibFold(cols[1] || ""), fmt = exLibFold(cols[2] || ""), est = exLibFold(cols[3] || "");
+    if (!name) errors.push("Linha " + (i + 1) + ": falta o nome.");
+    else if (cols[1] && !CONTRACT_MODALIDADES[mod]) errors.push("Linha " + (i + 1) + " (" + name + "): modalidade inválida (Mensal, Trimestral ou Anual).");
+    else if (cols[2] && fmt !== "individual" && fmt !== "duo") errors.push("Linha " + (i + 1) + " (" + name + "): formato inválido (Individual ou Duo).");
+    else if (cols[3] && ["ativo", "suspenso", "cancelado"].indexOf(est) < 0) errors.push("Linha " + (i + 1) + " (" + name + "): estado inválido (Ativo, Suspenso ou Cancelado).");
+    else rows.push({name: name, modalidade: cols[1] ? mod : null, formato: cols[2] ? fmt : (/\+/.test(name) || /^PT\s+Duo/i.test(cols[0]) ? "duo" : null), estado: cols[3] ? est : null, minutos: minutos});
+  });
+  return {rows: rows, errors: errors};
+}
+function studioImportContracts(text){
+  var parsed = parseContractsImport(text), report = {saved: 0, errors: parsed.errors.slice()};
+  var prev = JSON.parse(JSON.stringify(contractMeta.map));
+  parsed.rows.forEach(function(r){
+    var whole = matchStudentWholeName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);
+    names.forEach(function(nm){
+      var st = whole || matchStudentByName(nm);
+      if (!st){ report.errors.push(nm + ": não encontrei um aluno com este nome."); return; }
+      var cur = Object.assign({}, contractMeta.map[st.id] || {});
+      if (r.modalidade) cur.modalidade = r.modalidade;
+      if (r.formato) cur.formato = r.formato;
+      if (r.estado) cur.estado = r.estado;
+      if (r.minutos) cur.minutos = r.minutos;
+      contractMeta.map[st.id] = cur; report.saved++;
+    });
+  });
+  if (!report.saved) return Promise.resolve(report);
+  return saveContractMeta("contracts").then(function(r){ if (r.error){ contractMeta.map = prev; report.saved = 0; report.errors.push(r.error); } return report; });
+}
+// «Eu»: a minha ficha (alimentação e treino)
+function openMeModal(){
+  var studs = visibleStudentsForDashboard().slice().sort(function(a, b){ return String(a.name).localeCompare(String(b.name), "pt"); });
+  var sheet = openModal("<div class=\"mtitle\">Quem és tu na app?</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe a tua própria ficha para teres a tua alimentação e o teu treino aqui. Se ainda não tens ficha, usa «Convidar aluno» no menu Alunos com o teu e-mail e volta aqui.</p>" +
+    "<div class=\"student-search\" style=\"margin-bottom:10px;\"><span aria-hidden=\"true\">🔎</span><input type=\"search\" id=\"meFilter\" placeholder=\"Procurar…\" autocomplete=\"off\" aria-label=\"Procurar ficha\"></div>" +
+    "<div id=\"meList\" style=\"max-height:48vh; overflow:auto;\">" + studs.map(function(st){ return "<button type=\"button\" class=\"btn\" data-me=\"" + escapeHtml(st.id) + "\" data-mename=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"width:100%; text-align:left; min-height:44px; margin-bottom:6px;\">" + escapeHtml(st.name) + "</button>"; }).join("") + "</div>");
+  sheet.querySelector("#meFilter").addEventListener("input", function(e){ var q = exLibFold(e.target.value); sheet.querySelectorAll("[data-me]").forEach(function(b){ b.hidden = !!q && !nameStartsWithQuery(b.getAttribute("data-mename"), q); }); });
+  sheet.querySelectorAll("[data-me]").forEach(function(b){ b.addEventListener("click", function(){
+    contractMeta.me = b.getAttribute("data-me");
+    saveContractMeta("me").then(function(r){ if (r.error){ showToast("⚠ " + r.error); return; } closeModal(); goToMe(); });
+  }); });
+}
+function goToMe(){
+  var st = contractMeta.me ? findStudent(contractMeta.me) : null;
+  if (!st){ openMeModal(); return; }
+  state.proSelectedId = st.id; state.proTab = "plano"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
 }
 
 /* lupa e ordem no Estúdio: filtra por nome (começa por…) todas as listas com alunos e ordena o resumo de treinos */
