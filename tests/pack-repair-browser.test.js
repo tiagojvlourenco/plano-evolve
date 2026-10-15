@@ -29,6 +29,27 @@ var check = require("./check")();
   check.check("2a5. Palavras curtas demais não casam", matchEventStudent("PT 60 - Di", {}) === null);
 })();
 
+// ---- renovar antes de acabar: as aulas que restam gastam-se primeiro ----
+(function(){
+  var today = localTodayISO();
+  STUDENTS.push({id: "early", name: "Cedo Renova", isDemo: false, active: true});
+  studio.sessions = [];
+  var oldP = {id: "o", student_id: "early", name: "A", total: 5, starts_on: addDaysISO(today, -100), expires_on: null, used_before: 3};   // restam 2
+  var newP = {id: "n", student_id: "early", name: "A", total: 5, starts_on: today, expires_on: null, used_before: 0};
+  studio.packs = [newP, oldP];   // (a base devolve os mais recentes primeiro)
+  check.check("2h. Com dois pacotes sem validade, a aula gasta o mais antigo primeiro (restam 2 nele)", pickPackForSession("early", today).id === "o");
+  oldP.used_before = 5;
+  check.check("2i. Quando o antigo acaba, passa para o novo", pickPackForSession("early", today).id === "n");
+  oldP.used_before = 3; oldP.expires_on = addDaysISO(today, 30); newP.expires_on = addDaysISO(today, 200);
+  check.check("2j. Com validade, o que caduca primeiro (o antigo) é gasto primeiro", pickPackForSession("early", today).id === "o");
+  oldP.expires_on = null;
+  check.check("2k. Antigo sem validade e novo com validade: o que caduca primeiro é o novo (regra da validade)", pickPackForSession("early", today).id === "n");
+  oldP.expires_on = addDaysISO(today, 30); newP.expires_on = null; newP.notes = "renov:6";
+  check.check("2l. Pacote renovado «a contar» (sem validade ainda) gasta-se depois do antigo", pickPackForSession("early", today).id === "o");
+  var rows = studioSummaryRows(today).filter(function(r){ return r.student.id === "early"; });
+  check.check("2m. O resumo mostra os 2 pacotes ativos e as aulas que restam no total (2 + 5 = 7)", rows.length === 1 && rows[0].activeN === 2 && rows[0].activeRemaining === 7);
+})();
+
 // ---- ignorar de uma vez os títulos sem aluno ----
 (function(){
   calSettings.ignored = {"pt 60 - velho": true};

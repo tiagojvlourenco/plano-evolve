@@ -183,3 +183,5 @@ Associação evento → aluno: o título (ou o que vem depois de « - ») tem de
 Renovar um pacote: na ficha (Pacotes), os pacotes esgotados, caducados ou a acabar têm o botão «Renovar». Cria um pacote igual (aulas, preço, validade, partilha) a começar na primeira aula que ficou sem pacote (ou hoje), com o contador a zero, passa para ele as aulas já dadas sem pacote e cria a cobrança por pagar; depois só falta marcar «Pago» quando o dinheiro chegar.
 
 A renovação conta a partir da 1.ª aula do pacote novo: se já há aulas dadas sem pacote, o pacote novo começa na primeira delas e a validade conta daí; se ainda não há, fica «a contar» (notes = «renov:<meses>») e, quando a primeira aula entrar no pacote (ao sincronizar ou em «Acertar pacotes»), o início e a validade passam a ser os dessa aula.
+
+Renovar antes de acabar o pacote (por exemplo com 6 aulas por dar): «Renovar» está sempre disponível. As aulas gastam-se primeiro no pacote que caduca primeiro e, com a mesma validade (ou sem ela), no mais antigo; o pacote novo só começa a ser gasto quando o antigo acaba. O Resumo de treinos mostra «N pacotes ativos · restam X no total».
