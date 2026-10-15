@@ -103,7 +103,7 @@ function sampleRow(overrides){
 // renderProShell, fora de PRO_TABS (que são por aluno)
 (function(){
   check.check("9. PRO_TABS não inclui 'catalogo'/'catálogo' (não é um separador por aluno)", !PRO_TABS.some(function(t){ return /cat[aá]logo/i.test(t[0]) || /cat[aá]logo/i.test(t[1]); }));
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 1200);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 2800);
   check.check("9. renderProShell tem um botão navCatalog", fnSrc.indexOf('id=\\"navCatalog\\"') >= 0);
   check.check("9. renderProShell despacha para renderProCatalogMain quando proView === 'catalog'", appSource.indexOf('state.proView === "catalog"') >= 0 && appSource.indexOf("renderProCatalogMain()") >= 0);
 })();

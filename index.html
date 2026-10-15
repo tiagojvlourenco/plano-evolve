@@ -379,6 +379,9 @@
     font-size:0.72rem; font-weight:600; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.04em;
   }
   .pro-nav-item{min-height:44px;}
+  .area-switch{display:flex; gap:4px; padding:3px; border-radius:12px; background:var(--surface-2, rgba(255,255,255,0.05)); flex-shrink:0;}
+  .area-switch .pro-nav-item{padding:8px 12px; text-align:center;}
+  .area-switch .pro-nav-item.active{background:var(--accent); color:#fff;}
   .pro-nav-item.has-pending::after{content:""; display:inline-block; width:8px; height:8px; margin-left:6px; border-radius:50%; background:var(--critical); vertical-align:middle;}
   .pro-nav-item.active{background:var(--accent); color:var(--accent-ink);}
   .pro-sidebar-divider{height:1px; background:var(--line); margin:10px 4px;}
@@ -11654,11 +11657,18 @@ function renderProShell(){
   // qualquer aluno selecionado tem sempre prioridade sobre os dois.
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
-    sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
-      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + studioNavLabel() + "</button>" +
-      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>" +
-      "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>" +
-      "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>";
+    // duas áreas: «Acompanhamento» (alunos, catálogo, a minha ficha) e «Gestão» (estúdio e contratos): cada uma mostra só o que lhe diz respeito
+    var inGestao = state.proView === "studio" || state.proView === "contracts";
+    sidebar += "<div class=\"area-switch\" role=\"group\" aria-label=\"Área\"><button type=\"button\" class=\"pro-nav-item" + (inGestao ? "" : " active") + "\" id=\"areaAcomp\">Acompanhamento</button>" +
+      "<button type=\"button\" class=\"pro-nav-item" + (inGestao ? " active" : "") + "\" id=\"areaGestao\">" + gestaoAreaLabel() + "</button></div>";
+    if (!inGestao){
+      sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
+        "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>" +
+        "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>";
+    } else {
+      sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">Estúdio</button>" +
+        "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>";
+    }
   } else {
     // com um aluno aberto o menu são só as 4 áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
     sidebar += proStudentNavHtml();
@@ -11668,14 +11678,17 @@ function renderProShell(){
   proRoot.innerHTML = "<div class=\"pro-shell\">" + sidebar + "<div class=\"pro-main\" id=\"proMain\"></div></div>";
 
   var navDash = document.getElementById("navDashboard"), navCat = document.getElementById("navCatalog");
-  if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; renderProShell(); });
-  if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; renderProShell(); });
+  if (navDash) navDash.addEventListener("click", function(){ state.proSelectedId=null; state.proView="dashboard"; state.lastAcompView="dashboard"; renderProShell(); });
+  if (navCat) navCat.addEventListener("click", function(){ state.proSelectedId=null; state.proView="catalog"; state.lastAcompView="catalog"; renderProShell(); });
+  var areaAcomp = document.getElementById("areaAcomp"), areaGestao = document.getElementById("areaGestao");
+  if (areaAcomp) areaAcomp.addEventListener("click", function(){ if (state.proView !== "studio" && state.proView !== "contracts") return; state.proSelectedId = null; state.proView = state.lastAcompView || "dashboard"; renderProShell(); });
+  if (areaGestao) areaGestao.addEventListener("click", function(){ if (state.proView === "studio" || state.proView === "contracts") return; state.proSelectedId = null; state.proView = state.lastGestaoView || "studio"; if (state.proView === "studio") studio.loaded = false; else { studio.loaded = false; contractMeta.loaded = false; } renderProShell(); });
   var navContracts = document.getElementById("navContracts");
-  if (navContracts) navContracts.addEventListener("click", function(){ state.proSelectedId=null; state.proView="contracts"; contractsView.open = null; studio.loaded = false; contractMeta.loaded = false; renderProShell(); });
+  if (navContracts) navContracts.addEventListener("click", function(){ state.proSelectedId=null; state.proView="contracts"; state.lastGestaoView="contracts"; contractsView.open = null; studio.loaded = false; contractMeta.loaded = false; renderProShell(); });
   var navMe = document.getElementById("navMe");
   if (navMe) navMe.addEventListener("click", function(){ var go = function(){ goToMe(); }; if (!contractMeta.loaded) loadContractMeta().then(go); else go(); });
   var navStudio = document.getElementById("navStudio");
-  if (navStudio) navStudio.addEventListener("click", function(){ state.proSelectedId=null; state.proView="studio"; studio.loaded = false; renderProShell(); }); // lê os dados de novo de cada vez que se abre
+  if (navStudio) navStudio.addEventListener("click", function(){ state.proSelectedId=null; state.proView="studio"; state.lastGestaoView="studio"; studio.loaded = false; renderProShell(); }); // lê os dados de novo de cada vez que se abre
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
     btn.addEventListener("click", function(){ state.proTab = btn.getAttribute("data-t"); renderProShell(); });
   });
@@ -14334,10 +14347,11 @@ function studioAttentionCount(today){
   var overdue = studio.payments.filter(function(p){ return !p.paid_on && p.due_on < today; }).length;
   return n + overdue;
 }
-function studioNavLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Estúdio" + (n ? " · " + n : ""); }
+function studioNavLabel(){ return "Estúdio"; }
+function gestaoAreaLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Gestão" + (n ? " · " + n : ""); }
 function updateStudioBadge(){
-  var b = document.getElementById("navStudio");
-  if (b) b.textContent = studioNavLabel();
+  var b = document.getElementById("areaGestao");
+  if (b) b.textContent = gestaoAreaLabel();
 }
 // um pacote novo desconta as aulas extra já dadas desde a sua data de início
 function attachExtrasToPack(pack){

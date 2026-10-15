@@ -204,3 +204,7 @@ Novo menu «Contratos» (e «Eu»): sem migração nova. Os dados dos contratos 
 - **Financeiro:** recebido/a receber/em atraso do mês, com Pago e Desmarcar, e CSV.
 - **Eu:** abre a ficha escolhida (alimentação e treino). Para teres ficha, convida-te como aluno.
 - Não inclui a atribuição de sessões a outro PT nem a coluna lateral do backoffice.
+
+## 8m. Duas áreas no menu do profissional
+
+O menu tem um seletor **Acompanhamento | Gestão**: Acompanhamento mostra Alunos, Catálogo e Eu (nutrição, treino, check-ins); Gestão mostra Estúdio e Contratos (packs, aulas, recebimentos, horas). Mudar de área volta ao último ecrã dessa área; o número de avisos do estúdio aparece em «Gestão · N». É uma separação da interface na mesma app (a base de dados e a lista de alunos são uma só). Separar em duas apps fica para depois, se continuar a fazer falta.

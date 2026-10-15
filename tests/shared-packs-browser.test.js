@@ -140,7 +140,7 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   await pg.locator("[data-share-pack]").first().click(); await pg.waitForSelector("#shList");
   await pg.locator('#shList input[data-sh-id="s2"]').check(); await pg.click("#shGo");
   await pg.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 1; });
-  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
+  await pg.click("#proBack"); await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
   var sum = await pg.locator("#studioSummary").innerText();
   check.check("23. O resumo do estúdio mostra a partilha e o que resta no conjunto (38 de 39)", /Partilha com/.test(sum) && /restam\s*38\s*de 39/.test(sum.replace(/\n/g, " ")));
 

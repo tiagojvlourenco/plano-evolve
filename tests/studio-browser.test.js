@@ -38,11 +38,11 @@ function fixtureRow(id, name){
   var pg = st.page;
   await pg.goto(srv.url);
   await pg.waitForSelector(".student-row");
-  await pg.click("#navStudio");
+  await pg.click("#areaGestao"); await pg.click("#navStudio");
   check.check("1. O ecrã Estúdio abre e diz que não há pacotes a decorrer", /Nenhum aluno com pacote/.test(await pg.locator("#quickSessions").innerText()));
 
   // criar pacote na ficha
-  await pg.click("#navDashboard");
+  await pg.click("#areaAcomp"); await pg.click("#navDashboard");
   await pg.locator("[data-open]").first().click();
   await pg.click('[data-sub="sessoes"]');
   await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
@@ -71,14 +71,14 @@ function fixtureRow(id, name){
   // ecrã Estúdio: registo rápido do outro aluno com pacote
   await pg.evaluate(function(){ window.__fake.tables.session_packs.push({id: "pk-x", student_id: "stu2", name: "Pack 20", total: 20, price: 440, starts_on: "2026-01-01", expires_on: null, missed_consumes: true, late_cancel_consumes: true}); });
   await pg.click("#proBack");
-  await pg.click("#navStudio");
+  await pg.click("#areaGestao"); await pg.click("#navStudio");
   await pg.waitForSelector("#quickSessions");
   check.check("8. O Estúdio lê os dados de novo ao abrir e mostra o aluno que tem pacote a decorrer", (await pg.locator('#quickSessions [data-qs="stu2:feita"]').count()) === 1);
   await pg.locator('#quickSessions [data-qs="stu2:feita"]').click();
   await pg.waitForFunction(function(){ return window.__fake.tables.sessions.length === 3; });
   check.check("9. O registo rápido grava a sessão de hoje como feita", (await pg.evaluate(function(){ var l = window.__fake.tables.sessions; return l[l.length - 1].status; })) === "feita");
   // horário semanal: conta sozinho as sessões que já passaram
-  await pg.click("#navDashboard");
+  await pg.click("#areaAcomp"); await pg.click("#navDashboard");
   await pg.locator("[data-open]").first().click();
   await pg.click('[data-sub="sessoes"]');
   await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
@@ -91,7 +91,7 @@ function fixtureRow(id, name){
   check.check("9b. O horário conta sozinho a sessão que já passou (feita, 07:00, do horário)", auto.sess.length === 1 && auto.sess[0].status === "feita" && auto.sess[0].time === "07:00" && auto.sess[0].date === weekAgoISO);
   await pg.waitForFunction(function(){ var sl = window.__fake.tables.session_slots[0]; return sl && sl.generated_until; });
   check.check("9c. O horário fica marcado como contado até ontem, para não repetir", !!(await pg.evaluate(function(){ return window.__fake.tables.session_slots[0].generated_until; })));
-  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
+  await pg.click("#proBack"); await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
   check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8) e a agenda", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 1);
   check.check("9e. A sessão contada pelo horário não se duplica ao reabrir o Estúdio", (await pg.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 1);
   // importar pacotes a decorrer
@@ -109,10 +109,10 @@ function fixtureRow(id, name){
   var st2 = await session({role: "professional", userId: "pro-1", rows: rows, missingTables: true});
   await st2.page.goto(srv.url);
   await st2.page.waitForSelector(".student-row");
-  await st2.page.click("#navStudio");
+  await st2.page.click("#areaGestao"); await st2.page.click("#navStudio");
   await st2.page.waitForSelector("#proMain .card");
   check.check("11. Sem a migração 0023 a app avisa o que fazer em vez de falhar", /migração 0023/.test(await st2.page.locator("#proMain").innerText()));
-  await st2.page.click("#navDashboard");
+  await st2.page.click("#areaAcomp"); await st2.page.click("#navDashboard");
   check.check("12. E o resto do dashboard continua a funcionar", (await st2.page.locator(".student-row").count()) === 2);
   await st2.ctx.close();
 

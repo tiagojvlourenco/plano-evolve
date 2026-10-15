@@ -37,8 +37,8 @@ function fixtureRow(id, name){
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
   await pg.goto(srv.url); await pg.waitForSelector(".student-row");
-  check.check("1. O menu tem «Contratos» e «Eu»", (await pg.locator("#navContracts").count()) === 1 && (await pg.locator("#navMe").count()) === 1);
-  await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
+  check.check("1. O menu tem as duas áreas: Acompanhamento (Alunos, Catálogo, Eu) e Gestão (Estúdio, Contratos), cada uma só com os seus itens", (await pg.locator("#areaAcomp").count()) === 1 && (await pg.locator("#areaGestao").count()) === 1 && (await pg.locator("#navMe").count()) === 1 && (await pg.locator("#navContracts").count()) === 0 && (await pg.locator("#navStudio").count()) === 0);
+  await pg.click("#areaGestao"); await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
   var tot = await pg.locator("#contractTotals").innerText();
   check.check("2. Totais: horas contratadas dos ativos (8,66 + 4,33 + o duo 8,66 contado uma vez = 21,65 h) e 3 contratos ativos (o duo conta um)", /21,65 h/.test(tot) && /\n?3\b/.test(tot));
   var rec = tot.match(/([\d.\s]+,\d\d)\s*€/);
@@ -85,7 +85,7 @@ function fixtureRow(id, name){
   var fin = await pg.locator("#proMain").innerText();
   check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido no mês/.test(fin) && /A receber no mês/.test(fin) && /451,25 €/.test(fin));
   // Eu
-  await pg.click("#navMe"); await pg.waitForSelector("[data-me]");
+  await pg.click("#areaAcomp"); await pg.click("#navMe"); await pg.waitForSelector("[data-me]");
   await pg.locator('[data-me="b"]').click();
   await pg.waitForSelector(".pro-sidebar [data-t]");
   check.check("17. «Eu» abre a minha ficha (alimentação e treino) e fica guardada", (await pg.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "personal"; })[0]; return r && r.value.studentId; })) === "b" && /Bruno Costa/.test(await pg.locator("#proMain").innerText()));
