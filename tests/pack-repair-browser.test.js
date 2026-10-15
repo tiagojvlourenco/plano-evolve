@@ -152,7 +152,7 @@ function fixtureRow(id, name){
   var p2 = await ctx2.newPage(); p2.setDefaultTimeout(6000);
   p2.on("pageerror", function(e){ errors.push(e.message); }); p2.on("dialog", function(d){ d.accept(); });
   await p2.goto(srv.url); await p2.waitForSelector(".student-row");
-  await p2.click("#navStudio"); await p2.waitForSelector("#fixPacks");
+  await p2.click("#areaGestao"); await p2.click("#navStudio"); await p2.waitForSelector("#fixPacks");
   await p2.click("#fixPacks");
   await p2.waitForFunction(function(){ return /acertadas|acertada/.test(document.querySelector(".toast, #toast, [class*=toast]") ? document.querySelector(".toast, #toast, [class*=toast]").innerText : ""); }).catch(function(){});
   await p2.waitForFunction(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === "a"; }).every(function(x){ return x.pack_id === "pa"; }); });
@@ -224,7 +224,7 @@ function fixtureRow(id, name){
   var p5 = await ctx5.newPage(); p5.setDefaultTimeout(6000);
   p5.on("pageerror", function(e){ errors.push(e.message); }); p5.on("dialog", function(d){ d.accept(); });
   await p5.goto(srv.url); await p5.waitForSelector(".student-row");
-  await p5.click("#navStudio"); await p5.waitForSelector("#fixPacks");
+  await p5.click("#areaGestao"); await p5.click("#navStudio"); await p5.waitForSelector("#fixPacks");
   await p5.click("#fixPacks");
   await p5.waitForFunction(function(){ var p = window.__fake.tables.session_packs[0]; return p && p.expires_on; });
   var n2 = await p5.evaluate(function(){ return window.__fake.tables.session_packs[0]; });

@@ -88,7 +88,7 @@ STUDENTS = [mkStudent("a", "Ana Silva"), mkStudent("b", "Rui Costa")];
   studio.packs = [pack({id: "pa", student_id: "a", total: 10, used_before: 4}), pack({id: "pb", student_id: "b", total: 10, used_before: 10}), pack({id: "pc", student_id: "c", total: 10, used_before: 9})];
   var rows = studioSummaryRows(today);
   check.check("24. O resumo põe primeiro quem aguarda renovação, depois quem está a acabar", rows.map(function(r){ return r.student.id + ":" + r.state; }).join() === "b:renovar,c:acabar,a:normal");
-  check.check("25. O número de alunos a precisar de atenção conta no menu", studioAttentionCount(today) === 2 && /Estúdio · 2/.test(studioNavLabel()));
+  check.check("25. O número de alunos a precisar de atenção conta no menu", studioAttentionCount(today) === 2 && /Gestão · 2/.test(gestaoAreaLabel()));
 
   // ---- importação ----
   var imp = parsePackImport("Nome;Aulas;Início;Valor;Dadas\nAna Silva; 26; 01/10/2026; 520,50; 9\nRui Costa\t13\t2026-09-15\t260\t0\n\nXpto;abc;01/10/2026;1;0\nEva;10;31/02/2026;1;0\nEva Lopes;10;01/10/2026;100;11");

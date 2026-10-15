@@ -50,7 +50,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
     a.sessions.forEach(function(x, i){ window.__fake.tables.sessions.push(Object.assign({id: "s" + (i + 1)}, x)); });
     window.__fake.tables.studio_settings.push({id: "st1", key: "google_calendar", value: {clientId: "123456-abc.apps.googleusercontent.com", calendarId: "primary", useAsSource: false, titlePrefix: "", aliases: {}, ignored: {}, lastSync: null}});
   }, {start: iso(399), sessions: sessions});
-  await page.click("#navStudio");
+  await page.click("#areaGestao"); await page.click("#navStudio");
   await page.waitForSelector("#gcSync");
   await page.click("#gcSync");
   await page.waitForFunction(function(){ var o = document.querySelector("#gcOut"); return o && /eventos lidos/.test(o.textContent); });

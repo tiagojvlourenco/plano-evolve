@@ -58,7 +58,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.goto(srv.url);
   await page.waitForSelector(".student-row");
   await page.evaluate(function(d){ window.__fake.tables.session_packs.push({id: "pk-a", student_id: "stu1", name: "Trim", total: 10, price: 200, starts_on: d, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}); }, iso(30));
-  await page.click("#navStudio");
+  await page.click("#areaGestao"); await page.click("#navStudio");
   await page.waitForSelector("#gcalCard");
   await page.fill("#gcClient", "123456-abc.apps.googleusercontent.com"); await page.click("#gcSave");
   await page.waitForSelector("#gcSync");
@@ -99,7 +99,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   check.check("7b. Os nomes ignorados não voltam a aparecer nas sincronizações seguintes", (await page.locator("[data-gc-name]").count()) === 0);
   // painel de retenção: não os trata como alunos sem registos
   var reasons = await page.evaluate(function(){ var out = []; STUDENTS_FOR_TEST = null; return out; }).catch(function(){ return []; });
-  await page.click("#navDashboard");
+  await page.click("#areaAcomp"); await page.click("#navDashboard");
   await page.waitForSelector(".student-row");
   var queue = await page.evaluate(function(){ var q = document.getElementById("contactQueue"); return q ? q.textContent : ""; });
   check.check("8. Os alunos 'só estúdio' não aparecem na lista 'quem contactar' por não terem registos", !/Beatriz Lopes|Mãe \+ Pai|Rui Costa Silva/.test(queue));
@@ -134,7 +134,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.waitForFunction(function(n){ return window.__fake.rows.length === n - 1; }, rowsBefore);
   var left = await page.evaluate(function(id){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === id; }).length; }, beaId);
   check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta à lista", left === 0 && (await page.locator(".student-row").count()) >= 1 && !(await page.locator('.student-row:has-text("Beatriz Lopes")').count()));
-  await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.click("#areaGestao"); await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   await page.click("#gcSync"); await page.waitForFunction(function(){ return /eventos lidos/.test(document.querySelector("#gcOut").textContent); });
   check.check("11. O aluno apagado não volta: o título fica ignorado e não é recriado", (await page.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.name === "Beatriz Lopes"; }).length; })) === 0 && (await page.locator("[data-gc-name]").count()) === 0);
   await browser.close(); srv.server.close();

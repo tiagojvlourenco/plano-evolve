@@ -189,3 +189,22 @@ Renovar antes de acabar o pacote (por exemplo com 6 aulas por dar): «Renovar» 
 Pacotes partilhados (casais): uma aula gasta primeiro o pacote do próprio aluno e só depois o do parceiro; e as aulas de um aluno anteriores ao início do seu primeiro pacote próprio não gastam o pacote do parceiro (eram de um pacote anterior). «Sincronizar» e «↻ Acertar pacotes» voltam a ligar as aulas dos alunos com pacotes partilhados ao pacote certo (`reassignSharedPackSessions`). O cartão «Hoje: quem contactar» vem recolhido, com o número de alunos no cabeçalho; o estado fica guardado no dispositivo.
 
 Pacotes partilhados — ordem e partilha (substitui a regra anterior «pacote próprio primeiro»): uma aula gasta primeiro o pacote que caduca primeiro e, com a mesma validade (ou sem ela), o mais antigo, seja do próprio aluno ou do parceiro; assim as aulas que restam no pacote do parceiro gastam-se antes do pacote novo. Partilhar num dos pacotes basta: os dois alunos passam a ser parceiros e podem gastar os pacotes um do outro (`partnersOf`). As aulas anteriores ao início do pacote próprio continuam a não gastar o pacote do parceiro.
+
+Número da aula: cada sessão (ficha do aluno e agenda do dia do Estúdio) mostra «Aula n/total», a posição dentro do pacote (contando as aulas já dadas antes da app; nos pacotes partilhados conta o conjunto). As aulas previstas (agendadas) levam o número que terão e passam ao pacote seguinte quando o primeiro acaba (`sessionNumberMap`).
+
+Estúdio: lupa (nomes que começam pelas letras escritas, em todas as listas com alunos) e ordem do resumo de treinos (urgência, A→Z, Z→A, menos aulas primeiro).
+
+## 8l. Contratos (área só do Tiago)
+
+Novo menu «Contratos» (e «Eu»): sem migração nova. Os dados dos contratos ficam em `studio_settings` (chave `contracts`: `{idDoAluno: {formato, modalidade, minutos, estado}}`; chave `personal`: a ficha de «Eu»); as horas por mês continuam em `monthly_hours`.
+- **Lista:** totais (horas contratadas por mês, contratos ativos — um duo conta uma vez —, receita recorrente por mês = valor por sessão × sessões por mês), filtros Todos/Ativo/Suspenso/Cancelado, lupa e ordem (nome, valor, aulas por dar, horas).
+- **Ficha do contrato:** termos (formato, modalidade, plano, horas, valor do ciclo, valor por mês), participantes, treinos próximos/últimos com o número da aula, recebimentos (Pago/Desmarcar) e arquivo de packs; «Editar condições» e «Renovar».
+- **Duo:** dois alunos marcados como duo e parceiros (pacote partilhado) formam um só contrato; as horas repartem-se pelos dois.
+- **Importar:** `Nome; modalidade; formato; estado` (o «PT 45/60» do nome dá os minutos).
+- **Financeiro:** recebido/a receber/em atraso do mês, com Pago e Desmarcar, e CSV.
+- **Eu:** abre a ficha escolhida (alimentação e treino). Para teres ficha, convida-te como aluno.
+- Não inclui a atribuição de sessões a outro PT nem a coluna lateral do backoffice.
+
+## 8m. Duas áreas no menu do profissional
+
+O menu tem um seletor **Acompanhamento | Gestão**: Acompanhamento mostra Alunos, Catálogo e Eu (nutrição, treino, check-ins); Gestão mostra Estúdio e Contratos (packs, aulas, recebimentos, horas). Mudar de área volta ao último ecrã dessa área; o número de avisos do estúdio aparece em «Gestão · N». É uma separação da interface na mesma app (a base de dados e a lista de alunos são uma só). Separar em duas apps fica para depois, se continuar a fazer falta.
