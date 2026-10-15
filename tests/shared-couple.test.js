@@ -25,11 +25,16 @@ var check = require("./check")();
     check.check("2o. O pacote da Dora fica só com as aulas dela (26 de 26) e o do Gil com as dele (11 de 13 + a de hoje da Dora = 12)", usedD === 26 && usedG === 12);
     var todayS = studio.sessions.filter(function(x){ return x.student_id === "cd" && x.date === today; })[0];
     check.check("2p. Sem pacote novo, a aula de hoje da Dora gasta o pacote do Gil (restam 1)", todayS.pack_id === "pG");
-    // a Dora renova: a aula de hoje passa para o pacote novo dela e o Gil volta a ter 2
+    // a Dora renova: o pacote antigo do Gil (2 por dar) gasta-se primeiro, depois o pacote novo dela
     studio.packs.push({id: "pD2", student_id: "cd", name: "22", total: 22, starts_on: today, expires_on: null, used_before: 0, shared_with: ["cg"], missed_consumes: true, late_cancel_consumes: true});
+    studio.sessions.push({id: "q98", student_id: "cd", pack_id: null, date: today, time: null, status: "feita", source: "manual"}, {id: "q99", student_id: "cd", pack_id: null, date: today, time: null, status: "feita", source: "manual"});
     return reassignSharedPackSessions().then(function(){
-      var t2 = studio.sessions.filter(function(x){ return x.student_id === "cd" && x.date === today; })[0];
-      check.check("2q. Com o pacote novo da Dora, a aula de hoje conta nele e o Gil volta a ter 2 aulas por dar", t2.pack_id === "pD2" && packUsage(packG, today).remaining === 2);
+      var mine = studio.sessions.filter(function(x){ return x.student_id === "cd" && x.date === today; });
+      var inG = mine.filter(function(x){ return x.pack_id === "pG"; }).length, inD2 = mine.filter(function(x){ return x.pack_id === "pD2"; }).length;
+      check.check("2q. Com o pacote novo da Dora, as 2 aulas que restam no pacote do Gil gastam-se primeiro e a seguinte conta no pacote novo", inG === 2 && inD2 === 1 && packUsage(packG, today).remaining === 0);
+      // partilhar só de um lado chega: o pacote do Gil não está marcado para a Dora, mas a Dora marcou o dela para o Gil
+      packG.shared_with = []; packD.shared_with = ["cg"];
+      check.check("2r. Basta partilhar num dos pacotes: os dois passam a poder gastar os pacotes um do outro", usablePacksOf("cd").some(function(p){ return p.id === "pG"; }) && usablePacksOf("cg").some(function(p){ return p.id === "pD"; }));
     });
   });
 })().then(function(){ check.summarize(); });
