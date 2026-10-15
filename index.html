@@ -11728,9 +11728,24 @@ function isStudioOnly(s){ return !!(s && s.studioOnly && !s.inviteEmail && !s.au
 function dashLateDays(s){ return isStudioOnly(s) ? 0 : computeLastCheckinDaysAgo(s); }
 
 // linhas da lista de alunos: filtradas pela pesquisa (sem distinguir maiúsculas/acentos) e ordenadas por atenção ou por nome
+// «br» encontra «Bruno Costa» e «Ana Brito»: o nome, ou qualquer palavra dele, começa pelas letras escritas
+function nameStartsWithQuery(name, q){
+  var n = exLibFold(name);
+  return n.indexOf(q) === 0 || (" " + n).indexOf(" " + q) >= 0;
+}
+var dashRowsCache = [];
+function redrawDashList(){
+  var box = document.getElementById("studentListBox");
+  if (!box) return;
+  box.innerHTML = studentListRowsHtml(dashRowsCache); wireStudentList(box);
+}
+// ligado ao documento uma só vez: um redesenho do ecrã em segundo plano não pode deixar a lupa sem ouvinte
+document.addEventListener("input", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
+document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
+document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stuSort"){ state.dashSort = t.value; redrawDashList(); } });
 function studentListRowsHtml(allRows){
   var q = exLibFold(state.dashSearch || ""), sort = state.dashSort || "atencao";
-  var rows = allRows.filter(function(r){ return !q || exLibFold(r.s.name).indexOf(q) >= 0; });
+  var rows = allRows.filter(function(r){ return !q || nameStartsWithQuery(r.s.name, q); });
   var byName = function(a, b){ return String(a.s.name).localeCompare(String(b.s.name), "pt", {sensitivity: "base"}); };
   rows.sort(sort === "az" ? byName : sort === "za" ? function(a, b){ return byName(b, a); } :
     function(a, b){ return (b.pending - a.pending) || (b.crit - a.crit) || (b.alerts.length - a.alerts.length) || (b.days - a.days) || byName(a, b); });
@@ -11773,6 +11788,7 @@ function wireStudentList(root){
 
 function renderProDashboardMain(){
   var main = document.getElementById("proMain"), dashAllRows = [];
+  var hadSearchFocus = dashSearchFocused(), searchCaret = hadSearchFocus ? document.activeElement.selectionStart : null;
   var visible = visibleStudentsForDashboard();
   var demoCount = STUDENTS.filter(function(s){ return s.isDemo; }).length;
   var activeStudents = visible.filter(isStudentActive);
@@ -11819,14 +11835,10 @@ function renderProDashboardMain(){
   }
 
   main.innerHTML = html;
+  dashRowsCache = dashAllRows;
   var listBox = main.querySelector("#studentListBox");
-  if (listBox){
-    wireStudentList(listBox);
-    var redrawList = function(){ listBox.innerHTML = studentListRowsHtml(dashAllRows); wireStudentList(listBox); };
-    var searchEl = main.querySelector("#stuSearch"), sortEl = main.querySelector("#stuSort");
-    if (searchEl) searchEl.addEventListener("input", function(){ state.dashSearch = searchEl.value; redrawList(); });
-    if (sortEl) sortEl.addEventListener("change", function(){ state.dashSort = sortEl.value; redrawList(); });
-  }
+  if (listBox) wireStudentList(listBox);
+  if (hadSearchFocus){ var se = main.querySelector("#stuSearch"); if (se){ try { se.focus(); if (searchCaret != null) se.setSelectionRange(searchCaret, searchCaret); } catch (e) {} } }
   wirePhaseReviews(main, function(){ renderProDashboardMain(); });
   main.querySelectorAll("[data-contact]").forEach(function(btn){
     btn.addEventListener("click", function(){
