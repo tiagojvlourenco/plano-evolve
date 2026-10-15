@@ -161,7 +161,7 @@ function fixtureRow(id, name){
   await p3.click('[data-sub="sessoes"]');
   await p3.waitForSelector("[data-renew-pack]");
   await p3.click("[data-renew-pack]");
-  await p3.waitForFunction(function(){ return window.__fake.tables.session_packs.length === 2 && window.__fake.tables.payments.length === 1; });
+  await p3.waitForFunction(function(){ var T = window.__fake.tables; return T.session_packs.length === 2 && T.payments.length === 1 && T.sessions.filter(function(x){ return x.id[0] === "x" && x.pack_id; }).length === 2; });
   var f3 = await p3.evaluate(function(){ var T = window.__fake.tables; return {packs: T.session_packs, pay: T.payments, ses: T.sessions}; });
   var np = f3.packs.filter(function(x){ return x.id !== "old"; })[0];
   check.check("16. Renovar cria um pacote igual (3 aulas, 120 €), que começa na primeira aula que ficou sem pacote", np && np.total === 3 && Number(np.price) === 120 && np.used_before === 0 && f3.ses.filter(function(x){ return x.id === "x0"; })[0].pack_id === np.id);
