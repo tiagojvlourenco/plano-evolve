@@ -13910,10 +13910,22 @@ function packsOf(studentId){ return studio.packs.filter(function(p){ return p.st
 // um pacote tem um dono (student_id) e, em shared_with, os outros alunos que também podem gastar as suas aulas; as sessões de todos descontam ao mesmo pacote
 function sharedIdsOf(pack){ return pack && Array.isArray(pack.shared_with) ? pack.shared_with.filter(function(x, i, a){ return typeof x === "string" && x && a.indexOf(x) === i; }) : []; }
 // os pacotes que um aluno pode gastar: os seus e os que outros partilham com ele
-function usablePacksOf(studentId){ return studio.packs.filter(function(p){ return p.student_id === studentId || sharedIdsOf(p).indexOf(studentId) >= 0; }); }
+// parceiros: quem partilha pacotes com o aluno, em qualquer sentido (basta partilhar num dos pacotes do casal para os dois poderem gastar os pacotes um do outro)
+function partnersOf(studentId){
+  var out = [];
+  function add(id){ if (id && id !== studentId && out.indexOf(id) < 0 && findStudent(id)) out.push(id); }
+  studio.packs.forEach(function(p){
+    if (p.student_id === studentId) sharedIdsOf(p).forEach(add);
+    else if (sharedIdsOf(p).indexOf(studentId) >= 0) add(p.student_id);
+  });
+  return out;
+}
+// quem pode gastar o pacote: o dono, os que o dono marcou e os parceiros do dono
+function effectiveSharedIdsOf(pack){ var ids = sharedIdsOf(pack).slice(); partnersOf(pack.student_id).forEach(function(id){ if (ids.indexOf(id) < 0) ids.push(id); }); return ids; }
+function usablePacksOf(studentId){ var partners = partnersOf(studentId); return studio.packs.filter(function(p){ return p.student_id === studentId || partners.indexOf(p.student_id) >= 0 || sharedIdsOf(p).indexOf(studentId) >= 0; }); }
 // quem gasta deste pacote: o dono e os alunos com quem está partilhado
-function packMembersOf(pack){ var ids = [pack.student_id]; sharedIdsOf(pack).forEach(function(id){ if (ids.indexOf(id) < 0) ids.push(id); }); return ids; }
-function isSharedPack(pack){ return sharedIdsOf(pack).length > 0; }
+function packMembersOf(pack){ var ids = [pack.student_id]; effectiveSharedIdsOf(pack).forEach(function(id){ if (ids.indexOf(id) < 0) ids.push(id); }); return ids; }
+function isSharedPack(pack){ return effectiveSharedIdsOf(pack).length > 0; }
 // nomes dos outros alunos do pacote (os apagados ficam de fora)
 // o primeiro aluno ativo do pacote (o dono, se estiver ativo): é a quem se lembra a renovação
 function packActiveMember(pack){ var ids = packMembersOf(pack); for (var i = 0; i < ids.length; i++){ var m = findStudent(ids[i]); if (m && isStudentActive(m)) return m; } return null; }
@@ -13964,13 +13976,12 @@ function pickPackForSession(studentId, date){
     var u = packUsage(p, d);
     return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d) && (p.student_id === studentId || mayShare);
   }).sort(function(a, b){
-    // os pacotes do próprio aluno primeiro (o do parceiro só se gasta quando o seu acaba); depois o que caduca primeiro e, com a mesma validade, o mais antigo
-    var oa = a.student_id === studentId ? 0 : 1, ob = b.student_id === studentId ? 0 : 1;
-    if (oa !== ob) return oa - ob;
+    // o que caduca primeiro; com a mesma validade, o mais antigo (as aulas que restam no pacote do parceiro gastam-se antes do pacote novo); no empate, o do próprio aluno
     var ea = a.expires_on || "9999", eb = b.expires_on || "9999";
     if (ea !== eb) return ea < eb ? -1 : 1;
     var sa = a.starts_on || "", sb = b.starts_on || "";
-    return sa < sb ? -1 : sa > sb ? 1 : 0;
+    if (sa !== sb) return sa < sb ? -1 : 1;
+    return (a.student_id === studentId ? 0 : 1) - (b.student_id === studentId ? 0 : 1);
   })[0] || null;
 }
 // volta a ligar as aulas dos alunos com pacotes partilhados ao pacote certo, por ordem de data (corrige aulas que ficaram no pacote do parceiro)

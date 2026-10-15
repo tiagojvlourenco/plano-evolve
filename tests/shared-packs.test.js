@@ -51,10 +51,10 @@ STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno S
   check.check("15. Um só pacote partilhado: o parceiro também o gasta", pickPackForSession("b", today).id === "pk" && pickPackForSession("c", today) === null);
   var r1 = await studioAddSession("b", today, "feita"), r2 = await studioAddSession("a", today, "feita");
   check.check("16. As sessões dos dois descontam ao mesmo pacote", !r1.error && !r2.error && packUsage(studio.packs[0], today).used === 2 && r1.data.pack_id === "pk" && r2.data.pack_id === "pk");
-  // o pacote do próprio aluno gasta-se antes do do parceiro, mesmo que o do parceiro caduque primeiro
+  // pacote que caduca primeiro ganha ao do próprio aluno
   reset();
   studio.packs = [pack("own", "a", 10, {expires_on: d(60)}), pack("other", "b", 10, {expires_on: d(20), shared_with: ["a"]})];
-  check.check("17. O pacote do próprio aluno gasta-se antes do do parceiro (o do parceiro só quando o seu acaba)", pickPackForSession("a", today).id === "own");
+  check.check("17. Se o pacote partilhado caduca primeiro, gasta-se esse (como nos pacotes normais)", pickPackForSession("a", today).id === "other");
   // pacote partilhado ainda não começou / caducado
   studio.packs = [pack("o", "b", 10, {starts_on: d(5), shared_with: ["a"]})];
   check.check("18. Um pacote partilhado que ainda não começou não é escolhido", pickPackForSession("a", today) === null);
@@ -98,7 +98,7 @@ STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno S
   var sh2 = await studioSetPackSharing(studio.packs[0], ["b", "c"], true);
   check.check("27. Adicionar a Carla: o pacote caducado da Carla não é partilhado de volta", !sh2.error && studio.packs[0].shared_with.join() === "b,c" && studio.packs[2].shared_with.length === 0);
   var sh3 = await studioSetPackSharing(studio.packs[0], [], true);
-  check.check("28. Deixar de partilhar remove o acesso nos dois sentidos (o Bruno continua a partilhar com a Carla, que é outra partilha)", !sh3.error && studio.packs[0].shared_with.length === 0 && studio.packs[1].shared_with.join() === "c" && usablePacksOf("b").length === 1);
+  check.check("28. Deixar de partilhar remove o acesso nos dois sentidos (o Bruno continua a partilhar com a Carla, que é outra partilha)", !sh3.error && studio.packs[0].shared_with.length === 0 && studio.packs[1].shared_with.join() === "c" && usablePacksOf("a").length === 1 && usablePacksOf("b").length === 2);   // (o Bruno e a Carla continuam parceiros: partilhar num dos dois basta)
   var sh4 = await studioSetPackSharing(studio.packs[0], ["b"], false);
   check.check("29. Sem partilha nos dois sentidos, só o pacote escolhido muda", !sh4.error && studio.packs[0].shared_with.join() === "b" && studio.packs[1].shared_with.join() === "c");
   studio.sharedAvailable = false;
