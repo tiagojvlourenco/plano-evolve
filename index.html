@@ -11686,7 +11686,7 @@ function renderProShell(){
   var navContracts = document.getElementById("navContracts");
   if (navContracts) navContracts.addEventListener("click", function(){ gestaoGo("contracts", true); });
   var navMe = document.getElementById("navMe");
-  if (navMe) navMe.addEventListener("click", function(){ loadGestao().then(function(ok){ if (ok) G.goToMe(); else showToast("Não foi possível abrir a tua ficha — verifica a ligação."); }); });
+  if (navMe) navMe.addEventListener("click", function(){ loadGestao().then(gestaoWithData).then(function(ok){ if (ok) G.goToMe(); else showToast("Não foi possível abrir a tua ficha — verifica a ligação."); }); });
   var navStudio = document.getElementById("navStudio");
   if (navStudio) navStudio.addEventListener("click", function(){ gestaoGo("studio"); }); // lê os dados de novo de cada vez que se abre
   proRoot.querySelectorAll(".pro-sidebar [data-t]").forEach(function(btn){
@@ -12247,7 +12247,7 @@ function renderProTabContent(s){
   else if (state.proTab==="sessoes"){
     if (!G.loaded){
       el.innerHTML = "<p class=\"muted-p\">A carregar…</p>";
-      loadGestao().then(function(ok){ if (ok && state.proSelectedId === s.id && state.proTab === "sessoes") renderProTabContent(s); else if (!ok) el.innerHTML = "<p class=\"muted-p\">Não foi possível abrir os pacotes. Verifica a ligação.</p>"; });
+      loadGestao().then(gestaoWithData).then(function(ok){ if (ok && state.proSelectedId === s.id && state.proTab === "sessoes") renderProTabContent(s); else if (!ok) el.innerHTML = "<p class=\"muted-p\">Não foi possível abrir os pacotes. Verifica a ligação.</p>"; });
     } else { el.innerHTML = G.tplProSessoes(s); if (G.studio.available) G.wireProSessoes(s, el); }
   }
   else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
@@ -13812,6 +13812,11 @@ function loadGestao(){
     return !!G.loaded;
   }).catch(function(){ gestaoPromise = null; return false; });
   return gestaoPromise;
+}
+// depois de carregar tarde (o arranque não a conseguiu): lê também os dados do estúdio, senão os ecrãs mostravam «sem pacotes»
+function gestaoWithData(ok){
+  if (!ok || G.studio.loaded) return Promise.resolve(ok);
+  return G.studioRefresh().then(function(){ return true; }, function(){ return true; });
 }
 // corre fn() com a Gestão pronta: de imediato se já estiver carregada, senão depois de a carregar (nada acontece se falhar)
 function whenGestao(fn){

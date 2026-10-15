@@ -76,11 +76,26 @@ function cacheFirst(event){
 // código da Gestão: sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
 function networkFirstFile(event){
   var request = event.request;
-  return fetch(request, {cache: "no-cache"}).then(function(res){
-    if (res && res.ok){ var copy = res.clone(); event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, copy); }).catch(function(){})); return res; }
-    return caches.match(request).then(function(hit){ return hit || res; });
-  }).catch(function(){
-    return caches.match(request).then(function(hit){ return hit || Response.error(); });
+  return new Promise(function(resolve){
+    var settled = false;
+    function fromCache(last){
+      return caches.match(request).then(function(hit){
+        if (settled) return;
+        if (hit){ settled = true; resolve(hit); } else if (last){ settled = true; resolve(last); }
+      });
+    }
+    var timer = setTimeout(function(){ fromCache(null); }, NAV_TIMEOUT_MS); // rede lenta: usa já a cópia guardada, se existir
+    fetch(request, {cache: "no-cache"}).then(function(res){
+      clearTimeout(timer);
+      // só um JavaScript a sério substitui a cópia boa (um portal de Wi-Fi devolve HTML com 200)
+      var good = res && res.ok && /javascript/i.test(res.headers.get("Content-Type") || "");
+      if (settled) { if (good) event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, res.clone()); }).catch(function(){})); return; }
+      if (good){ var copy = res.clone(); event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, copy); }).catch(function(){})); settled = true; resolve(res); return; }
+      return fromCache(res).then(function(){ if (!settled){ settled = true; resolve(res); } });
+    }).catch(function(){
+      clearTimeout(timer);
+      fromCache(Response.error()).then(function(){ if (!settled){ settled = true; resolve(Response.error()); } });
+    });
   });
 }
 

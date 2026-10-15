@@ -112,6 +112,12 @@ function fixtureRow(id, name){
   await pgF.waitForFunction(function(){ return /Não foi possível abrir os pacotes/.test(document.getElementById("proMain").innerText); });
   check.check("11. O separador Pacotes da ficha avisa que não carregou (em vez de ficar em branco)", /Não foi possível abrir os pacotes/.test(await pgF.locator("#proMain").innerText()));
   failing = false;
+  // carregou tarde: o separador Pacotes lê também os dados (não pode mostrar «sem pacotes» quando o aluno tem um)
+  await pgF.evaluate(function(){ var d = new Date(); d.setDate(d.getDate() - 10); var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    window.__fake.tables.session_packs.push({id: "pkx", student_id: "a", name: "Pack Tardio", total: 10, price: 400, starts_on: iso, expires_on: null, used_before: 0}); });
+  await pgF.click('[data-sub="sessoes"]');
+  await pgF.waitForFunction(function(){ return /Pack Tardio/.test(document.getElementById("proMain").innerText); });
+  check.check("11b. Se a Gestão só carregou depois do arranque, o separador Pacotes mostra os pacotes do aluno", !/Ainda sem pacotes/.test(await pgF.locator("#proMain").innerText()));
   // voltar à lista e tentar outra vez: já carrega
   await pgF.click("#proBack");
   await pgF.waitForSelector(".student-row");
