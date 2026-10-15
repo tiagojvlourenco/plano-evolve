@@ -14522,6 +14522,12 @@ function matchEventStudent(title, aliases){
     var viaTail = all.filter(function(s){ return exLibFold(s.name) === tail; });
     if (viaTail.length) return unique(viaTail);
   }
+  // só o primeiro ou o último nome («PT 60 - Carina», «PT 60 - Diana»): vale se for exatamente um aluno (ativo) e a palavra for o primeiro ou o último nome da ficha
+  if (tail && tail.indexOf(" ") < 0 && tail.length >= 3){
+    var byToken = all.filter(function(s){ var p = exLibFold(s.name).split(" ").filter(Boolean); return p.length >= 2 && (p[0] === tail || p[p.length - 1] === tail); });
+    var oneTok = unique(byToken);
+    if (oneTok) return oneTok;
+  }
   var padded = " " + key + " ";
   var inside = all.filter(function(s){ var n = exLibFold(s.name); return n.indexOf(" ") > 0 && padded.indexOf(" " + n + " ") >= 0; });
   if (inside.length){

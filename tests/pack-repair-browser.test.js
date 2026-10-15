@@ -18,6 +18,17 @@ var check = require("./check")();
   check.check("2. Um pacote caducado e esgotado não alarga a janela", w2.from > addDaysISO(today, -250));
 })();
 
+// ---- só o primeiro ou o último nome no evento ----
+(function(){
+  STUDENTS.push({id: "t1", name: "Ana Carina Tok", isDemo: false, active: true}, {id: "t2", name: "Rui Silvano Pax", isDemo: false, active: true}, {id: "t3", name: "Eva Silvano Pax", isDemo: false, active: true});
+  check.check("2a1. «PT 60 - Carina» não casa (Carina é o 2.º nome, não o primeiro nem o último)", matchEventStudent("PT 60 - Carina", {}) === null);
+  STUDENTS.push({id: "t4", name: "Diana Zeta", isDemo: false, active: true}, {id: "t5", name: "Maria Carina", isDemo: false, active: true});
+  check.check("2a2. «PT 60 - Diana» casa com a única Diana (primeiro nome)", (matchEventStudent("PT 60 - Diana", {}) || {}).id === "t4");
+  check.check("2a3. «PT 60 - Carina» casa com quem tem Carina como último nome", (matchEventStudent("PT 60 - Carina", {}) || {}).id === "t5");
+  check.check("2a4. Um nome partilhado por dois alunos é ambíguo e não casa", matchEventStudent("PT 60 - Pax", {}) === null && matchEventStudent("PT 60 - Silvano", {}) === null);
+  check.check("2a5. Palavras curtas demais não casam", matchEventStudent("PT 60 - Di", {}) === null);
+})();
+
 // ---- duo: «PT Duo 60 - Ana + Rui» conta uma aula a cada um ----
 (function(){
   var today = localTodayISO(), day = addDaysISO(today, -3);
