@@ -11738,11 +11738,16 @@ function redrawDashList(){
   var box = document.getElementById("studentListBox");
   if (!box) return;
   box.innerHTML = studentListRowsHtml(dashRowsCache); wireStudentList(box);
+  var q = String(state.dashSearch || "").trim(), extras = document.getElementById("dashExtras"), head = document.getElementById("studentListHead");
+  if (extras) extras.hidden = !!q;
+  if (head){ var n = box.querySelectorAll(".student-row").length; head.setAttribute("data-label", head.getAttribute("data-label") || head.textContent); head.textContent = head.getAttribute("data-label") + (q ? " · " + n + (n === 1 ? " resultado" : " resultados") : ""); }
 }
+// a ordem muda uma lista que pode estar longe do ecrã: levá-la à vista para o toque ter efeito visível
+function showDashListHead(){ var h = document.getElementById("studentListHead"); if (h && h.scrollIntoView){ try { h.scrollIntoView({block: "start", behavior: "smooth"}); } catch (e) { h.scrollIntoView(); } } }
 // ligado ao documento uma só vez: um redesenho do ecrã em segundo plano não pode deixar a lupa sem ouvinte
 document.addEventListener("input", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
 document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "stuSearch"){ state.dashSearch = t.value; redrawDashList(); } });
-document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stuSort"){ state.dashSort = t.value; redrawDashList(); } });
+document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stuSort"){ state.dashSort = t.value; redrawDashList(); showDashListHead(); } });
 function studentListRowsHtml(allRows){
   var q = exLibFold(state.dashSearch || ""), sort = state.dashSort || "atencao";
   var rows = allRows.filter(function(r){ return !q || nameStartsWithQuery(r.s.name, q); });
@@ -11813,7 +11818,8 @@ function renderProDashboardMain(){
   "</div>";
 
   // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
-  html += tplPhaseReviews() + tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents);
+  // com texto na lupa estes cartões escondem-se: a lista (que fica por baixo deles) passa a estar logo debaixo do teclado
+  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents) + "</div>";
 
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
@@ -11830,14 +11836,14 @@ function renderProDashboardMain(){
       return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: dashLateDays(st), pending: pendingHelpFor(st.id)};
     });
     var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
-    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
+    html += "<div class=\"eyebrow\" id=\"studentListHead\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
     html += "<div class=\"student-list\" id=\"studentListBox\">" + studentListRowsHtml(allRows) + "</div>";
   }
 
   main.innerHTML = html;
   dashRowsCache = dashAllRows;
   var listBox = main.querySelector("#studentListBox");
-  if (listBox) wireStudentList(listBox);
+  if (listBox) redrawDashList();
   if (hadSearchFocus){ var se = main.querySelector("#stuSearch"); if (se){ try { se.focus(); if (searchCaret != null) se.setSelectionRange(searchCaret, searchCaret); } catch (e) {} } }
   wirePhaseReviews(main, function(){ renderProDashboardMain(); });
   main.querySelectorAll("[data-contact]").forEach(function(btn){
