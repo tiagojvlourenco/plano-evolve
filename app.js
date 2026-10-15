@@ -11425,11 +11425,11 @@ function renderProDetailMain(s){
       "<div class=\"avatar\">" + escapeHtml(s.initials) + "</div>" +
       "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
     "</div>" +
-    "<div class=\"quick-actions\">" +
+    (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
       "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
       "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>" +
       "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
-    "</div>" + subtabs +
+    "</div>") + subtabs +
     "<div id=\"proTabContent\" class=\"card\"></div>";
   wireProDetailNav(main);
   renderProTabContent(s);
@@ -11438,7 +11438,7 @@ function renderProDetailMain(s){
 // voltar à lista, atalhos de ação e separadores da mesma área
 function wireProDetailNav(main){
   var back = main.querySelector("#proBack");
-  if (back) back.addEventListener("click", function(){ state.proSelectedId = null; state.proView = "dashboard"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+  if (back) back.addEventListener("click", function(){ state.proSelectedId = null; state.proView = APP_MODE === "gestao" ? (state.lastGestaoView || "studio") : "dashboard"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   main.querySelectorAll("[data-sub]").forEach(function(b){
     b.addEventListener("click", function(){ state.proTab = b.getAttribute("data-sub"); renderProShell(); });
   });
