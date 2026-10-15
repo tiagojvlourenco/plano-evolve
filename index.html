@@ -11849,6 +11849,13 @@ function renderProDashboardMain(){
   var listBox = main.querySelector("#studentListBox");
   if (listBox) redrawDashList();
   if (hadSearchFocus){ var se = main.querySelector("#stuSearch"); if (se){ try { se.focus(); if (searchCaret != null) se.setSelectionRange(searchCaret, searchCaret); } catch (e) {} } }
+  var cqToggle = main.querySelector("#contactToggle");
+  if (cqToggle) cqToggle.addEventListener("click", function(){
+    var body = main.querySelector("#contactBody"), nowOpen = body.hidden;   // hidden → abrir
+    body.hidden = !nowOpen; setContactQueueOpen(nowOpen);
+    cqToggle.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+    var chev = cqToggle.lastElementChild; if (chev) chev.style.transform = "rotate(" + (nowOpen ? 90 : 0) + "deg)";
+  });
   wirePhaseReviews(main, function(){ renderProDashboardMain(); });
   main.querySelectorAll("[data-contact]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -13949,16 +13956,40 @@ function activePacksOf(studentId, today){
 // (nos pacotes partilhados, a igualdade de validade resolve-se a favor do pacote do próprio aluno; quando o seu acaba, gasta o do outro)
 function pickPackForSession(studentId, date){
   var d = isIsoDate(date) ? date : localTodayISO();
+  var own = studio.packs.filter(function(p){ return p.student_id === studentId; });
+  var firstOwnStart = own.reduce(function(m, p){ return p.starts_on && (!m || p.starts_on < m) ? p.starts_on : m; }, null);
+  // as aulas de um aluno que tem pacote próprio, dadas antes de esse pacote começar, não gastam o pacote de outra pessoa (eram de um pacote anterior)
+  var mayShare = !firstOwnStart || d >= firstOwnStart;
   return usablePacksOf(studentId).filter(function(p){
     var u = packUsage(p, d);
-    return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d);
+    return u.remaining > 0 && (!p.starts_on || p.starts_on <= d) && (!p.expires_on || p.expires_on >= d) && (p.student_id === studentId || mayShare);
   }).sort(function(a, b){
+    // os pacotes do próprio aluno primeiro (o do parceiro só se gasta quando o seu acaba); depois o que caduca primeiro e, com a mesma validade, o mais antigo
+    var oa = a.student_id === studentId ? 0 : 1, ob = b.student_id === studentId ? 0 : 1;
+    if (oa !== ob) return oa - ob;
     var ea = a.expires_on || "9999", eb = b.expires_on || "9999";
     if (ea !== eb) return ea < eb ? -1 : 1;
-    var sa = a.starts_on || "", sb = b.starts_on || "";   // mesma validade: gasta-se primeiro o pacote comprado primeiro (quem renova antes de acabar não passa a gastar o novo)
-    if (sa !== sb) return sa < sb ? -1 : 1;
-    return (a.student_id === studentId ? 0 : 1) - (b.student_id === studentId ? 0 : 1);
+    var sa = a.starts_on || "", sb = b.starts_on || "";
+    return sa < sb ? -1 : sa > sb ? 1 : 0;
   })[0] || null;
+}
+// volta a ligar as aulas dos alunos com pacotes partilhados ao pacote certo, por ordem de data (corrige aulas que ficaram no pacote do parceiro)
+function reassignSharedPackSessions(){
+  var ids = {};
+  studio.packs.forEach(function(p){ if (isSharedPack(p)) packMembersOf(p).forEach(function(id){ ids[id] = true; }); });
+  var list = studio.sessions.filter(function(x){ return ids[x.student_id] && x.status !== "agendada" && x.pack_id !== undefined; })
+    .sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : (a.time || "") > (b.time || "") ? 1 : 0; });
+  if (!list.length) return Promise.resolve(0);
+  var before = {}; list.forEach(function(x){ before[x.id] = x.pack_id || null; x.pack_id = null; });
+  list.forEach(function(x){ var pk = sessionConsumes({missed_consumes: true, late_cancel_consumes: true}, x) ? pickPackForSession(x.student_id, x.date) : null; x.pack_id = pk ? pk.id : null; });
+  var changed = list.filter(function(x){ return (x.pack_id || null) !== before[x.id]; });
+  var chain = Promise.resolve(0);
+  changed.forEach(function(x){
+    var now = x.pack_id, was = before[x.id];
+    x.pack_id = was;   // o estado em memória só muda se a gravação correr bem
+    chain = chain.then(function(n){ return studioUpdate("sessions", x.id, {pack_id: now}).then(function(r){ if (!r.error) x.pack_id = now; return n + (r.error ? 0 : 1); }); });
+  });
+  return chain;
 }
 function sessionsOfStudent(studentId){ return studio.sessions.filter(function(x){ return x.student_id === studentId; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }); }
 function paymentStatus(p, today){
@@ -15224,7 +15255,7 @@ function openEditPackModal(pack, onDone){
 // automático, para todos os alunos: as aulas dadas sem pacote contam no pacote que ainda tem aulas. Se o pacote caducou, não há outro mais novo
 // e o aluno continuou a treinar, o pacote deixa de caducar (a folha trata-o como o mesmo contrato). Devolve {students, sessions, extended}.
 function autoFixPacks(){
-  var today = localTodayISO(), rep = {students: 0, sessions: 0, extended: 0, aligned: 0}, chain = alignRenewedPacks().then(function(n){ rep.aligned = n; });
+  var today = localTodayISO(), rep = {students: 0, sessions: 0, extended: 0, aligned: 0, reassigned: 0}, chain = alignRenewedPacks().then(function(n){ rep.aligned = n; return reassignSharedPackSessions(); }).then(function(n){ rep.reassigned = n; });
   visibleStudentsForDashboard().filter(isStudentActive).forEach(function(st){
     chain = chain.then(function(){
       if (!extrasOf(st.id, today).n) return;
@@ -15476,7 +15507,7 @@ function renderProStudioMain(){
   var fixBtn = main.querySelector("#fixPacks");
   if (fixBtn) fixBtn.addEventListener("click", function(){
     fixBtn.disabled = true;
-    autoFixPacks().then(function(fx){ showToast(fx.sessions || fx.aligned ? "✓ " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") + (fx.aligned ? " · " + fx.aligned + (fx.aligned === 1 ? " renovação a contar da 1.ª aula" : " renovações a contar da 1.ª aula") : "") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
+    autoFixPacks().then(function(fx){ showToast(fx.sessions || fx.aligned || fx.reassigned ? "✓ " + (fx.sessions ? fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") : "pacotes acertados") + (fx.aligned ? " · " + fx.aligned + (fx.aligned === 1 ? " renovação a contar da 1.ª aula" : " renovações a contar da 1.ª aula") : "") + (fx.reassigned ? " · " + fx.reassigned + (fx.reassigned === 1 ? " aula voltou ao pacote certo" : " aulas voltaram ao pacote certo") : "") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
   });
   var hrsGo = main.querySelector("#hrsGo");
   if (hrsGo) hrsGo.addEventListener("click", function(){
@@ -15711,7 +15742,12 @@ function studioPulse(students, today){
 var CONTACT_CHANNEL_LABELS = {whatsapp: "WhatsApp", telefone: "Telefone", presencial: "Presencial", outro: "Outro"};
 function tplContactQueue(students){
   var q = computeContactQueue(students);
-  var html = "<div class=\"card contact-queue\" id=\"contactQueue\"><div class=\"eyebrow\" style=\"margin-bottom:4px;\">Hoje: quem contactar</div>";
+  var open = contactQueueOpen();
+  var html = "<div class=\"card contact-queue\" id=\"contactQueue\"><button type=\"button\" id=\"contactToggle\" aria-expanded=\"" + (open ? "true" : "false") + "\" style=\"display:flex; align-items:center; gap:10px; width:100%; background:none; border:0; padding:0; min-height:44px; cursor:pointer; color:inherit; text-align:left;\">" +
+    "<span class=\"eyebrow\" style=\"flex:1; margin:0;\">Hoje: quem contactar</span>" +
+    (q.shown.length ? "<span class=\"pill critical\" id=\"contactCount\">" + q.items.length + "</span>" : "<span class=\"pill good\">0</span>") +
+    "<span aria-hidden=\"true\" style=\"display:inline-block; transition:transform .15s; transform:rotate(" + (open ? "90" : "0") + "deg);\">›</span></button>" +
+    "<div id=\"contactBody\"" + (open ? "" : " hidden") + " style=\"margin-top:6px;\">";
   if (!q.shown.length){
     html += "<p class=\"muted-p\">✓ Ninguém precisa de contacto hoje.</p>";
   } else {
@@ -15730,8 +15766,11 @@ function tplContactQueue(students){
   if (q.recent) notes.push(plural(q.recent, "contactado", "contactados") + " nos últimos " + CONTACT_RECENT_DAYS + " dias");
   if (q.snoozed) notes.push(plural(q.snoozed, "adiado", "adiados"));
   if (notes.length) html += "<p class=\"muted-p\" style=\"margin-top:8px; font-size:0.74rem;\">Fora da lista: " + notes.join(" · ") + ".</p>";
-  return html + "</div>";
+  return html + "</div></div>";
 }
+var CONTACT_OPEN_KEY = "evolve.contactQueueOpen";
+function contactQueueOpen(){ if (typeof state.contactQueueOpen === "boolean") return state.contactQueueOpen; try { state.contactQueueOpen = localStorage.getItem(CONTACT_OPEN_KEY) === "1"; } catch (e) { state.contactQueueOpen = false; } return state.contactQueueOpen; }
+function setContactQueueOpen(v){ state.contactQueueOpen = !!v; try { localStorage.setItem(CONTACT_OPEN_KEY, v ? "1" : "0"); } catch (e) {} }
 function tplOnboardingCard(students){
   var rows = students.filter(isStudentActive).map(function(s){ return {s: s, ob: onboardingOf(s)}; }).filter(function(r){ return r.ob.inOnboarding; })
     .sort(function(a, b){ return (b.ob.stalled - a.ob.stalled) || (a.ob.done / a.ob.total) - (b.ob.done / b.ob.total); });
