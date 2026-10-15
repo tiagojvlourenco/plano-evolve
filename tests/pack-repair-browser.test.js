@@ -29,6 +29,16 @@ var check = require("./check")();
   check.check("2a5. Palavras curtas demais não casam", matchEventStudent("PT 60 - Di", {}) === null);
 })();
 
+// ---- ignorar de uma vez os títulos sem aluno ----
+(function(){
+  calSettings.ignored = {"pt 60 - velho": true};
+  calSettings.lastSync = {unmatched: [{title: "PT 60 - Velho", n: 3}, {title: "PT 60 - Cancelada A", n: 41}, {title: "PT 45 - Cancelado B", n: 2}], unmatchedMore: 4};
+  var n = calIgnoreAllUnmatched();
+  check.check("2f. «Ignorar todos» ignora os títulos que ainda não estavam ignorados e esvazia a lista", n === 2 && calSettings.lastSync.unmatched.length === 0 && calSettings.lastSync.unmatchedMore === 0 && calIsIgnored(calSettings.ignored, "PT 60 - Cancelada A") && calIsIgnored(calSettings.ignored, "PT 45 - Cancelado B"));
+  var plan = planCalendarSync({events: [{id: "ig", title: "PT 60 - Cancelada A", date: addDaysISO(localTodayISO(), -2), time: "10:00"}], today: localTodayISO(), window: {from: addDaysISO(localTodayISO(), -30), to: localTodayISO()}, aliases: {}, ignored: calSettings.ignored, prefix: "PT"});
+  check.check("2g. E nas sincronizações seguintes esses títulos já não aparecem sem aluno", Object.keys(plan.unmatched).length === 0);
+})();
+
 // ---- duo: «PT Duo 60 - Ana + Rui» conta uma aula a cada um ----
 (function(){
   var today = localTodayISO(), day = addDaysISO(today, -3);

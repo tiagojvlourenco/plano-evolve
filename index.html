@@ -14168,6 +14168,13 @@ function wireCalendarCard(main, redraw){
     calSettings.lastSync.unmatched = calSettings.lastSync.unmatched.filter(function(u){ return !calIsIgnored(calSettings.ignored, u.title); });
     calSaveSettings().then(function(){ showToast("✓ " + n + (n === 1 ? " nome ignorado" : " nomes ignorados")); redraw(); });
   });
+  var ignoreAll = card.querySelector("#gcIgnoreAll");
+  if (ignoreAll) ignoreAll.addEventListener("click", function(){
+    var total = (calSettings.lastSync && calSettings.lastSync.unmatched || []).filter(function(u){ return !calIsIgnored(calSettings.ignored, u.title); }).length;
+    if (!window.confirm("Ignorar todos os " + total + " títulos sem aluno (por exemplo clientes cancelados)? Deixam de aparecer nas próximas sincronizações e as aulas deles não contam.")) return;
+    var n = calIgnoreAllUnmatched();
+    calSaveSettings().then(function(){ showToast("✓ " + n + (n === 1 ? " título ignorado" : " títulos ignorados")); redraw(); });
+  });
   var create = card.querySelector("#gcCreate");
   if (create) create.addEventListener("click", function(){
     var cands = calStudentCandidates(calSettings.lastSync && calSettings.lastSync.unmatched), items = [];
@@ -14473,6 +14480,15 @@ function calTitleHasPrefix(title, prefix){
   if (!p) return true;
   var t = calTitleKey(title);
   return t.indexOf(p) === 0 && (t.length === p.length || !/[a-z0-9]/.test(t.charAt(p.length)));
+}
+// ignora de uma vez todos os títulos da última sincronização que ainda não têm aluno (clientes cancelados); devolve quantos
+function calIgnoreAllUnmatched(){
+  var ls = calSettings.lastSync, n = 0;
+  if (!ls || !ls.unmatched) return 0;
+  ls.unmatched.forEach(function(u){ if (!calIsIgnored(calSettings.ignored, u.title)){ calSettings.ignored[calTitleKey(u.title)] = true; n++; } });
+  ls.unmatched = [];
+  ls.unmatchedMore = 0;
+  return n;
 }
 function calIsIgnored(ignored, title){ return !!(ignored && Object.prototype.hasOwnProperty.call(ignored, calTitleKey(title)) && ignored[calTitleKey(title)] === true); }
 function calUsesCalendar(){ return !!(calSettings.useAsSource && calSettings.clientId); }
@@ -14824,7 +14840,8 @@ function calendarCardHtml(){
         (ls.unmatchedMore ? "<p class=\"muted-p\" style=\"margin-top:6px;\">Há mais " + ls.unmatchedMore + " títulos menos frequentes que não se mostram aqui.</p>" : "") +
         "<p class=\"muted-p\" id=\"gcNewOut\" style=\"display:none; margin-top:6px;\"></p>" +
         "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"gcCreate\">Criar os alunos selecionados</button>" +
-        "<button type=\"button\" class=\"btn btn-sm\" id=\"gcIgnore\">Ignorar os não selecionados</button></div>";
+        "<button type=\"button\" class=\"btn btn-sm\" id=\"gcIgnore\">Ignorar os não selecionados</button>" +
+        "<button type=\"button\" class=\"btn btn-sm\" id=\"gcIgnoreAll\">Ignorar todos</button></div>";
     }
     html += "<details class=\"perfil-section\" style=\"margin-top:12px;\"><summary class=\"eyebrow\">Associar a um aluno que já existe</summary><p class=\"muted-p\" style=\"margin:6px 0;\">Se algum destes é um aluno com o nome escrito de outra forma, associa-o (fica guardado para as próximas vezes).</p>" +
       ls.unmatched.map(function(u, i){ return "<div class=\"history-row\" style=\"align-items:center; gap:6px; flex-wrap:wrap;\"><div class=\"hlabel\" style=\"flex:1 1 120px;\">" + escapeHtml(u.title) + " <span class=\"muted-p\">×" + u.n + "</span></div><select class=\"mini-select\" data-gc-alias=\"" + i + "\"><option value=\"\">Associar a…</option>" + visibleStudentsForDashboard().filter(isStudentActive).map(function(st){ return "<option value=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</option>"; }).join("") + "</select></div>"; }).join("") + "</details>";
