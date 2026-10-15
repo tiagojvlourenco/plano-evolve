@@ -264,7 +264,7 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   var cardHtml = tplPhaseReviews();
   check.check("81. Com 7 revisões à espera o cartão mostra 5 e «Rever todas (7)»", (cardHtml.match(/data-phase-review="/g) || []).length === 5 && /Rever todas \(7\)/.test(cardHtml) && /\+ 2 alunos à espera/.test(cardHtml));
   STUDENTS = savedS;
-  check.check("82. O peso de um aluno dos 25–350 kg é a única gama aceite (a verificação está no check-in)", /Confirma o peso: tem de estar entre 25 e 350 kg/.test(require("fs").readFileSync(__dirname + "/../index.html", "utf8")) && /muito diferente do último/.test(require("fs").readFileSync(__dirname + "/../index.html", "utf8")));
+  check.check("82. O peso de um aluno dos 25–350 kg é a única gama aceite (a verificação está no check-in)", /Confirma o peso: tem de estar entre 25 e 350 kg/.test(require("./helpers/app-text")()) && /muito diferente do último/.test(require("./helpers/app-text")()));
 })();
 
 check.summarize();

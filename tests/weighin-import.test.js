@@ -5,7 +5,7 @@ var path = require("path");
 var appSource = require("./extract-app")();
 eval(appSource);
 var check = require("./check")();
-var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+var html = require("./helpers/app-text")();
 
 var SAMPLE = [
   "Aluno Exemplo",

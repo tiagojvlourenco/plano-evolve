@@ -13,7 +13,7 @@ require("./setup")();
 eval(require("./extract-app")());
 var check = require("./check")();
 
-var appSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8"); // núcleo + Gestão
+var appSource = require("./helpers/app-text")();
 
 // ---- 1. O papel de profissional nunca é decidido comparando um email fixo no JS ----
 (function(){

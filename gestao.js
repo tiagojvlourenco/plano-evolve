@@ -560,11 +560,11 @@ function studioAttentionCount(today){
   var overdue = studio.payments.filter(function(p){ return !p.paid_on && p.due_on < today; }).length;
   return n + overdue;
 }
-function studioNavLabel(){ return "Estúdio"; }
+function studioNavLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Estúdio" + (n ? " · " + n : ""); }
 function gestaoAreaLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Gestão" + (n ? " · " + n : ""); }
 function updateStudioBadge(){
-  var b = document.getElementById("areaGestao");
-  if (b) b.textContent = gestaoAreaLabel();
+  var b = document.getElementById("navStudio");
+  if (b) b.textContent = studioNavLabel();
 }
 // um pacote novo desconta as aulas extra já dadas desde a sua data de início
 function attachExtrasToPack(pack){
@@ -1410,7 +1410,7 @@ function wireProSessoes(s, el){
     stuRemove.disabled = true;
     removeStudioOnlyStudent(s).then(function(r){
       if (r.error){ stuRemove.disabled = false; return fail("#stuRemoveErr", r.error); }
-      showToast("✓ Aluno apagado"); state.proSelectedId = null; state.proView = "dashboard"; renderProShell(); updateStudioBadge();
+      showToast("✓ Aluno apagado"); state.proSelectedId = null; state.proView = APP_MODE === "gestao" ? "studio" : "dashboard"; renderProShell(); updateStudioBadge();
     });
   });
   var pkAdd = el.querySelector("#pkAdd");
@@ -1688,7 +1688,7 @@ function wireStudioCommon(el, redraw){
 
 /* ---------- Contratos (área só do Tiago): lista, totais, ficha do contrato, financeiro e «Eu» ---------- */
 var CONTRACT_MODALIDADES = {mensal: {label: "Mensal", months: 1}, trimestral: {label: "Trimestral", months: 3}, anual: {label: "Anual", months: 12}};
-var contractMeta = {map: {}, loaded: false, available: true, me: null};
+var contractMeta = {map: {}, loaded: false, available: true};
 var CONTRACTS_LOCAL_KEY = "evolve.contractMeta";
 function contractMetaClean(v){
   var out = {};
@@ -1706,21 +1706,18 @@ function contractMetaClean(v){
 function loadContractMeta(){
   var fromRows = function(rows){
     contractMeta.map = contractMetaClean(rows && rows.contracts);
-    var me = rows && rows.personal; contractMeta.me = me && typeof me.studentId === "string" ? me.studentId : null;
     contractMeta.loaded = true; return true;
   };
-  if (!sbReady){ try { var l = JSON.parse(localStorage.getItem(CONTRACTS_LOCAL_KEY) || "null") || {}; return Promise.resolve(fromRows({contracts: l.map, personal: {studentId: l.me}})); } catch (e) { return Promise.resolve(fromRows(null)); } }
-  var get = function(key){ return Promise.resolve(sb.from("studio_settings").select("value").eq("key", key).maybeSingle().then(function(r){ return r; })); };
-  return Promise.all([get("contracts"), get("personal")]).then(function(rs){
-    if (rs.some(function(r){ return r && r.error; })){ contractMeta.available = false; contractMeta.loaded = true; return false; }
+  if (!sbReady){ try { var l = JSON.parse(localStorage.getItem(CONTRACTS_LOCAL_KEY) || "null") || {}; return Promise.resolve(fromRows({contracts: l.map})); } catch (e) { return Promise.resolve(fromRows(null)); } }
+  return Promise.resolve(sb.from("studio_settings").select("value").eq("key", "contracts").maybeSingle().then(function(r){ return r; })).then(function(r){
+    if (r && r.error){ contractMeta.available = false; contractMeta.loaded = true; return false; }
     contractMeta.available = true;
-    return fromRows({contracts: rs[0] && rs[0].data ? rs[0].data.value : null, personal: rs[1] && rs[1].data ? rs[1].data.value : null});
+    return fromRows({contracts: r && r.data ? r.data.value : null});
   }, function(){ contractMeta.available = false; contractMeta.loaded = true; return false; });
 }
-function saveContractMeta(which){
-  if (!sbReady){ try { localStorage.setItem(CONTRACTS_LOCAL_KEY, JSON.stringify({map: contractMeta.map, me: contractMeta.me})); } catch (e) {} return Promise.resolve({}); }
-  var row = which === "me" ? {key: "personal", value: {studentId: contractMeta.me || null}} : {key: "contracts", value: contractMetaClean(contractMeta.map)};
-  row.updated_at = new Date().toISOString();
+function saveContractMeta(){
+  if (!sbReady){ try { localStorage.setItem(CONTRACTS_LOCAL_KEY, JSON.stringify({map: contractMeta.map})); } catch (e) {} return Promise.resolve({}); }
+  var row = {key: "contracts", value: contractMetaClean(contractMeta.map), updated_at: new Date().toISOString()};
   return Promise.resolve(sb.from("studio_settings").upsert(row).then(function(r){ return r; })).then(function(res){
     return res && res.error ? {error: "Não foi possível guardar (a migração 0025 já foi corrida?)."} : {};
   }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
@@ -1971,24 +1968,6 @@ function studioImportContracts(text){
   if (!report.saved) return Promise.resolve(report);
   return saveContractMeta("contracts").then(function(r){ if (r.error){ contractMeta.map = prev; report.saved = 0; report.errors.push(r.error); } return report; });
 }
-// «Eu»: a minha ficha (alimentação e treino)
-function openMeModal(){
-  var studs = visibleStudentsForDashboard().slice().sort(function(a, b){ return String(a.name).localeCompare(String(b.name), "pt"); });
-  var sheet = openModal("<div class=\"mtitle\">Quem és tu na app?</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe a tua própria ficha para teres a tua alimentação e o teu treino aqui. Se ainda não tens ficha, usa «Convidar aluno» no menu Alunos com o teu e-mail e volta aqui.</p>" +
-    "<div class=\"student-search\" style=\"margin-bottom:10px;\"><span aria-hidden=\"true\">🔎</span><input type=\"search\" id=\"meFilter\" placeholder=\"Procurar…\" autocomplete=\"off\" aria-label=\"Procurar ficha\"></div>" +
-    "<div id=\"meList\" style=\"max-height:48vh; overflow:auto;\">" + studs.map(function(st){ return "<button type=\"button\" class=\"btn\" data-me=\"" + escapeHtml(st.id) + "\" data-mename=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"width:100%; text-align:left; min-height:44px; margin-bottom:6px;\">" + escapeHtml(st.name) + "</button>"; }).join("") + "</div>");
-  sheet.querySelector("#meFilter").addEventListener("input", function(e){ var q = exLibFold(e.target.value); sheet.querySelectorAll("[data-me]").forEach(function(b){ b.hidden = !!q && !nameStartsWithQuery(b.getAttribute("data-mename"), q); }); });
-  sheet.querySelectorAll("[data-me]").forEach(function(b){ b.addEventListener("click", function(){
-    contractMeta.me = b.getAttribute("data-me");
-    saveContractMeta("me").then(function(r){ if (r.error){ showToast("⚠ " + r.error); return; } closeModal(); goToMe(); });
-  }); });
-}
-function goToMe(){
-  var st = contractMeta.me ? findStudent(contractMeta.me) : null;
-  if (!st){ openMeModal(); return; }
-  state.proSelectedId = st.id; state.proTab = "plano"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
-}
-
 /* lupa e ordem no Estúdio: filtra por nome (começa por…) todas as listas com alunos e ordena o resumo de treinos */
 function applyStudioFilter(){
   var main = document.getElementById("proMain");
@@ -2178,8 +2157,7 @@ function renderProStudioMain(){
 
 /* ---------- ligação ao núcleo ---------- */
 function gestaoEnter(view, closeContract){ state.proView = view; state.lastGestaoView = view; if (closeContract) contractsView.open = null; studio.loaded = false; if (view === "contracts") contractMeta.loaded = false; }
-function gestaoGoToMe(){ if (!contractMeta.loaded) loadContractMeta().then(goToMe); else goToMe(); }
-G.enter = gestaoEnter; G.goToMe = gestaoGoToMe; G.gestaoAreaLabel = gestaoAreaLabel; G.studio = studio;
+G.enter = gestaoEnter; G.studioNavLabel = studioNavLabel; G.studio = studio;
 G.renderProStudioMain = renderProStudioMain; G.renderProContractsMain = renderProContractsMain;
 G.tplProSessoes = tplProSessoes; G.wireProSessoes = wireProSessoes; G.studentStudioSummary = studentStudioSummary;
 G.studioRefresh = studioRefresh; G.studioAutoSessions = studioAutoSessions; G.studioAfterAutoSessions = studioAfterAutoSessions;

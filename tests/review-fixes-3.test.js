@@ -100,7 +100,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
     undoWorkoutLog(s, log);
     check.check("6. undoWorkoutLog remove a sessão das duas listas", s.workoutLogs.length === 1 && s.workoutLogsRaw.length === 1 && s.workoutLogs[0].id === "a" && s.workoutLogsRaw[0].id === "a");
     trainingColumnsAvailable = realCols; sb = realSb; sbReady = realReady;
-    var src = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+    var src = require("./helpers/app-text")();
     check.check("6. O guardar do profissional só dá 'guardado' depois da escrita e repõe o registo se falhar (rascunho mantido)", /appendWorkoutLogAsPro\(s, log\); \}\)\.then\(function\(ok\)\{\s*if \(!ok\) throw new Error\("columns"\);/.test(src) && /catch\(function\([a-z]*\)\{[^}]*undoWorkoutLog\(s, log\)/.test(src.replace(/\n/g, " ")));
     // rotas de leitura da tabela/gráfico do profissional usam o histórico dentro da linha de base e do mesmo tipo
     check.check("6. Tabela do profissional usa baselineHistory e o gráfico só histórico do mesmo tipo", /progressionStatus\(baselineHistory\(h\)\)/.test(src) && /sameKindHistory\(/.test(src));

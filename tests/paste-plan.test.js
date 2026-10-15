@@ -120,7 +120,7 @@ check.check("2. O botão está ligado ao mesmo gerador de proposta", /#draftFrom
   function m(n){ return d.filter(function(x){ return x.mealName === n; })[0]; }
   check.check("9. 'logurte' (I maiúsculo lido como l) é lido como iogurte", m("Lanche").foods.some(function(f){ return /^Iogurte/.test(f.name); }));
   check.check("9. As linhas depois de 'Leia (...)' não acrescentam alimentos ao jantar", m("Jantar").foods.length === 2 && !m("Jantar").foods.some(function(f){ return /Iogurte/.test(f.name); }));
-  var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("9. Campos de hora/data sem aspeto nativo e limitados à coluna (iOS)", /input\[type="time"\], input\[type="date"\]\{\s*-webkit-appearance:none; appearance:none; display:block;[^}]*width:100%; min-width:0; max-width:100%/.test(html));
 })();
 check.summarize();

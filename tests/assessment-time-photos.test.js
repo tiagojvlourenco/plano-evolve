@@ -5,7 +5,7 @@ var path = require("path");
 var appSource = require("./extract-app")();
 eval(appSource);
 var check = require("./check")();
-var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+var html = require("./helpers/app-text")();
 
 function assess(over){ return Object.assign({date:"2026-09-01", weight:69, bodyFat:30, muscle:26, visceral:8, water:49}, over || {}); }
 

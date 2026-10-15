@@ -168,13 +168,13 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 
 // ---- 10. Ecrãs baixos ----
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("10. Em ecrãs baixos (paisagem/teclado) o painel do cronómetro encolhe", /@media \(max-height:560px\)\{\s*#restTimer\{bottom:calc\(76px/.test(html));
   check.check("10. A animação de alerta pisca poucas vezes (não para sempre)", /animation:rtPulse 1s ease-in-out 8;/.test(html));
 })();
 // ---- 11. Achados de menor gravidade ----
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("11. Descanso prescrito de 0 s só marca a série (não arranca 90 s)", /if \(secs >= 5\) restTimerStart\(secs/.test(appSource));
   check.check("11. Guardar o treino fecha o cronómetro", /wlDraftClear\(s, day\.id\);\s*restTimerStop\(\);/.test(appSource));
   check.check("11. 'Acrescentar nota datada' não perde o texto ainda não guardado", /if \(area\) s\.notes = area\.value;/.test(appSource));

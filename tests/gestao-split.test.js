@@ -14,7 +14,7 @@ var fakeSource = require("./helpers/fake-supabase");
 var startStaticServer = require("./helpers/static-server");
 
 var root = path.join(__dirname, "..");
-var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+var html = fs.readFileSync(path.join(root, "app.js"), "utf8");
 var gestao = fs.readFileSync(path.join(root, "gestao.js"), "utf8");
 var sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
 

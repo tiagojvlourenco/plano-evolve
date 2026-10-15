@@ -24,7 +24,7 @@ function freshStudent(overrides){
 
 // 1. .onb-field input tem o reset de aparência nativa (mesmo padrão já usado em .checkin-field)
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   var rule = html.slice(html.indexOf(".onb-field input"), html.indexOf(".onb-field input") + 400);
   check.check("1. .onb-field input reseta -webkit-appearance (corrige o input type=time no iOS)", /-webkit-appearance:\s*none/.test(rule));
   check.check("1. .onb-field input reseta appearance também (não só -webkit-)", /(?<!-webkit-)appearance:\s*none/.test(rule));

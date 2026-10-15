@@ -19,7 +19,7 @@ var EVIL = '<img src=x onerror=alert(1)>';
 })();
 
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8"); // núcleo + Gestão
+  var html = require("./helpers/app-text")();
   check.check("2. Nome/objetivo do aluno nunca são concatenados sem escapeHtml", !/\+ s\.name \+|\+ s\.goal \+|\+ s\.name\.split\(" "\)\[0\] \+/.test(html.replace("\"Questionário inicial de \" + s.name + \":\"", "")));
   check.check("3. Notas do check-in e do profissional são escapadas", html.indexOf('"<div class=\\"muted-p\\">" + c.notes + "</div>"') === -1 && html.indexOf('">" + s.notes + "</textarea>"') === -1);
   check.check("4. Nomes de alimentos nas vistas do aluno são escapados", html.indexOf('"<span class=\\"fname\\">" + f.name + "</span>"') === -1 && html.indexOf('+ f.name + "</div>"') === -1);

@@ -47,7 +47,7 @@ var check = require("./check")();
 
 // ---- 5. CSS responsivo (contrato: as regras existem) ----
 (function(){
-  var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("5. Blocos de peso do profissional ficam 2x2 em ecrãs pequenos", /@media \(max-width:760px\)\{ \.pro-main \.stat-grid-4\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\} \}/.test(html));
   check.check("5. 'Sair' fica na linha do logótipo em ecrãs pequenos", /\.brand-header #signOutBtn\{grid-column:2; grid-row:1;\}/.test(html));
   check.check("5. A data do Histórico passa para baixo do texto em ecrãs pequenos", /\.history-row:has\(> \.hdate\)\{flex-direction:column/.test(html));
@@ -74,7 +74,7 @@ var check = require("./check")();
 
 // ---- 7. iOS: campos com letra < 16px fazem zoom ao tocar e o ecrã fica ampliado depois do login ----
 (function(){
-  var html = require("fs").readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("7. Em ecrãs de toque, inputs/selects/textareas têm 16px (sem zoom automático do iOS)", /@media \(hover:none\) and \(pointer:coarse\)\{\s*input:not\(\[type=checkbox\]\)[^}]*select, textarea\{font-size:16px !important;\}/.test(html));
   check.check("7. O zoom do utilizador não é bloqueado (acessibilidade): sem maximum-scale/user-scalable=no", !/maximum-scale|user-scalable\s*=\s*no/.test(html));
 })();
