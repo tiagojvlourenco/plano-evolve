@@ -1,5 +1,6 @@
 /* EVOLVE — service worker: a app abre sem rede.
    - Navegação (index.html): rede primeiro (sempre a versão mais recente quando há ligação), cache como reserva.
+   - gestao.js (código da Gestão, só descarregado pelo profissional): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
    - Ficheiros do próprio site (fontes, ícones, Supabase local, animações dos exercícios): cache primeiro.
    - Tudo o que é de outro servidor (Supabase, Open Food Facts, YouTube...) passa direto: nunca se guarda em cache
      (dados de saúde, sessões e fotos não ficam na cache do service worker).
@@ -72,6 +73,32 @@ function cacheFirst(event){
   });
 }
 
+// código da Gestão: sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
+function networkFirstFile(event){
+  var request = event.request;
+  return new Promise(function(resolve){
+    var settled = false;
+    function fromCache(last){
+      return caches.match(request).then(function(hit){
+        if (settled) return;
+        if (hit){ settled = true; resolve(hit); } else if (last){ settled = true; resolve(last); }
+      });
+    }
+    var timer = setTimeout(function(){ fromCache(null); }, NAV_TIMEOUT_MS); // rede lenta: usa já a cópia guardada, se existir
+    fetch(request, {cache: "no-cache"}).then(function(res){
+      clearTimeout(timer);
+      // só um JavaScript a sério substitui a cópia boa (um portal de Wi-Fi devolve HTML com 200)
+      var good = res && res.ok && /javascript/i.test(res.headers.get("Content-Type") || "");
+      if (settled) { if (good) event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, res.clone()); }).catch(function(){})); return; }
+      if (good){ var copy = res.clone(); event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, copy); }).catch(function(){})); settled = true; resolve(res); return; }
+      return fromCache(res).then(function(){ if (!settled){ settled = true; resolve(res); } });
+    }).catch(function(){
+      clearTimeout(timer);
+      fromCache(Response.error()).then(function(){ if (!settled){ settled = true; resolve(Response.error()); } });
+    });
+  });
+}
+
 self.addEventListener("fetch", function(event){
   var req = event.request;
   if (req.method !== "GET") return;
@@ -80,5 +107,6 @@ self.addEventListener("fetch", function(event){
   var sameSite = url.origin === self.location.origin;
   if (!sameSite) return;
   if (req.mode === "navigate"){ event.respondWith(networkFirst(event)); return; }
+  if (/\/gestao\.js$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
   event.respondWith(cacheFirst(event).catch(function(){ return Response.error(); }));
 });
