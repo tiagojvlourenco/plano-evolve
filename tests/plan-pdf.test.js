@@ -66,4 +66,27 @@ Object.defineProperty(global, "navigator", {configurable: true, writable: true, 
 check.check("27. No telemóvel, entrega o ficheiro à folha de partilha (imprimir, Ficheiros, WhatsApp)", exportPlanPdf(s) === true && shared && shared.files[0].type === "application/pdf" && /^plano-alimentar-tiago-lourenco-\d{4}-\d{2}-\d{2}\.pdf$/.test(shared.files[0].name));
 check.check("28. Sem plano, avisa em vez de gerar um PDF vazio", (function(){ shared = null; var r = exportPlanPdf(student({meals: []})); return r === false && shared === null; })());
 check.check("29. A data do nome do ficheiro é a local (não UTC)", (function(){ var d = new Date(); return localFileDate() === d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })());
+
+// ---- revisão adversarial ----
+check.check("30. Acentos decompostos (nomes copiados de outras apps) saem como letras acentuadas, não «?»", pdfWinAnsi("José Lourenço") === "Jos\xE9 Louren\xE7o" && pdfTextW("José", 10, false) === pdfTextW("José", 10, false));
+var oddName = bin(renderPlanPdf(buildPlanDoc(student({name: "O'Brien – (Zé) \\ 🙂"}))));
+check.check("31. O título do PDF é UTF-16 em hexadecimal (aceita apóstrofos, travessões e parênteses no nome) e o ficheiro continua válido", /\/Title <FEFF[0-9a-f]+>/.test(oddName) && /\/Producer \(EVOLVE\)/.test(oddName) && /^%PDF-1\.4/.test(oddName) && /%%EOF\n$/.test(oddName));
+var longRaw = bin(renderPlanPdf(buildPlanDoc(student({name: "Maria Conceição Albuquerque de Sousa Vasconcelos Menezes Pereira Fernandes"}))));
+var shortRaw = bin(renderPlanPdf(buildPlanDoc(student({name: "Ana"}))));
+function nameSize(raw, name){ var m = new RegExp("/F2 ([\\d.]+) Tf[^\\n]*\\(" + name.replace(/[()]/g, "\\$&")); var r = m.exec(raw); return r ? parseFloat(r[1]) : null; }
+check.check("32. Um nome muito comprido encolhe para caber na página (o curto fica a 22 pt)", nameSize(shortRaw, "Ana") === 22 && nameSize(longRaw, "Maria Concei") !== null && nameSize(longRaw, "Maria Concei") < 22 && nameSize(longRaw, "Maria Concei") >= 12);
+// duplo toque e computador
+var shares = 0, downloads = 0, origCreate = document.createElement;
+Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: {canShare: function(){ return true; }, share: function(){ shares++; return Promise.resolve(); }}});
+global.window.matchMedia = function(q){ return {matches: true}; };
+pdfLastTap = 0;
+var t1 = exportPlanPdf(student()), t2 = exportPlanPdf(student());
+check.check("33. Um duplo toque gera um só PDF (o segundo, dentro de 1,5 s, é ignorado)", t1 === true && t2 === false && shares === 1);
+document.createElement = function(){ return {click: function(){ downloads++; }, remove: function(){}, style: {}}; };
+global.window.matchMedia = function(q){ return {matches: false}; };   // computador: ponteiro fino e fora de uma app instalada
+pdfLastTap = 0; shares = 0;
+exportPlanPdf(student());
+check.check("34. No computador (ponteiro fino) descarrega o ficheiro em vez de abrir a folha de partilha, mesmo que o browser a ofereça", shares === 0 && downloads === 1);
+document.createElement = origCreate; delete global.window.matchMedia;
+
 check.summarize();

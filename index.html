@@ -315,10 +315,12 @@
   .plano-supp{border-top:1px dashed var(--line); margin-top:4px;}
   .plano-supp-note{font-size:0.78rem; margin:-2px 0 8px;}
   .student-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;}
-  .student-search{flex:1 1 200px; display:flex; align-items:center; gap:8px; border:1px solid var(--line-strong); background:var(--bg); border-radius:10px; padding:0 12px; min-height:44px;}
+  .student-search{flex:1 1 0; min-width:0; display:flex; align-items:center; gap:8px; border:1px solid var(--line-strong); background:var(--bg); border-radius:10px; padding:0 12px; min-height:44px;}
   .student-search input{flex:1; min-width:0; border:none; outline:none; background:transparent; color:var(--ink); font-size:16px; font-family:var(--sans); padding:10px 0;}
   .student-search:focus-within{border-color:var(--accent);}
   .student-tools .mini-select{min-height:44px;}
+  #phaseReviewsCard, #contactQueue, #onboardingCard{margin-bottom:14px;}
+  .assess-form-grid .f input[type=checkbox]{width:auto; flex:none; padding:0; margin:0;}
   .student-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 18px; cursor:pointer;}
   .student-card:hover{border-color:var(--line-strong);}
   .student-card-top{display:flex; align-items:center; gap:12px;}
@@ -662,6 +664,8 @@
     max-width:calc(100vw - 32px); width:max-content; white-space:normal; text-align:center; line-height:1.4;
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.toast-top{bottom:auto; top:calc(14px + env(safe-area-inset-top, 0px)); transform:translateX(-50%) translateY(-20px);}
+  .toast.toast-top.show{transform:translateX(-50%) translateY(0);}
 </style>
 
 </head>
@@ -2680,7 +2684,7 @@ function isTrainingDayToday(s){
 // do ecrã (ver .toast, agora com max-width e quebra de linha normal).
 function showToast(msg){
   var t = document.createElement("div");
-  t.className = "toast";
+  t.className = "toast" + (typeof modalRoot !== "undefined" && modalRoot && modalRoot.firstChild ? " toast-top" : "");   // com uma janela aberta, não tapa os botões dela
   t.textContent = msg;
   document.body.appendChild(t);
   requestAnimationFrame(function(){ t.classList.add("show"); });
@@ -6333,9 +6337,11 @@ function proRefreshStudents(force){
   return proRefreshPromise;
 }
 // redesenha só o que é seguro: a lista de alunos, e só se não houver nada a meio (ficha aberta, janela aberta)
+// um re-desenho em segundo plano não pode tirar o foco da pesquisa (o teclado fecharia-se e as letras perdiam-se)
+function dashSearchFocused(){ var e = document.activeElement; return !!(e && e.id === "stuSearch"); }
 function proRefreshAndRender(force){
   return proRefreshStudents(force).then(function(changed){
-    if (changed && authRole === "professional" && state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild){
+    if (changed && authRole === "professional" && state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild && !dashSearchFocused()){
       renderProDashboardMain();
     }
     return changed;
@@ -6603,7 +6609,9 @@ var CREATINE_NOTE = "Pode ser tomada em qualquer altura do dia.";
 var CREATINE_G_PER_KG = 0.05;
 var CREATINE_MIN_G = 3, CREATINE_MAX_G = 5;
 // condições em que o profissional tem de confirmar antes de a creatina aparecer ao aluno (rins, gravidez e amamentação) — texto livre da ficha
-var CREATINE_CAUTION_RE = /\b(rim|rins|renal|renais|nefr\w*|di[aá]lise|transplant\w*|creatinina|irc|drc|gr[aá]vid\w*|gesta[cç]\w*|amament\w*|lacta\w*)(?![a-z])/i;
+var CREATINE_RENAL_RE = /(\b(rim|rins|renal|renais|irc|drc)(?![a-z])|nefr|dialis|transplant|creatinina)/;   // rins (texto já sem acentos)
+var CREATINE_PREG_RE = /(gravid(?!ade)|gestante|gestac|amament|lactac|lactante|aleitament|puerper|pos-?parto)/;   // gravidez e amamentação
+var CREATINE_CAUTION_FIELDS = ["medicalConditions", "currentMedication", "physicalLimitations", "medicalNotes"];   // os campos de texto livre da ficha médica
 function creatineWeightKg(s){
   var w = Number(s && s.weightCurrent) || Number(s && s.weight) || 0;
   if (!(w > 0) && s && s.weights && s.weights.length) w = Number(s.weights[s.weights.length - 1].w) || 0;
@@ -6615,21 +6623,36 @@ function creatineDoseG(s){
   var ref = referenceWeightKg(w, s.height, null);
   return Math.min(CREATINE_MAX_G, Math.max(CREATINE_MIN_G, Math.round(ref * CREATINE_G_PER_KG)));
 }
-function creatineCautions(s){
-  var out = [];
-  if (s && Number(s.age) > 0 && Number(s.age) < 18) out.push("tem menos de 18 anos");
-  var text = [s && s.medicalConditions, s && s.currentMedication].filter(Boolean).join(" ; ");
-  if (text && CREATINE_CAUTION_RE.test(text)) out.push("a ficha refere rins, gravidez, amamentação ou medicação a confirmar com o médico");
+// os motivos (chaves estáveis) por que a creatina pede a confirmação do profissional
+function creatineCautionKeys(s){
+  var out = [], age = ageAtDate(s, localTodayISO());
+  if (age != null && age < 18) out.push("menor");
+  var text = exLibFold(CREATINE_CAUTION_FIELDS.map(function(f){ return s && s[f]; }).filter(Boolean).join(" ; "));
+  if (text && CREATINE_RENAL_RE.test(text)) out.push("renal");
+  if (text && CREATINE_PREG_RE.test(text)) out.push("gravidez");
   return out;
 }
+var CREATINE_CAUTION_TEXT = {menor: "tem menos de 18 anos", renal: "a ficha refere problemas renais", gravidez: "a ficha refere gravidez ou amamentação"};
+function creatineCautions(s){ return creatineCautionKeys(s).map(function(k){ return CREATINE_CAUTION_TEXT[k]; }); }
 function creatineBlocked(s){
   return !!s && (s.blockedFoods || []).some(function(n){ return exLibFold(n) === exLibFold(CREATINE_NAME); });
 }
-function creatineConfirmed(s){ return !!(s && s.nutritionPhase && s.nutritionPhase.creatineConfirmed === true); }
-// {on: aparece ao aluno, dose, cautions, state: 'on' | 'off' | 'sem-peso' | 'confirmar'}
+// a confirmação vale para os motivos que o profissional viu (guardados como lista); se aparece um motivo novo (gravidez, por exemplo), volta a pedir
+function creatineConfirmed(s){
+  var c = s && s.nutritionPhase && s.nutritionPhase.creatineConfirmed;
+  if (c === true) return true;   // valor antigo: sem lista de motivos
+  if (!Array.isArray(c)) return false;
+  return creatineCautionKeys(s).every(function(k){ return c.indexOf(k) >= 0; });
+}
+// o plano já traz creatina escrita à mão (um alimento): a linha automática ficaria duplicada
+function planHasCreatineFood(s){
+  return (s && s.meals || []).some(function(m){ return (m.foods || []).some(function(f){ return /creatin(?!in)/i.test(String(f.name || "")); }); });
+}
+// {on: aparece ao aluno, dose, cautions, state: 'on' | 'off' | 'sem-peso' | 'confirmar' | 'no-plano'}
 function creatineStatus(s){
   var dose = creatineDoseG(s), cautions = creatineCautions(s);
   if (creatineBlocked(s)) return {on: false, dose: dose, cautions: cautions, state: "off"};
+  if (planHasCreatineFood(s)) return {on: false, dose: dose, cautions: cautions, state: "no-plano"};
   if (dose == null) return {on: false, dose: null, cautions: cautions, state: "sem-peso"};
   if (cautions.length && !creatineConfirmed(s)) return {on: false, dose: dose, cautions: cautions, state: "confirmar"};
   return {on: true, dose: dose, cautions: cautions, state: "on"};
@@ -6655,20 +6678,25 @@ function setCreatineEnabled(s, on){
   var before = creatineBlocked(s);
   s.blockedFoods = (s.blockedFoods || []).filter(function(n){ return exLibFold(n) !== exLibFold(CREATINE_NAME); });
   if (!on) s.blockedFoods.push(CREATINE_NAME);
-  logPlanEvent(s, "creatina", on ? "Creatina mono-hidratada incluída no plano" : "Creatina mono-hidratada retirada do plano", before ? "desligada" : "ligada", on ? "ligada" : "desligada");
-  startCreatineClock(s, on);
+  // se ainda falta a confirmação (menor, rins, gravidez), desbloquear não faz a creatina aparecer: não se regista como incluída
+  var live = !on || creatineStatus(s).state === "on";
+  logPlanEvent(s, "creatina", on ? (live ? "Creatina mono-hidratada incluída no plano" : "Creatina mono-hidratada desbloqueada, a aguardar a confirmação do profissional") : "Creatina mono-hidratada retirada do plano", before ? "desligada" : "ligada", on ? (live ? "ligada" : "por confirmar") : "desligada");
+  if (live) startCreatineClock(s, on);
   persistStudent(s);
 }
 // a creatina retém 0,5–1,5 kg de água nas primeiras semanas: marca-se quando começa ou pára, para a fase de peso não confundir isso com gordura
 function startCreatineClock(s, on){
   if (!s.nutritionPhase && !phaseColumnAvailable) return;
-  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineStartDate: todayISO(), creatineOn: !!on});
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineStartDate: localTodayISO(), creatineOn: !!on});
 }
 function confirmCreatine(s){
+  if (!phaseColumnAvailable) return {error: PHASE_MIGRATION_MSG};
   ensureSyncBaseline(s);
-  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineConfirmed: true, creatineStartDate: todayISO(), creatineOn: true});
-  logPlanEvent(s, "creatina", "Creatina mono-hidratada confirmada pelo profissional apesar de: " + creatineCautions(s).join("; "), "por confirmar", "confirmada");
+  var keys = creatineCautionKeys(s);
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase || {}, {creatineConfirmed: keys, creatineStartDate: localTodayISO(), creatineOn: true});
+  logPlanEvent(s, "creatina", "Creatina mono-hidratada confirmada pelo profissional apesar de: " + keys.map(function(k){ return CREATINE_CAUTION_TEXT[k]; }).join("; "), "por confirmar", "confirmada");
   persistStudent(s);
+  return {};
 }
 function tplCreatineCard(s){
   var st = creatineStatus(s), w = creatineWeightKg(s), ref = w ? referenceWeightKg(w, s.height, null) : 0;
@@ -6677,12 +6705,13 @@ function tplCreatineCard(s){
   if (st.state === "sem-peso") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> — a dose calcula-se pelo peso corporal, que ainda não está registado.</p>";
   else if (st.state === "off") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> está retirada do plano deste aluno" + (st.dose ? " (a dose seria " + st.dose + " g por dia)" : "") + ".</p>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineToggle\" data-on=\"1\">Incluir no plano</button>";
-  else if (st.state === "confirmar") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> não aparece ao aluno: " + escapeHtml(st.cautions.join("; ")) + ". Só a incluas com indicação do médico.</p>" +
+  else if (st.state === "no-plano") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong>: o plano já tem creatina escrita à mão, por isso a linha automática fica escondida. Retira esse alimento para a dose passar a acompanhar o peso.</p>";
+  else if (st.state === "confirmar") html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + "</strong> não aparece ao aluno: " + escapeHtml(st.cautions.join("; ")) + ". Inclui-a só com indicação do médico.</p>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineConfirm\">Tenho indicação médica — incluir " + st.dose + " g</button>";
-  else html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + " · " + st.dose + " g por dia</strong>, sempre no pequeno-almoço (≈ " + String(CREATINE_G_PER_KG).replace(".", ",") + " g × " + String(Math.round(ref * 10) / 10).replace(".", ",") + " kg de peso" + (ref < w ? " de referência" : "") + ", entre " + CREATINE_MIN_G + " e " + CREATINE_MAX_G + " g). " + escapeHtml(CREATINE_NOTE) + " Acompanha o peso do aluno sozinha.</p>" +
+  else html += "<p class=\"muted-p\"><strong>" + escapeHtml(CREATINE_NAME) + " · " + st.dose + " g por dia</strong>, sempre no pequeno-almoço (≈ " + String(CREATINE_G_PER_KG).replace(".", ",") + " g × " + String(Math.round(ref * 10) / 10).replace(".", ",") + " kg de peso" + (ref < w ? " de referência" : "") + ", entre " + CREATINE_MIN_G + " e " + CREATINE_MAX_G + " g). " + escapeHtml(CREATINE_NOTE) + " A dose ajusta-se sozinha ao peso do aluno.</p>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"creatineToggle\" data-on=\"0\">Retirar do plano</button>";
   if (takes) html += "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-top:6px;\">O aluno disse que já toma creatina: confirma que não duplica a dose.</p>";
-  html += "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Nas primeiras semanas retém 0,5 a 1,5 kg de água: não é gordura. A revisão de peso ignora esse período.</p></div>";
+  html += "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:6px;\">Nas primeiras semanas retém 0,5 a 1,5 kg de água: não é gordura." + (s.nutritionPhase && s.nutritionPhase.creatineStartDate ? " A revisão de peso ignora esse período." : "") + "</p></div>";
   return html;
 }
 
@@ -6705,7 +6734,7 @@ var PHASE_CFG = {
   alertLoss: 1.5, alertGain: 0.75,             // acima disto o aviso é imediato (% do peso/semana)
   startCutPct: 10, startCutMin: 150, startCutMax: 300, startBulkPct: 5, startBulkMin: 100, startBulkMax: 250,
   stepPct: 5, stepMin: 100, stepMax: 200, safetyStep: 300, maxCum4wk: 400,
-  reviewDays: 14, excludeAfterChange: 7, windowMax: 28, minWeighins: 4, minWeeks: 2, minSpan: 14, fullSpan: 21, shortSpanAct: 0.25, outlierKg: 2,
+  reviewDays: 21, excludeAfterChange: 7, windowMax: 28, minWeighins: 4, minWeeks: 2, minSpan: 14, fullSpan: 21, shortSpanAct: 0.25, outlierKg: 2,
   minAdherence: 6, hungerStop: 7, energyStop: 4, goalTol: 0.3, creatineGraceDays: 14,
   maintDrift: 0.25, maintStep: 100, eaHard: 30
 };
@@ -6733,6 +6762,8 @@ function cutTierFor(s, weight){
   if (bmi == null) return "B";
   return bmi >= 30 ? "C" : bmi >= 25 ? "B" : "A";
 }
+// intervalo entre revisões: a 1.ª semana depois de uma alteração não conta e a tendência pede 14 dias de pesagens, por isso nunca menos de 3 semanas
+function phaseEveryDays(n){ return Math.max(PHASE_CFG.excludeAfterChange + PHASE_CFG.minSpan, n > 0 ? Number(n) : PHASE_CFG.reviewDays); }
 function phaseStepKcal(maint){ return clampN(round25(maint * PHASE_CFG.stepPct / 100), PHASE_CFG.stepMin, PHASE_CFG.stepMax); }
 // calorias do ponto de partida de cada fase (o primeiro passo, pequeno)
 function phaseStartKcal(type, maint){
@@ -6792,23 +6823,30 @@ function computePhaseReview(s, today, opts){
   if (!np || !isStudentActive(s) || isStudioOnly(s)) return null;
   var t = s.targets || {}, kcal = Number(t.kcal) || 0;
   if (!(kcal > 0)) return null;
-  var every = np.reviewEveryDays > 0 ? np.reviewEveryDays : PHASE_CFG.reviewDays;
+  var every = phaseEveryDays(np.reviewEveryDays), early = false;
   if (!opts.force){
     var due = np.nextReviewDate || addDaysISO(np.lastReviewDate || np.startDate, every);
-    if (today < due) return null;
     if (np.snoozeUntil && today < np.snoozeUntil) return null;
+    early = today < due;   // antes da data só pode sair o aviso urgente (perda/ganho demasiado rápidos)
   }
-  var maint = computeMaintenanceKcal(s);
-  if (!maint) return null;
   var from = [np.startDate, np.lastChangeDate ? addDaysISO(np.lastChangeDate, PHASE_CFG.excludeAfterChange) : null,
     np.creatineStartDate ? addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays) : null, addDaysISO(today, -PHASE_CFG.windowMax)]
     .filter(Boolean).sort().pop();
   var fit = phaseWeightFit(s.weights, from, today);
+  // a manutenção calcula-se com o peso da tendência (uma pesagem mal escrita não a pode deslocar)
+  var sm = Object.assign({}, s, {weightCurrent: fit.n >= 3 ? Math.round(fit.trendNow * 10) / 10 : s.weightCurrent});
+  var maint = computeMaintenanceKcal(sm);
+  if (!maint) return null;
   var out = {studentId: s.id, name: s.name, phase: np.phase, kind: "dados", today: today, maint: maint, currentTargets: {kcal: kcal, protein: t.protein, carbs: t.carbs != null ? t.carbs : t.carbsMax, fat: t.fat != null ? t.fat : t.fatMax},
     fit: fit, warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
   var weightNow = fit.n ? fit.trendNow : (Number(s.weightCurrent) || 0);
   var ratePct = fit.meanW > 0 ? fit.slopeKgWk / fit.meanW * 100 : 0;
   out.ratePct = ratePct; out.evidence = fit.n >= 2 ? phaseEvidenceText(fit, ratePct) : "";
+  var wCur = Number(s.weightCurrent) || 0;
+  if (fit.n >= 3 && (Math.abs(ratePct) > 3 || (wCur > 0 && Math.abs(wCur - fit.trendNow) > Math.max(3, 0.08 * fit.trendNow)))){
+    out.kind = "dados"; out.text = "Pesagem suspeita: o peso registado (" + pt2(wCur) + " kg) ou a tendência (" + pt2(ratePct) + " %/semana) não são plausíveis. Confirma o peso com o aluno antes de rever o plano.";
+    return out;
+  }
   var target = Number(np.targetWeight) > 0 ? Number(np.targetWeight) : (Number(s.weightGoal) > 0 ? Number(s.weightGoal) : null);
   var step = phaseStepKcal(maint);
   // no máximo 400 kcal acumuladas em 4 semanas
@@ -6820,7 +6858,7 @@ function computePhaseReview(s, today, opts){
     var delta = newKcal - kcal;
     var nt = {kcal: newKcal, protein: out.currentTargets.protein, fat: out.currentTargets.fat, carbs: Math.max(0, Math.round((out.currentTargets.carbs || 0) + delta / 4))};
     out.kind = kind; out.deltaKcal = delta; out.proposedTargets = nt; out.text = text;
-    out.warnings = nutritionSafetyWarnings(s, nt);
+    out.warnings = nutritionSafetyWarnings(sm, nt);
     if (out.warnings.some(function(w){ return w.level === "critical"; })){
       out.kind = "limite"; out.proposedTargets = null; out.deltaKcal = 0;
       out.text = "Este ajuste ficaria abaixo do mínimo de segurança. Em vez de cortar mais, considera uma pausa de 1 semana na manutenção (" + maint + " kcal) ou mais atividade diária.";
@@ -6839,7 +6877,8 @@ function computePhaseReview(s, today, opts){
   var deficitPct = (maint - kcal) / maint * 100;  // > 0 em défice
 
   // --- objetivo atingido ---
-  if (target && fit.n >= 3){
+  var wrongSide = np.startWeight > 0 && target && ((np.phase === "cut" && np.startWeight <= target + PHASE_CFG.gapKg) || (np.phase === "bulk" && np.startWeight >= target - PHASE_CFG.gapKg));
+  if (target && !early && !wrongSide && fit.n >= PHASE_CFG.minWeighins){
     var reached = np.phase === "cut" ? weightNow <= target + PHASE_CFG.goalTol : np.phase === "bulk" ? weightNow >= target - PHASE_CFG.goalTol : false;
     if (reached){
       var firstStep = np.phase === "cut" && deficitPct > 3 ? round25(kcal + (maint - kcal) * 0.5) : maint;
@@ -6849,11 +6888,17 @@ function computePhaseReview(s, today, opts){
   }
   // --- manutenção ---
   if (np.phase === "manutencao"){
+    if (early) return null;
     if (np.exiting && Math.abs(maint - kcal) >= 50) return propose(maint, "ajuste", "Completar a passagem à manutenção: " + kcal + " → " + maint + " kcal (já com o peso atual).", {completesExit: true});
     if (!fit.ok) return info("dados", "Ainda não há pesagens suficientes (mínimo " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas) para rever a manutenção.");
     if (Math.abs(ratePct) >= PHASE_CFG.maintDrift && fit.spanDays >= PHASE_CFG.fullSpan){
-      var dir = ratePct > 0 ? -1 : 1, mstep = Math.min(PHASE_CFG.maintStep, room || PHASE_CFG.maintStep);
-      return propose(kcal + dir * mstep, "ajuste", "O peso está a " + (ratePct > 0 ? "subir" : "descer") + " " + pt2(Math.abs(ratePct)) + " %/semana na manutenção. Sugestão: " + (dir > 0 ? "acrescentar " : "retirar ") + mstep + " kcal/dia.");
+      var dir = ratePct > 0 ? -1 : 1, mk = kcal + dir * PHASE_CFG.maintStep;
+      if (dir < 0){   // retirar calorias nunca passa o piso de segurança
+        var bmrM = computeBMR(sm), flM = bmrM ? Math.ceil(kcalFloorFor(s.sex, bmrM, maint)) : 0;
+        mk = Math.max(mk, flM);
+        if (mk >= kcal) return info("limite", "O peso está a subir na manutenção, mas as calorias já estão no mínimo de segurança (" + flM + " kcal). Em vez de cortar mais, revê a atividade diária ou a estimativa da manutenção.");
+      }
+      return propose(mk, "ajuste", "O peso está a " + (ratePct > 0 ? "subir" : "descer") + " " + pt2(Math.abs(ratePct)) + " %/semana na manutenção. Sugestão: " + (dir > 0 ? "acrescentar " : "retirar ") + Math.abs(mk - kcal) + " kcal/dia.");
     }
     return info("em-linha", "A manutenção está estável (" + pt2(ratePct) + " %/semana). Não é preciso alterar o plano.");
   }
@@ -6865,8 +6910,11 @@ function computePhaseReview(s, today, opts){
   // rápido de mais é sempre prioritário (e não espera pelos 14 dias de dados)
   if (fit.relaxed && move > alert){
     var back = np.phase === "cut" ? Math.min(kcal + PHASE_CFG.safetyStep, maint) : Math.max(kcal - step, maint);
-    if (back !== kcal) return propose(back, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite de " + pt2(alert) + " %/semana. Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(back - kcal) + " kcal/dia (de " + kcal + " para " + back + ")" + (np.phase === "cut" ? " para proteger a massa magra." : " para limitar o ganho de gordura."), {urgent: true});
+    var wrongWay = np.phase === "cut" ? back <= kcal : back >= kcal;   // calorias do lado errado da manutenção: nada a subir (cut) nem a descer (bulk)
+    if (wrongWay) return info("limite", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite, mas as calorias (" + kcal + " kcal) já estão " + (np.phase === "cut" ? "acima" : "abaixo") + " da manutenção estimada (" + maint + " kcal): não há " + (np.phase === "cut" ? "subida" : "descida") + " a propor. Confirma a adesão e se a manutenção está bem estimada.");
+    return propose(back, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite de " + pt2(alert) + " %/semana. Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(back - kcal) + " kcal/dia (de " + kcal + " para " + back + ")" + (np.phase === "cut" ? " para proteger a massa magra." : " para limitar o ganho de gordura."), {urgent: true});
   }
+  if (early) return null;
   if (!fit.ok){
     var cg = np.creatineStartDate && today < addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays + PHASE_CFG.minSpan);
     return info("dados", cg ? "Há pouco que o aluno começou ou parou a creatina: a subida inicial de 0,5 a 1,5 kg é retenção de água, não gordura. A revisão espera por pesagens a partir de " + fmtDateFullPt(addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays)) + "." :
@@ -6877,7 +6925,7 @@ function computePhaseReview(s, today, opts){
   if (fit.spanDays < PHASE_CFG.fullSpan && viol < PHASE_CFG.shortSpanAct) return info("em-linha", "Tendência ainda dentro da margem de erro (" + pt2(move) + " %/semana com " + fit.spanDays + " dias de pesagens). A decisão fica para a próxima revisão.");
   if (move > cfg.hi){
     var up = np.phase === "cut" ? Math.min(kcal + step, maint) : Math.max(kcal - step, maint);
-    if (up === kcal) return info("em-linha", "Acima da banda, mas já na manutenção: não há mais o que ajustar.");
+    if (np.phase === "cut" ? up <= kcal : up >= kcal) return info("limite", "Acima da banda, mas as calorias (" + kcal + " kcal) já estão " + (kcal === maint ? "na" : np.phase === "cut" ? "acima da" : "abaixo da") + " manutenção estimada (" + maint + " kcal): não há o que ajustar. Confirma a adesão e se a manutenção está bem estimada.");
     return propose(up, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do previsto (" + pt2(cfg.rate) + " %/semana). Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(up - kcal) + " kcal/dia (de " + kcal + " para " + up + ").");
   }
   // abaixo da banda (estagnou ou vai ao contrário): primeiro a adesão, depois os limites, só então mais um passo
@@ -6887,16 +6935,16 @@ function computePhaseReview(s, today, opts){
   if (room < 50) return info("limite", "Já houve " + cum + " kcal de alterações nas últimas 4 semanas (máximo " + PHASE_CFG.maxCum4wk + "): esperar pela próxima revisão.");
   var stepNow = Math.min(step, room), nk;
   if (np.phase === "cut"){
-    var capKcal = Math.ceil(maint * (1 - cfg.cap / 100) / 25) * 25, bmr0 = computeBMR(s), floor = Math.ceil(kcalFloorFor(s.sex, bmr0 || 0, maint)), lean = latestLeanMass(s);
+    var capKcal = Math.ceil(maint * (1 - cfg.cap / 100) / 25) * 25, bmr0 = computeBMR(sm), floor = Math.ceil(kcalFloorFor(s.sex, bmr0 || 0, maint)), lean = latestLeanMass(s);
     var eaFloor = lean > 0 ? Math.ceil(PHASE_CFG.eaHard * lean) : 0, lowest = Math.max(capKcal, floor, eaFloor);
     if (kcal <= lowest) return info("limite", "Já estás no limite de segurança do défice (" + pt2(deficitPct) + " % da manutenção, mínimo " + lowest + " kcal). Em vez de cortar mais: pausa de 1 semana na manutenção, mais passos/atividade ou rever o peso objetivo.");
     nk = Math.max(kcal - stepNow, lowest);
-    return propose(nk, "ajuste", "A perda está a ser de " + pt2(move < 0 ? 0 : move) + " %/semana (" + (move <= 0 ? "estagnou" : "abaixo") + " do previsto, " + pt2(cfg.rate) + " %/semana). Sugestão: reduzir " + (kcal - nk) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos descem " + Math.round((kcal - nk) / 4) + " g).");
+    return propose(nk, "ajuste", "A perda está a ser de " + pt2(Math.max(0, move)) + " %/semana (" + (move < 0 ? "o peso está a subir, " : move === 0 ? "estagnada, " : "") + "abaixo do previsto de " + pt2(cfg.rate) + " %/semana). Sugestão: reduzir " + (kcal - nk) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos descem " + Math.round((kcal - nk) / 4) + " g).");
   }
   var capUp = Math.floor(maint * (1 + cfg.cap / 100) / 25) * 25;
   if (kcal >= capUp) return info("limite", "Já estás no teto do excedente (+" + pt2((kcal - maint) / maint * 100) + " % da manutenção). Antes de subir mais, confirma a adesão, a proteína, o treino e o sono; se persistir, revê o objetivo.");
   nk = Math.min(kcal + stepNow, capUp);
-  return propose(nk, "ajuste", "O ganho de peso é de " + pt2(Math.max(0, move)) + " %/semana (abaixo do previsto, " + pt2(cfg.rate) + " %/semana). Sugestão: acrescentar " + (nk - kcal) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos sobem " + Math.round((nk - kcal) / 4) + " g).");
+  return propose(nk, "ajuste", "O ganho de peso é de " + pt2(Math.max(0, move)) + " %/semana (" + (move < 0 ? "o peso está a descer, " : move === 0 ? "estagnado, " : "") + "abaixo do previsto de " + pt2(cfg.rate) + " %/semana). Sugestão: acrescentar " + (nk - kcal) + " kcal/dia (de " + kcal + " para " + nk + "; os hidratos sobem " + Math.round((nk - kcal) / 4) + " g).");
 }
 function phaseNeedsAttention(rv){ return !!rv && (rv.kind === "ajuste" || rv.kind === "objetivo" || rv.kind === "aderencia" || rv.kind === "limite"); }
 function collectPhaseReviews(today){
@@ -6909,9 +6957,35 @@ function collectPhaseReviews(today){
   return out;
 }
 // aplicar uma proposta (só o profissional): alvos, quantidades do plano, fase e histórico, tudo de uma vez
+var PHASE_MIGRATION_MSG = "Para guardar a fase, as revisões e a confirmação da creatina falta correr a migração 0029 no SQL Editor do Supabase (ficheiro supabase/migrations/0029_nutrition_phase.sql) e recarregar a app.";
+// a creatina nova retém água: marca o início (só se o aluno ainda não a tomava e a linha vai aparecer), para a revisão de peso ignorar as primeiras semanas
+function phaseStampCreatine(s, np, today){
+  var takes = (s.supplements || []).some(function(x){ return exLibFold(x) === "creatina"; });
+  if (!np.creatineStartDate && !takes && creatineStatus(s).on){ np.creatineStartDate = today; np.creatineOn = true; }
+}
+// uma alteração manual dos alvos a meio da fase recomeça a janela de pesagens e conta para as 400 kcal em 4 semanas
+function notePhaseManualChange(s, oldKcal, newKcal){
+  var np = phaseOf(s);
+  if (!np || !(oldKcal > 0) || Math.abs(newKcal - oldKcal) < 50) return;
+  var today = localTodayISO();
+  s.nutritionPhase = Object.assign({}, np, {lastChangeDate: today, reviews: (np.reviews || []).concat([{date: today, kind: "manual", deltaKcal: newKcal - oldKcal, rate: 0, n: 0}]).slice(-24)});
+}
+// guardar o peso objetivo com uma fase já em curso: só muda o objetivo (calorias, etapas e histórico ficam); devolve true se tratou do assunto
+function keepRunningPhase(s, newGoal){
+  if (Number(newGoal || 0) === Number(s.weightGoal || 0)){ showToast("O peso objetivo não mudou."); return true; }
+  var np = phaseOf(s);
+  if (!np) return false;
+  ensureSyncBaseline(s);
+  s.weightGoal = newGoal;
+  s.nutritionPhase = Object.assign({}, np, {targetWeight: newGoal || null});
+  persistStudent(s);
+  showToast("Peso objetivo guardado. A fase e as calorias não mudam: para mudar de fase usa «Alterar fase» na Nutrição.");
+  return true;
+}
 function applyPhaseReview(s, rv){
   if (authRole === "student") return {error: "Só o profissional pode aplicar uma revisão."};
   if (!rv || !rv.proposedTargets) return {error: "Esta revisão não tem alterações para aplicar."};
+  if (!phaseColumnAvailable) return {error: PHASE_MIGRATION_MSG};
   ensureSyncBaseline(s);
   var today = localTodayISO(), np = Object.assign({}, s.nutritionPhase), old = s.targets, nt = rv.proposedTargets;
   logTargetsChange(s, old, nt);
@@ -6919,7 +6993,7 @@ function applyPhaseReview(s, rv){
   s.fromOnboarding = false;
   var res = (s.meals || []).length ? autoAdjustPlanQuantities(s) : null;
   logPlanEvent(s, "fase_revisao", "Revisão " + phaseLabel(np.phase) + ": " + old.kcal + " → " + nt.kcal + " kcal (" + (rv.deltaKcal > 0 ? "+" : "") + rv.deltaKcal + ")" + (res ? "; " + res.changed + " alimentos ajustados" : ""), old.kcal, nt.kcal);
-  var every = np.reviewEveryDays > 0 ? np.reviewEveryDays : PHASE_CFG.reviewDays;
+  var every = phaseEveryDays(np.reviewEveryDays);
   np.stage = (np.stage || 0) + 1; np.lastChangeDate = today; np.lastReviewDate = today; np.snoozeUntil = null;
   np.nextReviewDate = addDaysISO(today, rv.kind === "objetivo" || rv.exiting || rv.completesExit ? 7 : every);
   np.deficitPct = phaseDeficitPct(nt.kcal, rv.maint);
@@ -6930,20 +7004,26 @@ function applyPhaseReview(s, rv){
   return {changed: res ? res.changed : 0, from: old.kcal, to: nt.kcal};
 }
 function postponePhaseReview(s, days){
+  if (!phaseColumnAvailable) return {error: PHASE_MIGRATION_MSG};
   ensureSyncBaseline(s);
   s.nutritionPhase = Object.assign({}, s.nutritionPhase, {snoozeUntil: addDaysISO(localTodayISO(), days || 7)});
   persistStudent(s);
+  return {};
 }
 // iniciar (ou mudar) a fase; com applyStart usa os alvos de partida da fase, senão ancora-se nos alvos atuais
 function startPhase(s, o){
   if (authRole === "student") return {error: "Só o profissional pode iniciar uma fase."};
-  var type = o.type === "cut" || o.type === "bulk" ? o.type : "manutencao", today = localTodayISO();
+  if (!phaseColumnAvailable) return {error: PHASE_MIGRATION_MSG};
+  var type = o.type === "cut" || o.type === "bulk" ? o.type : "manutencao", today = localTodayISO(), curKg = creatineWeightKg(s);
+  // o objetivo tem de ficar do lado certo do peso atual (um cut com objetivo acima do peso apagaria o défice sem avisar)
+  if (curKg > 0 && o.targetWeight > 0 && ((type === "cut" && !(o.targetWeight < curKg - PHASE_CFG.gapKg)) || (type === "bulk" && !(o.targetWeight > curKg + PHASE_CFG.gapKg))))
+    return {error: "O peso objetivo (" + pt2(o.targetWeight) + " kg) tem de ficar " + (type === "cut" ? "abaixo" : "acima") + " do peso atual (" + pt2(curKg) + " kg) para um " + phaseLabel(type) + "."};
   ensureSyncBaseline(s);
   if (!s.targets) s.targets = {kcal: 0, protein: 0, carbs: 0, fat: 0};
   if (o.targetWeight > 0) s.weightGoal = o.targetWeight;
   var old = s.nutritionPhase || {}, np = Object.assign({}, old, {phase: type, startDate: today, startWeight: creatineWeightKg(s) || null, targetWeight: o.targetWeight > 0 ? o.targetWeight : (s.weightGoal || null),
     level: o.level === "avancado" ? "avancado" : "novato", stage: 0, stageStartDate: today, lastChangeDate: today, lastReviewDate: null, snoozeUntil: null, exiting: false, reviews: []});
-  var every = [14, 21, 28].indexOf(Number(o.every)) >= 0 ? Number(o.every) : (type === "bulk" && np.level === "avancado" ? PHASE_CFG.bulk.avancado.review : PHASE_CFG.reviewDays);
+  var every = phaseEveryDays([21, 28].indexOf(Number(o.every)) >= 0 ? Number(o.every) : (type === "bulk" && np.level === "avancado" ? PHASE_CFG.bulk.avancado.review : PHASE_CFG.reviewDays));
   np.reviewEveryDays = every; np.nextReviewDate = addDaysISO(today, every);
   var res = null, maint = computeMaintenanceKcal(s);
   if (o.applyStart){
@@ -6955,9 +7035,7 @@ function startPhase(s, o){
     }
   }
   np.deficitPct = phaseDeficitPct(s.targets.kcal, maint);
-  // a creatina nova retém água: marca o início (só se o aluno ainda não a tomava)
-  var takes = (s.supplements || []).some(function(x){ return exLibFold(x) === "creatina"; });
-  if (!np.creatineStartDate && !takes && creatineStatus(s).on){ np.creatineStartDate = today; np.creatineOn = true; }
+  phaseStampCreatine(s, np, today);
   s.nutritionPhase = np;
   logPlanEvent(s, "fase_inicio", "Fase " + phaseLabel(type) + " iniciada" + (np.targetWeight ? " (objetivo " + pt2(np.targetWeight) + " kg)" : "") + ": " + s.targets.kcal + " kcal" + (res ? "; " + res.changed + " alimentos ajustados" : ""), (old.phase || "—"), type);
   persistStudent(s);
@@ -6969,8 +7047,9 @@ function setPhaseFromGoal(s){
   if (!(cur > 0) || !(goal > 0)) return;
   var type = phaseTypeFor(cur, goal), today = localTodayISO(), maint = computeMaintenanceKcal(s);
   var np = Object.assign({}, s.nutritionPhase, {phase: type, startDate: today, startWeight: cur, targetWeight: goal, level: (s.nutritionPhase && s.nutritionPhase.level) || "novato", stage: 0, stageStartDate: today, lastChangeDate: today,
-    lastReviewDate: null, snoozeUntil: null, exiting: false, reviews: [], reviewEveryDays: (s.nutritionPhase && s.nutritionPhase.reviewEveryDays) || PHASE_CFG.reviewDays});
+    lastReviewDate: null, snoozeUntil: null, exiting: false, reviews: [], reviewEveryDays: phaseEveryDays(s.nutritionPhase && s.nutritionPhase.reviewEveryDays)});
   np.nextReviewDate = addDaysISO(today, np.reviewEveryDays);
+  phaseStampCreatine(s, np, today);
   np.deficitPct = s.targets && s.targets.kcal && maint ? phaseDeficitPct(s.targets.kcal, maint) : null;
   s.nutritionPhase = np;
 }
@@ -7004,7 +7083,7 @@ function openPhaseSetupModal(s, onDone){
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(s.name) + (cur ? " · peso atual " + pt2(cur) + " kg" : "") + (maint ? " · manutenção " + maint + " kcal" : "") + "</p>" +
     "<div class=\"checkin-field\"><label for=\"phType\">Fase</label><select id=\"phType\" class=\"mini-select\" style=\"width:100%;\"><option value=\"cut\"" + (defType === "cut" ? " selected" : "") + ">Cut (perder peso)</option><option value=\"bulk\"" + (defType === "bulk" ? " selected" : "") + ">Bulk (ganhar peso)</option><option value=\"manutencao\"" + (defType === "manutencao" ? " selected" : "") + ">Manutenção</option></select></div>" +
     "<div class=\"checkin-field\"><label for=\"phGoal\">Peso objetivo (kg)</label><input type=\"number\" id=\"phGoal\" step=\"0.5\" min=\"0\" value=\"" + (goal || "") + "\"></div>" +
-    "<div class=\"checkin-field\"><label for=\"phEvery\">Rever o plano de</label><select id=\"phEvery\" class=\"mini-select\" style=\"width:100%;\"><option value=\"14\">14 em 14 dias</option><option value=\"21\">21 em 21 dias</option><option value=\"28\">28 em 28 dias</option></select></div>" +
+    "<div class=\"checkin-field\"><label for=\"phEvery\">Rever o plano</label><select id=\"phEvery\" class=\"mini-select\" style=\"width:100%;\"><option value=\"21\">De 3 em 3 semanas (recomendado)</option><option value=\"28\">De 4 em 4 semanas</option></select></div>" +
     "<div class=\"checkin-field\" id=\"phLevelBox\"><label for=\"phLevel\">Experiência de treino (no bulk)</label><select id=\"phLevel\" class=\"mini-select\" style=\"width:100%;\"><option value=\"novato\">Menos de ~3 anos a treinar com regularidade</option><option value=\"avancado\">Avançado (mais de ~3 anos)</option></select></div>" +
     "<label style=\"display:flex; gap:8px; align-items:flex-start; margin:8px 0;\"><input type=\"checkbox\" id=\"phApply\" " + (np ? "" : "checked") + "> <span class=\"muted-p\">Aplicar já as calorias de partida da fase (ponto de partida pequeno e gradual). Se não, a fase começa nos alvos atuais.</span></label>" +
     "<div id=\"phPreview\" class=\"muted-p\" style=\"margin:6px 0 10px;\"></div>" +
@@ -7020,22 +7099,23 @@ function openPhaseSetupModal(s, onDone){
       (cfg ? " Ritmo previsto: " + pt2(cfg.rate) + " % do peso por semana; as calorias só mudam de " + o.every + " em " + o.every + " dias, em passos de 100–200 kcal, quando o peso o pedir e tu aprovares." : " Revisão a cada " + o.every + " dias; só mexe se o peso derivar.");
   }
   sheet.addEventListener("input", preview); sheet.addEventListener("change", preview);
-  if (np && np.reviewEveryDays) sheet.querySelector("#phEvery").value = String(np.reviewEveryDays);
+  if (np && np.reviewEveryDays) sheet.querySelector("#phEvery").value = String(phaseEveryDays(np.reviewEveryDays) >= 28 ? 28 : 21);
   if (np && np.level) sheet.querySelector("#phLevel").value = np.level;
   preview();
   sheet.querySelector("#phGo").addEventListener("click", function(){
     var o = read();
     if (o.type !== "manutencao" && !(o.targetWeight > 0)){ var e = sheet.querySelector("#phErr"); e.textContent = "Indica o peso objetivo."; e.style.display = "block"; return; }
+    var goBtn = sheet.querySelector("#phGo"); if (goBtn.disabled) return; goBtn.disabled = true;
     var r = startPhase(s, o);
-    if (r.error){ var e2 = sheet.querySelector("#phErr"); e2.textContent = r.error; e2.style.display = "block"; return; }
+    if (r.error){ goBtn.disabled = false; var e2 = sheet.querySelector("#phErr"); e2.textContent = r.error; e2.style.display = "block"; return; }
     closeModal(); showToast("✓ Fase " + phaseLabel(o.type) + " definida"); if (onDone) onDone();
   });
 }
 // janela de revisão: uma proposta de cada vez; o OK aplica tudo
-function openPhaseReviewModal(items, i, onDone){
+function openPhaseReviewModal(items, i, onDone, q){
   items = items.filter(function(x){ return x && x.student; });
   if (!items.length){ if (onDone) onDone(); return; }
-  i = i || 0;
+  i = i || 0; q = q || {acted: false};
   if (i >= items.length){ closeModal(); if (onDone) onDone(); return; }
   var it = items[i], s = it.student, rv = it.review, hasChange = !!rv.proposedTargets;
   var ct = rv.currentTargets, pt = rv.proposedTargets;
@@ -7050,36 +7130,54 @@ function openPhaseReviewModal(items, i, onDone){
       (rv.warnings.length ? "<ul class=\"muted-p\" style=\"padding-left:18px; margin-bottom:10px;\">" + rv.warnings.map(function(w){ return "<li>" + escapeHtml(w.text) + "</li>"; }).join("") + "</ul>" : "") +
       "<p class=\"muted-p\" style=\"font-size:0.78rem; margin-bottom:10px;\">Ao dares OK, os alvos mudam e as quantidades das refeições reajustam-se sozinhas. A decisão é sempre tua.</p>";
   }
+  // sem alterações a aplicar, «OK» já adia a revisão: um segundo botão a fazer o mesmo só confundia
   html += "<div style=\"display:flex; flex-direction:column; gap:8px;\"><button type=\"button\" class=\"btn primary\" id=\"prOk\">" + (hasChange ? "✓ OK — aplicar" : "✓ OK — percebido") + "</button>" +
-    "<button type=\"button\" class=\"btn\" id=\"prLater\">Adiar 7 dias</button><button type=\"button\" class=\"btn\" id=\"prOpen\">Ver o aluno</button></div>";
+    (hasChange ? "<button type=\"button\" class=\"btn\" id=\"prLater\">Adiar 7 dias</button>" : "") + "<button type=\"button\" class=\"btn\" id=\"prOpen\">Ver o aluno</button></div>";
   var sheet = openModal(html);
-  var next = function(){ openPhaseReviewModal(items, i + 1, onDone); };
+  // um duplo toque no OK não pode aprovar já a proposta seguinte sem a ler: a janela nova só aceita toques passados 600 ms
+  var openedAt = Date.now(), settling = function(){ return i > 0 && Date.now() - openedAt < 600; }, busy = false;
+  var next = function(){ q.acted = true; openPhaseReviewModal(items, i + 1, onDone, q); };
+  var closedEarly = function(){ if (q.acted && onDone) onDone(); };
+  sheet.querySelector(".mclose button").addEventListener("click", closedEarly);
+  if (sheet.parentNode) sheet.parentNode.addEventListener("click", function(e){ if (e.target === sheet.parentNode) closedEarly(); });
   sheet.querySelector("#prOk").addEventListener("click", function(){
+    if (busy || settling()) return;
+    busy = true;
     if (hasChange){
       var r = applyPhaseReview(s, rv);
-      if (r.error){ showToast("⚠ " + r.error); return; }
+      if (r.error){ busy = false; showToast("⚠ " + r.error); return; }
       showToast(["✓ Plano de ", s.name, " atualizado: ", r.from, " → ", r.to, " kcal/dia"].join(""));
-    } else postponePhaseReview(s, 7);
+    } else { var pr = postponePhaseReview(s, 7); if (pr.error){ busy = false; showToast("⚠ " + pr.error); return; } }
     next();
   });
-  sheet.querySelector("#prLater").addEventListener("click", function(){ postponePhaseReview(s, 7); next(); });
+  var laterBtn = sheet.querySelector("#prLater");
+  if (laterBtn) laterBtn.addEventListener("click", function(){
+    if (busy || settling()) return;
+    busy = true;
+    var pr = postponePhaseReview(s, 7);
+    if (pr.error){ busy = false; showToast("⚠ " + pr.error); return; }
+    next();
+  });
   sheet.querySelector("#prOpen").addEventListener("click", function(){ closeModal(); state.proSelectedId = s.id; state.proTab = "plano"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
 }
 function tplPhaseReviews(){
   var list = collectPhaseReviews();
   if (!list.length) return "";
+  var shown = list.slice(0, PHASE_REVIEW_CARD_MAX);
   return "<div class=\"card\" id=\"phaseReviewsCard\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Revisões de plano · " + list.length + "</div>" +
-    list.map(function(x){
+    shown.map(function(x){
       return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\"><div class=\"hlabel\">" + escapeHtml(x.student.name) + " <span class=\"pill\">" + phaseLabel(x.review.phase) + "</span></div><div class=\"muted-p\" style=\"font-size:0.78rem;\">" +
         escapeHtml(x.review.kind === "ajuste" || x.review.kind === "objetivo" ? (x.review.deltaKcal > 0 ? "+" : "") + x.review.deltaKcal + " kcal/dia sugeridas" : x.review.text) + "</div></div>" +
-        "<button type=\"button\" class=\"btn btn-sm primary\" data-phase-review=\"" + escapeHtml(x.student.id) + "\">Rever</button></div>";
-    }).join("") + "</div>";
+        "<button type=\"button\" class=\"btn btn-sm primary\" data-phase-review=\"" + escapeHtml(x.student.id) + "\" style=\"min-height:44px;\">Rever</button></div>";
+    }).join("") + (list.length > shown.length ? "<p class=\"muted-p\" style=\"margin:8px 0 6px;\">+ " + (list.length - shown.length) + (list.length - shown.length === 1 ? " aluno à espera" : " alunos à espera") + "</p><button type=\"button\" class=\"btn btn-sm\" data-phase-review-all style=\"min-height:44px;\">Rever todas (" + list.length + ")</button>" : "") + "</div>";
 }
+var PHASE_REVIEW_CARD_MAX = 5;
 function wirePhaseReviews(root, redraw){
   root.querySelectorAll("[data-phase-review]").forEach(function(b){ b.addEventListener("click", function(){
     var id = b.getAttribute("data-phase-review"), list = collectPhaseReviews(), idx = list.map(function(x){ return x.student.id; }).indexOf(id);
-    if (idx >= 0) openPhaseReviewModal(list, idx, redraw);
+    if (idx >= 0) openPhaseReviewModal(list, idx, redraw); else if (redraw) redraw();   // já tratado noutro sítio: o cartão atualiza-se
   }); });
+  root.querySelectorAll("[data-phase-review-all]").forEach(function(b){ b.addEventListener("click", function(){ openPhaseReviewModal(collectPhaseReviews(), 0, redraw); }); });
 }
 // ao entrar, o profissional vê logo as revisões à espera (uma vez por sessão)
 function maybeOpenPhaseReviews(){
@@ -8577,7 +8675,9 @@ var PDF_INK = [13, 15, 18], PDF_ORANGE = [232, 93, 44], PDF_MUTED = [105, 112, 1
 // texto em WinAnsi (um byte por carácter); o que não existe passa à letra base ou a «?»
 function pdfWinAnsi(str){
   var out = "";
-  String(str == null ? "" : str).split("").forEach(function(ch){
+  var txt = String(str == null ? "" : str);
+  if (txt.normalize) txt = txt.normalize("NFC");   // «a» + acento solto passa a «á» (nomes copiados de outras apps)
+  txt.split("").forEach(function(ch){
     var c = ch.charCodeAt(0);
     if ((c >= 32 && c <= 126) || (c >= 160 && c <= 255)) out += ch;
     else if (PDF_SPECIAL[c] != null) out += String.fromCharCode(PDF_SPECIAL[c]);
@@ -8649,7 +8749,9 @@ function pdfDoc(){
       add("<< /Type /Catalog /Pages 2 0 R >>");
       add("<< /Type /Pages /Kids [" + kids + "] /Count " + pages.length + " >>");
       ["Helvetica", "Helvetica-Bold", "Helvetica-Oblique"].forEach(function(f){ add("<< /Type /Font /Subtype /Type1 /BaseFont /" + f + " /Encoding /WinAnsiEncoding >>"); });
-      add("<< /Title (" + esc(pdfWinAnsi(title || "Plano alimentar EVOLVE")) + ") /Producer (EVOLVE) /Creator (EVOLVE) >>");
+      var tt = String(title || "Plano alimentar EVOLVE"), th = "FEFF";   // o título de um PDF é UTF-16 (em hexadecimal): aceita qualquer nome
+      for (var q = 0; q < tt.length; q++) th += ("0000" + tt.charCodeAt(q).toString(16)).slice(-4);
+      add("<< /Title <" + th + "> /Producer (EVOLVE) /Creator (EVOLVE) >>");
       pages.forEach(function(ops, i){
         var stream = ops.join("\n");
         add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + n(PDF_PAGE_W) + " " + n(PDF_PAGE_H) + "] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents " + (8 + 2 * i) + " 0 R >>");
@@ -8720,7 +8822,9 @@ function renderPlanPdf(plan){
   doc.text("PLANO ALIMENTAR", W - M, 40, 12, "b", PDF_WHITE, "r");
   doc.text(plan.dateLabel, W - M, 57, 9.5, "r", [184, 191, 204], "r");
   doc.fillRect(0, 84, W, 4, PDF_ORANGE);
-  doc.text(plan.name, M, 124, 22, "b", PDF_INK, "l");
+  var nameSz = 22;
+  while (nameSz > 12 && pdfTextW(plan.name, nameSz, true) > CW) nameSz -= 0.5;   // nomes compridos encolhem em vez de saírem da página
+  doc.text(plan.name, M, 124, nameSz, "b", PDF_INK, "l");
   y = 140;
   if (plan.targets){
     doc.card(M, y, CW, 60, 10, PDF_SOFT, null);
@@ -8800,15 +8904,21 @@ function renderPlanPdf(plan){
 }
 
 // entrega: no telemóvel abre a folha de partilha (imprimir, guardar nos Ficheiros, WhatsApp); no computador descarrega
+var pdfLastTap = 0, pdfLastUrl = null;
 function exportPlanPdf(s){
   if (!planReadyForExport(s)){ showToast("O plano ainda não tem refeições com alimentos."); return false; }
+  var nowTap = Date.now();
+  if (nowTap - pdfLastTap < 1500) return false;   // um duplo toque não gera (nem descarrega) dois PDFs
+  pdfLastTap = nowTap;
   var bytes;
   try { bytes = renderPlanPdf(buildPlanDoc(s)); } catch (e) { showToast("⚠ Não foi possível gerar o PDF"); return false; }
   var name = "plano-alimentar-" + slug(s.name || "aluno") + "-" + localFileDate() + ".pdf";
   var blob = new Blob([bytes], {type: "application/pdf"}), file = null;
   try { file = new File([blob], name, {type: "application/pdf"}); } catch (e) {}
-  if (file && navigator.share && navigator.canShare && navigator.canShare({files: [file]})){
-    navigator.share({files: [file], title: "Plano alimentar EVOLVE"}).catch(function(e){ if (!e || e.name !== "AbortError") pdfDeliver(blob, name); });
+  // a folha de partilha é para o telemóvel (imprimir, Ficheiros, WhatsApp); no computador descarrega-se
+  var touchFirst = !window.matchMedia || window.matchMedia("(pointer: coarse)").matches;
+  if (touchFirst && file && navigator.share && navigator.canShare && navigator.canShare({files: [file]})){
+    navigator.share({files: [file], title: "Plano alimentar EVOLVE"}).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) pdfDeliver(blob, name); });
     return true;
   }
   pdfDeliver(blob, name);
@@ -8819,12 +8929,14 @@ function pdfDeliver(blob, name){
   var standalone = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
   if (standalone){
     // numa app instalada no iPhone, um descarregamento abre o PDF sem botão de voltar: dá-se uma ligação para tocar
+    if (pdfLastUrl){ try { URL.revokeObjectURL(pdfLastUrl); } catch (e) {} }
+    pdfLastUrl = url;   // só se liberta quando houver outro PDF (a janela pode ficar aberta o tempo que for)
     openModal("<div class=\"mtitle\">PDF pronto</div><p class=\"muted-p\" style=\"margin-bottom:12px;\">Abre o PDF e usa o botão de partilha do telemóvel para imprimir ou guardar.</p>" +
       "<a class=\"btn primary\" id=\"pdfOpenLink\" style=\"display:block; text-align:center;\" href=\"" + url + "\" target=\"_blank\" rel=\"noopener\">Abrir PDF</a>");
   } else {
     var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
   }
-  setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
 }
 
 function tplPlanoTabs(s){
@@ -11470,6 +11582,12 @@ function wireAlunoTab(s){
       if (errEl){ errEl.textContent = "O peso tem de ser superior a 0."; errEl.style.display = "block"; }
       return;
     }
+    // uma gralha (8,2 em vez de 82,2) estragaria a tendência de peso e as propostas de calorias: pede para confirmar
+    if (!isNaN(wRaw) && (wRaw < 25 || wRaw > 350)){
+      if (errEl){ errEl.textContent = "Confirma o peso: tem de estar entre 25 e 350 kg."; errEl.style.display = "block"; }
+      return;
+    }
+    if (!isNaN(wRaw) && s.weightCurrent > 0 && Math.abs(wRaw - s.weightCurrent) / s.weightCurrent > 0.15 && !window.confirm("O peso (" + String(wRaw).replace(".", ",") + " kg) é muito diferente do último (" + String(s.weightCurrent).replace(".", ",") + " kg). Está certo?")) return;
     if (errEl) errEl.style.display = "none";
     var w = wRaw || s.weightCurrent;
     var today = new Date().toISOString().slice(0,10);
@@ -13714,6 +13832,7 @@ function studioLoad(){
 function studioInsert(kind, row){
   if (!sbReady){ var r = Object.assign({id: uidShort("s")}, row); studio[kind].unshift(r); studioLocalWrite(); return Promise.resolve({data: r}); }
   return Promise.resolve(sb.from(STUDIO_TABLES[kind]).insert(row).select("*")).then(function(res){
+    if (kind === "packs" && row && row.shared_with && res && res.error && /shared_with/.test(res.error.message || "")){ studio.sharedAvailable = false; return {error: SHARED_MIGRATION_MSG}; }
     if (!res || res.error || !res.data || !res.data[0]) return {error: (res && res.error && res.error.message) || "Não foi possível guardar — verifica a ligação (e se a migração 0023 já foi corrida)."};
     studio[kind].unshift(res.data[0]);
     return {data: res.data[0]};
@@ -13765,6 +13884,9 @@ function usablePacksOf(studentId){ return studio.packs.filter(function(p){ retur
 function packMembersOf(pack){ var ids = [pack.student_id]; sharedIdsOf(pack).forEach(function(id){ if (ids.indexOf(id) < 0) ids.push(id); }); return ids; }
 function isSharedPack(pack){ return sharedIdsOf(pack).length > 0; }
 // nomes dos outros alunos do pacote (os apagados ficam de fora)
+// o primeiro aluno ativo do pacote (o dono, se estiver ativo): é a quem se lembra a renovação
+function packActiveMember(pack){ var ids = packMembersOf(pack); for (var i = 0; i < ids.length; i++){ var m = findStudent(ids[i]); if (m && isStudentActive(m)) return m; } return null; }
+function packHasActiveMember(pack){ return !!packActiveMember(pack); }
 function packOtherNames(pack, viewerId){ return packMembersOf(pack).filter(function(id){ return id !== viewerId && findStudent(id); }).map(nameOf); }
 function weeklySlotsOfPack(pack){ return packMembersOf(pack).reduce(function(n, id){ return n + weeklySlotsOf(id); }, 0); }
 // o conjunto de aulas que um aluno pode gastar (os seus pacotes + os partilhados), sem repetir
@@ -13776,6 +13898,17 @@ function poolOf(studentId, today){
     if (isSharedPack(p) || p.student_id !== studentId) out.shared = true;
   });
   return out;
+}
+// «a acabar» num pacote partilhado olha para o conjunto: só acaba quando acabam as aulas de todos os pacotes dos alunos envolvidos
+function packEndingInPool(pack, today){
+  var u = packUsage(pack, today);
+  if (!u.ending || !isSharedPack(pack)) return u.ending;
+  var seen = {}, rest = 0, slots = 0;
+  packMembersOf(pack).forEach(function(id){
+    slots += weeklySlotsOf(id);
+    usablePacksOf(id).forEach(function(p){ if (seen[p.id]) return; seen[p.id] = true; var q = packUsage(p, today); if (q.active) rest += q.remaining; });
+  });
+  return rest <= Math.max(PACK_ENDING_SESSIONS, slots) || (u.daysLeft != null && u.daysLeft <= PACK_ENDING_DAYS);
 }
 function activePacksOf(studentId, today){
   return usablePacksOf(studentId).filter(function(p){ return packUsage(p, today).active; }).sort(function(a, b){
@@ -13817,7 +13950,7 @@ function studentStudioSummary(studentId, today){
   var absences = studio.sessions.filter(function(x){ return x.student_id === studentId && x.date >= since && (x.status === "faltou" || x.status === "cancelada_tarde"); }).length;
   var activeOrRecent = packs.filter(function(x){ return x.u.active || (x.u.exhausted && x.pack.starts_on >= addDaysISO(today, -90)); });
   var hasActive = packs.some(function(x){ return x.u.active; });
-  var ending = packs.filter(function(x){ return x.u.ending; });
+  var ending = packs.filter(function(x){ return packEndingInPool(x.pack, today); });
   // já teve pacote há pouco tempo e já não tem nenhum a decorrer: falta renovar
   return {packs: packs, overdue: overdue, absences: absences, hasActive: hasActive, ending: ending,
     needsRenewal: !hasActive && packs.some(function(x){ return x.pack.starts_on >= addDaysISO(today, -120); }), activeOrRecent: activeOrRecent};
@@ -13833,7 +13966,7 @@ function studioKpis(month, today){
   var ms = studio.sessions.filter(function(x){ return monthOf(x.date) === month; });
   var done = ms.filter(function(x){ return x.status === "feita"; }).length;
   var missed = ms.filter(function(x){ return x.status === "faltou" || x.status === "cancelada_tarde"; }).length;
-  var ending = studio.packs.filter(function(p){ var st = findStudent(p.student_id); return st && isStudentActive(st) && packUsage(p, today).ending; });
+  var ending = studio.packs.filter(function(p){ return packHasActiveMember(p) && packEndingInPool(p, today); });
   var paidMonth = studio.payments.filter(function(p){ return p.paid_on && monthOf(p.paid_on) === month; });
   return {toCollect: sum(dueMonth), toCollectN: dueMonth.length, overdue: sum(overdue), overdueN: overdue.length, endingN: ending.length, missed: missed, done: done,
     attendance: done + missed ? Math.round(done / (done + missed) * 100) : null, received: sum(paidMonth), receivedN: paidMonth.length};
@@ -14070,7 +14203,7 @@ function studioSummaryRows(today){
     var renew = !hasActive && (u.exhausted || u.expired);
     var pending = pk.starts_on > today;
     rows.push({student: st, pack: pk, u: u, extras: ex, weekly: weeklySlotsOf(st.id), pool: poolOf(st.id, today), others: packOtherNames(pk, st.id),
-      state: renew ? "renovar" : (!pending && u.ending ? "acabar" : (pending ? "pendente" : "normal"))});
+      state: renew ? "renovar" : (!pending && packEndingInPool(pk, today) ? "acabar" : (pending ? "pendente" : "normal"))});
   });
   var rank = {renovar: 0, acabar: 1, normal: 2, pendente: 3};
   return rows.sort(function(a, b){ return rank[a.state] - rank[b.state] || a.u.remaining - b.u.remaining || String(a.student.name).localeCompare(String(b.student.name), "pt"); });
@@ -14114,7 +14247,7 @@ function parsePackImport(text){
     var price = cols[3] ? parseImportNumber(cols[3]) : null, used = cols[4] ? parseImportNumber(cols[4]) : 0;
     // a validade pode vir em meses (6) ou pelo tipo do pack (Trimestral = 6 meses: duração + 3)
     var typeMonths = cols[5] ? packTypeMonths(cols[5]) : null, months = cols[5] ? (typeMonths != null ? typeMonths : parseImportNumber(cols[5])) : 0;
-    var shareWith = cols[6] ? cols[6].split(/\s*[&|\/]\s*|\s+e\s+/i).map(function(t){ return t.trim(); }).filter(Boolean) : [];
+    var shareWith = cols[6] ? cols[6].split(/\s*[&|\/]\s*|\s+e\s+/i).map(function(t){ return t.trim(); }).filter(Boolean) : [], shareRaw = cols[6] || "";
     if (/^(nome|cliente|aluno)$/i.test(cols[0]) && total == null) return; // linha de cabeçalho colada do Sheets
     if (!cols[0]) errors.push("Linha " + (i + 1) + ": falta o nome.");
     else if (total == null || total < 1 || total > 500 || total !== Math.round(total)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): número de aulas inválido.");
@@ -14122,7 +14255,7 @@ function parsePackImport(text){
     else if (cols[3] && (price == null || price < 0)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): valor inválido.");
     else if (used == null || used < 0 || used > total || used !== Math.round(used)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): aulas já dadas inválidas (0 a " + total + ").");
     else if (months == null || months < 0 || months > 36 || months !== Math.round(months)) errors.push("Linha " + (i + 1) + " (" + cols[0] + "): validade inválida (meses, 0 a 36; vazio = sem validade).");
-    else rows.push({name: cols[0], total: total, start: start, price: price, used: used, months: months, shareWith: shareWith});
+    else rows.push({name: cols[0], total: total, start: start, price: price, used: used, months: months, shareWith: shareWith, shareRaw: shareRaw});
   });
   return {rows: rows, errors: errors};
 }
@@ -14150,7 +14283,10 @@ function studioImportPacks(text){
       if (studio.slotsAvailable) row.used_before = r.used;
       // «partilhado com»: o pacote também pode ser gasto por esses alunos (casais)
       var shareIds = [];
-      (r.shareWith || []).forEach(function(nm){
+      var shareNames = r.shareWith || [];
+      // «Ana Sousa e Silva» é um nome só: se a célula inteira for exatamente um aluno, não se parte por « e »
+      if (r.shareRaw && /\s+e\s+/i.test(r.shareRaw)){ var kk = exLibFold(r.shareRaw), whole = STUDENTS.filter(function(x){ return (!x.isDemo || state.showDemoStudents) && exLibFold(x.name) === kk; }); if (whole.length === 1) shareNames = [r.shareRaw]; }
+      shareNames.forEach(function(nm){
         var other = matchStudentByName(nm);
         if (!other) report.errors.push(st.name + ": não encontrei o aluno «" + nm + "» para partilhar o pacote.");
         else if (other.id !== st.id && shareIds.indexOf(other.id) < 0) shareIds.push(other.id);
@@ -14630,8 +14766,8 @@ function packBarHtml(pack, u, viewerId){
       (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
-    (foreign ? "" : "<span style=\"display:flex; gap:6px; align-items:center;\"><button type=\"button\" class=\"btn btn-sm\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
-    "<button type=\"button\" class=\"assess-del\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></span>") + "</div>";
+    (foreign ? "" : "<span style=\"display:flex; gap:12px; align-items:center;\"><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
+    "<button type=\"button\" class=\"assess-del\" style=\"min-width:44px; min-height:44px;\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></span>") + "</div>";
 }
 function paymentRowHtml(p, today, withName){
   var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
@@ -14675,7 +14811,7 @@ function tplProSessoes(s){
     "<div class=\"f\"><label>Preço (€)</label><input type=\"number\" id=\"pkPrice\" min=\"0\" step=\"0.5\" placeholder=\"250\"></div>" +
     "<div class=\"f\"><label>Início</label><input type=\"date\" id=\"pkStart\" value=\"" + today + "\"></div>" +
     (studio.slotsAvailable ? "<div class=\"f\"><label>Aulas já dadas (antes da app)</label><input type=\"number\" id=\"pkUsed\" min=\"0\" max=\"500\" value=\"0\"></div>" : "") +
-    "<div class=\"f\"><label>Tipo de pack</label><select id=\"pkType\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Outro (indico a validade)</option>" + Object.keys(PACK_TYPES).map(function(k){ return "<option value=\"" + k + "\">" + PACK_TYPES[k].label + " · " + PACK_TYPES[k].months + " meses</option>"; }).join("") + "</select></div>" +
+    "<div class=\"f\"><label>Tipo de pack</label><select id=\"pkType\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Outro</option>" + Object.keys(PACK_TYPES).map(function(k){ return "<option value=\"" + k + "\">" + PACK_TYPES[k].label + " · " + PACK_TYPES[k].months + " meses</option>"; }).join("") + "</select></div>" +
     "<div class=\"f\"><label>Validade (meses, 0 = sem)</label><input type=\"number\" id=\"pkMonths\" min=\"0\" max=\"36\" value=\"3\"></div>" +
     "<p class=\"muted-p\" style=\"grid-column:1/-1; font-size:0.76rem;\">A validade é a duração do pack + " + PACK_VALIDITY_EXTRA_MONTHS + " meses (trimestral pago a 14/01: dura até 14/04 e vale até 14/07). O mensal vale 3 meses desde o mês em que paga.</p>" +
     (studio.sharedAvailable ? "<div class=\"f\" style=\"grid-column:1/-1;\"><label>Partilhado com (casais: um só pagamento)</label><select id=\"pkShare\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Ninguém</option>" +
@@ -14733,6 +14869,8 @@ function removeStudioOnlyStudent(s){
     clearTimeout(persistTimers[id]); delete persistTimers[id]; delete persistStudents[id];
     try { var ob = outboxRead(); if (ob[id]){ delete ob[id]; outboxWrite(); } } catch (e) {}
     var i = STUDENTS.indexOf(s); if (i >= 0) STUDENTS.splice(i, 1);
+    var gonePacks = studio.packs.filter(function(p){ return p.student_id === id; }).map(function(p){ return p.id; });
+    studio.sessions.concat(studio.payments).forEach(function(x){ if (gonePacks.indexOf(x.pack_id) >= 0) x.pack_id = null; });   // as sessões de quem partilhava o pacote ficam sem pacote (como ao apagar um pacote)
     ["sessions", "packs", "payments", "slots"].forEach(function(k){ studio[k] = studio[k].filter(function(x){ return x.student_id !== id; }); });
     if (!sbReady) studioLocalWrite();
     // os títulos que apontavam para ele passam a ser ignorados (senão voltavam a aparecer para criar)
@@ -14823,7 +14961,7 @@ function wireProSessoes(s, el){
       var charge = price > 0 && el.querySelector("#pkCharge").checked ? studioInsert("payments", {student_id: s.id, pack_id: r.data.id, amount: price, due_on: start}) : Promise.resolve({});
       // o outro aluno também passa a poder gastar o pacote que já tinha (se tiver), para os dois acabarem juntos
       var back = partner ? studioGrantReciprocal(r.data, [partner], []) : Promise.resolve({});
-      Promise.all([charge, back, attachExtrasToPack(r.data)]).then(function(res){ showToast(res[0].error ? "Pacote criado, mas a cobrança não foi guardada" : "✓ Pacote criado" + (partner ? " e partilhado" : "") + (res[2] ? " · " + res[2] + (res[2] === 1 ? " aula extra descontada" : " aulas extra descontadas") : "")); studioRerender(s); });
+      Promise.all([charge, back, attachExtrasToPack(r.data)]).then(function(res){ showToast(res[0].error ? "Pacote criado, mas a cobrança não foi guardada" : res[1].error ? "Pacote criado, mas não foi possível dar ao outro aluno acesso ao pacote dele" : "✓ Pacote criado" + (partner ? " e partilhado" : "") + (res[2] ? " · " + res[2] + (res[2] === 1 ? " aula extra descontada" : " aulas extra descontadas") : "")); studioRerender(s); });
     });
   });
   var pkType = el.querySelector("#pkType"), pkNameEl = el.querySelector("#pkName"), pkNameTouched = false;
@@ -14871,24 +15009,34 @@ function studentsForSharing(ownerId){
 var SHARED_MIGRATION_MSG = "Para partilhar pacotes falta correr a migração 0028 no SQL Editor do Supabase (ficheiro supabase/migrations/0028_shared_packs.sql) e recarregar a app.";
 // o aluno com quem se partilha passa a poder gastar também os pacotes dele que ainda têm aulas (e deixa de poder, nos removidos); assim os dois gastam do mesmo conjunto
 function studioGrantReciprocal(pack, added, removed){
-  var today = localTodayISO(), errors = 0;
+  var today = localTodayISO(), errors = 0, group = [pack.student_id].concat(added.filter(function(id){ return id !== pack.student_id; }));
   var jobs = [];
   studio.packs.forEach(function(q){
     if (q.id === pack.id) return;
-    var cur = sharedIdsOf(q), has = cur.indexOf(pack.student_id) >= 0;
-    if (added.indexOf(q.student_id) >= 0 && !has){ var u = packUsage(q, today); if (!u.expired && u.remaining > 0) jobs.push({id: q.id, next: cur.concat([pack.student_id])}); }
-    else if (removed.indexOf(q.student_id) >= 0 && has) jobs.push({id: q.id, next: cur.filter(function(x){ return x !== pack.student_id; })});
+    var cur = sharedIdsOf(q);
+    if (added.indexOf(q.student_id) >= 0){
+      // o conjunto fecha-se: cada aluno acrescentado passa a poder gastar os pacotes de todos os outros do grupo (se ainda têm aulas e não caducaram)
+      var u = packUsage(q, today); if (u.expired || u.remaining <= 0) return;
+      var missing = group.filter(function(id){ return id !== q.student_id && cur.indexOf(id) < 0; });
+      if (missing.length) jobs.push({id: q.id, next: cur.concat(missing)});
+    } else if (removed.indexOf(q.student_id) >= 0 && cur.indexOf(pack.student_id) >= 0){
+      // só se tira o acesso se o dono não tem outro pacote ainda partilhado com este aluno
+      var stillShared = studio.packs.some(function(o){ return o.id !== pack.id && o.student_id === pack.student_id && sharedIdsOf(o).indexOf(q.student_id) >= 0 && !packUsage(o, today).expired; });
+      if (!stillShared) jobs.push({id: q.id, next: cur.filter(function(x){ return x !== pack.student_id; })});
+    }
   });
   return jobs.reduce(function(c, j){ return c.then(function(){ return studioUpdate("packs", j.id, {shared_with: j.next}).then(function(r){ if (r.error) errors++; }); }); }, Promise.resolve()).then(function(){ return errors ? {error: "Não foi possível atualizar " + errors + (errors === 1 ? " pacote" : " pacotes") + " do outro aluno."} : {}; });
 }
 function studioSetPackSharing(pack, ids, reciprocal){
   if (!studio.sharedAvailable) return Promise.resolve({error: SHARED_MIGRATION_MSG});
   ids = (ids || []).filter(function(id, i, a){ return id && id !== pack.student_id && a.indexOf(id) === i; });
+  if (ids.length > 10) return Promise.resolve({error: "Um pacote só pode ser partilhado com 10 alunos no máximo."});
   var before = sharedIdsOf(pack);
-  var added = ids.filter(function(id){ return before.indexOf(id) < 0; }), removed = before.filter(function(id){ return ids.indexOf(id) < 0; });
+  var removed = before.filter(function(id){ return ids.indexOf(id) < 0; });
   return studioUpdate("packs", pack.id, {shared_with: ids}).then(function(r){
     if (r.error) return {error: /shared_with/.test(r.error) ? SHARED_MIGRATION_MSG : r.error};
-    return reciprocal ? studioGrantReciprocal(pack, added, removed) : {};
+    // com a partilha nos dois sentidos, repõe-se sempre o que falta a TODOS os escolhidos (guardar outra vez repara uma falha anterior)
+    return reciprocal ? studioGrantReciprocal(pack, ids, removed) : {};
   });
 }
 function openSharePackModal(pack, onDone){
@@ -14898,15 +15046,18 @@ function openSharePackModal(pack, onDone){
   var sheet = openModal("<div class=\"mtitle\">Partilhar pacote</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">«" + escapeHtml(pack.name) + "» de " + escapeHtml(owner ? owner.name : "—") + ". Quem estiver marcado pode gastar aulas deste pacote (casais que treinam sozinhos e juntos com um só pagamento): as sessões de todos descontam ao mesmo conjunto e acabam ao mesmo tempo.</p>" +
     "<div class=\"student-search\" style=\"margin-bottom:10px;\"><span aria-hidden=\"true\">🔎</span><input type=\"search\" id=\"shFilter\" placeholder=\"Procurar aluno…\" aria-label=\"Procurar aluno\" autocomplete=\"off\"></div>" +
     "<div id=\"shList\" style=\"max-height:42vh; overflow:auto; margin-bottom:10px;\">" + (cands.length ? cands.map(function(st){
-      return "<label class=\"history-row\" data-sh-name=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"display:flex; gap:10px; align-items:center; min-height:44px; cursor:pointer;\"><input type=\"checkbox\" data-sh-id=\"" + escapeHtml(st.id) + "\"" + (cur.indexOf(st.id) >= 0 ? " checked" : "") + "> <span>" + escapeHtml(st.name) + "</span></label>";
-    }).join("") : "<p class=\"muted-p\">Não há outros alunos ativos.</p>") + "</div>" +
+      return "<label class=\"history-row\" data-sh-name=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"display:flex; justify-content:flex-start; gap:12px; align-items:center; min-height:44px; cursor:pointer;\"><input type=\"checkbox\" style=\"width:22px; height:22px; accent-color:var(--accent); flex:none;\" data-sh-id=\"" + escapeHtml(st.id) + "\"" + (cur.indexOf(st.id) >= 0 ? " checked" : "") + "> <span>" + escapeHtml(st.name) + "</span></label>";
+    }).join("") : "<p class=\"muted-p\">Não há outros alunos ativos.</p>") + "</div><p class=\"muted-p\" id=\"shEmpty\" style=\"display:none; margin-bottom:10px;\">Nenhum aluno com esse nome.</p>" +
+    "<div style=\"position:sticky; bottom:0; background:var(--surface); padding-top:8px;\">" +   // «Guardar» fica sempre à vista, mesmo com uma lista comprida
     "<label style=\"display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;\"><input type=\"checkbox\" id=\"shBack\" checked> <span class=\"muted-p\">Dar também a cada um acesso ao seu próprio pacote (partilha nos dois sentidos), para ambos gastarem do conjunto todo.</span></label>" +
     "<p class=\"muted-p\" id=\"shErr\" style=\"color:var(--critical); display:none;\"></p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"shGo\" style=\"width:100%;\">Guardar</button>");
+    "<button type=\"button\" class=\"btn primary\" id=\"shGo\" style=\"width:100%;\">Guardar</button></div>");
   var filter = sheet.querySelector("#shFilter");
   filter.addEventListener("input", function(){
     var q = exLibFold(filter.value);
-    sheet.querySelectorAll("[data-sh-name]").forEach(function(row){ row.style.display = !q || row.getAttribute("data-sh-name").indexOf(q) >= 0 ? "flex" : "none"; });
+    var shown = 0;
+    sheet.querySelectorAll("[data-sh-name]").forEach(function(row){ var ok = !q || row.getAttribute("data-sh-name").indexOf(q) >= 0; row.style.display = ok ? "flex" : "none"; if (ok) shown++; });
+    sheet.querySelector("#shEmpty").style.display = shown ? "none" : "block";
   });
   sheet.querySelector("#shGo").addEventListener("click", function(){
     var ids = [].slice.call(sheet.querySelectorAll("[data-sh-id]")).filter(function(c){ return c.checked; }).map(function(c){ return c.getAttribute("data-sh-id"); });
@@ -14975,7 +15126,7 @@ function renderProStudioMain(){
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
       "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
-      (r.pool.shared && r.others.length ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">👥 Partilha com " + escapeHtml(r.others.join(", ")) + " · no conjunto restam <strong>" + r.pool.remaining + "</strong> de " + r.pool.total + "</div>" : "") +
+      (r.pool.shared && r.others.length ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">👥 Partilha com " + escapeHtml(r.others.join(", ")) + " · " + (r.pool.remaining === 1 ? "no conjunto resta <strong>1</strong>" : "no conjunto restam <strong>" + r.pool.remaining + "</strong>") + " de " + r.pool.total + "</div>" : "") +
       (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
   });
   html += "</div>";
@@ -15015,7 +15166,7 @@ function renderProStudioMain(){
   html += "<div class=\"card\" id=\"studioPayments\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
     (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>";
 
-  var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: findStudent(p.student_id)}; }).filter(function(x){ return x.st && isStudentActive(x.st) && x.u.ending; });
+  var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: packActiveMember(p)}; }).filter(function(x){ return x.st && packEndingInPool(x.p, today); });
   html += "<div class=\"card\" id=\"studioEnding\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes a acabar</div>" +
     (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
       escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
@@ -15452,6 +15603,7 @@ function setTargetsFromPlanIfAsked(el, s){
   var tot = foodsTotals(s.meals.reduce(function(a, m){ return a.concat(m.foods); }, []));
   var newTargets = { kcal: Math.round(tot.kcal), protein: Math.round(tot.p), carbs: Math.round(tot.c), fat: Math.round(tot.f) };
   logTargetsChange(s, s.targets, newTargets);
+  notePhaseManualChange(s, s.targets.kcal, newTargets.kcal);
   s.targets = newTargets;
   s.fromOnboarding = false;
   var ws = nutritionSafetyWarnings(Object.assign({}, s, {leanMass: latestLeanMass(s)}), newTargets);
@@ -15567,7 +15719,7 @@ function wireProPlanExtras(s, el){
   var crToggle = el.querySelector("#creatineToggle");
   if (crToggle) crToggle.addEventListener("click", function(){ setCreatineEnabled(s, crToggle.getAttribute("data-on") === "1"); renderProTabContent(s); });
   var crConfirm = el.querySelector("#creatineConfirm");
-  if (crConfirm) crConfirm.addEventListener("click", function(){ confirmCreatine(s); renderProTabContent(s); });
+  if (crConfirm) crConfirm.addEventListener("click", function(){ var r = confirmCreatine(s); if (r.error){ showToast("⚠ " + r.error); return; } renderProTabContent(s); });
 }
 function wireProTab(s){
   var el = document.getElementById("proTabContent");
@@ -15677,6 +15829,7 @@ function wireProTab(s){
       }
       var newTargets = { kcal: newKcal, protein: newProtein, carbs: newCarbs, fat: newFat };
       logTargetsChange(s, s.targets, newTargets);
+      notePhaseManualChange(s, s.targets.kcal, newTargets.kcal);
       s.targets = newTargets;
       s.fromOnboarding = false;
       var banner = el.querySelector(".suggestion-banner");
@@ -16035,6 +16188,7 @@ function wireProTab(s){
       showToast("⚠ O peso objetivo tem de ser superior a 0");
       return;
     }
+    if (keepRunningPhase(s, newGoal)) return;
     s.weightGoal = newGoal;
     var suggested = computeSuggestedTargets({
       sex: s.sex, weight: s.weightCurrent, height: s.height, age: s.age,
@@ -16416,7 +16570,7 @@ function finishBoot(rows, isProfessional, offline){
     syncPillUpdate();
     if (!offline) outboxFlush();
     if (isProfessional) setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
-    if (isProfessional) studioRefresh().then(function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild) renderProDashboardMain(); });
+    if (isProfessional) studioRefresh().then(function(){ if (state.mode === "pro" && !state.proSelectedId && state.proView === "dashboard" && !modalRoot.firstChild && !dashSearchFocused()) renderProDashboardMain(); });
   });
 }
 

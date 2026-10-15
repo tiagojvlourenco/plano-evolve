@@ -95,7 +95,7 @@ function fixtureRow(id, name, extra){
   await sp.ctx.close();
 
   // ---------- partilha nativa (iPhone) ----------
-  var ctx3 = await browser.newContext({viewport: {width: 390, height: 844}});
+  var ctx3 = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});   // a folha de partilha é só para ecrãs de toque
   await ctx3.addInitScript(fakeSource({role: "student", userId: "user-1", rows: [fixtureRow("stu1", "Ana Teste")]}));
   await ctx3.addInitScript(function(){
     window.__shared = null;
@@ -110,6 +110,22 @@ function fixtureRow(id, name, extra){
   var sh = await p3.evaluate(function(){ return window.__shared; });
   check.check("12. Com partilha nativa (iPhone), o PDF vai direto para a folha de partilha, sem descarregar", sh.type === "application/pdf" && /^plano-alimentar-ana-teste-/.test(sh.name) && sh.size > 2000 && sh.title === "Plano alimentar EVOLVE");
   await ctx3.close();
+
+  // computador com Web Share de ficheiros (Chrome/Edge): descarrega, não abre a folha de partilha
+  var ctx4 = await browser.newContext({viewport: {width: 1280, height: 800}, acceptDownloads: true});
+  await ctx4.addInitScript(fakeSource({role: "student", userId: "user-1", rows: [fixtureRow("stu1", "Ana Teste")]}));
+  await ctx4.addInitScript(function(){ window.__shared4 = 0; navigator.canShare = function(){ return true; }; navigator.share = function(){ window.__shared4++; return Promise.resolve(); }; });
+  var p4 = await ctx4.newPage(); p4.setDefaultTimeout(6000); p4.on("pageerror", function(e){ errors.push(e.message); });
+  await p4.goto(srv.url); await p4.waitForSelector(".check-circle[data-circle]");
+  await p4.click('.tabbar button:nth-child(2)'); await p4.waitForSelector("#exportPlanPdf");
+  var [dl4] = await Promise.all([p4.waitForEvent("download"), p4.click("#exportPlanPdf")]);
+  check.check("12b. No computador descarrega o PDF mesmo que o browser ofereça a partilha de ficheiros", /\.pdf$/.test(dl4.suggestedFilename()) && (await p4.evaluate(function(){ return window.__shared4; })) === 0);
+  // duplo clique: um só PDF
+  await p4.waitForTimeout(1700);
+  var downloads4 = 0; p4.on("download", function(){ downloads4++; });
+  await p4.dblclick("#exportPlanPdf"); await p4.waitForTimeout(600);
+  check.check("12c. Um duplo clique descarrega um só PDF", downloads4 === 1);
+  await ctx4.close();
 
   check.check("13. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));

@@ -98,9 +98,9 @@ STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno S
   var sh2 = await studioSetPackSharing(studio.packs[0], ["b", "c"], true);
   check.check("27. Adicionar a Carla: o pacote caducado da Carla não é partilhado de volta", !sh2.error && studio.packs[0].shared_with.join() === "b,c" && studio.packs[2].shared_with.length === 0);
   var sh3 = await studioSetPackSharing(studio.packs[0], [], true);
-  check.check("28. Deixar de partilhar remove o acesso nos dois sentidos", !sh3.error && studio.packs[0].shared_with.length === 0 && studio.packs[1].shared_with.length === 0 && usablePacksOf("b").length === 1);
+  check.check("28. Deixar de partilhar remove o acesso nos dois sentidos (o Bruno continua a partilhar com a Carla, que é outra partilha)", !sh3.error && studio.packs[0].shared_with.length === 0 && studio.packs[1].shared_with.join() === "c" && usablePacksOf("b").length === 1);
   var sh4 = await studioSetPackSharing(studio.packs[0], ["b"], false);
-  check.check("29. Sem partilha nos dois sentidos, só o pacote escolhido muda", !sh4.error && studio.packs[0].shared_with.join() === "b" && studio.packs[1].shared_with.length === 0);
+  check.check("29. Sem partilha nos dois sentidos, só o pacote escolhido muda", !sh4.error && studio.packs[0].shared_with.join() === "b" && studio.packs[1].shared_with.join() === "c");
   studio.sharedAvailable = false;
   var sh5 = await studioSetPackSharing(studio.packs[0], ["c"], true);
   check.check("30. Sem a migração 0028, avisa em vez de falhar em silêncio", !!sh5.error && /0028/.test(sh5.error));
@@ -109,5 +109,66 @@ STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno S
   // ---- migração ----
   var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0028_shared_packs.sql", "utf8");
   check.check("31. A migração 0028 junta shared_with (jsonb, default []) sem apagar dados e é repetível", /shared_with jsonb not null default '\[\]'::jsonb/.test(mig) && /if not exists/i.test(mig) && !/drop table|delete from/i.test(mig));
-  check.summarize();
+  
+// ---- revisão adversarial: reciprocidade idempotente, desmarcar com outro pacote, conjunto de três, «a acabar» pelo conjunto, importação com « e » ----
+  reset();
+  studio.packs = [pack("pa", "a", 13, {shared_with: ["b"]}), pack("pb", "b", 26)];
+  var rp = await studioSetPackSharing(studio.packs[0], ["b"], true);
+  check.check("33. «Guardar» outra vez repara a partilha nos dois sentidos que ficou incompleta (antes, sem alterações, não fazia nada)", !rp.error && studio.packs[1].shared_with.join() === "a");
+  reset();
+  studio.packs = [pack("pa", "a", 13, {shared_with: ["b"]}), pack("pa2", "a", 13, {shared_with: ["b"]}), pack("pb", "b", 26, {shared_with: ["a"]})];
+  await studioSetPackSharing(studio.packs[1], [], true);
+  check.check("34. Deixar de partilhar só um de dois pacotes do mesmo dono não tira à Ana o acesso ao pacote do Bruno", studio.packs[2].shared_with.join() === "a" && studio.packs[0].shared_with.join() === "b" && usablePacksOf("a").some(function(p){ return p.id === "pb"; }));
+  reset();
+  studio.packs = [pack("pa", "a", 10), pack("pb", "b", 10), pack("pc", "c", 10)];
+  await studioSetPackSharing(studio.packs[0], ["b", "c"], true);
+  check.check("35. Partilha a três: o conjunto fecha-se (os três gastam dos três pacotes)", ["a", "b", "c"].every(function(id){ return usablePacksOf(id).length === 3; }) && studio.packs[1].shared_with.slice().sort().join() === "a,c" && studio.packs[2].shared_with.slice().sort().join() === "a,b");
+  var many = []; for (var i = 0; i < 11; i++) many.push("s" + i);
+  var big = await studioSetPackSharing(studio.packs[0], many, true);
+  check.check("36. Mais de 10 alunos num pacote dá um erro claro (não «falta a migração»)", !!big.error && /10 alunos/.test(big.error) && !/0028/.test(big.error));
+  // «a acabar» pelo conjunto
+  reset();
+  studio.packs = [pack("pa", "a", 13, {shared_with: ["b"]}), pack("pb", "b", 26, {shared_with: ["a"]})];
+  for (var k = 0; k < 12; k++) studio.sessions.push(ses(k, "a", "pa"));
+  studio.slots = [{id: "s1", student_id: "a", weekday: 1, time: "10:00", counts_from: d(-30)}];
+  check.check("37. Com 12 de 13 usadas num pacote e 26 no outro, o conjunto NÃO está a acabar (o pacote da Ana, sozinho, sim)", packUsage(studio.packs[0], today).ending === true && packEndingInPool(studio.packs[0], today) === false && packEndingInPool(studio.packs[1], today) === false);
+  var rows = studioSummaryRows(today);
+  check.check("38. O resumo do estúdio não manda renovar nem marca «a acabar» nenhum dos dois; a contagem de pacotes a acabar é 0", rows.every(function(r){ return r.state === "normal"; }) && studioKpis(monthOf(today), today).endingN === 0 && studentStudioSummary("b", today).ending.length === 0);
+  for (var k2 = 12; k2 < 13; k2++) studio.sessions.push(ses(40 + k2, "a", "pa"));
+  for (var k3 = 0; k3 < 25; k3++) studio.sessions.push(ses(100 + k3, "b", "pb"));
+  check.check("39. Quando o conjunto está quase no fim (1 aula em 39) passa a «a acabar» (um alerta só, o do pacote que ainda tem aulas)", packEndingInPool(studio.packs[1], today) === true && studentStudioSummary("a", today).ending.length >= 1 && studioKpis(monthOf(today), today).endingN === 1);
+  // aluno inativo: o aviso vai para quem está ativo
+  STUDENTS[0].active = false;
+  check.check("40. Se o dono do pacote está inativo, o pacote partilhado continua a contar para o parceiro ativo", packActiveMember(studio.packs[0]) && packActiveMember(studio.packs[0]).id === "b" && packHasActiveMember(studio.packs[0]));
+  STUDENTS[0].active = true;
+  // importação com nomes que levam « e »
+  var savedStudents = STUDENTS;
+  STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "x", name: "Ana Sousa e Silva", active: true}, {id: "j", name: "José Pinto", active: true}, {id: "m", name: "Maria Silva", active: true}];
+  reset();
+  var imp = await studioImportPacks("Ana Silva; 13; 01/10/2026; 300; 0; Trimestral; Ana Sousa e Silva\nJosé Pinto; 10; 01/10/2026; 100; 0; 6; José Pinto e Maria Silva");
+  var pAna = studio.packs.filter(function(x){ return x.student_id === "a"; })[0], pJose = studio.packs.filter(function(x){ return x.student_id === "j"; })[0];
+  check.check("41. Um nome com « e » (Ana Sousa e Silva) é um aluno só; «A e B» continua a separar dois alunos", imp.errors.length === 0 && pAna.shared_with.join() === "x" && pJose.shared_with.slice().sort().join() === "m");
+  STUDENTS = savedStudents;
+  // coluna 0028 em falta: erro em português e deixa de oferecer a partilha
+  reset(); sbReady = true;
+  var savedSb = typeof sb !== "undefined" ? sb : null;
+  sb = {from: function(){ return {insert: function(){ return {select: function(){ return Promise.resolve({data: null, error: {message: "Could not find the 'shared_with' column of 'session_packs' in the schema cache"}}); }}; }}; }};
+  var ins = await studioInsert("packs", {student_id: "a", name: "P", total: 5, starts_on: d(0), shared_with: ["b"]});
+  sbReady = false; sb = savedSb;
+  check.check("42. Sem a migração 0028 o erro do Supabase (em inglês) vira a mensagem em português e a partilha deixa de se oferecer", !!ins.error && /0028/.test(ins.error) && !/Could not find/.test(ins.error) && studio.sharedAvailable === false);
+  studio.sharedAvailable = true;
+  // remover um aluno só-estúdio deixa as sessões do parceiro sem pacote (não penduradas num pacote que já não existe)
+  reset();
+  STUDENTS = [{id: "a", name: "Ana Silva", active: true, studioOnly: true}, {id: "b", name: "Bruno Silva", active: true}];
+  studio.packs = [pack("pa", "a", 10, {shared_with: ["b"]})]; studio.sessions = [ses(1, "b", "pa"), ses(2, "a", "pa")];
+  await removeStudioOnlyStudent(STUDENTS[0]);
+  check.check("43. Ao remover o dono de um pacote partilhado, as sessões do parceiro ficam sem pacote (não penduradas)", studio.sessions.length === 1 && studio.sessions[0].student_id === "b" && studio.sessions[0].pack_id === null && studio.packs.length === 0);
+  // o formulário de novo pacote: sem a migração não mostra «Partilhado com»; o resto do texto
+  STUDENTS = [{id: "a", name: "Ana Silva", active: true}, {id: "b", name: "Bruno Silva", active: true}];
+  studio.sharedAvailable = false;
+  check.check("44. Sem a migração, a ficha não mostra «Partilhado com»", !/id="pkShare"/.test(tplProSessoes(STUDENTS[0])));
+  studio.sharedAvailable = true;
+
+
+check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

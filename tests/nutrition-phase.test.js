@@ -127,7 +127,7 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   check.check("37. Na revisão seguinte completa a saída: calorias de manutenção", rv2.kind === "ajuste" && rv2.completesExit === true && rv2.proposedTargets.kcal === computeMaintenanceKcal(done));
   applyPhaseReview(done, rv2);
   check.check("38. E a saída fica concluída", done.nutritionPhase.exiting === false && done.targets.kcal === computeMaintenanceKcal(done));
-  var bulkDone = stu({weightCurrent: 77.9, weights: wts(75, 0.9, 28), height: 178, targets: targetsFor(BK, 150, 75)}, {phase: "bulk", targetWeight: 78});
+  var bulkDone = stu({weightCurrent: 77.9, weights: wts(75, 0.9, 28), height: 178, targets: targetsFor(BK, 150, 75)}, {phase: "bulk", targetWeight: 78, startWeight: 75});
   check.check("39. No bulk, chegar ao peso objetivo propõe a manutenção diretamente", computePhaseReview(bulkDone, today).kind === "objetivo");
   var drift = computePhaseReview(stu({weights: wts(90, 0.9, 28), targets: targetsFor(maint, 160, 75)}, {phase: "manutencao", targetWeight: null}), today);
   check.check("40. Na manutenção, uma subida de ≥ 0,25 %/semana durante 3 semanas propõe retirar 100 kcal", drift.kind === "ajuste" && drift.deltaKcal === -100);
@@ -150,7 +150,7 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   check.check("43. O OK aplica os alvos novos de uma vez (calorias e hidratos)", !r.error && s.targets.kcal === rv.proposedTargets.kcal && s.targets.carbs === rv.proposedTargets.carbs && s.targets.protein === 160 && s.fromOnboarding === false && r.from === CUT && r.to === s.targets.kcal);
   check.check("44. …e reajusta as quantidades do plano do aluno sozinho (as refeições passam a somar menos ~" + Math.abs(rv.deltaKcal) + " kcal, como o alvo)", r.changed > 0 && JSON.stringify(s.meals) !== snapshot && after < before && Math.abs((after - before) - rv.deltaKcal) < 90);
   var np = s.nutritionPhase;
-  check.check("45. A fase regista a revisão: etapa 1, última alteração hoje, próxima revisão daí a 14 dias, défice em % e o histórico", np.stage === 1 && np.lastChangeDate === today && np.nextReviewDate === d(14) && np.deficitPct < 0 && np.reviews.length === 1 && np.reviews[0].deltaKcal === rv.deltaKcal && np.reviews[0].kind === "ajuste");
+  check.check("45. A fase regista a revisão: etapa 1, última alteração hoje, próxima revisão daí a 21 dias (1 semana de adaptação + 14 dias de pesagens), défice em % e o histórico", np.stage === 1 && np.lastChangeDate === today && np.nextReviewDate === d(21) && np.deficitPct < 0 && np.reviews.length === 1 && np.reviews[0].deltaKcal === rv.deltaKcal && np.reviews[0].kind === "ajuste");
   check.check("46. O histórico do plano guarda a revisão e as alterações de calorias", s.planHistory.some(function(e){ return e.type === "fase_revisao" && /Revisão Cut/.test(e.summary); }) && s.planHistory.some(function(e){ return e.type === "kcal"; }));
   check.check("47. Logo a seguir não há nova proposta (a revisão só volta daí a 14 dias)", computePhaseReview(s, today) === null);
   check.check("48. Uma revisão sem alterações (aderência) não se pode «aplicar»", !!applyPhaseReview(stu({weights: wts(90, 0, 28), checkins: checkins(3)}), computePhaseReview(stu({weights: wts(90, 0, 28), checkins: checkins(3)}), today)).error);
@@ -202,4 +202,69 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   var s = stu({weights: wts(90, 0, 28)}), row = studentToRow(s);
   check.check("62. A fase vai na coluna nutrition_phase e volta igual", row.nutrition_phase.phase === "cut" && rowToStudent(Object.assign({id: "p1"}, row)).nutritionPhase.targetWeight === 82);
 })();
+
+// ---- revisão adversarial: sentido das calorias, aviso urgente, pesagens suspeitas, cadência, alvos manuais ----
+(function(){
+  var above = stu({weights: wts(90, -1.5, 14, 2), targets: targetsFor(maint + 300, 160, 75)}, {nextReviewDate: d(0)});
+  var rvA = computePhaseReview(above, today);
+  check.check("63. Cut com as calorias ACIMA da manutenção e perda rápida: não propõe «aumentar» baixando calorias — avisa que está do lado errado", rvA.kind === "limite" && !rvA.proposedTargets && /acima da manutenção estimada/.test(rvA.text));
+  var below = stu({weights: wts(70, 0.9, 14, 2), weightCurrent: 76, targets: targetsFor(BM - 300, 150, 75)}, {phase: "bulk", startWeight: 70, targetWeight: 80, nextReviewDate: d(0), reviews: []});
+  var rvB = computePhaseReview(below, today);
+  check.check("64. Bulk com as calorias ABAIXO da manutenção e ganho rápido: não propõe «reduzir» subindo calorias", !rvB || rvB.kind !== "ajuste" || rvB.deltaKcal < 0);
+  // aviso urgente antes da data da revisão
+  var urgentEarly = stu({weights: wts(90, -1.9, 10, 2)}, {nextReviewDate: d(14)});
+  var rvU = computePhaseReview(urgentEarly, today);
+  check.check("65. Perda a mais de 1,5 %/semana avisa logo, sem esperar pela data da revisão (e só esse aviso)", rvU && rvU.kind === "ajuste" && rvU.urgent === true && rvU.deltaKcal > 0);
+  check.check("66. Antes da data, um peso estagnado, o objetivo atingido ou a manutenção não aparecem", computePhaseReview(stu({weights: wts(90, 0, 28)}, {nextReviewDate: d(14)}), today) === null && computePhaseReview(stu({weightCurrent: 82.2, weights: wts(86, -0.9, 28)}, {targetWeight: 82.5, nextReviewDate: d(14)}), today) === null && computePhaseReview(stu({weights: wts(90, 0.9, 28), targets: targetsFor(maint, 160, 75)}, {phase: "manutencao", targetWeight: null, nextReviewDate: d(14)}), today) === null);
+  // pesagem suspeita (8,2 em vez de 82,2)
+  var typo = stu({weightCurrent: 8.2, weights: wts(90, -0.3, 28).concat([{date: today, w: 8.2}])});
+  var rvT = computePhaseReview(typo, today);
+  check.check("67. Uma pesagem mal escrita (8,2 kg) não gera propostas: diz que há uma pesagem suspeita", rvT.kind === "dados" && /Pesagem suspeita/.test(rvT.text) && !rvT.proposedTargets);
+  var stable = stu({weightCurrent: 90, weights: wts(90, 0, 28).map(function(w, i){ return i === 3 ? {date: w.date, w: 9.0} : w; })});
+  check.check("68. Nem uma pesagem isolada absurda no meio do histórico muda a manutenção ou a proposta", (function(){ var r = computePhaseReview(stable, today); return r.kind === "ajuste" && r.maint === computeMaintenanceKcal(stu()); })());
+  // manutenção: piso e passo
+  var smallM = stu({sex: "Feminino", height: 158, weightCurrent: 48, weights: wts(48, 0.6, 28), targets: targetsFor(1250, 100, 40)}, {phase: "manutencao", targetWeight: null});
+  var rvM = computePhaseReview(smallM, today), flM = Math.ceil(kcalFloorFor("Feminino", computeBMR(smallM), computeMaintenanceKcal(smallM)));
+  check.check("69. Na manutenção, retirar 100 kcal nunca passa o piso de segurança (" + (rvM.proposedTargets ? rvM.proposedTargets.kcal : rvM.kind) + " ≥ " + flM + ")", !rvM.proposedTargets || rvM.proposedTargets.kcal >= flM);
+  // objetivo: precisa de 4 pesagens e de partida do lado certo
+  var few = stu({weightCurrent: 82.2, weights: [{date: d(-4), w: 82.4}, {date: d(-2), w: 82.3}, {date: d(0), w: 82.2}]}, {targetWeight: 82.5});
+  check.check("70. «Objetivo atingido» não se decide com 3 pesagens ruidosas", computePhaseReview(few, today).kind !== "objetivo");
+  var wrong = stu({weightCurrent: 82.2, weights: wts(86, -0.9, 28)}, {targetWeight: 82.5, startWeight: 80});
+  check.check("71. Nem com um cut cujo peso de partida já estava abaixo do objetivo (dados antigos)", computePhaseReview(wrong, today).kind !== "objetivo");
+  // cadência
+  check.check("72. O intervalo entre revisões nunca é menor que 3 semanas (1 de adaptação + 14 dias de pesagens)", phaseEveryDays(14) === 21 && phaseEveryDays(21) === 21 && phaseEveryDays(28) === 28 && phaseEveryDays(undefined) === 21 && PHASE_CFG.reviewDays === 21);
+  var sp = stu({weightGoal: 82}); sp.nutritionPhase = null; startPhase(sp, {type: "cut", targetWeight: 82, every: 14, applyStart: false});
+  check.check("73. Definir a fase com 14 dias fica a 21 (a «Próxima revisão» mostrada é verdadeira)", sp.nutritionPhase.reviewEveryDays === 21 && sp.nutritionPhase.nextReviewDate === d(21));
+  // alterações manuais dos alvos
+  var man = stu({weights: wts(90, 0, 28)}); notePhaseManualChange(man, CUT, CUT - 300);
+  check.check("74. Uma alteração manual dos alvos (−300 kcal) recomeça a janela de pesagens e entra nas 400 kcal de 4 semanas", man.nutritionPhase.lastChangeDate === today && man.nutritionPhase.reviews.length === 1 && man.nutritionPhase.reviews[0].kind === "manual" && man.nutritionPhase.reviews[0].deltaKcal === -300 && computePhaseReview(man, today).kind === "dados");
+  var tiny = stu(); notePhaseManualChange(tiny, 2300, 2320);
+  check.check("75. Mexidas pequenas (< 50 kcal) não contam", tiny.nutritionPhase.reviews.length === 0 && tiny.nutritionPhase.lastChangeDate === d(-35));
+  // guardar o peso objetivo com a fase em curso
+  var run = stu({weightGoal: 82, weights: wts(90, 0, 28)}); var before = JSON.stringify(run.nutritionPhase.reviews) + run.targets.kcal + run.nutritionPhase.stage;
+  run.nutritionPhase.stage = 2; run.nutritionPhase.reviews = [{date: d(-10), deltaKcal: -125, kind: "ajuste"}];
+  check.check("76. Guardar o peso objetivo com a fase em curso só muda o objetivo (etapas, histórico e calorias ficam)", keepRunningPhase(run, 80) === true && run.weightGoal === 80 && run.nutritionPhase.targetWeight === 80 && run.nutritionPhase.stage === 2 && run.nutritionPhase.reviews.length === 1 && run.targets.kcal === CUT);
+  check.check("77. Guardar o mesmo objetivo outra vez não faz nada; sem fase, devolve false (o cálculo inicial trata do resto)", keepRunningPhase(run, 80) === true && (function(){ var x = stu({weightGoal: null}); x.nutritionPhase = null; return keepRunningPhase(x, 80) === false; })());
+  // creatina e setPhaseFromGoal
+  var sg = stu({weightGoal: 82, supplements: []}); sg.nutritionPhase = null; setPhaseFromGoal(sg);
+  var sg2 = stu({weightGoal: 82, supplements: ["Creatina"]}); sg2.nutritionPhase = null; setPhaseFromGoal(sg2);
+  check.check("78. Definir a fase pelo peso objetivo também marca o início da creatina nova (e não a de quem já a tomava)", sg.nutritionPhase.creatineStartDate === today && sg.nutritionPhase.creatineOn === true && !sg2.nutritionPhase.creatineStartDate);
+  // objetivo do lado certo
+  var wrongGoal = stu(); var e1 = startPhase(wrongGoal, {type: "cut", targetWeight: 95, applyStart: true}), e2 = startPhase(wrongGoal, {type: "bulk", targetWeight: 70, applyStart: true});
+  check.check("79. Um cut com objetivo acima do peso atual (ou um bulk abaixo) é recusado, sem mexer em nada", !!e1.error && /abaixo do peso atual/.test(e1.error) && !!e2.error && /acima do peso atual/.test(e2.error) && wrongGoal.targets.kcal === CUT);
+  // migração 0029 por correr
+  phaseColumnAvailable = false;
+  var nm = stu({weights: wts(90, 0, 28)}), rvNm = computePhaseReview(nm, today), snap = JSON.stringify(nm.targets);
+  var errs = [applyPhaseReview(nm, rvNm), postponePhaseReview(nm, 7), startPhase(nm, {type: "cut", targetWeight: 82, applyStart: true})];
+  phaseColumnAvailable = true;
+  check.check("80. Sem a migração 0029 nada é aplicado em silêncio: devolve o erro e não mexe nos alvos nem na fase", errs.every(function(r){ return r.error && /0029/.test(r.error); }) && JSON.stringify(nm.targets) === snap && nm.nutritionPhase.stage === 0);
+  // cartão do painel: no máximo 5 linhas
+  var many = []; for (var i = 0; i < 7; i++) many.push(stu({id: "m" + i, name: "Aluno " + i, weights: wts(90, 0, 28)}));
+  var savedS = STUDENTS; STUDENTS = many;
+  var cardHtml = tplPhaseReviews();
+  check.check("81. Com 7 revisões à espera o cartão mostra 5 e «Rever todas (7)»", (cardHtml.match(/data-phase-review="/g) || []).length === 5 && /Rever todas \(7\)/.test(cardHtml) && /\+ 2 alunos à espera/.test(cardHtml));
+  STUDENTS = savedS;
+  check.check("82. O peso de um aluno dos 25–350 kg é a única gama aceite (a verificação está no check-in)", /Confirma o peso: tem de estar entre 25 e 350 kg/.test(require("fs").readFileSync(__dirname + "/../index.html", "utf8")) && /muito diferente do último/.test(require("fs").readFileSync(__dirname + "/../index.html", "utf8")));
+})();
+
 check.summarize();

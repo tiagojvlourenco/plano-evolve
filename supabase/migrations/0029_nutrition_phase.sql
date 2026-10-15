@@ -3,7 +3,7 @@
 --
 -- students.nutrition_phase — estado da fase nutricional do aluno, só o profissional escreve:
 --   {phase: 'cut' | 'bulk' | 'manutencao', startDate, startWeight, targetWeight, deficitPct, stage, stageStartDate,
---    reviewEveryDays, lastReviewDate, nextReviewDate, snoozeUntil, creatineStartDate, creatineConfirmed, reviews: [...]}
+--    reviewEveryDays, lastReviewDate, nextReviewDate, snoozeUntil, creatineStartDate, creatineOn, creatineConfirmed (lista dos motivos confirmados: menor, renal, gravidez), reviews: [...]}
 -- As propostas pendentes NÃO se guardam: calculam-se sempre a partir dos pesos, dos alvos e da fase; só ficam as decisões.
 -- Os alunos não conseguem escrevê-la (o gatilho enforce_student_column_permissions só deixa os campos do diário).
 --

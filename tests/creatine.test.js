@@ -73,7 +73,7 @@ setCreatineEnabled(p, true);
 check.check("32. Incluir outra vez tira-a de blockedFoods sem duplicar", !creatineBlocked(p) && p.blockedFoods.length === 0 && p.planHistory.length === 2 && p.nutritionPhase.creatineOn === true);
 var q = student({age: 15});
 confirmCreatine(q);
-check.check("33. Confirmar com indicação médica liga-a e fica registado", creatineStatus(q).on === true && q.nutritionPhase.creatineConfirmed === true && q.planHistory.length === 1 && /menos de 18 anos/.test(q.planHistory[0].summary));
+check.check("33. Confirmar com indicação médica liga-a e fica registado", creatineStatus(q).on === true && Array.isArray(q.nutritionPhase.creatineConfirmed) && q.nutritionPhase.creatineConfirmed.join() === "menor" && q.planHistory.length === 1 && /menos de 18 anos/.test(q.planHistory[0].summary));
 
 // ---- guardar e ler ----
 var row = studentToRow(Object.assign(student(), {nutritionPhase: {phase: "cut", creatineConfirmed: true}}));
@@ -85,4 +85,25 @@ check.check("36. Sem a migração 0029 a coluna não é enviada (o resto grava-s
 phaseColumnAvailable = true;
 var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0029_nutrition_phase.sql", "utf8");
 check.check("37. A migração 0029 junta nutrition_phase (jsonb) de forma repetível e sem apagar dados", /add column if not exists nutrition_phase jsonb/.test(mig) && /drop constraint if exists/.test(mig) && !/drop table|delete from/i.test(mig));
+
+// ---- revisão adversarial: mais campos, acentos, idade, motivos, duplicados ----
+check.check("38. Gravidez e rins também se detetam nas «Observações» e nas «Lesões ou limitações» da ficha médica", creatineCautions({medicalNotes: "Grávida de 12 semanas"}).length === 1 && creatineCautions({physicalLimitations: "Doença renal crónica"}).length === 1 && creatineStatus(student({medicalNotes: "está a amamentar"})).state === "confirmar");
+check.check("39. Termos compostos e com acentos soltos (NFD) também apanham: hemodiálise, pielonefrite, glomerulonefrite, gestação, puérpera, aleitamento", ["Hemodiálise", "Pielonefrite de repetição", "Glomerulonefrite", "Gestação de risco", "puérpera", "aleitamento materno", "Dialise".normalize("NFD"), "grávida"].every(function(t){ return creatineCautions({medicalConditions: t}).length >= 1; }));
+check.check("40. Sem falsos positivos: gravidade, lactato, lactase, gestão, primeira, circuito", ["gravidade moderada da lesão", "lactato elevado", "intolerância à lactase", "gestão do tempo", "primeira consulta", "treino em circuito"].every(function(t){ return creatineCautions({medicalConditions: t}).length === 0; }));
+check.check("41. A idade vem da data de nascimento (e passa dos 18 sozinha): 17 anos guardados mas nascido há 25 anos = adulto", creatineCautions({age: 17, birthDate: "2001-01-01"}).length === 0 && creatineCautions({age: 30, birthDate: "2015-06-01"}).length === 1 && creatineCautions({age: 16}).length === 1);
+// confirmação ligada ao motivo
+var cm = student({age: 16}); confirmCreatine(cm);
+check.check("42. A confirmação guarda os motivos vistos (menor): se aparece outro (gravidez), volta a pedir", creatineStatus(cm).on === true && (function(){ cm.medicalNotes = "Grávida"; return creatineStatus(cm).state === "confirmar" && creatineCautions(cm).length === 2; })());
+check.check("43. Confirmações antigas (true) continuam a valer", creatineStatus(student({age: 16, nutritionPhase: {creatineConfirmed: true}})).on === true);
+// plano com creatina escrita à mão
+var hand = student(); hand.meals[1].foods.push(food("Creatina monohidratada", "5 g"));
+check.check("44. Se o plano já tem creatina escrita à mão, a linha automática esconde-se (sem duplicar) e o cartão explica", creatineStatus(hand).state === "no-plano" && creatineLineHtml(hand) === "" && /escrita à mão/.test(tplCreatineCard(hand)) && creatineStatus(student({meals: [meal("Pequeno-almoço", "08:00", [food("Creatinina", "1 g")])]})).state === "on");
+// incluir numa ficha por confirmar
+var fl = student({age: 16, blockedFoods: [CREATINE_NAME]});
+setCreatineEnabled(fl, true);
+check.check("45. Desbloquear uma ficha por confirmar não diz «incluída» nem marca o relógio da creatina", creatineStatus(fl).state === "confirmar" && /a aguardar a confirmação/.test(fl.planHistory[0].summary) && fl.planHistory[0].after === "por confirmar" && !(fl.nutritionPhase && fl.nutritionPhase.creatineStartDate));
+check.check("46. A data do relógio da creatina é a local (a mesma da revisão de peso)", (function(){ var x = student(); setCreatineEnabled(x, false); return x.nutritionPhase.creatineStartDate === localTodayISO(); })());
+check.check("47. Sem a migração 0029 a confirmação não finge que gravou", (function(){ phaseColumnAvailable = false; var x = student({age: 16}); var r = confirmCreatine(x); phaseColumnAvailable = true; return !!r.error && /0029/.test(r.error) && creatineStatus(x).state === "confirmar"; })());
+check.check("48. O cartão só diz que a revisão ignora o período da creatina quando há data de início", !/ignora esse período/.test(tplCreatineCard(student())) && /ignora esse período/.test(tplCreatineCard(student({nutritionPhase: {creatineStartDate: localTodayISO()}}))));
+
 check.summarize();

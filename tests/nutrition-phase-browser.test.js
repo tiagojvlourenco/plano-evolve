@@ -59,10 +59,14 @@ function fixtureRow(id, name, o){
   var a = await pg.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "a1"; })[0]; });
   check.check("3. Um toque no OK baixa as calorias do aluno um passo pequeno (100–200 kcal)", a.targets.kcal < kcal0 && kcal0 - a.targets.kcal >= 100 && kcal0 - a.targets.kcal <= 200 && a.targets.protein === 160 && a.targets.fat === 75);
   check.check("4. …reajusta as quantidades das refeições (grava a coluna meals)", JSON.stringify(a.meals) !== beforeMeals);
-  check.check("5. …avança a fase (etapa 1, próxima revisão daí a 14 dias) e regista no histórico do plano", a.nutrition_phase.stage === 1 && a.nutrition_phase.nextReviewDate === d(14) && a.nutrition_phase.lastChangeDate === today && a.plan_history.some(function(e){ return e.type === "fase_revisao"; }));
+  var wr = await pg.evaluate(function(){ return window.__fake.writes.filter(function(w){ return w.table === "students" && w.op === "update" && w.id === "a1"; }); });
+  var forbidden = ["checkins", "weights", "weight_current", "photos", "notes", "name", "meal_daily_state", "workout_logs"];
+  check.check("4b. O OK só envia as colunas que mudaram (targets, meals, plan_history, nutrition_phase…): nunca os check-ins, pesos ou fotos que outro dispositivo pode ter acabado de gravar", wr.length >= 1 && wr.every(function(w){ return !w.cols.some(function(c){ return forbidden.indexOf(c) >= 0; }); }) && wr.some(function(w){ return w.cols.indexOf("targets") >= 0; }));
+  check.check("5. …avança a fase (etapa 1, próxima revisão daí a 21 dias) e regista no histórico do plano", a.nutrition_phase.stage === 1 && a.nutrition_phase.nextReviewDate === d(21) && a.nutrition_phase.lastChangeDate === today && a.plan_history.some(function(e){ return e.type === "fase_revisao"; }));
   // o segundo da fila abre sozinho
   await pg.waitForSelector("#prOk");
   check.check("6. A seguir abre a revisão do 2.º aluno (2 de 2)", /2 de 2/.test(await pg.locator(".modal-sheet").innerText()));
+  await pg.waitForTimeout(700);   // a janela nova não aceita toques nos primeiros 600 ms (duplo toque)
   await pg.click("#prLater");
   await pg.waitForFunction(function(){ var r = window.__fake.rows.filter(function(x){ return x.id === "b1"; })[0]; return r.nutrition_phase && r.nutrition_phase.snoozeUntil; });
   var b = await pg.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "b1"; })[0]; });
@@ -80,7 +84,8 @@ function fixtureRow(id, name, o){
   var panel = await pg.locator("#phaseCard").innerText();
   check.check("10. A ficha de Nutrição mostra a fase Cut, o objetivo (82 kg), as calorias face à manutenção e a próxima revisão", /cut/i.test(panel) && /82 kg/.test(panel) && /da manutenção de/.test(panel) && /Próxima revisão/.test(panel));
   await pg.click("#phaseReviewNow");
-  check.check("11. «Rever agora» mostra o que a revisão diz (agora, logo depois de uma alteração, nada a propor)", (await pg.locator("#prOk").count()) === 0 && (await pg.locator("#toast, .toast").count()) >= 0);
+  var toastOk = await pg.locator(".toast", {hasText: /pesagens|Nada a rever|margem|previsto/}).first().waitFor({timeout: 4000}).then(function(){ return true; }, function(){ return false; });
+  check.check("11. «Rever agora» logo depois de uma alteração não abre janela: mostra um aviso de que não há nada a rever", (await pg.locator("#prOk").count()) === 0 && toastOk);
 
   // aluno sem fase: definir
   await pg.click("#proBack");
@@ -100,6 +105,47 @@ function fixtureRow(id, name, o){
   check.check("15. OK define a fase: cut, objetivo 80 kg, revisão de 21 em 21 dias, calorias de partida (−10 %) e o plano reajustado", c.nutrition_phase.phase === "cut" && c.nutrition_phase.targetWeight === 80 && c.weight_goal === 80 && c.nutrition_phase.reviewEveryDays === 21 && Math.abs(c.nutrition_phase.deficitPct + 10) < 2 && c.plan_history.some(function(e){ return e.type === "fase_inicio"; }));
   check.check("16. A fase nova aparece logo no cartão", /cut/i.test(await pg.locator("#phaseCard").innerText()) && /alterar fase/i.test(await pg.locator("#phaseCard").innerText()));
   await st.ctx.close();
+
+  // ---------- duplo toque no OK e fila fechada a meio ----------
+  var rowsQ = [fixtureRow("q1", "Ana Fila"), fixtureRow("q2", "Bruno Fila"), fixtureRow("q3", "Carla Fila")];
+  var kQ = rowsQ[0].targets.kcal;
+  var sq = await session(rowsQ), pq = sq.page;
+  await pq.goto(srv.url);
+  await pq.waitForSelector("#prOk");
+  await pq.dblclick("#prOk");   // dois toques seguidos: só o 1.º aluno pode ser aprovado
+  await pq.waitForFunction(function(k){ return window.__fake.rows.filter(function(r){ return r.id === "q1"; })[0].targets.kcal !== k; }, kQ);
+  await pq.waitForTimeout(400);
+  var q2 = await pq.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "q2"; })[0]; });
+  check.check("19. Um duplo toque no OK aprova só o 1.º aluno: o 2.º abre sem ser aprovado às cegas (2 de 3)", q2.targets.kcal === kQ && !(q2.nutrition_phase && q2.nutrition_phase.stage > 0) && /2 de 3/.test(await pq.locator(".modal-sheet").innerText()));
+  await pq.waitForTimeout(700);
+  await pq.click(".modal-sheet .mclose button");   // fecha a fila a meio
+  await pq.waitForFunction(function(){ var c = document.getElementById("phaseReviewsCard"); return c && /Revisões de plano · 2/i.test(c.innerText); }, null, {timeout: 4000}).catch(function(){});
+  check.check("20. Fechar a fila a meio deixa o cartão do painel certo (2 à espera, sem o aluno já tratado) e o «Rever» funciona", /Revisões de plano · 2/i.test(await pq.locator("#phaseReviewsCard").innerText()) && (await pq.locator('[data-phase-review="q1"]').count()) === 0);
+  await pq.locator('[data-phase-review="q2"]').click();
+  await pq.waitForSelector("#prOk");
+  check.check("21. «Rever» abre a revisão desse aluno", /Revisão do plano de Bruno Fila/.test(await pq.locator(".modal-sheet").innerText()));
+  await sq.ctx.close();
+
+  // ---------- migração 0029 por correr: grava-se o resto, avisa, e não finge que guardou a fase ----------
+  var ctxM = await browser.newContext({viewport: {width: 390, height: 844}});
+  await ctxM.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("m1", "Ana Sem Coluna"), fixtureRow("m2", "Rui Sem Coluna")], missingCols: {students: ["nutrition_phase"]}}));
+  var pm = await ctxM.newPage(); pm.setDefaultTimeout(6000); pm.on("pageerror", function(e){ errors.push(e.message); });
+  var kM = null;
+  await pm.goto(srv.url);
+  await pm.waitForSelector("#prOk");
+  kM = await pm.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "m1"; })[0].targets.kcal; });
+  await pm.click("#prOk");
+  await pm.waitForFunction(function(k){ return window.__fake.rows.filter(function(r){ return r.id === "m1"; })[0].targets.kcal !== k; }, kM, {timeout: 6000});
+  var wm = await pm.evaluate(function(){ return {writes: window.__fake.writes.filter(function(w){ return w.table === "students"; }), row: window.__fake.rows.filter(function(r){ return r.id === "m1"; })[0]}; });
+  check.check("22. Sem a coluna nutrition_phase (0029 por correr) o servidor recusa essa gravação mas as calorias e o plano guardam-se na mesma", wm.writes.some(function(w){ return w.op === "update-REJECTED" && w.cols.indexOf("nutrition_phase") >= 0; }) && wm.row.targets.kcal < kM && wm.row.nutrition_phase.stage === 0 && wm.writes.some(function(w){ return w.op === "update" && w.cols.indexOf("targets") >= 0 && w.cols.indexOf("nutrition_phase") < 0; }));
+  await pm.waitForSelector("#prOk");
+  await pm.waitForTimeout(700);
+  await pm.click("#prOk");
+  await pm.waitForSelector(".toast", {timeout: 4000});
+  var blockedToast = await pm.locator(".toast", {hasText: /0029/}).first().waitFor({timeout: 4000}).then(function(){ return true; }, function(){ return false; });
+  var rM2 = await pm.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "m2"; })[0].targets.kcal; });
+  check.check("23. Depois de saber que falta a migração, o OK seguinte não finge que guardou: avisa da 0029 e não mexe no plano do aluno", blockedToast && rM2 === kM);
+  await ctxM.close();
 
   // ---------- o aluno nunca escreve a fase ----------
   var ctx2 = await browser.newContext({viewport: {width: 390, height: 844}});
