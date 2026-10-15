@@ -14280,12 +14280,18 @@ function studioSummaryRows(today){
   visibleStudentsForDashboard().filter(isStudentActive).forEach(function(st){
     var pk = currentPackOf(st.id, today);
     if (!pk) return;
+    // acabou o pacote dela e está a gastar o do parceiro: a linha mostra o pacote dela (valor e aulas) e, à parte, o que está a gastar
+    var spendFrom = null;
+    if (pk.student_id !== st.id){
+      var ownLatest = packsOf(st.id).slice().sort(function(a, b){ return a.starts_on < b.starts_on ? 1 : a.starts_on > b.starts_on ? -1 : 0; })[0];
+      if (ownLatest){ spendFrom = {pack: pk, u: packUsage(pk, today), ownerName: findStudent(pk.student_id) ? nameOf(pk.student_id) : "—"}; pk = ownLatest; }
+    }
     var u = packUsage(pk, today), ex = extrasOf(st.id, today);
     var hasActive = activePacksOf(st.id, today).length > 0;
     var renew = !hasActive && (u.exhausted || u.expired);
     var pending = pk.starts_on > today;
     var actives = activePacksOf(st.id, today);
-    rows.push({student: st, pack: pk, u: u, extras: ex, weekly: weeklySlotsOf(st.id), pool: poolOf(st.id, today), others: packOtherNames(pk, st.id),
+    rows.push({student: st, pack: pk, spendFrom: spendFrom, u: u, extras: ex, weekly: weeklySlotsOf(st.id), pool: poolOf(st.id, today), others: packOtherNames(pk, st.id),
       activeN: actives.length, activeRemaining: actives.reduce(function(a, p){ return a + packUsage(p, today).remaining; }, 0),
       state: renew ? "renovar" : (!pending && packEndingInPool(pk, today) ? "acabar" : (pending ? "pendente" : "normal"))});
   });
@@ -15437,6 +15443,7 @@ function renderProStudioMain(){
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
       "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
+      (r.spendFrom ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">Pacote dela esgotado · a gastar o pacote de <strong>" + escapeHtml(r.spendFrom.ownerName) + "</strong> (" + (r.spendFrom.pack.price != null ? escapeHtml(eurShort(r.spendFrom.pack.price)) + " · " : "") + r.spendFrom.u.total + " aulas): restam <strong>" + r.spendFrom.u.remaining + "</strong></div>" : "") +
       (r.activeN > 1 ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + r.activeN + " pacotes ativos · no total <strong>restam " + r.activeRemaining + "</strong> (gastam-se primeiro as do pacote mais antigo)</div>" : "") +
       (r.pool.shared && r.others.length ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">👥 Partilha com " + escapeHtml(r.others.join(", ")) + " · " + (r.pool.remaining === 1 ? "no conjunto resta <strong>1</strong>" : "no conjunto restam <strong>" + r.pool.remaining + "</strong>") + " de " + r.pool.total + "</div>" : "") +
       (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";

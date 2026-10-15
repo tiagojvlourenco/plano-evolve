@@ -25,6 +25,9 @@ var check = require("./check")();
     check.check("2o. O pacote da Dora fica só com as aulas dela (26 de 26) e o do Gil com as dele (11 de 13 + a de hoje da Dora = 12)", usedD === 26 && usedG === 12);
     var todayS = studio.sessions.filter(function(x){ return x.student_id === "cd" && x.date === today; })[0];
     check.check("2p. Sem pacote novo, a aula de hoje da Dora gasta o pacote do Gil (restam 1)", todayS.pack_id === "pG");
+    var rows0 = studioSummaryRows(today), rowD = rows0.filter(function(r){ return r.student.id === "cd"; })[0], rowG = rows0.filter(function(r){ return r.student.id === "cg"; })[0];
+    packD.price = 902.5; packG.price = 451.25;
+    check.check("2p2. No resumo, a linha da Dora mostra o pacote dela (26 aulas) e à parte o do Gil que está a gastar; a do Gil mostra o dele", rowD.pack.id === "pD" && rowD.u.total === 26 && rowD.spendFrom && rowD.spendFrom.pack.id === "pG" && rowD.spendFrom.u.remaining === 1 && rowG.pack.id === "pG" && !rowG.spendFrom);
     // a Dora renova: o pacote antigo do Gil (2 por dar) gasta-se primeiro, depois o pacote novo dela
     studio.packs.push({id: "pD2", student_id: "cd", name: "22", total: 22, starts_on: today, expires_on: null, used_before: 0, shared_with: ["cg"], missed_consumes: true, late_cancel_consumes: true});
     studio.sessions.push({id: "q98", student_id: "cd", pack_id: null, date: today, time: null, status: "feita", source: "manual"}, {id: "q99", student_id: "cd", pack_id: null, date: today, time: null, status: "feita", source: "manual"});
