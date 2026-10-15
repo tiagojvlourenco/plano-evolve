@@ -171,3 +171,7 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 ## 8j. Horas mensais por aluno (sem migração nova)
 
 As «Horas mensais» da folha «Dados» de cada cliente guardam-se em `studio_settings` (chave `monthly_hours`, `{idDoAluno: horas}`), tabela criada na migração 0025. Importam-se em Estúdio → «Importar as horas mensais» (`Nome; horas`, aceita «PT 60 - Nome» e duos «A + B», cujas horas se dividem pelos dois) ou editam-se na ficha (separador Pacotes). A soma dos alunos ativos aparece no cabeçalho do Estúdio («Horas mensais ativas»).
+
+## 8k. Pacote caducado com aulas dadas depois (o aluno parou e voltou)
+
+Na ficha do aluno (Pacotes): «Editar» muda aulas, aulas já dadas antes da app, início e validade do pacote, e as aulas extra passam para ele. Se o aluno aguarda renovação com aulas extra mas o pacote caducado ainda tem aulas, aparece «Contar estas aulas no pacote caducado (sem validade)». A janela do Google Agenda chega agora às aulas previstas (folha) já passadas e aos pacotes caducados que ainda têm aulas: sincronizar volta a confirmar essas aulas.
