@@ -205,14 +205,21 @@ Novo menu «Contratos» (e «Eu»): sem migração nova. Os dados dos contratos 
 - **Eu:** abre a ficha escolhida (alimentação e treino). Para teres ficha, convida-te como aluno.
 - Não inclui a atribuição de sessões a outro PT nem a coluna lateral do backoffice.
 
-## 8m. Duas áreas no menu do profissional
+## 8m. Duas apps: EVOLVE (Acompanhamento) e EVOLVE Gestão
 
-O menu tem um seletor **Acompanhamento | Gestão**: Acompanhamento mostra Alunos, Catálogo e Eu (nutrição, treino, check-ins); Gestão mostra Estúdio e Contratos (packs, aulas, recebimentos, horas). Mudar de área volta ao último ecrã dessa área; o número de avisos do estúdio aparece em «Gestão · N». É uma separação da interface na mesma app (a base de dados e a lista de alunos são uma só). Separar em duas apps fica para depois, se continuar a fazer falta.
+O mesmo site tem **duas apps instaláveis**, para não misturar o acompanhamento dos alunos com a gestão do estúdio:
+
+- **`index.html` — EVOLVE** (ícone preto e branco): os alunos usam-na; o profissional vê aqui **Alunos, Catálogo e Eu** (nutrição, treino, check-ins, a minha ficha). Tem a ligação «Gestão ↗».
+- **`gestao.html` — EVOLVE Gestão** (ícone laranja): só para o profissional. Abre no **Estúdio** e tem **Contratos**; abrir um aluno mostra só os **Pacotes** dele (aulas, recebimentos). Tem a ligação «Acompanhamento ↗». Uma conta de aluno que a abra vê «Só para o profissional» e uma ligação para a app dela.
+
+Para instalar a Gestão no iPhone: abrir `…/gestao.html` no Safari → Partilhar → «Adicionar ao ecrã principal». No iPhone cada ícone guarda a sua própria sessão: é preciso iniciar sessão uma vez em cada app.
+
+Código partilhado: `app.js` (núcleo) e `app.css`; as duas páginas só têm o esqueleto (`<html data-app="gestao">` na Gestão). `gestao.js` é o código do Estúdio/Contratos e só a app de Gestão o carrega.
 
 ## 8n. A Gestão vive noutro ficheiro (`gestao.js`)
 
-O código da Gestão (Estúdio, packs, aulas, Google Agenda, Contratos, Financeiro e a ficha «Eu») está em **`gestao.js`**, fora de `index.html`. Só o profissional o descarrega: `loadGestao()` (em `index.html`) pede-o depois de iniciar sessão e avalia-o dentro da app; os alunos nunca o pedem. O que o núcleo precisa de chamar fica no objeto `G` (`G.enter`, `G.renderProStudioMain`, `G.tplProSessoes`, `G.studioRefresh`…), definido no fim de `gestao.js`.
+O código da Gestão (Estúdio, packs, aulas, Google Agenda, Contratos, Financeiro) está em **`gestao.js`**, fora do núcleo (`app.js`). Só a app de Gestão o descarrega: `loadGestao()` pede-o depois de iniciar sessão e avalia-o dentro da app; os alunos e a app de Acompanhamento nunca o pedem. («Eu» é do Acompanhamento e vive no núcleo.) O que o núcleo precisa de chamar fica no objeto `G` (`G.enter`, `G.renderProStudioMain`, `G.tplProSessoes`, `G.studioRefresh`…), definido no fim de `gestao.js`.
 
-- **Publicar:** `index.html`, `gestao.js` e `sw.js` têm de ir juntos para o mesmo sítio (um commit só trata disto). O ficheiro `gestao.js` **não** está na lista de pré-cache do service worker: quando há rede vem sempre a versão atual (rede primeiro), e sem rede usa a última que o profissional já viu — por isso, com a app já aberta, a Gestão continua a abrir se a rede cair (ficheiro guardado depois da primeira vez; com rede lenta usa a cópia ao fim de 4 s).
+- **Publicar:** `index.html`, `gestao.html`, `app.js`, `app.css`, `gestao.js`, `sw.js`, os manifestos e os ícones têm de ir juntos para o mesmo sítio (um commit só trata disto). O ficheiro `gestao.js` **não** está na lista de pré-cache do service worker: quando há rede vem sempre a versão atual (rede primeiro), e sem rede usa a última que o profissional já viu — por isso, com a app já aberta, a Gestão continua a abrir se a rede cair (ficheiro guardado depois da primeira vez; com rede lenta usa a cópia ao fim de 4 s).
 - **Sem rede na primeira vez:** a Gestão mostra um aviso («Não foi possível abrir a Gestão») e o resto da app (alunos, planos, treinos) funciona; ao voltar a ter rede, abrir a Gestão tenta de novo sozinho.
-- **Regra para quem mexe no código:** tudo o que for só do estúdio/contratos escreve-se em `gestao.js`. Se o núcleo (`index.html`) precisar de algo de lá, exporta-se em `G` e chama-se como `G.nome` (e nunca pelo nome solto: o teste `tests/gestao-split.test.js` falha se o núcleo usar um nome do módulo sem `G`). Os testes juntam `gestao.js` ao script da app (`tests/extract-app.js`).
+- **Regra para quem mexe no código:** tudo o que for só do estúdio/contratos escreve-se em `gestao.js`. Se o núcleo (`index.html`) precisar de algo de lá, exporta-se em `G` e chama-se como `G.nome` (e nunca pelo nome solto: o teste `tests/gestao-split.test.js` falha se o núcleo usar um nome do módulo sem `G`). Os testes juntam `gestao.js` ao `app.js` (`tests/extract-app.js`); `gestao.html` e `index.html` têm de ter o mesmo corpo (o mesmo teste verifica).

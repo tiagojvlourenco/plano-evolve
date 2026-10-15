@@ -37,10 +37,16 @@ var leaks = modOnly.filter(function(n){
   return coreText.split("\n").some(function(line){ return re.test(line.replace(/\/\/.*$/, "").replace(/"(?:[^"\\]|\\.)*"/g, '""')); });
 });
 check.check("2. O núcleo não usa nenhum nome do módulo sem passar por G (" + (leaks.slice(0, 5).join(", ") || "nenhum") + ")", leaks.length === 0);
-check.check("3. O módulo exporta o que o núcleo chama e marca-se como carregado", ["G.enter", "G.goToMe", "G.gestaoAreaLabel", "G.studio", "G.renderProStudioMain", "G.renderProContractsMain", "G.tplProSessoes", "G.wireProSessoes", "G.studentStudioSummary", "G.studioRefresh", "G.studioAutoSessions", "G.studioAfterAutoSessions", "G.loaded = true"].every(function(s){ return gestao.indexOf(s) >= 0; }));
-check.check("4. index.html não carrega gestao.js como script nem o service worker o pré-guarda; o núcleo carrega-o com loadGestao()", !/<script[^>]*gestao\.js/.test(html) && !/SHELL = \[[^\]]*gestao/.test(sw) && /function loadGestao\(/.test(html));
-check.check("5. O service worker serve gestao.js com rede primeiro (nunca uma cópia antiga com rede) e cache como reserva", /networkFirstFile/.test(sw) && /gestao\\\.js/.test(sw) && /no-cache/.test(sw.slice(sw.indexOf("function networkFirstFile"))));
-check.check("6. O ficheiro dos alunos (index.html) ficou sem a Gestão: menos de 1,03 MB, e a Gestão (gestao.js) tem mais de 150 KB", Buffer.byteLength(html) < 1030000 && Buffer.byteLength(gestao) > 150000);
+check.check("3. O módulo exporta o que o núcleo chama e marca-se como carregado", ["G.enter", "G.studioNavLabel", "G.studio", "G.renderProStudioMain", "G.renderProContractsMain", "G.tplProSessoes", "G.wireProSessoes", "G.studentStudioSummary", "G.studioRefresh", "G.studioAutoSessions", "G.studioAfterAutoSessions", "G.loaded = true"].every(function(s){ return gestao.indexOf(s) >= 0; }));
+var pageA = fs.readFileSync(path.join(root, "index.html"), "utf8"), pageG = fs.readFileSync(path.join(root, "gestao.html"), "utf8");
+check.check("4. Nenhuma das duas páginas carrega gestao.js como script nem o service worker o pré-guarda; o núcleo carrega-o com loadGestao()", !/<script[^>]*gestao\.js/.test(pageA + pageG) && !/SHELL = \[[^\]]*"gestao\.js"/.test(sw) && /function loadGestao\(/.test(html));
+check.check("5. O service worker serve app.js, app.css e gestao.js com rede primeiro (nunca uma cópia antiga com rede) e cache como reserva", /networkFirstFile/.test(sw) && /\(gestao\|app\)\\\.\(js\|css\)/.test(sw) && /no-cache/.test(sw.slice(sw.indexOf("function networkFirstFile"))));
+check.check("6. O núcleo (app.js) ficou sem a Gestão: menos de 1 MB, e a Gestão (gestao.js) tem mais de 150 KB", Buffer.byteLength(html) < 1000000 && Buffer.byteLength(gestao) > 150000);
+// as duas páginas têm o mesmo corpo (ecrãs de entrada, modais...) e só diferem no cabeçalho (nome, manifesto, ícone) e em data-app
+var bodyOf = function(t){ return t.slice(t.indexOf("<body>")); };
+check.check("7. gestao.html e index.html têm o mesmo corpo; a Gestão tem data-app, manifesto e ícone próprios", bodyOf(pageA) === bodyOf(pageG) && /<html[^>]*data-app="gestao"/.test(pageG) && !/data-app/.test(pageA) && /manifest-gestao\.json/.test(pageG) && /icon-gestao-180\.png/.test(pageG) && /manifest\.json/.test(pageA));
+var mA = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8")), mG = JSON.parse(fs.readFileSync(path.join(root, "manifest-gestao.json"), "utf8"));
+check.check("8. O manifesto da Gestão é de outra app (nome, início em gestao.html, id e ícones próprios) no mesmo âmbito", mG.start_url === "./gestao.html" && mG.id !== mA.id && mG.short_name !== mA.short_name && mG.scope === mA.scope && mG.icons.every(function(i){ return /icon-gestao-/.test(i.src) && fs.existsSync(path.join(root, i.src)); }));
 
 if (!pw || !chromiumPath){ console.log("(ignorado: Playwright/Chromium não disponíveis aqui)"); check.check("browser indisponível — teste ignorado", true); check.summarize(); return; }
 
@@ -60,92 +66,91 @@ function fixtureRow(id, name){
     pg.on("dialog", function(d){ d.accept(); });
     pg.on("request", function(r){ if (/gestao\.js/.test(r.url())) log.push(r.url()); });
   }
+  async function open(role, rows, page, opts){
+    var ctx = await browser.newContext(Object.assign({viewport: {width: 390, height: 844}}, opts || {}));
+    await ctx.addInitScript(fakeSource({role: role, userId: role === "professional" ? "pro-1" : "user-1", rows: rows}));
+    var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
+    var log = []; watch(pg, log);
+    await pg.goto(srv.url + (page || ""));
+    return {ctx: ctx, pg: pg, log: log};
+  }
+  var PRO_ROWS = [fixtureRow("a", "Ana Silva"), fixtureRow("b", "Bruno Costa")];
 
-  // 7. aluno: nunca pede gestao.js
-  var ctxS = await browser.newContext({viewport: {width: 390, height: 844}});
-  await ctxS.addInitScript(fakeSource({role: "student", userId: "user-1", rows: [fixtureRow("stu1", "Ana Teste")]}));
-  var pgS = await ctxS.newPage(); pgS.setDefaultTimeout(6000);
-  var reqS = []; watch(pgS, reqS);
-  await pgS.goto(srv.url);
-  await pgS.waitForSelector(".check-circle[data-circle]");
-  await pgS.waitForTimeout(600);
-  check.check("7. O aluno não descarrega gestao.js", reqS.length === 0);
-  await ctxS.close();
+  // 9. aluno: nunca pede gestao.js
+  var S = await open("student", [fixtureRow("stu1", "Ana Teste")]);
+  await S.pg.waitForSelector(".check-circle[data-circle]");
+  await S.pg.waitForTimeout(600);
+  check.check("9. O aluno não descarrega gestao.js", S.log.length === 0);
+  await S.ctx.close();
 
-  // 8. profissional: pede uma vez (logo a seguir ao arranque) e a Gestão abre
-  var ctxP = await browser.newContext({viewport: {width: 390, height: 844}});
-  await ctxP.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("a", "Ana Silva"), fixtureRow("b", "Bruno Costa")]}));
-  var pgP = await ctxP.newPage(); pgP.setDefaultTimeout(6000);
-  var reqP = []; watch(pgP, reqP);
-  await pgP.goto(srv.url);
-  await pgP.waitForSelector(".student-row");
-  await pgP.waitForTimeout(500);
-  await pgP.click("#areaGestao");
-  await pgP.click("#navContracts");
-  await pgP.waitForSelector("#contractTotals");
-  await pgP.click("#navStudio");
-  await pgP.waitForSelector("#gcalCard");
-  await pgP.click("#areaAcomp");
-  await pgP.waitForSelector(".student-row");
-  await pgP.click("#areaGestao");
-  await pgP.waitForTimeout(300);
-  check.check("8. O profissional descarrega gestao.js uma só vez e abre Estúdio e Contratos", reqP.length === 1);
-  await ctxP.close();
+  // 10. a app de Acompanhamento do profissional: sem Gestão dentro (sem área, sem pedido do ficheiro, sem separador Pacotes), com ligação à outra app
+  var A = await open("professional", PRO_ROWS);
+  await A.pg.waitForSelector(".student-row");
+  await A.pg.waitForTimeout(500);
+  var sideA = await A.pg.locator(".pro-sidebar").innerText();
+  check.check("10. No Acompanhamento: Alunos, Catálogo e Eu, mais a ligação «Gestão» para gestao.html; sem seletor de áreas, Estúdio nem Contratos; sem pedir gestao.js",
+    /Alunos/i.test(sideA) && /Cat[aá]logo/i.test(sideA) && /\bEu\b/i.test(sideA) && (await A.pg.locator("#goGestao").getAttribute("href")) === "gestao.html" &&
+    (await A.pg.locator("#areaGestao, #areaAcomp, #navStudio, #navContracts").count()) === 0 && A.log.length === 0);
+  await A.pg.locator('[data-open="a"]').first().click();
+  await A.pg.waitForSelector("#proBack");
+  check.check("11. A ficha do aluno no Acompanhamento não tem o separador Pacotes", (await A.pg.locator('[data-sub="sessoes"]').count()) === 0 && !/Pacotes/.test(await A.pg.locator(".pro-subtabs").innerText()));
+  await A.pg.click("#proBack"); await A.pg.waitForSelector(".student-row");
+  await A.pg.click("#navMe"); await A.pg.waitForSelector("[data-me]");
+  check.check("12. «Eu» continua no Acompanhamento (escolher a minha ficha)", (await A.pg.locator("[data-me]").count()) === 2);
+  await A.ctx.close();
 
-  // 9. falha ao carregar: o resto da app funciona, aparece um aviso e dá para tentar de novo
-  var ctxF = await browser.newContext({viewport: {width: 390, height: 844}, serviceWorkers: "block"}); // sem o service worker, o route() apanha o pedido
-  await ctxF.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("a", "Ana Silva"), fixtureRow("b", "Bruno Costa")]}));
+  // 13. a app de Gestão: abre no Estúdio, descarrega gestao.js uma vez, sem lista de alunos nem menu de acompanhamento
+  var G2 = await open("professional", PRO_ROWS, "gestao.html");
+  await G2.pg.waitForSelector("#gcalCard");
+  var sideG = await G2.pg.locator(".pro-sidebar").innerText();
+  check.check("13. Na Gestão: abre no Estúdio, menu Estúdio e Contratos com a ligação «Acompanhamento» para index.html; sem Alunos/Catálogo/Eu nem interruptor Aluno/Profissional; gestao.js pedido uma vez",
+    /Est[uú]dio/i.test(sideG) && /Contratos/i.test(sideG) && (await G2.pg.locator("#goAcomp").getAttribute("href")) === "index.html" &&
+    (await G2.pg.locator("#navDashboard, #navCatalog, #navMe, .student-row").count()) === 0 && !(await G2.pg.locator("#modeSwitch").isVisible()) && G2.log.length === 1);
+  await G2.pg.click("#navContracts"); await G2.pg.waitForSelector("#contractTotals");
+  await G2.pg.click("#navStudio"); await G2.pg.waitForSelector("#gcalCard");
+  check.check("14. Na Gestão dá para ir de Estúdio a Contratos e voltar", (await G2.pg.locator("#gcalCard").count()) === 1);
+  await G2.ctx.close();
+
+  // 15. uma conta de aluno na app de Gestão não entra: mostra aviso e ligação para a app dele
+  var GS = await open("student", [fixtureRow("stu1", "Ana Teste")], "gestao.html");
+  await GS.pg.waitForSelector("#noStudentScreen:not(.hidden)");
+  var msg = await GS.pg.locator("#noStudentScreen").innerText();
+  check.check("15. Um aluno em gestao.html vê «Só para o profissional», com ligação para a app EVOLVE, e não descarrega gestao.js", /Só para o profissional/i.test(msg) && (await GS.pg.locator('#noStudentScreen a[href="index.html"]').count()) === 1 && GS.log.length === 0);
+  await GS.ctx.close();
+
+  // 16. falha ao carregar gestao.js: aviso e «Tentar outra vez»; quando a ligação volta, abre
   var failing = true;
+  var ctxF = await browser.newContext({viewport: {width: 390, height: 844}, serviceWorkers: "block"}); // sem o service worker, o route() apanha o pedido
+  await ctxF.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: PRO_ROWS}));
   await ctxF.route(/gestao\.js/, function(route){ if (failing) route.fulfill({status: 503, body: "no"}); else route.continue(); });
   var pgF = await ctxF.newPage(); pgF.setDefaultTimeout(6000);
   var reqF = []; watch(pgF, reqF);
-  await pgF.goto(srv.url);
-  await pgF.waitForSelector(".student-row");
-  await pgF.waitForTimeout(400);
-  check.check("9. Sem gestao.js a lista de alunos funciona na mesma", (await pgF.locator(".student-row").count()) === 2);
-  await pgF.click("#areaGestao");
-  await pgF.waitForSelector(".toast");
-  check.check("10. Ao abrir a Gestão sem o ficheiro, aparece um aviso e a app não muda de ecrã", /Não foi possível abrir a Gestão/.test(await pgF.locator(".toast").first().innerText()) && (await pgF.locator(".student-row").count()) === 2);
-  // a ficha do aluno: o separador Pacotes avisa em vez de ficar em branco
-  await pgF.locator('[data-open="a"]').first().click();
-  await pgF.click('[data-sub="sessoes"]');
-  await pgF.waitForFunction(function(){ return /Não foi possível abrir os pacotes/.test(document.getElementById("proMain").innerText); });
-  check.check("11. O separador Pacotes da ficha avisa que não carregou (em vez de ficar em branco)", /Não foi possível abrir os pacotes/.test(await pgF.locator("#proMain").innerText()));
+  await pgF.goto(srv.url + "gestao.html");
+  await pgF.waitForSelector("#gestaoRetry");
+  check.check("16. Sem gestao.js a app de Gestão avisa «Não foi possível abrir a Gestão» e oferece «Tentar outra vez»", /Não foi possível abrir a Gestão/.test(await pgF.locator("#proMain").innerText()));
   failing = false;
-  // carregou tarde: o separador Pacotes lê também os dados (não pode mostrar «sem pacotes» quando o aluno tem um)
-  await pgF.evaluate(function(){ var d = new Date(); d.setDate(d.getDate() - 10); var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-    window.__fake.tables.session_packs.push({id: "pkx", student_id: "a", name: "Pack Tardio", total: 10, price: 400, starts_on: iso, expires_on: null, used_before: 0}); });
-  await pgF.click('[data-sub="sessoes"]');
-  await pgF.waitForFunction(function(){ return /Pack Tardio/.test(document.getElementById("proMain").innerText); });
-  check.check("11b. Se a Gestão só carregou depois do arranque, o separador Pacotes mostra os pacotes do aluno", !/Ainda sem pacotes/.test(await pgF.locator("#proMain").innerText()));
-  // voltar à lista e tentar outra vez: já carrega
-  await pgF.click("#proBack");
-  await pgF.waitForSelector(".student-row");
-  await pgF.click("#areaGestao");
-  await pgF.click("#navContracts");
-  await pgF.waitForSelector("#contractTotals");
-  check.check("12. Quando a ligação volta, abrir a Gestão carrega o ficheiro e funciona (tenta de novo)", reqF.length >= 2 && (await pgF.locator("#contractTotals").count()) === 1);
+  await pgF.click("#gestaoRetry");
+  await pgF.waitForSelector("#gcalCard");
+  check.check("17. Quando a ligação volta, «Tentar outra vez» carrega o ficheiro e mostra o Estúdio", reqF.length >= 2);
   await ctxF.close();
 
-  // 13-14. service worker: com o ficheiro já visto, sem rede ainda o serve (cópia guardada); com rede vem sempre o atual
-  var ctxW = await browser.newContext({viewport: {width: 390, height: 844}});
-  await ctxW.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("a", "Ana Silva")]}));
-  var pgW = await ctxW.newPage(); pgW.setDefaultTimeout(8000);
-  watch(pgW, []);
-  await pgW.goto(srv.url);
-  await pgW.waitForSelector(".student-row");
-  await pgW.waitForFunction(function(){ return navigator.serviceWorker && navigator.serviceWorker.controller; }, null, {timeout: 8000}).catch(function(){});
-  await pgW.reload(); await pgW.waitForSelector(".student-row");
-  await pgW.waitForFunction(function(){ return caches.open("evolve-v1").then(function(c){ return c.match("gestao.js"); }).then(function(m){ return !!m; }); }, null, {timeout: 8000}).catch(function(){});
-  var cached = await pgW.evaluate(function(){ return caches.open("evolve-v1").then(function(c){ return c.match("gestao.js"); }).then(function(m){ return !!m; }); });
-  check.check("13. O service worker guarda gestao.js depois de o profissional a usar (rede primeiro)", cached);
-  await ctxW.setOffline(true);
-  var offStatus = await pgW.evaluate(function(){ return fetch("gestao.js").then(function(r){ return r.status + ":" + (r.headers.get("content-type") || "") ; }).catch(function(e){ return "erro " + e.message; }); });
-  check.check("14. Sem rede, gestao.js sai da cache do service worker (a Gestão abre offline)", /^200/.test(offStatus));
-  await ctxW.close();
+  // 18-19. service worker: guarda o código e as duas páginas; sem rede ainda serve gestao.js
+  var W = await open("professional", [fixtureRow("a", "Ana Silva")], "gestao.html");
+  W.pg.setDefaultTimeout(8000);
+  await W.pg.waitForSelector("#gcalCard");
+  await W.pg.waitForFunction(function(){ return navigator.serviceWorker && navigator.serviceWorker.controller; }, null, {timeout: 8000}).catch(function(){});
+  await W.pg.reload(); await W.pg.waitForSelector("#gcalCard");
+  var names = ["gestao.js", "app.js", "app.css", "gestao.html"];
+  await W.pg.waitForFunction(function(n){ return caches.open("evolve-v1").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x); })); }).then(function(m){ return m.every(Boolean); }); }, names, {timeout: 8000}).catch(function(){});
+  var cached = await W.pg.evaluate(function(n){ return caches.open("evolve-v1").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x).then(function(m){ return !!m; }); })); }); }, names);
+  check.check("18. O service worker guarda gestao.js, app.js, app.css e a página gestao.html (rede primeiro)", cached.every(Boolean));
+  await W.ctx.setOffline(true);
+  var offStatus = await W.pg.evaluate(function(){ return fetch("gestao.js").then(function(r){ return r.status; }).catch(function(e){ return "erro " + e.message; }); });
+  check.check("19. Sem rede, gestao.js sai da cache do service worker (a Gestão abre offline)", offStatus === 200);
+  await W.ctx.close();
 
   await browser.close();
   srv.server.close();
-  check.check("15. Sem erros de JavaScript na página", errors.length === 0 || (console.log(errors), false));
+  check.check("20. Sem erros de JavaScript nas páginas", errors.length === 0 || (console.log(errors), false));
   check.summarize();
 })();

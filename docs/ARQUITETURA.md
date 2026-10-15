@@ -1,12 +1,12 @@
 # Evolve Nutrition — resumo técnico da estrutura
 
-> Nota: **não existe `src/`**. A app é um único `index.html` (~12 000 linhas, JavaScript puro dentro de uma IIFE, CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
+> Nota: **não existe `src/`**. O código está em `app.js` (~15 000 linhas, JavaScript puro dentro de uma IIFE) e `app.css`, partilhados por `index.html` e `gestao.html` (a Gestão fica em `gestao.js`), CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
 
 ## 0. Visão geral
 
 | Camada | Tecnologia |
 |---|---|
-| Front-end | `index.html` (HTML + CSS + JS do núcleo) + `gestao.js` (a Gestão, só para o profissional), PWA (`manifest.json`, ícones `icon-*.png`) |
+| Front-end | Duas PWAs no mesmo site: `index.html` (EVOLVE) e `gestao.html` (EVOLVE Gestão), com `app.js` + `app.css` partilhados e `gestao.js` só para a Gestão (`manifest.json`, ícones `icon-*.png`) |
 | Backend | Supabase (Auth + Postgres com RLS + Storage `progress-photos`) |
 | Dados de catálogo | SQL gerado offline em `scripts/` e corrido à mão no SQL Editor |
 | Testes | `node tests/run-all.js` (avalia a app em Node com um DOM falso, `tests/extract-app.js`) |
@@ -31,7 +31,7 @@ Não há router: o estado vive em `var state = {...}` (≈ linha 6126) e cada "e
 - **Indicador** `#syncPill`: "Sem ligação · N alterações guardadas" / "⏳ N por enviar".
 - **Cópia da ficha do aluno** (`evolve_snapshot_v1`): atualizada em cada leitura e em cada alteração; apagada, com a fila, ao terminar sessão (`offlineDataWipe`).
 - **Dados frescos do profissional**: `proRefreshAndRender()` (ao voltar à app, no máximo de minuto a minuto, e botão "↻ Atualizar") atualiza **no próprio objeto** só as fichas sem alterações por enviar e que não estão abertas; não corre com uma janela aberta nem se houve alterações locais durante a leitura.
-- **`sw.js`**: pré-cache da página, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; `gestao.js` também com rede primeiro (e fora do pré-cache: os alunos não o descarregam); restantes ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
+- **`sw.js`**: pré-cache das duas páginas, de `app.js`/`app.css`, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; `app.js`, `app.css` e `gestao.js` com rede primeiro (e `gestao.js` fora do pré-cache: os alunos não o descarregam); cada página tem a sua cópia guardada; restantes ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
 
 ### 1.2 Aluno — `renderAlunoShell()` / `renderAlunoTab()` (`state.alunoTab`)
 Barra inferior com 3 separadores:
@@ -172,8 +172,9 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 
 | Ficheiro | Papel |
 |---|---|
-| `index.html` | **O núcleo da app**: CSS, HTML dos ecrãs, JS (estado, render, rede, regras de nutrição/treino/antropometria) — é o que os alunos descarregam |
-| `gestao.js` | **A Gestão do profissional** (Estúdio, packs, aulas, Google Agenda, Contratos, Financeiro, «Eu»): carregado só pelo profissional, depois de iniciar sessão (`loadGestao()`), e ligado ao núcleo pelo objeto `G` (ver `docs/OPERACOES.md` 8n) |
+| `index.html`, `gestao.html` | As duas páginas (esqueleto + ecrãs de entrada): **EVOLVE** (alunos e acompanhamento) e **EVOLVE Gestão** (`<html data-app="gestao">`, só o profissional); manifestos `manifest.json` e `manifest-gestao.json`, ícones `icon-*.png` e `icon-gestao-*.png` |
+| `app.js`, `app.css` | O código e o estilo partilhados pelas duas páginas (estado, render, rede, nutrição/treino/antropometria, «Eu»); `APP_MODE` (`acomp`/`gestao`) decide o menu |
+| `gestao.js` | A Gestão (Estúdio, packs, aulas, Google Agenda, Contratos, Financeiro): carregado só pela app de Gestão (`loadGestao()`), ligado ao núcleo pelo objeto `G` (ver `docs/OPERACOES.md` 8n) |
 | `manifest.json`, `icon-*.png` | PWA (cores `#0D0F12`) |
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
@@ -186,7 +187,7 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `docs/OPERACOES.md` | Operação: contas, demo, fotos, backups |
 | `docs/ARQUITETURA.md` | Este documento |
 
-### Mapa do `index.html` (aproximado)
+### Mapa do `app.js` (aproximado)
 
 | Linhas | Conteúdo |
 |---|---|
