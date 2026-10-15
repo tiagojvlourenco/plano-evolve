@@ -11779,7 +11779,11 @@ function renderProDashboardMain(){
   var pendingCheckins = activeStudents.filter(function(s){ return dashLateDays(s)>=7; }).length;
   var alertCount = activeStudents.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
 
-  var html = "<div class=\"pro-stat-row\">" +
+  // a lupa e a ordem ficam no topo, à vista (antes ficavam por baixo dos cartões e perdiam-se no telemóvel)
+  var toolsHtml = state.dashboardListMode ? (
+"<div class=\"student-tools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stuSearch\" placeholder=\"Procurar aluno…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno\" value=\"" + escapeHtml(state.dashSearch || "") + "\"></label>" +
+      "<select id=\"stuSort\" class=\"mini-select\" aria-label=\"Ordenar alunos\">" + [["atencao", "Por atenção"], ["az", "Nome A → Z"], ["za", "Nome Z → A"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + ((state.dashSort || "atencao") === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>") : "";
+  var html = toolsHtml + "<div class=\"pro-stat-row\">" +
     proStat(activeStudents.length, "Alunos ativos", "active") +
     proStat(pendingCheckins, "Check-ins", "checkins") +
     proStat(alertCount, "Alertas", "alerts") +
@@ -11810,9 +11814,7 @@ function renderProDashboardMain(){
       return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: dashLateDays(st), pending: pendingHelpFor(st.id)};
     });
     var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
-    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>" +
-      "<div class=\"student-tools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stuSearch\" placeholder=\"Procurar aluno…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno\" value=\"" + escapeHtml(state.dashSearch || "") + "\"></label>" +
-      "<select id=\"stuSort\" class=\"mini-select\" aria-label=\"Ordenar alunos\">" + [["atencao", "Por atenção"], ["az", "Nome A → Z"], ["za", "Nome Z → A"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + ((state.dashSort || "atencao") === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>";
+    html += "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
     html += "<div class=\"student-list\" id=\"studentListBox\">" + studentListRowsHtml(allRows) + "</div>";
   }
 
@@ -13888,6 +13890,12 @@ function isSharedPack(pack){ return sharedIdsOf(pack).length > 0; }
 function packActiveMember(pack){ var ids = packMembersOf(pack); for (var i = 0; i < ids.length; i++){ var m = findStudent(ids[i]); if (m && isStudentActive(m)) return m; } return null; }
 function packHasActiveMember(pack){ return !!packActiveMember(pack); }
 function packOtherNames(pack, viewerId){ return packMembersOf(pack).filter(function(id){ return id !== viewerId && findStudent(id); }).map(nameOf); }
+// quem gastou aulas deste pacote (por aluno): numa partilha, o nome de cada um aparece na contagem
+function packUsageByStudent(pack){
+  var by = {}, order = [];
+  studio.sessions.forEach(function(x){ if (x.pack_id === pack.id && sessionConsumes(pack, x)){ if (!by[x.student_id]){ by[x.student_id] = 0; order.push(x.student_id); } by[x.student_id]++; } });
+  return order.map(function(id){ return {id: id, name: findStudent(id) ? nameOf(id) : "aluno removido", n: by[id]}; });
+}
 function weeklySlotsOfPack(pack){ return packMembersOf(pack).reduce(function(n, id){ return n + weeklySlotsOf(id); }, 0); }
 // o conjunto de aulas que um aluno pode gastar (os seus pacotes + os partilhados), sem repetir
 function poolOf(studentId, today){
@@ -14091,7 +14099,7 @@ function studioAutoSessions(){
 // lê os dados do estúdio e conta as sessões do horário que já passaram
 function studioRefresh(){
   var mode = sbReady; // se a ligação à base de dados mudar entretanto (testes, início de sessão), não se conta nada com os dados de outro modo
-  return Promise.all([studioLoad(), calLoadSettings()]).then(function(r){ var ok = r[0]; return ok && sbReady === mode ? studioAutoSessions() : 0; }).then(function(n){ updateStudioBadge(); return n; });
+  return Promise.all([studioLoad(), calLoadSettings(), loadMonthlyHours()]).then(function(r){ var ok = r[0]; return ok && sbReady === mode ? studioAutoSessions() : 0; }).then(function(n){ updateStudioBadge(); return n; });
 }
 function wireCalendarCard(main, redraw){
   var card = main.querySelector("#gcalCard");
@@ -14237,6 +14245,66 @@ function parseImportDate(t){
   return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && dt.getUTCMonth() === mo - 1 ? iso : null;
 }
 function parseImportNumber(t){ var n = Number(String(t == null ? "" : t).trim().replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) ? n : null; }
+// ---- horas mensais de cada aluno (da folha «Dados» → «Horas mensais»): guardadas em studio_settings, chave 'monthly_hours' ----
+var monthlyHours = {map: {}, loaded: false, available: true};
+var HOURS_LOCAL_KEY = "evolve.monthlyHours";
+function hoursOf(id){ var v = monthlyHours.map[id]; return typeof v === "number" && v > 0 ? v : null; }
+function fmtHours(h){ return (Math.round(h * 100) / 100).toString().replace(".", ",") + " h"; }
+function totalActiveHours(){
+  return visibleStudentsForDashboard().filter(isStudentActive).reduce(function(a, st){ return a + (hoursOf(st.id) || 0); }, 0);
+}
+function hoursClean(v){
+  var out = {};
+  if (v && typeof v === "object") Object.keys(v).forEach(function(k){ var n = Number(v[k]); if (isFinite(n) && n > 0 && n <= 200) out[k] = Math.round(n * 100) / 100; });
+  return out;
+}
+function loadMonthlyHours(){
+  if (!sbReady){ try { monthlyHours.map = hoursClean(JSON.parse(localStorage.getItem(HOURS_LOCAL_KEY) || "null")); } catch (e) { monthlyHours.map = {}; } monthlyHours.loaded = true; return Promise.resolve(true); }
+  return Promise.resolve(sb.from("studio_settings").select("value").eq("key", "monthly_hours").maybeSingle().then(function(r){ return r; })).then(function(res){
+    if (res && res.error){ monthlyHours.available = false; monthlyHours.loaded = true; return false; }
+    monthlyHours.available = true; monthlyHours.map = hoursClean(res && res.data ? res.data.value : null); monthlyHours.loaded = true; return true;
+  }, function(){ monthlyHours.available = false; monthlyHours.loaded = true; return false; });
+}
+function saveMonthlyHours(){
+  var value = hoursClean(monthlyHours.map);
+  if (!sbReady){ try { localStorage.setItem(HOURS_LOCAL_KEY, JSON.stringify(value)); } catch (e) {} return Promise.resolve({}); }
+  return Promise.resolve(sb.from("studio_settings").upsert({key: "monthly_hours", value: value, updated_at: new Date().toISOString()}).then(function(r){ return r; })).then(function(res){
+    return res && res.error ? {error: "Não foi possível guardar as horas (a migração 0025 já foi corrida?)."} : {};
+  }, function(){ return {error: "Não foi possível guardar — verifica a ligação."}; });
+}
+function setStudentHours(id, hours){
+  var old = monthlyHours.map[id];
+  if (hours > 0) monthlyHours.map[id] = hours; else delete monthlyHours.map[id];
+  return saveMonthlyHours().then(function(r){ if (r.error){ if (old > 0) monthlyHours.map[id] = old; else delete monthlyHours.map[id]; } return r; });
+}
+// «Nome; horas» — o nome pode vir como na folha («PT 60 - Ana Silva»): tira-se o prefixo do pack
+function parseHoursImport(text){
+  var rows = [], errors = [];
+  String(text || "").split(/\r?\n/).forEach(function(line, i){
+    if (!line.trim()) return;
+    var cols = line.split(/\t|;/).map(function(c){ return c.trim(); });
+    if (/^(nome|cliente|aluno)\b/i.test(cols[0]) && parseImportNumber(cols[1]) == null) return;
+    var name = cols[0].replace(/^PT(?:\s+[\w.]+)*?\s*[-–]\s*/i, "").trim(), h = cols.length > 1 ? parseImportNumber(cols[1]) : null;
+    if (!name) errors.push("Linha " + (i + 1) + ": falta o nome.");
+    else if (cols.length < 2 || h == null || h <= 0 || h > 200) errors.push("Linha " + (i + 1) + " (" + name + "): horas inválidas (ex.: 8,66).");
+    else rows.push({name: name, hours: Math.round(h * 100) / 100});
+  });
+  return {rows: rows, errors: errors};
+}
+function studioImportHours(text){
+  var parsed = parseHoursImport(text), report = {saved: 0, errors: parsed.errors.slice()};
+  var prev = JSON.parse(JSON.stringify(monthlyHours.map));
+  parsed.rows.forEach(function(r){
+    var whole = matchStudentByName(r.name), names = whole ? [r.name] : r.name.split(/\s*\+\s*|\s+e\s+/i).filter(Boolean);   // «Ana + Rui» (duo): as horas da linha dividem-se pelos dois (a aula conta uma só vez)
+    names.forEach(function(nm){
+      var st = whole || matchStudentByName(nm);
+      if (!st) report.errors.push(nm + ": não encontrei um aluno com este nome.");
+      else { monthlyHours.map[st.id] = Math.round(r.hours / names.length * 100) / 100; report.saved++; }
+    });
+  });
+  if (!report.saved) return Promise.resolve(report);
+  return saveMonthlyHours().then(function(r){ if (r.error){ monthlyHours.map = prev; report.saved = 0; report.errors.push(r.error); } return report; });
+}
 function parsePackImport(text){
   var rows = [], errors = [];
   String(text || "").split(/\r?\n/).forEach(function(line, i){
@@ -14765,6 +14833,7 @@ function packBarHtml(pack, u, viewerId){
     "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
       (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : " · sem validade") + "</div>" +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
+    (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Aulas usadas: " + (function(){ var l = packUsageByStudent(pack).map(function(x){ return "<strong>" + escapeHtml(x.name) + "</strong> " + x.n; }); if (Number(pack.used_before) > 0) l.unshift("antes da app " + Number(pack.used_before)); return l.length ? l.join(" · ") : "nenhuma ainda"; })() + "</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
     (foreign ? "" : "<span style=\"display:flex; gap:12px; align-items:center;\"><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-share-pack=\"" + escapeHtml(pack.id) + "\" title=\"Casais ou pessoas que partilham o mesmo pagamento\">Partilhar</button>" +
     "<button type=\"button\" class=\"assess-del\" style=\"min-width:44px; min-height:44px;\" data-del-pack=\"" + escapeHtml(pack.id) + "\" aria-label=\"Apagar pacote\" title=\"Apagar pacote (as sessões ficam sem pacote)\">✕</button></span>") + "</div>";
@@ -14782,7 +14851,8 @@ function paymentRowHtml(p, today, withName){
 function tplProSessoes(s){
   if (!studio.available) return studioUnavailableHtml();
   var today = localTodayISO(), sum = studentStudioSummary(s.id, today);
-  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pacotes</div>";
+  var html = "<div class=\"checkin-field\" style=\"max-width:220px; margin-bottom:12px;\"><label for=\"stuHours\">Horas mensais</label><input type=\"text\" inputmode=\"decimal\" id=\"stuHours\" value=\"" + (hoursOf(s.id) ? String(hoursOf(s.id)).replace(".", ",") : "") + "\" placeholder=\"ex.: 8,66\"></div>";
+  html += "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Pacotes</div>";
   html += sum.packs.length ? sum.packs.map(function(x){ return packBarHtml(x.pack, x.u, s.id); }).join("") : "<p class=\"muted-p\">Ainda sem pacotes. Cria o primeiro abaixo.</p>";
 
   var ex0 = extrasOf(s.id, today);
@@ -14834,7 +14904,7 @@ function tplProSessoes(s){
   var upcoming = allSess.filter(function(x){ return x.status === "agendada" && x.date >= today; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
   var sessRow = function(x){
     var pk = studio.packs.filter(function(p){ return p.id === x.pack_id; })[0];
-    return "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 130px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) : "sem pacote") + "</div></div>" +
+    return "<div class=\"history-row\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 130px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(x.date)) + (x.time ? " · " + escapeHtml(x.time) : "") + "</div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (pk ? escapeHtml(pk.name) + (pk.student_id !== x.student_id && findStudent(pk.student_id) ? " · pacote de " + escapeHtml(nameOf(pk.student_id)) : "") : "sem pacote") + "</div></div>" +
       "<span style=\"display:flex; gap:6px; align-items:center; flex-wrap:wrap;\">" + sessionStatusPill(x.status, x.date) +
       "<select class=\"mini-select\" data-sess-set=\"" + escapeHtml(x.id) + "\" aria-label=\"Alterar estado da sessão\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).filter(function(k){ return k !== x.status; }).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select>" +
       " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Apagar sessão\">✕</button></span></div>";
@@ -14926,6 +14996,12 @@ function studioSetSessionStatus(ses, status){
   return studioUpdate("sessions", ses.id, patch);
 }
 function wireProSessoes(s, el){
+  var hrsIn = el.querySelector("#stuHours");
+  if (hrsIn) hrsIn.addEventListener("change", function(){
+    var raw = hrsIn.value.trim(), h = raw ? parseImportNumber(raw) : 0;
+    if (h == null || h < 0 || h > 200){ showToast("⚠ Horas inválidas (ex.: 8,66)"); hrsIn.value = hoursOf(s.id) ? String(hoursOf(s.id)).replace(".", ",") : ""; return; }
+    setStudentHours(s.id, Math.round(h * 100) / 100).then(function(r){ showToast(r.error ? "⚠ " + r.error : h ? "✓ Horas mensais guardadas" : "✓ Horas removidas"); if (r.error) hrsIn.value = hoursOf(s.id) ? String(hoursOf(s.id)).replace(".", ",") : ""; });
+  });
   function fail(id, msg){ var e = el.querySelector(id); if (e){ e.textContent = msg; e.style.display = "block"; } }
   el.querySelectorAll("[data-sess-set]").forEach(function(sel){ sel.addEventListener("change", function(){
     var ses = studio.sessions.filter(function(x){ return x.id === sel.getAttribute("data-sess-set"); })[0];
@@ -15110,7 +15186,7 @@ function renderProStudioMain(){
   var students = visibleStudentsForDashboard().filter(isStudentActive);
   var html = "<div class=\"pro-stat-row\" id=\"studioKpis\">" +
     proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
-    proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + "</div>";
+    proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + proStat(totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "Horas mensais ativas") + "</div>";
 
   try { html += calendarCardHtml(); } catch (e){ html += "<div class=\"card\"><div class=\"eyebrow\">Google Agenda</div><p class=\"muted-p\">Não foi possível mostrar o cartão. Atualiza a página e sincroniza outra vez.</p></div>"; }
 
@@ -15176,6 +15252,11 @@ function renderProStudioMain(){
     "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9; Trimestral; João Silva\"></textarea>" +
     "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
+  html += "<details class=\"perfil-section\" id=\"studioImportHours\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as horas mensais</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com a linha «Horas mensais» da folha «Dados»: <strong>Nome; horas</strong> (ex.: Ana Silva; 8,66). Aceita o nome como na folha («PT 60 - Ana Silva»). A soma dos alunos ativos aparece no cabeçalho.</p>" +
+    "<textarea id=\"hrsText\" rows=\"5\" placeholder=\"Ana Silva; 8,66\"></textarea>" +
+    "<p class=\"muted-p\" id=\"hrsOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"hrsGo\" style=\"margin-top:8px;\">Importar horas</button></details>";
   html += "<details class=\"perfil-section\" id=\"studioImportSched\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as datas previstas (agendadas)</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com as datas da folha «Treinos»: <strong>Nome; 20/07/2026; 21/07/2026; …</strong> (datas como 31/12/2026 ou 2026/12/31). Ficam como «agendada» na ficha do aluno, não gastam aulas do pacote, e quando o Google Agenda trouxer essa aula passam a «feita» ou «faltou». Importar duas vezes não duplica.</p>" +
     "<textarea id=\"schText\" rows=\"5\" placeholder=\"Ana Silva; 20/07/2026; 21/07/2026; 23/07/2026\"></textarea>" +
@@ -15198,6 +15279,15 @@ function renderProStudioMain(){
     done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
   }); });
   wireCalendarCard(main, redraw);
+  var hrsGo = main.querySelector("#hrsGo");
+  if (hrsGo) hrsGo.addEventListener("click", function(){
+    var out = main.querySelector("#hrsOut"); hrsGo.disabled = true; out.textContent = "A importar…";
+    studioImportHours(main.querySelector("#hrsText").value).then(function(rep){
+      var msg = "✓ " + rep.saved + (rep.saved === 1 ? " aluno atualizado" : " alunos atualizados") + (rep.saved ? " · total ativo " + fmtHours(totalActiveHours()) : "");
+      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
+      out.textContent = msg; hrsGo.disabled = false; if (rep.saved) redraw();
+    });
+  });
   var schGo = main.querySelector("#schGo");
   if (schGo) schGo.addEventListener("click", function(){
     var out = main.querySelector("#schOut"); schGo.disabled = true; out.textContent = "A importar…";

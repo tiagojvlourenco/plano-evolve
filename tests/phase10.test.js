@@ -47,7 +47,7 @@ function freshStudent(overrides){
 
 // 3. Ordem e nomes dos 4 blocos do dashboard: Alunos ativos, Check-ins, Alertas, Total de alunos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 1200);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 4000);
   var order = ["Alunos ativos", "Check-ins", "Alertas", "Total de alunos"];
   var lastIdx = -1;
   var inOrder = true;
