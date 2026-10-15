@@ -52,7 +52,17 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   await pg.selectOption("#stuSort", "za");
   check.check("7. Z→A inverte a ordem", (await names()).join("|") === "Zélia Pinto|Bruno Costa|Ana Silva|Álvaro Dias");
   await pg.selectOption("#stuSort", "az"); await pg.fill("#stuSearch", "a");
-  check.check("8. Pesquisa e ordem combinam-se (todos têm «a»; fica A→Z)", (await names()).join("|") === "Álvaro Dias|Ana Silva|Bruno Costa|Zélia Pinto");
+  check.check("8. Só aparecem os nomes que começam por «a» (o nome ou uma palavra dele), A→Z", (await names()).join("|") === "Álvaro Dias|Ana Silva");
+  await pg.fill("#stuSearch", "");
+  await pg.focus("#stuSearch"); await pg.keyboard.type("di", {delay: 40});
+  check.check("8b. Ao escrever, a lista vai ficando só com quem tem uma palavra a começar por «di»", (await names()).join("|") === "Álvaro Dias");
+  await pg.evaluate(function(){ document.querySelector("[data-stat-key=active]").click(); });   // um redesenho em segundo plano a meio da escrita
+  check.check("8c. Um redesenho a meio mantém o texto, o filtro e o foco da lupa", (await names()).join("|") === "Álvaro Dias" && (await pg.inputValue("#stuSearch")) === "di" && await pg.evaluate(function(){ return document.activeElement && document.activeElement.id === "stuSearch"; }));
+  await pg.keyboard.type("a");
+  check.check("8d. E continua a filtrar depois do redesenho («dia»)", (await names()).join("|") === "Álvaro Dias");
+  await pg.selectOption("#stuSort", "za"); await pg.evaluate(function(){ document.querySelector("[data-stat-key=active]").click(); }); await pg.selectOption("#stuSort", "az");
+  check.check("8e. A ordem também responde depois de um redesenho", (await pg.locator("#stuSort").inputValue()) === "az");
+  await pg.fill("#stuSearch", "");
   await pg.fill("#stuSearch", "");
   await pg.locator('[data-open="s1"]').first().click();
   await pg.click("#proBack");
