@@ -143,6 +143,21 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - Importar duas vezes não duplica: conta as sessões que já existem em cada dia (incluindo as que o Google Agenda já converteu).
 - Validade dos pacotes importados (sexta coluna de «Importar pacotes que já estão a decorrer»): trimestral/semestral/anual = duração + 3 meses de margem; mensal = 3 meses; exceções à parte.
 
+## 8h. Migração 0028: pacotes partilhados (casais) e validade por tipo de pack
+
+- [ ] Correr `supabase/migrations/0028_shared_packs.sql` (depois da 0027; é repetível). Acrescenta `session_packs.shared_with`. Sem ela, tudo o resto funciona e a app avisa quando tentas partilhar.
+- Na ficha do aluno (Resumo → Pacotes): **Partilhar** dá a outros alunos o direito de gastar aulas desse pacote. Com «partilha nos dois sentidos» marcada, cada um também fica com acesso ao seu próprio pacote, por isso, mesmo com 13 aulas num e 26 no outro, as sessões de qualquer dos dois descontam ao mesmo conjunto e acabam juntos. Só há uma cobrança (a do pacote do dono). No formulário de **Novo pacote** escolhe logo o parceiro em «Partilhado com».
+- Importar pacotes: sexta coluna = meses ou o tipo (**Mensal** 3, **Trimestral** 6, **Semestral** 9, **Anual** 15 meses: duração + 3); sétima coluna = aluno(s) com quem se partilha (`Ana Silva; 26; 01/10/2026; 520; 9; Trimestral; João Silva`; separa vários com `&`, `/` ou ` e `).
+- Novo pacote: escolhe o **Tipo de pack** e a validade preenche-se sozinha (trimestral pago a 14/01 dura até 14/04 e vale até 14/07).
+
+## 8i. Migração 0029: fases de peso (cut/bulk), revisão periódica e creatina
+
+- [ ] Correr `supabase/migrations/0029_nutrition_phase.sql` (depois da 0028; é repetível). Acrescenta `students.nutrition_phase`. Sem ela, o PDF e o resto grava-se, mas a fase, as revisões e a confirmação da creatina (menores, rins, gravidez, amamentação) não ficam guardadas: a app avisa e não aplica revisões às cegas.
+- **Creatina mono-hidratada** aparece em todos os planos, sempre no pequeno-almoço, com a dose pelo peso (0,05 g/kg, entre 3 e 5 g) e a nota «Pode ser tomada em qualquer altura do dia.». Na Nutrição há o cartão «Suplementação» para a retirar/incluir; menores e fichas com rins, gravidez ou amamentação pedem a tua confirmação antes de aparecer ao aluno.
+- **Fase e objetivo de peso** (Nutrição): o peso objetivo define cut, bulk ou manutenção; «Definir fase» aplica as calorias de partida graduais (cut −10 %, bulk +5 % da manutenção). De 3 em 3 ou de 4 em 4 semanas (à tua escolha; nunca menos, para o peso estabilizar depois de cada alteração), se o peso não evolui como previsto, aparece um **pop-up ao entrar** (e um cartão no painel) com a sugestão de mudar 100–200 kcal; **OK — aplicar** ajusta os alvos e as quantidades das refeições do aluno de uma vez; «Adiar 7 dias» esconde-o. Perder ou ganhar peso depressa demais avisa logo, sem esperar pela data. Se guardares outro peso objetivo com a fase em curso, só o objetivo muda (as calorias e as etapas ficam; para mudar de fase usa «Alterar fase»). Se a adesão é baixa ou a fome alta, a app não propõe cortar mais.
+- A creatina nova retém 0,5–1,5 kg de água: a revisão ignora as pesagens das 2 semanas a seguir a começar ou parar.
+- **Plano em PDF**: botão «Plano em PDF (imprimir)» no plano do aluno e «Exportar o plano em PDF» na Nutrição. No iPhone abre a folha de partilha (Imprimir, Guardar nos Ficheiros, WhatsApp).
+
 **Medir antes de otimizar mais:** para saber quanto pesa cada ficha (e se vale a pena carregar menos colunas no arranque do profissional), corre `select name, pg_size_pretty(pg_column_size(s.*)) as tamanho from students s order by pg_column_size(s.*) desc;`
 
 ## 9. Riscos e limitações que ficam por resolver nesta fase

@@ -35,10 +35,11 @@ function freshStudent(overrides){
   var withoutGoal = computeSuggestedTargets({sex:p.sex, weight:p.weight, height:p.height, age:p.age, trainingsPerWeek:p.trainingsPerWeek, goal:p.goal});
   var bmr = 10*70 + 6.25*175 - 5*28 + 5;
   var tdee = bmr * activityFromTrainings(4);
-  // ganho: ritmo limitado a 0,4% do peso por semana e a +15% da manutenção
+  // ganho: o ponto de partida é um passo pequeno (+5 % da manutenção, entre 100 e 250 kcal), nunca mais do que o ritmo (0,4 % do peso/semana) nem +15 %
   var rate = Math.min(WEIGHT_GOAL_RATE_KG_PER_WEEK, 70 * GAIN_PCT_PER_WEEK / 100);
-  var expectedKcal = Math.round(tdee + Math.min((rate * KCAL_PER_KG) / 7, tdee * MAX_SURPLUS_FRACTION));
-  check.check("2. Com weightGoal de ganho, usa o excedente baseado no ritmo (não a % antiga)", withGoal.kcal === expectedKcal);
+  var start = Math.min(Math.max(Math.round(tdee * PHASE_CFG.startBulkPct / 100 / 25) * 25, PHASE_CFG.startBulkMin), PHASE_CFG.startBulkMax);
+  var expectedKcal = Math.round(tdee + Math.min((rate * KCAL_PER_KG) / 7, start, tdee * MAX_SURPLUS_FRACTION));
+  check.check("2. Com weightGoal de ganho, começa com um excedente pequeno e gradual (não o ritmo completo nem a % antiga)", withGoal.kcal === expectedKcal && withGoal.kcal - tdee < 260 && withGoal.kcal > tdee);
   check.check("2. Difere do cálculo sem weightGoal (não é coincidência)", withGoal.kcal !== withoutGoal.kcal);
 })();
 
@@ -49,8 +50,10 @@ function freshStudent(overrides){
   var bmr = 10*90 + 6.25*165 - 5*35 - 161;
   var tdee = bmr * activityFromTrainings(2);
   check.check("3. Objetivo de perda gera calorias abaixo do TDEE", t.kcal < tdee);
-  var expectedKcal = Math.round(tdee - (WEIGHT_GOAL_RATE_KG_PER_WEEK * KCAL_PER_KG) / 7);
-  check.check("3. Défice usa o mesmo ritmo (0.5kg/semana), com sinal negativo", t.kcal === expectedKcal);
+  // o défice começa pequeno (−10 % da manutenção, entre 150 e 300 kcal) e só cresce com as revisões do peso: nunca os 550 kcal de uma vez
+  var startCut = Math.min(Math.max(Math.round(tdee * PHASE_CFG.startCutPct / 100 / 25) * 25, PHASE_CFG.startCutMin), PHASE_CFG.startCutMax);
+  var expectedKcal = Math.round(tdee - Math.min(startCut, (WEIGHT_GOAL_RATE_KG_PER_WEEK * KCAL_PER_KG) / 7));
+  check.check("3. O défice de partida é gradual (−10 % da manutenção) e não os 550 kcal do ritmo completo", t.kcal === expectedKcal && tdee - t.kcal <= 300 && tdee - t.kcal >= 150);
 })();
 
 // 4. Diferença pequena (<0.5kg) entre peso atual e objetivo não ativa o modo "ritmo" (evita ruído por arredondamentos)

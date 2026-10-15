@@ -40,6 +40,14 @@ module.exports = function fakeSupabaseSource(initial){
     };
     Builder.prototype.exec = function(){
       var t = this.table;
+      // migrações por correr: INIT.missingCols = {students: ["nutrition_phase"], session_packs: ["shared_with"]} recusa as gravações que levam essas colunas (como o PostgREST)
+      if (INIT.missingCols && INIT.missingCols[t] && (this.op === "update" || this.op === "insert" || this.op === "upsert") && this.payload){
+        var first = Array.isArray(this.payload) ? (this.payload[0] || {}) : this.payload, absent = INIT.missingCols[t].filter(function(c){ return c in first; })[0];
+        if (absent){
+          F.writes.push({table: t, op: this.op + "-REJECTED", cols: Object.keys(first)});
+          return {data: null, error: {message: "Could not find the '" + absent + "' column of '" + t + "' in the schema cache", code: "PGRST204"}, status: 400};
+        }
+      }
       if (t === "professionals"){
         F.selects.push("professionals");
         return {data: F.role === "professional" ? {user_id: F.userId} : null, error: null, status: 200};
