@@ -1,5 +1,6 @@
 /* EVOLVE — service worker: a app abre sem rede.
    - Navegação (index.html): rede primeiro (sempre a versão mais recente quando há ligação), cache como reserva.
+   - gestao.js (código da Gestão, só descarregado pelo profissional): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
    - Ficheiros do próprio site (fontes, ícones, Supabase local, animações dos exercícios): cache primeiro.
    - Tudo o que é de outro servidor (Supabase, Open Food Facts, YouTube...) passa direto: nunca se guarda em cache
      (dados de saúde, sessões e fotos não ficam na cache do service worker).
@@ -72,6 +73,17 @@ function cacheFirst(event){
   });
 }
 
+// código da Gestão: sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
+function networkFirstFile(event){
+  var request = event.request;
+  return fetch(request, {cache: "no-cache"}).then(function(res){
+    if (res && res.ok){ var copy = res.clone(); event.waitUntil(caches.open(VERSION).then(function(c){ return c.put(request, copy); }).catch(function(){})); return res; }
+    return caches.match(request).then(function(hit){ return hit || res; });
+  }).catch(function(){
+    return caches.match(request).then(function(hit){ return hit || Response.error(); });
+  });
+}
+
 self.addEventListener("fetch", function(event){
   var req = event.request;
   if (req.method !== "GET") return;
@@ -80,5 +92,6 @@ self.addEventListener("fetch", function(event){
   var sameSite = url.origin === self.location.origin;
   if (!sameSite) return;
   if (req.mode === "navigate"){ event.respondWith(networkFirst(event)); return; }
+  if (/\/gestao\.js$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
   event.respondWith(cacheFirst(event).catch(function(){ return Response.error(); }));
 });

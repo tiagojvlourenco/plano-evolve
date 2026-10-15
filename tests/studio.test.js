@@ -105,7 +105,7 @@ sbReady = false; reset([], [], []); store = {};
   var tab = tplProSessoes(ana);
   check.check("36. A ficha mostra pacotes, formulário, sessões e cobranças", /Pack 10/.test(tab) && /id="pkAdd"/.test(tab) && /id="seAdd"/.test(tab) && /data-pay="1"/.test(tab) && /data-del-session=/.test(tab));
   check.check("37. O texto do utilizador é escapado nos ecrãs", !/<img/.test((function(){ reset([pack({name: "<img src=x onerror=1>"})], []); return tplProSessoes(ana); })()));
-  check.check("38. O separador Pacotes existe na ficha e o menu Estúdio na lista", /\["sessoes","Pacotes"\]/.test(appSource) && /id=\\"navStudio\\"/.test(appSource) && /proView === "studio"\) renderProStudioMain/.test(appSource));
+  check.check("38. O separador Pacotes existe na ficha e o menu Estúdio na lista", /\["sessoes","Pacotes"\]/.test(appSource) && /id=\\"navStudio\\"/.test(appSource) && /proView === "studio" \|\| state\.proView === "contracts"\) renderGestaoMain/.test(appSource) && /G\.renderProStudioMain\(\)/.test(appSource));
 
   // ---- migração ----
   var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0023_studio_packs.sql", "utf8");
