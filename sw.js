@@ -5,8 +5,10 @@
    - Ficheiros do próprio site (fontes, ícones, Supabase local, animações dos exercícios): cache primeiro.
    - Tudo o que é de outro servidor (Supabase, Open Food Facts, YouTube...) passa direto: nunca se guarda em cache
      (dados de saúde, sessões e fotos não ficam na cache do service worker).
-   Subir VERSION sempre que mudar um ficheiro de vendor/, fonts/ ou ícones (index.html atualiza-se sozinho). */
-var VERSION = "evolve-v1";
+   Subir VERSION sempre que mudar um ficheiro de vendor/, fonts/ ou ícones (as páginas e o código atualizam-se sozinhos).
+   v2 (duas apps): o service worker antigo guardava QUALQUER página da app como «index.html»; quem abrisse gestao.html antes da atualização
+   deixava a Gestão no lugar do EVOLVE. Mudar o nome apaga essa cache e a cópia antiga de index.html (script inline). */
+var VERSION = "evolve-v2";
 var SHELL = [
   "./", "index.html", "gestao.html", "app.css", "app.js", "manifest.json", "manifest-gestao.json",
   "vendor/supabase.js",
@@ -20,7 +22,8 @@ var NAV_TIMEOUT_MS = 4000;
 self.addEventListener("install", function(event){
   event.waitUntil(caches.open(VERSION).then(function(cache){
     // um ficheiro em falta não pode impedir a instalação do resto
-    return Promise.all(SHELL.map(function(u){ return cache.add(u).catch(function(){}); }));
+    // cache:"reload" ignora a cache HTTP do browser (senão podia guardar uma cópia anterior à atualização)
+    return Promise.all(SHELL.map(function(u){ return cache.add(new Request(u, {cache: "reload"})).catch(function(){}); }));
   }).then(function(){ return self.skipWaiting(); }));
 });
 
