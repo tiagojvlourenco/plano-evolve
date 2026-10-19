@@ -2097,9 +2097,9 @@ function renderProStudioMain(){
   var today = localTodayISO(); if (!studioView.month) studioView.month = monthOf(today); if (!studioView.date) studioView.date = today;
   var k = studioKpis(studioView.month, today);
   var students = visibleStudentsForDashboard().filter(isStudentActive);
-  var html = "<div class=\"pro-stat-row\" id=\"studioKpis\">" +
-    proStat(eurShort(k.toCollect), "A cobrar este mês") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") +
-    proStat(k.endingN, "Pacotes a acabar") + proStat(k.attendance == null ? "—" : k.attendance + "%", "Presença no mês") + proStat(totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "Horas mensais ativas") + "</div>";
+  var html = "<h2 class=\"ct-title\">Estúdio</h2><div class=\"ct-stats ct-stats5\" id=\"studioKpis\">" +
+    ctStat("A cobrar", eurShort(k.toCollect), "este mês") + ctStat("Em atraso", eurShort(k.overdue), k.overdueN ? k.overdueN + (k.overdueN === 1 ? " cobrança" : " cobranças") : "nada em atraso") +
+    ctStat("A acabar", k.endingN, k.endingN === 1 ? "pacote" : "pacotes") + ctStat("Presença", k.attendance == null ? "—" : k.attendance + "%", "no mês") + ctStat("Horas mensais ativas", totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "contratadas") + "</div>";
 
   html += "<div class=\"student-tools\" id=\"studioTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stSearch\" placeholder=\"Procurar aluno no estúdio…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno no estúdio\" value=\"" + escapeHtml(studioView.search || "") + "\"></label>" +
     "<select id=\"stSort\" class=\"mini-select\" aria-label=\"Ordenar o resumo de treinos\">" + [["urgencia", "Por urgência"], ["az", "Nome A → Z"], ["za", "Nome Z → A"], ["menos", "Menos aulas primeiro"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (studioView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>" +
