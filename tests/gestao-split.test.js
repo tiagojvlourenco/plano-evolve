@@ -147,8 +147,8 @@ function fixtureRow(id, name){
   await W.pg.waitForFunction(function(){ return navigator.serviceWorker && navigator.serviceWorker.controller; }, null, {timeout: 8000}).catch(function(){});
   await W.pg.reload(); await W.pg.waitForSelector("#gcalCard");
   var names = ["gestao.js", "app.js", "app.css", "gestao.html"];
-  await W.pg.waitForFunction(function(n){ return caches.open("evolve-v1").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x); })); }).then(function(m){ return m.every(Boolean); }); }, names, {timeout: 8000}).catch(function(){});
-  var cached = await W.pg.evaluate(function(n){ return caches.open("evolve-v1").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x).then(function(m){ return !!m; }); })); }); }, names);
+  await W.pg.waitForFunction(function(n){ return caches.open("evolve-v2").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x); })); }).then(function(m){ return m.every(Boolean); }); }, names, {timeout: 8000}).catch(function(){});
+  var cached = await W.pg.evaluate(function(n){ return caches.open("evolve-v2").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x).then(function(m){ return !!m; }); })); }); }, names);
   check.check("18. O service worker guarda gestao.js, app.js, app.css e a página gestao.html (rede primeiro)", cached.every(Boolean));
   await W.ctx.setOffline(true);
   var offStatus = await W.pg.evaluate(function(){ return fetch("gestao.js").then(function(r){ return r.status; }).catch(function(e){ return "erro " + e.message; }); });
