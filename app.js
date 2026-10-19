@@ -13042,10 +13042,12 @@ var meState = {id: null, loaded: false};
 function loadMe(){
   if (meState.loaded) return Promise.resolve(true);
   var done = function(id){ meState.id = typeof id === "string" ? id : null; meState.loaded = true; return true; };
+  var fail = function(){ meState.id = null; return false; }; // falhou a leitura: não fica em cache (tenta de novo no próximo toque)
   if (!sbReady){ try { return Promise.resolve(done(localStorage.getItem(ME_LOCAL_KEY))); } catch (e) { return Promise.resolve(done(null)); } }
   return Promise.resolve(sb.from("studio_settings").select("value").eq("key", "personal").maybeSingle().then(function(r){ return r; })).then(function(r){
+    if (r && r.error) return fail();
     return done(r && r.data && r.data.value ? r.data.value.studentId : null);
-  }, function(){ return done(null); });
+  }, fail);
 }
 function saveMe(){
   if (!sbReady){ try { localStorage.setItem(ME_LOCAL_KEY, meState.id || ""); } catch (e) {} return Promise.resolve({}); }
@@ -13237,21 +13239,6 @@ function contactReasonsFor(s, today){
   if (by["estagnado"] || by["estagnado-a-treinar"]) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
   var planDays = isStudioOnly(s) ? null : lastPlanChangeDays(s);
   if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
-  if (G.loaded && G.studio.loaded && G.studio.available){
-    var ss = G.studentStudioSummary(s.id, today);
-    if (ss.overdue.length){
-      var owed = ss.overdue.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0), first = ss.overdue[ss.overdue.length - 1];
-      out.push({key: "pagamento-atrasado", label: "Pagamento em atraso (" + eur(owed) + ")", weight: 65, hint: "Cobrança vencida a " + fmtDateFullPt(first.due_on) + ".", vars: {valor: eur(first.amount), data: fmtDateFullPt(first.due_on)}});
-    }
-    if (ss.ending.length){
-      var u = ss.ending.slice().sort(function(a, b){ return a.u.remaining - b.u.remaining; })[0].u;
-      var left = u.remaining <= PACK_ENDING_SESSIONS || u.daysLeft == null ? "restam " + u.remaining + (u.remaining === 1 ? " sessão" : " sessões") : "termina em " + u.daysLeft + " dias";
-      out.push({key: "pacote-a-acabar", label: "Pacote a acabar (" + left + ")", weight: 45, hint: "Boa altura para propor a renovação.", vars: {restam: left}});
-    } else if (ss.needsRenewal){
-      out.push({key: "pacote-a-acabar", label: "Sem pacote a decorrer — renovar?", weight: 50, hint: "O último pacote terminou e ainda não há outro.", vars: {restam: "já terminou"}});
-    }
-    if (ss.absences >= ABSENCE_ALERT) out.push({key: "faltas", label: ss.absences + " faltas nos últimos " + ABSENCE_WINDOW_DAYS + " dias", weight: 40, hint: "Faltas ou cancelamentos tardios.", vars: {}});
-  }
   if (isBirthdayToday(s, today)) out.push({key: "aniversario", label: "Faz anos hoje", weight: 25, hint: "Um parabéns fortalece a relação."});
   if (by["sobrecarga"] || by["alta-adesao"]) out.push({key: "boa-noticia", label: by["sobrecarga"] ? "Pronto para subir carga" : "Adesão muito boa", weight: 15, hint: "Uma mensagem positiva também retém alunos."});
   return out.sort(function(a, b){ return b.weight - a.weight; });
@@ -14617,6 +14604,8 @@ function doSignOut(){
   offlineDataWipe(); // a cópia da ficha e a fila ficam só enquanto a sessão estiver iniciada
   restTimerStop();
   wlDraftWipe();
+  meState.id = null; meState.loaded = false; // a escolha do «Eu» é de cada conta
+  state.proSelectedId = null; if (G.loaded) G.enter("studio"); // a Gestão volta a ler tudo ao entrar
   sb.auth.signOut().then(function(){ authRole = null; showAuthScreen("signin"); });
 }
 document.getElementById("signOutBtn").addEventListener("click", doSignOut);

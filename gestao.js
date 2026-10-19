@@ -1995,6 +1995,35 @@ document.addEventListener("search", function(e){ var t = e.target; if (t && t.id
 document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stSort"){ studioView.sort = t.value; applyStudioFilter(); var b = document.getElementById("studioSummary"); if (b && b.scrollIntoView){ try { b.scrollIntoView({block: "start", behavior: "smooth"}); } catch (err) { b.scrollIntoView(); } } } });
 /* visão geral do estúdio (menu "Estúdio") */
 var studioView = {month: null, date: null, search: "", sort: "urgencia"};
+/* «Quem contactar» da Gestão: pagamento em atraso, pacote a acabar/terminado e faltas (estes avisos vivem aqui, não na app de Acompanhamento) */
+function studioContactReasons(studentId, today){
+  var out = [], ss = studentStudioSummary(studentId, today);
+  if (ss.overdue.length){
+    var owed = ss.overdue.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0), first = ss.overdue[ss.overdue.length - 1];
+    out.push({key: "pagamento-atrasado", label: "Pagamento em atraso (" + eur(owed) + ")", weight: 65, vars: {valor: eur(first.amount), data: fmtDateFullPt(first.due_on)}});
+  }
+  if (ss.ending.length){
+    var u = ss.ending.slice().sort(function(a, b){ return a.u.remaining - b.u.remaining; })[0].u;
+    var left = u.remaining <= PACK_ENDING_SESSIONS || u.daysLeft == null ? "restam " + u.remaining + (u.remaining === 1 ? " sessão" : " sessões") : "termina em " + u.daysLeft + " dias";
+    out.push({key: "pacote-a-acabar", label: "Pacote a acabar (" + left + ")", weight: 45, vars: {restam: left}});
+  } else if (ss.needsRenewal){
+    out.push({key: "pacote-a-acabar", label: "Sem pacote a decorrer — renovar?", weight: 50, vars: {restam: "já terminou"}});
+  }
+  if (ss.absences >= ABSENCE_ALERT) out.push({key: "faltas", label: ss.absences + " faltas nos últimos " + ABSENCE_WINDOW_DAYS + " dias", weight: 40, vars: {}});
+  return out.sort(function(a, b){ return b.weight - a.weight; });
+}
+function studioContactHtml(students, today){
+  var rows = students.map(function(st){ return {st: st, reasons: studioContactReasons(st.id, today)}; }).filter(function(r){ return r.reasons.length; })
+    .sort(function(a, b){ return b.reasons[0].weight - a.reasons[0].weight || String(a.st.name).localeCompare(String(b.st.name), "pt"); });
+  if (!rows.length) return "";
+  return "<div class=\"card\" id=\"studioContact\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Quem contactar (" + rows.length + ")</div>" +
+    rows.map(function(r){
+      var wa = r.st.phone ? whatsappUrl(r.st.phone, contactMessageFor(r.reasons[0].key, r.st, r.reasons[0].vars)) : "";
+      return "<div class=\"studio-row\" data-sname=\"" + escapeHtml(exLibFold(r.st.name)) + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.st.id) + "\">" + escapeHtml(r.st.name) + "</button>" +
+        (wa ? "<a class=\"btn btn-sm\" target=\"_blank\" rel=\"noopener\" href=\"" + escapeHtml(wa) + "\">WhatsApp</a>" : "") + "</div>" +
+        "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + r.reasons.map(function(x){ return escapeHtml(x.label); }).join(" · ") + "</div></div>";
+    }).join("") + "</div>";
+}
 function renderProStudioMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; studioRefresh().then(function(){ if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain(); }); return; }
@@ -2030,6 +2059,7 @@ function renderProStudioMain(){
       (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
   });
   html += "</div>";
+  html += studioContactHtml(students, today);
   // alunos ainda sem pacote: sem isto, na app de Gestão não havia como abrir a ficha deles para lhes criar o primeiro pacote
   var noPack = students.filter(function(st){ return !packsOf(st.id).length && !usablePacksOf(st.id).length; });
   if (noPack.length){

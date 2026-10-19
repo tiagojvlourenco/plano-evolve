@@ -60,19 +60,21 @@ STUDENTS = [ana];
 reset([pack({total: 4})], [sess(), sess(), sess()], [{id: "1", student_id: "a", amount: 100, due_on: d(10), paid_on: null}]);
 var sm = studentStudioSummary("a", today);
 check.check("19. O resumo do aluno: 1 pacote a acabar e 1 cobrança em atraso", sm.ending.length === 1 && sm.overdue.length === 1 && sm.hasActive);
-var rs = contactReasonsFor(ana, today), by = {};
+var rs = studioContactReasons("a", today), by = {};
 rs.forEach(function(r){ by[r.key] = r; });
 check.check("20. Pagamento em atraso aparece como motivo, com valor e data na mensagem", by["pagamento-atrasado"] && /100,00/.test(contactMessageFor("pagamento-atrasado", ana, by["pagamento-atrasado"].vars)) && by["pagamento-atrasado"].weight === 65);
 check.check("21. Pacote a acabar aparece como motivo com o que resta", by["pacote-a-acabar"] && /restam 1 sessão/.test(by["pacote-a-acabar"].label) && /restam 1 sessão/.test(contactMessageFor("pacote-a-acabar", ana, by["pacote-a-acabar"].vars)));
 reset([pack({total: 10})], [sess({date: d(5), status: "faltou"}), sess({date: d(9), status: "cancelada_tarde"}), sess({date: d(60), status: "faltou"})]);
-check.check("22. Duas faltas/cancelamentos tardios em 30 dias dão o motivo 'faltas' (a de há 60 dias não conta)", contactReasonsFor(ana, today).some(function(r){ return r.key === "faltas" && /2 faltas/.test(r.label); }));
+check.check("22. Duas faltas/cancelamentos tardios em 30 dias dão o motivo 'faltas' (a de há 60 dias não conta)", studioContactReasons("a", today).some(function(r){ return r.key === "faltas" && /2 faltas/.test(r.label); }));
 reset([pack({starts_on: d(80), expires_on: d(10)})], []);
-check.check("23. Sem pacote a decorrer depois de ter tido um há pouco: renovar", contactReasonsFor(ana, today).some(function(r){ return r.key === "pacote-a-acabar" && /renovar/.test(r.label); }));
+check.check("23. Sem pacote a decorrer depois de ter tido um há pouco: renovar", studioContactReasons("a", today).some(function(r){ return r.key === "pacote-a-acabar" && /renovar/.test(r.label); }));
 reset([], []);
-check.check("24. Sem dados do estúdio não há motivos novos (a app continua a funcionar)", !contactReasonsFor(ana, today).some(function(r){ return ["pagamento-atrasado", "pacote-a-acabar", "faltas"].indexOf(r.key) >= 0; }));
+check.check("24. Sem dados do estúdio não há motivos novos (a app continua a funcionar)", !studioContactReasons("a", today).some(function(r){ return ["pagamento-atrasado", "pacote-a-acabar", "faltas"].indexOf(r.key) >= 0; }));
 studio.available = false;
-check.check("25. Com a migração por correr não há motivos novos nem erros", !contactReasonsFor(ana, today).some(function(r){ return r.key === "pagamento-atrasado"; }) && /migração <strong>0023/.test(tplProSessoes(ana)));
+check.check("25. Com a migração por correr não há motivos novos nem erros", !studioContactReasons("a", today).some(function(r){ return r.key === "pagamento-atrasado"; }) && /migração <strong>0023/.test(tplProSessoes(ana)));
 studio.available = true;
+reset([pack({total: 4})], [sess(), sess(), sess()], [{id: "1", student_id: "a", amount: 100, due_on: d(10), paid_on: null}]);
+check.check("25b. O núcleo (Acompanhamento) já não mistura avisos de pacotes e pagamentos na lista de contactos: vivem na Gestão", !contactReasonsFor(ana, today).some(function(r){ return ["pagamento-atrasado", "pacote-a-acabar", "faltas"].indexOf(r.key) >= 0; }) && /id="studioContact"/.test(studioContactHtml([ana], today)) && /data-open-student="a"/.test(studioContactHtml([ana], today)));
 
 // ---- CSV ----
 reset([pack({name: 'Pack "especial"; 10'})], [sess({date: today, status: "faltou", notes: "x"})], [{id: "1", student_id: "a", amount: 250, due_on: today, paid_on: null, notes: "linha1\nlinha2"}]);
