@@ -692,3 +692,7 @@ html[data-app="gestao"]{--display:'Space Grotesk', -apple-system, BlinkMacSystem
   .ct-name{padding:0;}
   .ct-sess{justify-content:flex-start;}
 }
+.pack-row .btn{padding:10px 12px;}
+.pack-row{position:relative;}
+.pack-row .assess-del{position:absolute; top:-6px; right:-6px; margin:0;}
+.pack-row > div:first-child{padding-right:36px;}
