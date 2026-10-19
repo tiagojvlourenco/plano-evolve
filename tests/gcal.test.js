@@ -163,5 +163,14 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   var emptyPrefix = calSettings.titlePrefix;
   store[CAL_LOCAL_KEY] = JSON.stringify({clientId: "x.apps.googleusercontent.com", titlePrefix: "PT"}); await calLoadSettings(); calSettings.titlePrefix = "Treino"; await calSaveSettings(); calSettings.titlePrefix = "x"; await calLoadSettings();
   check.check("64. Por omissão o prefixo é 'PT'; vazio fica vazio; o que se escreve guarda-se", defPrefix === "PT" && emptyPrefix === "" && calSettings.titlePrefix === "Treino");
+  // o mesmo nome 2x no mesmo horário = 2 aulas
+  studio.sessions = [];
+  var pr = planCalendarSync({events: [evt("r1", "PT 60 - Isabel Carvalho", 3), evt("r2", "PT 60 - Isabel Carvalho", 3)], today: today, window: win, aliases: {}});
+  check.check("65. Dois eventos com o mesmo nome no mesmo horário contam duas aulas", pr.insert.length === 2 && pr.matched === 2);
+  var pr2 = planCalendarSync({events: [evt("r3", "PT Duo 60 - Isabel Carvalho + Isabel Carvalho", 3)], today: today, window: win, aliases: {}});
+  check.check("66. «Nome + Nome» no mesmo título conta duas aulas, com ids diferentes", pr2.insert.length === 2 && pr2.insert[0].external_id !== pr2.insert[1].external_id);
+  studio.sessions = [{id: "h1", student_id: "a", date: d(3), time: "10:00", status: "feita", source: "horario"}];
+  var pr3 = planCalendarSync({events: [evt("r1", "PT 60 - Isabel Carvalho", 3), evt("r2", "PT 60 - Isabel Carvalho", 3)], today: today, window: win, aliases: {}});
+  check.check("67. Uma sessão já registada cobre só um dos dois eventos: entra a outra", pr3.insert.length === 1);
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });
