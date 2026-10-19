@@ -1,5 +1,6 @@
   /* Fontes guardadas no próprio site (funcionam sem rede e não enviam o IP do aluno a servidores de terceiros) */
   @font-face{font-family:'Manrope'; font-style:normal; font-weight:200 800; font-display:swap; src:url(fonts/manrope-latin-wght-normal.woff2) format('woff2');}
+  @font-face{font-family:'Space Grotesk'; font-style:normal; font-weight:300 700; font-display:swap; src:url(fonts/space-grotesk-latin-wght-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/jura-latin-400-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/jura-latin-500-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/jura-latin-600-normal.woff2) format('woff2');}
@@ -649,3 +650,45 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
   .toast.toast-top{bottom:auto; top:calc(14px + env(safe-area-inset-top, 0px)); transform:translateX(-50%) translateY(-20px);}
   .toast.toast-top.show{transform:translateX(-50%) translateY(0);}
+
+/* ---- Gestão: letra Space Grotesk e aspeto «limpo» (cantos retos, linhas finas) nos Contratos, Clientes e Financeiro ---- */
+html[data-app="gestao"]{--display:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --sans:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --mono:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;}
+.ct-title{font-size:1.5rem; font-weight:500; text-transform:uppercase; letter-spacing:0.08em; margin:4px 0 14px;}
+.ct-tabs{display:grid; grid-auto-flow:column; grid-auto-columns:1fr; border:1px solid var(--line-strong); margin-bottom:14px;}
+.ct-tab{background:transparent; border:0; border-right:1px solid var(--line-strong); color:var(--muted); min-height:44px; font-size:0.68rem; font-weight:500; text-transform:uppercase; letter-spacing:0.16em; cursor:pointer; font-family:var(--sans);}
+.ct-tab:last-child{border-right:0;}
+.ct-tab.on{background:var(--surface-3); color:var(--ink); font-weight:700;}
+.ct-stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;}
+.ct-stat{border:1px solid var(--line-strong); background:var(--surface); padding:14px 16px;}
+.ct-stat .l{font-size:0.62rem; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted);}
+.ct-stat .v{font-size:1.85rem; font-weight:500; line-height:1.15; margin:8px 0 4px; font-variant-numeric:tabular-nums;}
+.ct-stat .s{font-size:0.76rem; color:var(--muted);}
+.ct-section{font-size:0.66rem; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); margin:20px 0 8px;}
+.ct-filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.ct-f{background:transparent; border:1px solid var(--line-strong); color:var(--ink); min-height:44px; padding:0 14px; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.14em; cursor:pointer; font-family:var(--sans);}
+.ct-f.on{background:var(--ink); color:var(--bg);}
+.ct-table{border:1px solid var(--line-strong);}
+.ct-head{display:none;}
+.ct-row{display:block; width:100%; text-align:left; background:transparent; border:0; border-top:1px solid var(--line); padding:12px 14px; color:var(--ink); font-family:var(--sans); font-size:0.92rem; cursor:pointer;}
+.ct-row:first-child, .ct-head + div > .ct-row:first-child{border-top:0;}
+.ct-c{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:3px 0; min-width:0;}
+.ct-c[data-l]::before{content:attr(data-l); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.16em; color:var(--muted);}
+.ct-c.r{text-align:right;}
+.ct-name{display:block; padding-bottom:6px;}
+.ct-name strong{display:block; font-weight:700; font-size:1rem;}
+.ct-name small, .ct-c small{display:block; color:var(--muted); font-size:0.76rem; margin-top:2px;}
+.ct-hrs{display:inline-block; margin-left:8px; padding:1px 10px; border:1px solid var(--accent); border-radius:999px; color:var(--accent-strong); font-size:0.72rem; font-weight:700;}
+.ct-sess{display:flex; align-items:center; gap:8px; flex:1; justify-content:flex-end;}
+.ct-sess .bar-track{flex:0 1 110px; margin:0;}
+.ct-st{font-weight:700;} .ct-st.good{color:var(--good);} .ct-st.warn{color:var(--warn);} .ct-st.critical{color:var(--critical);}
+.ct-good{color:var(--good);} .ct-warn{color:var(--warn);}
+.ct-mrow.on{background:var(--surface-2);}
+@media (min-width:760px){
+  .ct-head, .ct-row{display:grid; grid-template-columns:var(--cols); gap:12px; align-items:center;}
+  .ct-head{padding:12px 14px; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.16em; color:var(--muted); border-bottom:1px solid var(--line-strong); background:var(--surface);}
+  .ct-head .r, .ct-c.r{text-align:right; justify-content:flex-end;}
+  .ct-c[data-l]::before{display:none;}
+  .ct-c{display:block; padding:0;}
+  .ct-name{padding:0;}
+  .ct-sess{justify-content:flex-start;}
+}

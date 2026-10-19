@@ -1780,46 +1780,84 @@ function contractTotals(units){
 function contractPlanLabel(x){
   return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
 }
-var contractsView = {tab: "contratos", filter: "todos", search: "", sort: "nome", open: null};
+var contractsView = {tab: "contratos", filter: "todos", cfilter: "todos", search: "", sort: "nome", open: null};
 function renderProContractsMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded || !contractMeta.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; Promise.all([studioRefresh(), loadContractMeta()]).then(function(){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); }); return; }
   if (!studio.available){ main.innerHTML = studioUnavailableHtml(); return; }
   var today = localTodayISO();
-  var html = "<div class=\"checkin-tabs\" style=\"display:flex; gap:8px; margin-bottom:12px;\">" + [["contratos", "Contratos"], ["financeiro", "Financeiro"]].map(function(t){
-    return "<button type=\"button\" class=\"btn btn-sm" + (contractsView.tab === t[0] ? " primary" : "") + "\" data-ct-tab=\"" + t[0] + "\" style=\"flex:1; min-height:44px;\">" + t[1] + "</button>"; }).join("") + "</div>";
+  var html = "<h2 class=\"ct-title\">" + (contractsView.tab === "financeiro" ? "Financeiro" : contractsView.tab === "clientes" ? "Clientes" : "Contratos") + "</h2><div class=\"ct-tabs\">" + [["contratos", "Contratos"], ["clientes", "Clientes"], ["financeiro", "Financeiro"]].map(function(t){
+    return "<button type=\"button\" class=\"ct-tab" + (contractsView.tab === t[0] ? " on" : "") + "\" data-ct-tab=\"" + t[0] + "\">" + t[1] + "</button>"; }).join("") + "</div>";
   if (contractsView.tab === "financeiro") html += contractsFinanceHtml(today);
+  else if (contractsView.tab === "clientes") html += contractsClientsHtml(today);
   else if (contractsView.open) html += contractDetailHtml(contractsView.open, today);
   else html += contractsListHtml(today);
   main.innerHTML = html;
   wireContractsMain(main);
   if (contractsView.tab === "contratos" && !contractsView.open) applyContractsFilter();
 }
+function ctStat(label, value, sub){ return "<div class=\"ct-stat\"><div class=\"l\">" + label + "</div><div class=\"v\">" + value + "</div><div class=\"s\">" + sub + "</div></div>"; }
+function ctFilters(list, current, attr, counts){
+  return "<div class=\"ct-filters\">" + list.map(function(f){ return "<button type=\"button\" class=\"ct-f" + (current === f[0] ? " on" : "") + "\" " + attr + "=\"" + f[0] + "\">" + f[1] + " · " + counts(f[0]) + "</button>"; }).join("") + "</div>";
+}
+function contractsTotalsHtml(units){
+  var t = contractTotals(units);
+  return "<div class=\"ct-stats\" id=\"contractTotals\">" + ctStat("Horas totais", t.hours ? fmtHours(t.hours) : "—", "contratadas por mês") + ctStat("Contratos ativos", t.n, "um duo conta uma vez") + ctStat("Receita recorrente", t.revenue ? eur(t.revenue) : "—", "contratada por mês") + "</div>";
+}
 function contractsListHtml(today){
-  var units = contractUnits(today), t = contractTotals(units);
-  var html = "<div class=\"pro-stat-row\" id=\"contractTotals\">" + proStat(t.hours ? fmtHours(t.hours) : "—", "Horas totais contratadas por mês") + proStat(t.n, "Contratos ativos · um duo conta uma vez") + proStat(t.revenue ? eur(t.revenue) : "—", "Receita recorrente por mês") + "</div>";
+  var units = contractUnits(today);
+  var html = contractsTotalsHtml(units);
   var count = function(f){ return f === "todos" ? units.length : units.filter(function(x){ return x.estado === f; }).length; };
-  html += "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;\">" + [["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["cancelado", "Cancelado"]].map(function(f){
-    return "<button type=\"button\" class=\"btn btn-sm" + (contractsView.filter === f[0] ? " primary" : "") + "\" data-ct-filter=\"" + f[0] + "\" style=\"min-height:44px;\">" + f[1] + " · " + count(f[0]) + "</button>"; }).join("") + "</div>";
-  html += "<div class=\"student-tools\" id=\"contractTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"ctSearch\" placeholder=\"Procurar contrato…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar contrato\" value=\"" + escapeHtml(contractsView.search || "") + "\"></label>" +
+  html += "<div class=\"ct-section\">Contratos</div>" + ctFilters([["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["cancelado", "Cancelado"]], contractsView.filter, "data-ct-filter", count);
+  html += "<div class=\"student-tools\" id=\"contractTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"ctSearch\" placeholder=\"Procurar nome…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar contrato\" value=\"" + escapeHtml(contractsView.search || "") + "\"></label>" +
     "<select id=\"ctSort\" class=\"mini-select\" aria-label=\"Ordenar contratos\">" + [["nome", "Nome A → Z"], ["nomeza", "Nome Z → A"], ["valor", "Maior valor"], ["restam", "Menos aulas por dar"], ["horas", "Mais horas"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (contractsView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>";
-  html += "<div id=\"contractList\">";
+  html += "<div class=\"ct-table\" style=\"--cols:2.2fr 1fr 1.3fr 2fr 1fr 1fr\"><div class=\"ct-head\"><span>Contrato</span><span>Formato</span><span>Plano</span><span>Sessões</span><span class=\"r\">Valor</span><span>Estado</span></div><div id=\"contractList\">";
   var rows = units.filter(function(x){ return contractsView.filter === "todos" || x.estado === contractsView.filter; });
   rows.forEach(function(x, i){
-    var pct = x.u ? x.u.pct : 0;
-    html += "<div class=\"card contract-row\" data-cname=\"" + escapeHtml(exLibFold(x.name)) + "\" data-val=\"" + (x.perMonth || 0) + "\" data-rem=\"" + (x.u ? x.u.remaining : 999) + "\" data-hrs=\"" + x.hours + "\" data-ord=\"" + i + "\" style=\"margin-bottom:10px; cursor:pointer;\" data-open-contract=\"" + escapeHtml(x.key) + "\">" +
-      "<div style=\"display:flex; justify-content:space-between; gap:8px; align-items:flex-start;\"><div style=\"min-width:0;\"><div class=\"hlabel\" style=\"font-weight:700;\">" + escapeHtml(x.name) + "</div>" +
-      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (x.duo ? "Duo" : "Individual") + " · " + escapeHtml(contractPlanLabel(x)) + (x.hours ? " · <span class=\"pill warn\">" + escapeHtml(fmtHours(x.hours)) + "</span>" : "") + "</div></div>" +
-      "<div style=\"text-align:right; white-space:nowrap;\"><div class=\"hlabel\">" + (x.price != null ? escapeHtml(eurShort(x.price)) : "—") + "</div><span class=\"pill " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span></div></div>" +
-      (x.u ? "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div><div class=\"muted-p\" style=\"font-size:0.78rem;\"><strong>" + x.u.used + " de " + x.u.total + "</strong> · " + escapeHtml(x.packLabel) + "</div>" : "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + escapeHtml(x.packLabel) + "</div>") + "</div>";
+    var pct = x.u ? x.u.pct : 0, tone = x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical";
+    html += "<div class=\"ct-row contract-row\" data-cname=\"" + escapeHtml(exLibFold(x.name)) + "\" data-val=\"" + (x.perMonth || 0) + "\" data-rem=\"" + (x.u ? x.u.remaining : 999) + "\" data-hrs=\"" + x.hours + "\" data-ord=\"" + i + "\" data-open-contract=\"" + escapeHtml(x.key) + "\">" +
+      "<div class=\"ct-c ct-name\"><strong>" + escapeHtml(x.name) + "</strong><small>Na agenda: PT " + x.meta.minutos + " - " + escapeHtml(x.name) + "</small></div>" +
+      "<div class=\"ct-c\" data-l=\"Formato\">" + (x.duo ? "Duo" : "Individual") + "</div>" +
+      "<div class=\"ct-c\" data-l=\"Plano\"><span>" + escapeHtml(contractPlanLabel(x)) + "</span>" + (x.hours ? "<span class=\"ct-hrs\">" + escapeHtml(fmtHours(x.hours)) + "</span>" : "") + "</div>" +
+      "<div class=\"ct-c\" data-l=\"Sessões\">" + (x.u ? "<div class=\"ct-sess\"><span><strong>" + x.u.used + "</strong> de " + x.u.total + "</span><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div></div><small>" + escapeHtml(x.packLabel) + "</small>" : "<small>" + escapeHtml(x.packLabel) + "</small>") + "</div>" +
+      "<div class=\"ct-c r\" data-l=\"Valor\"><strong>" + (x.price != null ? escapeHtml(eur(x.price)) : "—") + "</strong></div>" +
+      "<div class=\"ct-c ct-st " + tone + "\" data-l=\"Estado\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</div></div>";
   });
   if (!rows.length) html += "<p class=\"muted-p\">Sem contratos neste estado.</p>";
-  html += "</div><p class=\"muted-p\" id=\"ctInfo\" style=\"font-size:0.78rem;\">" + rows.length + " de " + units.length + "</p>";
+  html += "</div></div><p class=\"muted-p\" id=\"ctInfo\" style=\"font-size:0.78rem;\">" + rows.length + " de " + units.length + "</p>";
   html += "<details class=\"perfil-section\" id=\"contractImport\" style=\"margin:14px 0;\"><summary class=\"eyebrow\">Importar formato, modalidade e estado dos contratos</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por contrato: <strong>Nome; modalidade; formato; estado</strong> (ex.: PT 60 - Ana Silva; Trimestral; Individual; Ativo). O «PT 45» ou «PT 60» do nome dá os minutos; em duos usa «A + B». Estado: Ativo, Suspenso ou Cancelado.</p>" +
     "<textarea id=\"ctImpText\" rows=\"5\" placeholder=\"PT 60 - Ana Silva; Trimestral; Individual; Ativo\"></textarea><p class=\"muted-p\" id=\"ctImpOut\" style=\"margin-top:6px;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"ctImpGo\" style=\"margin-top:8px;\">Importar</button></details>";
   return html;
+}
+var CT_CLIENT_FILTERS = [["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["inativo", "Inativos"]];
+function ctShortDate(iso){ return iso ? iso.slice(8) + "/" + iso.slice(5, 7) : "—"; }
+function contractsClientsHtml(today){
+  var units = contractUnits(today);
+  var rows = visibleStudentsForDashboard().map(function(st){
+    var un = units.filter(function(u){ return u.ids.indexOf(st.id) >= 0; })[0], est = contractEstadoOf(st);
+    var tone = est === "ativo" ? "ativo" : est === "suspenso" ? "suspenso" : "inativo";
+    var lastS = studio.sessions.filter(function(x){ return x.student_id === st.id && x.status === "feita" && x.date <= today; }).reduce(function(m, x){ return x.date > m ? x.date : m; }, "");
+    var lastP = studio.payments.filter(function(y){ return y.student_id === st.id && y.paid_on; }).reduce(function(m, y){ return y.paid_on > m ? y.paid_on : m; }, "");
+    return {st: st, un: un, estado: tone, label: est === "cancelado" ? "Inativo" : CONTRACT_ESTADO_LABEL[est], perMonth: un && un.perMonth != null ? un.perMonth / un.members.length : null, lastS: lastS, lastP: lastP};
+  });
+  var count = function(f){ return f === "todos" ? rows.length : rows.filter(function(r){ return r.estado === f; }).length; };
+  var shown = rows.filter(function(r){ return contractsView.cfilter === "todos" || r.estado === contractsView.cfilter; }).sort(function(a, b){ return String(a.st.name).localeCompare(String(b.st.name), "pt"); });
+  var html = contractsTotalsHtml(units) + "<div class=\"ct-section\">Clientes</div>" + ctFilters(CT_CLIENT_FILTERS, contractsView.cfilter, "data-ct-cfilter", count);
+  html += "<div class=\"ct-table\" style=\"--cols:2.2fr 1.3fr 1fr 1.6fr 1fr 1.2fr 1fr\"><div class=\"ct-head\"><span>Nome</span><span>Plano</span><span class=\"r\">Valor/mês</span><span>Sessões</span><span>Último treino</span><span>Último pagamento</span><span>Estado</span></div>";
+  shown.forEach(function(r){
+    var x = r.un, tone = r.estado === "ativo" ? "good" : r.estado === "suspenso" ? "warn" : "critical";
+    html += "<div class=\"ct-row\"><div class=\"ct-c ct-name\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.st.id) + "\"><strong>" + escapeHtml(r.st.name) + "</strong></button></div>" +
+      "<div class=\"ct-c\" data-l=\"Plano\">" + (x ? escapeHtml(contractPlanLabel(x)) : "—") + "</div>" +
+      "<div class=\"ct-c r\" data-l=\"Valor/mês\"><strong>" + (r.perMonth != null ? escapeHtml(eur(r.perMonth)) : "—") + "</strong></div>" +
+      "<div class=\"ct-c\" data-l=\"Sessões\">" + (x && x.u ? "<div class=\"ct-sess\"><span><strong>" + x.u.used + "</strong> de " + x.u.total + "</span><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + x.u.pct + "%\"></div></div></div>" : "—") + "</div>" +
+      "<div class=\"ct-c\" data-l=\"Último treino\">" + ctShortDate(r.lastS) + "</div>" +
+      "<div class=\"ct-c\" data-l=\"Último pagamento\">" + (r.lastP ? escapeHtml(fmtDateFullPt(r.lastP)) : "—") + "</div>" +
+      "<div class=\"ct-c ct-st " + tone + "\" data-l=\"Estado\">" + r.label + "</div></div>";
+  });
+  if (!shown.length) html += "<p class=\"muted-p\">Sem clientes neste estado.</p>";
+  return html + "</div><p class=\"muted-p\" style=\"font-size:0.78rem;\">" + shown.length + " de " + rows.length + "</p>";
 }
 function applyContractsFilter(){
   var list = document.getElementById("contractList");
@@ -1880,19 +1918,35 @@ function contractPaymentRowHtml(p, today){
     "<span style=\"white-space:nowrap;\"><span class=\"hlabel\">" + escapeHtml(eur(p.amount)) + "</span> <span class=\"pill " + tone + "\">" + st + "</span> " +
     (p.paid_on ? "<button type=\"button\" class=\"btn btn-sm\" data-unpay=\"" + escapeHtml(p.id) + "\">Desmarcar</button>" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button>") + "</span></div>";
 }
+var MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function contractsFinanceHtml(today){
   if (!studioView.month) studioView.month = monthOf(today);
-  var month = studioView.month, k = studioKpis(month, today);
-  var inMonth = studio.payments.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
-  var html = "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"ctMonth\">Mês</label><input type=\"month\" id=\"ctMonth\" value=\"" + escapeHtml(month) + "\"></div>" +
-    "<div class=\"pro-stat-row\" style=\"margin-top:10px;\">" + proStat(eurShort(k.received), "Recebido no mês (" + k.receivedN + ")") + proStat(eurShort(k.toCollect), "A receber no mês (" + k.toCollectN + ")") + proStat(eurShort(k.overdue), k.overdueN ? "Em atraso (" + k.overdueN + ")" : "Em atraso") + "</div>" +
-    "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos do mês</div>" + (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos neste mês.</p>") + "</div>" +
+  var month = studioView.month, year = month.slice(0, 4), mi = parseInt(month.slice(5, 7), 10) - 1;
+  var sum = function(list){ return list.reduce(function(a, p){ return a + (Number(p.amount) || 0); }, 0); };
+  var pays = studio.payments, paidIn = function(pre){ return pays.filter(function(p){ return p.paid_on && p.paid_on.indexOf(pre) === 0; }); };
+  var dueIn = function(pre){ return pays.filter(function(p){ return p.due_on && p.due_on.indexOf(pre) === 0; }); };
+  var years = {}; years[today.slice(0, 4)] = 1; years[year] = 1; pays.forEach(function(p){ if (p.due_on) years[p.due_on.slice(0, 4)] = 1; if (p.paid_on) years[p.paid_on.slice(0, 4)] = 1; });
+  var inMonth = pays.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
+  var mName = MESES_PT[mi] || month;
+  var html = "<p class=\"muted-p\" style=\"margin:-4px 0 12px;\">Esta página é sua.</p><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"ctYear\">Ano</label><select id=\"ctYear\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(years).sort().map(function(y){ return "<option value=\"" + y + "\"" + (y === year ? " selected" : "") + ">" + y + (y === today.slice(0, 4) ? " até " + MESES_PT[parseInt(today.slice(5, 7), 10) - 1] : "") + "</option>"; }).join("") + "</select></div>" +
+    "<div class=\"ct-stats ct-stats4\" style=\"margin-top:10px;\">" + ctStat("Recebido em " + mName, eur(sum(paidIn(month))), "dinheiro que entrou") + ctStat("Previsto em " + mName, eur(sum(dueIn(month).filter(function(p){ return !p.paid_on; }))), "ainda esperado") +
+    ctStat("Recebido em " + year, eur(sum(paidIn(year))), "até hoje") + ctStat("Previsto até ao fim do ano", eur(sum(pays.filter(function(p){ return !p.paid_on && p.due_on >= today && p.due_on.slice(0, 4) === year; }))), "de hoje em diante") + "</div>";
+  html += "<div class=\"ct-table\" style=\"--cols:1.6fr 1fr 1fr; margin-top:14px;\"><div class=\"ct-head\"><span>Mês</span><span class=\"r\">Recebido</span><span class=\"r\">Previsto</span></div>";
+  MESES_PT.forEach(function(nm, i){
+    var pre = year + "-" + pad2(i + 1);
+    html += "<button type=\"button\" class=\"ct-row ct-mrow" + (pre === month ? " on" : "") + "\" data-ct-month=\"" + pre + "\"><div class=\"ct-c ct-name\"><strong>" + nm + "</strong></div><div class=\"ct-c r\" data-l=\"Recebido\"><span class=\"ct-good\">" + eur(sum(paidIn(pre))) + "</span></div><div class=\"ct-c r\" data-l=\"Previsto\"><span class=\"ct-warn\">" + eur(sum(dueIn(pre))) + "</span></div></button>";
+  });
+  html += "</div><div class=\"checkin-field\" style=\"max-width:200px; margin-top:14px;\"><label for=\"ctMonth\">Mês em detalhe</label><input type=\"month\" id=\"ctMonth\" value=\"" + escapeHtml(month) + "\"></div>" +
+    "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos de " + escapeHtml(mName) + "</div>" + (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos neste mês.</p>") + "</div>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctCsv\">⬇ Recebimentos (CSV)</button></div>";
   return html;
 }
 function wireContractsMain(main){
   var redraw = function(){ renderProContractsMain(); };
   main.querySelectorAll("[data-ct-tab]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.tab = b.getAttribute("data-ct-tab"); contractsView.open = null; redraw(); }); });
+  main.querySelectorAll("[data-ct-cfilter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.cfilter = b.getAttribute("data-ct-cfilter"); redraw(); }); });
+  main.querySelectorAll("[data-ct-month]").forEach(function(b){ b.addEventListener("click", function(){ studioView.month = b.getAttribute("data-ct-month"); redraw(); }); });
+  var yr = main.querySelector("#ctYear"); if (yr) yr.addEventListener("change", function(){ studioView.month = yr.value + "-" + (studioView.month || "01-01").slice(5, 7); redraw(); });
   main.querySelectorAll("[data-ct-filter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.filter = b.getAttribute("data-ct-filter"); redraw(); }); });
   main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
   var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; redraw(); });

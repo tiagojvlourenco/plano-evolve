@@ -51,7 +51,7 @@ function fixtureRow(id, name){
   var rec = tot.match(/([\d.\s]+,\d\d)\s*€/);
   // valor/mês: a 902,5/26 × 8,66 = 300,59 ; b 451,25/13 × 4,33 = 150,30 ; duo 1200/26 × 8,66 = 399,69  → 850,58
   check.check("3. Receita recorrente por mês = valor por sessão × sessões por mês, só dos ativos", /850,\d\d\s*€/.test(tot));
-  var names = function(){ return pg.evaluate(function(){ return [].filter.call(document.querySelectorAll("#contractList [data-cname]"), function(r){ return !r.hidden; }).map(function(r){ return r.querySelector(".hlabel").textContent.trim(); }); }); };
+  var names = function(){ return pg.evaluate(function(){ return [].filter.call(document.querySelectorAll("#contractList [data-cname]"), function(r){ return !r.hidden; }).map(function(r){ return r.querySelector(".ct-name strong").textContent.trim(); }); }); };
   check.check("4. A lista tem 4 contratos (a Carla cancelada, o duo numa só linha)", (await names()).join("|") === "Ana Silva|Bruno Costa|Carla Dias|Rui Duo + Eva Duo");
   await pg.click('[data-ct-filter="ativo"]');
   check.check("5. O filtro «Ativo» esconde a cancelada", (await names()).join("|") === "Ana Silva|Bruno Costa|Rui Duo + Eva Duo");
@@ -90,7 +90,7 @@ function fixtureRow(id, name){
   // financeiro
   await pg.click('[data-ct-tab="financeiro"]'); await pg.waitForSelector("#ctMonth");
   var fin = await pg.locator("#proMain").innerText();
-  check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido no mês/.test(fin) && /A receber no mês/.test(fin) && /451,25 €/.test(fin));
+  check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido em/i.test(fin) && /Previsto em/i.test(fin) && /Esta página é sua/.test(fin) && /451,25 €/.test(fin));
   // Eu (app de Acompanhamento)
   await pgA.click("#navMe"); await pgA.waitForSelector("[data-me]");
   await pgA.locator('[data-me="b"]').click();

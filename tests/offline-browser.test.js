@@ -54,7 +54,7 @@ function fixtureRow(id, name){
   var swReady = await page.evaluate(async function(){ var r = await navigator.serviceWorker.ready; return !!(r && r.active); });
   check.check("2. O service worker fica ativo", swReady);
   var cached = await page.evaluate(async function(){ var ks = await caches.keys(); var c = await caches.open(ks[0]); var reqs = await c.keys(); return {keys: ks, urls: reqs.map(function(r){ return new URL(r.url).pathname; })}; });
-  check.check("3. A cache tem a página, o Supabase local e as fontes", cached.keys[0] === "evolve-v2" && ["/index.html", "/vendor/supabase.js", "/fonts/manrope-latin-wght-normal.woff2", "/manifest.json"].every(function(u){ return cached.urls.indexOf(u) >= 0; }));
+  check.check("3. A cache tem a página, o Supabase local e as fontes", cached.keys[0] === "evolve-v3" && ["/index.html", "/vendor/supabase.js", "/fonts/manrope-latin-wght-normal.woff2", "/manifest.json"].every(function(u){ return cached.urls.indexOf(u) >= 0; }));
   var external = await page.evaluate(function(){ return performance.getEntriesByType("resource").map(function(r){ return r.name; }).filter(function(u){ return !/^http:\/\/127\.0\.0\.1/.test(u); }); });
   check.check("4. A app não pede nada a servidores externos ao abrir (fontes e Supabase são locais)", external.length === 0);
 
