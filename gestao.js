@@ -847,6 +847,14 @@ function matchDuoStudents(title){
   }
   return out.length ? out : null;
 }
+function matchRepeatedStudent(title){
+  var parts = String(title || "").split(/\s+[-–—]\s+/), tail = parts.length > 1 ? parts[parts.length - 1] : String(title || "");
+  if (!/\s[+&]\s/.test(tail)) return null;
+  var names = tail.split(/\s*[+&]\s*/).map(function(t){ return t.trim(); }).filter(Boolean);
+  if (names.length < 2 || names.some(function(n){ return exLibFold(n) !== exLibFold(names[0]); })) return null;
+  var st = matchStudentByName(names[0]);
+  return st ? {st: st, n: names.length} : null;
+}
 function matchEventStudent(title, aliases){
   var key = calTitleKey(title);
   if (aliases && Object.prototype.hasOwnProperty.call(aliases, key) && aliases[key]){ var a = findStudent(aliases[key]); if (a) return a; }
@@ -900,6 +908,8 @@ function planCalendarSync(opts){
   opts.events.forEach(function(ev){
     if (!ev || ev.cancelled || ev.date > today || ev.date < win.from) return;
     if (!calTitleHasPrefix(ev.title, prefix)) return; // não é uma aula (ex.: reuniões, feriados): nem conta nem aparece na lista
+    var rep = matchRepeatedStudent(ev.title);   // «Ana + Ana»: o mesmo nome várias vezes = várias aulas
+    if (rep){ for (var k = 0; k < rep.n; k++) items.push({ev: ev, st: rep.st, eid: k ? ev.id + "#" + rep.st.id + "#" + k : ev.id}); return; }
     var st = matchEventStudent(ev.title, aliases);
     if (st){ items.push({ev: ev, st: st, eid: ev.id}); return; }
     var duo = matchDuoStudents(ev.title);
@@ -931,8 +941,9 @@ function planCalendarSync(opts){
       return;
     }
     // uma sessão registada à mão (ou do horário) no mesmo dia/hora ganha: não se conta duas vezes (as agendadas não contam: são só previsões)
-    var dup = studio.sessions.some(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && x.status !== "agendada" && (!x.time || !ev.time || x.time === ev.time); });
-    if (dup) return;
+    // (cada sessão já registada cobre um só evento: dois eventos iguais no mesmo horário são duas aulas)
+    var dup = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === ev.date && x.source !== "calendario" && x.status !== "agendada" && !claimed[x.id] && (!x.time || !ev.time || x.time === ev.time); })[0];
+    if (dup){ claimed[dup.id] = true; return; }
     plan.insert.push({student_id: st.id, date: ev.date, time: ev.time, status: status, source: "calendario", external_id: eid});
   });
   // sessões vindas do calendário cujo evento já não existe (apagado, cancelado ou renomeado) dentro da janela lida
