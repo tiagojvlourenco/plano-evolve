@@ -92,10 +92,21 @@ function fakeSb(calls){
 tests.push(function(){
   var toasts = []; showToast = function(m){ toasts.push(m); };
   var calls = []; sbReady = true; sb = fakeSb(calls);
-  var s = {id:"t1", photos:[], authUserId:null};
-  return uploadProgressPhotoAsPro(s, {name:"x.jpg"}, "frente").then(function(ok){
-    check.check("7. Sem conta do aluno ativada: não carrega e avisa", ok === false && s.photos.length === 0 && calls.length === 0);
-    check.check("7. O aviso explica porquê", toasts.some(function(m){ return /ainda não ativou a conta/.test(m); }));
+  resizeImageFile = function(){ return Promise.resolve({blob:true}); };
+  var s = {id:"t1", photos:[], authUserId:null, name:"T"};
+  return uploadProgressPhotoAsPro(s, {name:"x.jpg"}, "frente", null, "2025-03-10").then(function(ok){
+    var up = calls.filter(function(c){ return c.op === "upload"; })[0];
+    check.check("7. Sem conta do aluno ativada: carrega na pasta do estúdio (só o profissional vê), sem avisos de erro", ok === true && up && up.path.indexOf("sem-conta/t1/") === 0 && !toasts.length);
+    check.check("7. A foto fica com a data em que foi tirada (fotos antigas)", s.photos.length === 1 && s.photos[0].date === "2025-03-10");
+  });
+});
+
+tests.push(function(){
+  var calls = []; sbReady = true; sb = fakeSb(calls);
+  var s = {id:"t2", photos:[], authUserId:"u2", name:"T"};
+  return uploadProgressPhotoAsPro(s, {name:"x.jpg"}, "costas", null, "2999-01-01").then(function(){
+    check.check("7. Uma data no futuro (ou inválida) cai para hoje", s.photos[0].date === todayISO());
+    check.check("7. A comparação entrega a imagem pela folha de partilha do telemóvel ou por descarga", typeof deliverComparisonImage === "function");
   });
 });
 

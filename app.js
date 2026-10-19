@@ -10408,7 +10408,7 @@ function tplPhotoCompare(s){
     "</div>" +
     "<div class=\"compare-grid\" id=\"compareGrid\"></div>" +
     "<div id=\"compareMetrics\"></div>" +
-    "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar comparação</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar / enviar ao aluno</button>" +
     "<p class=\"muted-p\" id=\"compareDownloadError\" style=\"color:var(--critical); display:none; margin-top:8px;\"></p>" +
   "</div>";
 }
@@ -10483,6 +10483,29 @@ function drawImageCover(ctx, img, x, y, w, h){
 // Gera uma única imagem PNG com a grelha 2 momentos × 3 posições (até 6
 // fotos), pronta a descarregar e a enviar ao aluno. Pedido explícito: uma
 // imagem combinada, não os ficheiros separados.
+// entrega a imagem da comparação: no telemóvel abre a folha de partilha (WhatsApp, Mensagens, Fotografias);
+// numa app instalada sem partilha mostra a imagem para guardar; no computador descarrega
+function deliverComparisonImage(blob, name, studentName){
+  var file = null;
+  try { file = new File([blob], name, {type: "image/png"}); } catch (e) {}
+  var touchFirst = !window.matchMedia || window.matchMedia("(pointer: coarse)").matches;
+  var url = URL.createObjectURL(blob);
+  var fallback = function(){
+    var standalone = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone){
+      openModal("<div class=\"mtitle\">Comparação pronta</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Mantém o dedo carregado na imagem para a guardar ou partilhar.</p>" +
+        "<img src=\"" + url + "\" alt=\"Comparação de fotografias\" style=\"width:100%; border-radius:12px; background:#fff;\">");
+    } else {
+      var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+    }
+  };
+  if (touchFirst && file && navigator.share && navigator.canShare && navigator.canShare({files: [file]})){
+    navigator.share({files: [file], title: "Evolução" + (studentName ? " — " + studentName : "")}).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) fallback(); });
+    return;
+  }
+  fallback();
+}
 function downloadPhotoComparison(s, dateA, dateB, errEl){
   if (errEl) errEl.style.display = "none";
   var cellW = 280, cellH = 360, labelW = 90, gap = 14, headerH = 46, titleH = 46, pad = 24;
@@ -10551,14 +10574,7 @@ function downloadPhotoComparison(s, dateA, dateB, errEl){
     return new Promise(function(resolve){ canvas.toBlob(resolve, "image/png"); });
   }).then(function(blob){
     if (!blob) throw new Error("Não foi possível gerar a imagem.");
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "evolucao-" + s.id + "-" + dateA + "-vs-" + dateB + ".png";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    deliverComparisonImage(blob, "evolucao-" + slug(s.name || s.id) + "-" + dateA + "-vs-" + dateB + ".png", s.name);
   }).catch(function(err){
     if (errEl){
       errEl.textContent = "⚠ Não foi possível gerar a imagem de comparação — tenta novamente.";
@@ -10572,20 +10588,18 @@ function downloadPhotoComparison(s, dateA, dateB, errEl){
 // pasta do ALUNO no Storage (a política de leitura do aluno só deixa ler a própria pasta; o profissional
 // pode inserir em qualquer uma) — por isso o aluno também vê a foto. Sem a conta do aluno ativada
 // (sem auth_user_id) não há pasta onde a guardar: avisa em vez de falhar em silêncio.
-function uploadProgressPhotoAsPro(s, file, position, onDone){
+function uploadProgressPhotoAsPro(s, file, position, onDone, date){
   if (!file) return Promise.resolve(false);
+  var photoDate = isIsoDate(date) && date <= todayISO() ? date : todayISO();   // permite carregar fotos antigas com a data em que foram tiradas
   if (sbReady){
-    if (!s.authUserId){
-      showToast("O aluno ainda não ativou a conta — só depois é possível carregar fotos.");
-      return Promise.resolve(false);
-    }
-    var uploadedPath = s.authUserId + "/" + Date.now() + ".jpg";
+    // sem a conta do aluno ativada, a foto fica numa pasta do estúdio (só o profissional a vê); com conta, na pasta do aluno
+    var uploadedPath = (s.authUserId ? s.authUserId : "sem-conta/" + s.id) + "/" + Date.now() + ".jpg";
     return resizeImageFile(file, 1280).then(function(blob){
       return sb.storage.from("progress-photos").upload(uploadedPath, blob, {contentType:"image/jpeg"});
     }).then(function(res){
       if (res.error){ showToast("⚠ Falha ao enviar foto: " + (res.error.message || "erro de acesso")); return false; }
       return sb.storage.from("progress-photos").createSignedUrl(uploadedPath, 21600).then(function(signedRes){
-        var photo = { date: todayISO(), path: uploadedPath, position: position, by: "profissional" };
+        var photo = { date: photoDate, path: uploadedPath, position: position, by: "profissional" };
         photo._resolvedUrl = (signedRes.data && signedRes.data.signedUrl) || null;
         s.photos.push(photo);
         if (onDone) onDone();
@@ -10597,7 +10611,7 @@ function uploadProgressPhotoAsPro(s, file, position, onDone){
   return new Promise(function(resolve){
     var reader = new FileReader();
     reader.onload = function(){
-      s.photos.push({date: todayISO(), dataUrl: reader.result, position: position, by: "profissional"});
+      s.photos.push({date: photoDate, dataUrl: reader.result, position: position, by: "profissional"});
       if (onDone) onDone();
       persistStudent(s);
       resolve(true);
@@ -10612,7 +10626,8 @@ function tplPhotosSection(s, opts){
     html += "<label style=\"display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; margin:10px 0;\">" +
       "<input type=\"checkbox\" id=\"togglePhotos\"" + (s.allowPhotos?" checked":"") + "> Permitir que o aluno carregue fotos de progresso</label>" +
       photoGridHtml(s) +
-      "<div class=\"muted-p\" style=\"margin:10px 0 6px;\">Carregar foto de progresso (tirada por ti):</div>" +
+      "<div class=\"muted-p\" style=\"margin:10px 0 6px;\">Carregar foto de progresso (tirada por ti). Escolhe primeiro a data em que foi tirada:</div>" +
+      "<div class=\"checkin-field\" style=\"max-width:200px; margin-bottom:8px;\"><label for=\"proPhotoDate\">Data da foto</label><input type=\"date\" id=\"proPhotoDate\" value=\"" + todayISO() + "\" max=\"" + todayISO() + "\"></div>" +
       "<div style=\"display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;\">" +
         PHOTO_POSITIONS.map(function(p){
           return "<label class=\"btn-file\">" + p.label + "<input type=\"file\" accept=\"image/*\" class=\"pro-photo-upload-input\" data-position=\"" + p.key + "\" style=\"display:none;\"></label>";
@@ -14135,7 +14150,8 @@ function wireProTab(s){
     photoInput.addEventListener("change", function(e){
       var file = e.target.files && e.target.files[0];
       var position = photoInput.getAttribute("data-position");
-      uploadProgressPhotoAsPro(s, file, position, function(){ renderProTabContent(s); });
+      var dEl = el.querySelector("#proPhotoDate");
+      uploadProgressPhotoAsPro(s, file, position, function(){ renderProTabContent(s); }, dEl && dEl.value);
       photoInput.value = "";
     });
   });
