@@ -1,5 +1,5 @@
-// Contratos (área só do Tiago): totais, lista com filtros/lupa/ordem, ficha do contrato (termos, recebimentos, Desmarcar), editar condições,
-// importar e «Eu». Chromium real com Supabase simulado.
+// Contratos (app de Gestão, só do Tiago): totais, lista com filtros/lupa/ordem, ficha do contrato (termos, recebimentos, Desmarcar), editar condições,
+// importar; e «Eu» (app de Acompanhamento). Chromium real com Supabase simulado. Cada app é uma página (com o seu Supabase simulado).
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
@@ -34,11 +34,18 @@ function fixtureRow(id, name){
     T.studio_settings.push({key: "monthly_hours", value: {a: 8.66, b: 4.33, c: 8.66, d: 4.33, e: 4.33}},
       {key: "contracts", value: {a: {modalidade: "trimestral", minutos: 60}, c: {estado: "cancelado"}, d: {formato: "duo"}, e: {formato: "duo"}}});
   });
+  // duas apps, duas páginas: Gestão (gestao.html: Estúdio, Contratos) e Acompanhamento (index.html: Alunos, Catálogo, Eu)
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
-  await pg.goto(srv.url); await pg.waitForSelector(".student-row");
-  check.check("1. O menu tem as duas áreas: Acompanhamento (Alunos, Catálogo, Eu) e Gestão (Estúdio, Contratos), cada uma só com os seus itens", (await pg.locator("#areaAcomp").count()) === 1 && (await pg.locator("#areaGestao").count()) === 1 && (await pg.locator("#navMe").count()) === 1 && (await pg.locator("#navContracts").count()) === 0 && (await pg.locator("#navStudio").count()) === 0);
-  await pg.click("#areaGestao"); await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
+  var pgA = await ctx.newPage(); pgA.setDefaultTimeout(6000);
+  pgA.on("pageerror", function(e){ errors.push(e.message); }); pgA.on("dialog", function(d){ d.accept(); });
+  await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#navContracts");
+  await pgA.goto(srv.url); await pgA.waitForSelector(".student-row");
+  var cnt = async function(p, sel){ return await p.locator(sel).count(); };
+  check.check("1. Há duas apps, cada uma só com os seus itens: Acompanhamento (Alunos, Catálogo, Eu, ligação à Gestão) e Gestão (Estúdio, Contratos, ligação ao Acompanhamento), sem o interruptor de áreas",
+    (await cnt(pgA, "#navDashboard")) === 1 && (await cnt(pgA, "#navCatalog")) === 1 && (await cnt(pgA, "#navMe")) === 1 && (await cnt(pgA, "#goGestao")) === 1 && (await cnt(pgA, "#navStudio")) === 0 && (await cnt(pgA, "#navContracts")) === 0 && (await cnt(pgA, "#areaAcomp")) === 0 && (await cnt(pgA, "#areaGestao")) === 0 &&
+    (await cnt(pg, "#navStudio")) === 1 && (await cnt(pg, "#navContracts")) === 1 && (await cnt(pg, "#goAcomp")) === 1 && (await cnt(pg, "#navMe")) === 0 && (await cnt(pg, "#navDashboard")) === 0 && (await cnt(pg, "#navCatalog")) === 0 && (await cnt(pg, "#areaAcomp")) === 0 && (await cnt(pg, "#areaGestao")) === 0);
+  await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
   var tot = await pg.locator("#contractTotals").innerText();
   check.check("2. Totais: horas contratadas dos ativos (8,66 + 4,33 + o duo 8,66 contado uma vez = 21,65 h) e 3 contratos ativos (o duo conta um)", /21,65 h/.test(tot) && /\n?3\b/.test(tot));
   var rec = tot.match(/([\d.\s]+,\d\d)\s*€/);
@@ -77,18 +84,18 @@ function fixtureRow(id, name){
   await pg.evaluate(function(){ document.getElementById("contractImport").open = true; });
   await pg.fill("#ctImpText", "PT 45 - Bruno Costa; Anual; Individual; Ativo\nPT Duo 60 - Rui Duo + Eva Duo; Mensal; Duo; Suspenso\nNinguém; Mensal; Individual; Ativo");
   await pg.click("#ctImpGo");
-  await pg.waitForFunction(function(){ return /atualizados/.test(document.getElementById("ctImpOut") ? document.getElementById("ctImpOut").textContent : "") || /Suspenso/.test(document.querySelector("#contractList").innerText); });
+  await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "contracts"; })[0]; return r && r.value.b && r.value.b.modalidade === "anual" && r.value.e && r.value.e.estado === "suspenso"; });
   var imp = await pg.evaluate(function(){ var v = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value; return {b: v.b, d: v.d, e: v.e}; });
   check.check("15. A importação grava modalidade, minutos (do «PT 45») e estado, e o duo nos dois", imp.b && imp.b.modalidade === "anual" && imp.b.minutos === 45 && imp.d.estado === "suspenso" && imp.e.estado === "suspenso" && imp.d.formato === "duo");
   // financeiro
   await pg.click('[data-ct-tab="financeiro"]'); await pg.waitForSelector("#ctMonth");
   var fin = await pg.locator("#proMain").innerText();
   check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido no mês/.test(fin) && /A receber no mês/.test(fin) && /451,25 €/.test(fin));
-  // Eu
-  await pg.click("#areaAcomp"); await pg.click("#navMe"); await pg.waitForSelector("[data-me]");
-  await pg.locator('[data-me="b"]').click();
-  await pg.waitForSelector(".pro-sidebar [data-t]");
-  check.check("17. «Eu» abre a minha ficha (alimentação e treino) e fica guardada", (await pg.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "personal"; })[0]; return r && r.value.studentId; })) === "b" && /Bruno Costa/.test(await pg.locator("#proMain").innerText()));
+  // Eu (app de Acompanhamento)
+  await pgA.click("#navMe"); await pgA.waitForSelector("[data-me]");
+  await pgA.locator('[data-me="b"]').click();
+  await pgA.waitForSelector(".pro-sidebar [data-t]");
+  check.check("17. «Eu» abre a minha ficha (alimentação e treino) e fica guardada", (await pgA.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "personal"; })[0]; return r && r.value.studentId; })) === "b" && /Bruno Costa/.test(await pgA.locator("#proMain").innerText()));
   check.check("18. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();

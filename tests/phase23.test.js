@@ -82,7 +82,7 @@ function freshStudent(overrides){
 
 // 7. CSS do toast já não força uma só linha nem ultrapassa a largura do ecrã
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   var toastCss = html.slice(html.indexOf(".toast{"), html.indexOf(".toast{") + 600);
   check.check("7. Já não tem white-space:nowrap (permite quebra de linha)", toastCss.indexOf("white-space:nowrap") === -1);
   check.check("7. Tem um max-width que respeita a largura do ecrã", toastCss.indexOf("max-width:calc(100vw") >= 0);

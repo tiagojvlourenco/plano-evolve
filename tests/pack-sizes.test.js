@@ -67,7 +67,7 @@ var G = require("../scripts/generate-pack-sizes.js");
 
 // ---- 3. Expressões iguais às da app (index.html) ----
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   function literal(src, varName){ var m = new RegExp("var " + varName + " = (/.*/i?);").exec(src); return m && m[1]; }
   ["PERISHABLE_AFTER_OPENING", "LEADS_WITH_PRODUCT", "DAIRY_NOT_PACK", "NOT_PERISHABLE_HEAD", "NOT_PERISHABLE_ANYWHERE"].forEach(function(v){
     var lib = literal(fs.readFileSync(path.join(__dirname, "..", "scripts", "lib", "pack-size.js"), "utf8"), v);

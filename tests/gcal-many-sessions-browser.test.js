@@ -43,14 +43,17 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   });
   var page = await ctx.newPage(); page.setDefaultTimeout(15000);
   page.on("pageerror", function(e){ errors.push(e.message); }); page.on("dialog", function(d){ d.accept(); });
-  await page.goto(srv.url);
-  await page.waitForSelector(".student-row");
+  // a app da Gestão (gestao.html) abre logo no Estúdio, sem lista de alunos nem interruptor de áreas
+  await page.goto(srv.url + "gestao.html");
+  await page.waitForSelector("#navStudio");
   await page.evaluate(function(a){
     window.__fake.tables.session_packs.push({id: "pk-a", student_id: "stu1", name: "Trim", total: 10, price: 200, starts_on: a.start, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0});
     a.sessions.forEach(function(x, i){ window.__fake.tables.sessions.push(Object.assign({id: "s" + (i + 1)}, x)); });
     window.__fake.tables.studio_settings.push({id: "st1", key: "google_calendar", value: {clientId: "123456-abc.apps.googleusercontent.com", calendarId: "primary", useAsSource: false, titlePrefix: "", aliases: {}, ignored: {}, lastSync: null}});
   }, {start: iso(399), sessions: sessions});
-  await page.click("#areaGestao"); await page.click("#navStudio");
+  // (antes de o Estúdio ler os dados: reabre-se o Estúdio a partir do menu)
+  await page.click("#navContracts"); await page.waitForSelector("#navContracts.active");
+  await page.click("#navStudio");
   await page.waitForSelector("#gcSync");
   await page.click("#gcSync");
   await page.waitForFunction(function(){ var o = document.querySelector("#gcOut"); return o && /eventos lidos/.test(o.textContent); });

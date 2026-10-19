@@ -57,7 +57,7 @@ var check = require("./check")();
 
 // 6. Regras CSS presentes
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("6. Remove o marcador nativo do <summary>", html.indexOf(".add-food-details summary::-webkit-details-marker{display:none;}") >= 0);
   check.check("6. Texto do summary centrado (parece um botão, não uma lista)", html.indexOf(".add-food-details summary{list-style:none; text-align:center;") >= 0);
 })();

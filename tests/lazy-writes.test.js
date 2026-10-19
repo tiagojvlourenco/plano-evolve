@@ -55,7 +55,7 @@ tests.push(function(){
 
 // 3. Auditoria estática: toda a instrução que COMEÇA em sb.from(...) tem de ter .then(...) na cadeia.
 tests.push(function(){
-  var src = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8"); // núcleo + Gestão
+  var src = require("./helpers/app-text")();
   var re = /^[ \t]*sb\.from\(/gm, m, bare = 0, unconsumed = [];
   while ((m = re.exec(src))){
     bare++;
@@ -84,7 +84,7 @@ tests.push(function(){
 
 // 4. Funções que devolvem a escrita por executar têm de ser consumidas pelo chamador.
 tests.push(function(){
-  var src = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8"); // núcleo + Gestão
+  var src = require("./helpers/app-text")();
   check.check("4. saveHelpRequestNote(...) é consumida com .then", /saveHelpRequestNote\([^)]*\)\.then\(/.test(src));
   check.check("4. markHelpRequestHandled(...) é consumida com .then", /markHelpRequestHandled\([^)]*\)\.then\(/.test(src));
   check.check("4. createHelpRequest espera pelo resultado da escrita (Promise.resolve(...).then)", /return Promise\.resolve\(sb\.from\("help_requests"\)\.insert\(/.test(src));

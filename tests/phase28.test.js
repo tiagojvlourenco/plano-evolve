@@ -15,7 +15,7 @@ var check = require("./check")();
 // ---- 1. CSS: input type="date"/"time" sem -webkit-appearance:none ----
 
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("1. Tem uma regra CSS própria para input[type=date]/[type=time]", html.indexOf('.onb-field input[type="date"], .onb-field input[type="time"]') >= 0);
   var rule = html.slice(html.indexOf('.onb-field input[type="date"]'), html.indexOf('.onb-field input[type="date"]') + 200);
   check.check("1. Usa appearance:auto (aspeto nativo do picker)", rule.indexOf("appearance:auto") >= 0);

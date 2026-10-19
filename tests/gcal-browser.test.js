@@ -47,11 +47,13 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   });
   var page = await ctx.newPage(); page.setDefaultTimeout(6000);
   page.on("pageerror", function(e){ errors.push(e.message); }); page.on("dialog", function(d){ d.accept(); });
-  await page.goto(srv.url);
-  await page.waitForSelector(".student-row");
-  // pacote de 10 aulas a decorrer para os dois alunos
+  // a app da Gestão (gestao.html) abre logo no Estúdio, sem lista de alunos nem interruptor de áreas
+  await page.goto(srv.url + "gestao.html");
+  await page.waitForSelector("#navStudio");
+  // pacote de 10 aulas a decorrer para os dois alunos (antes de o Estúdio ler os dados: reabre-se o Estúdio a partir do menu)
   await page.evaluate(function(d){ window.__fake.tables.session_packs.push({id: "pk-a", student_id: "stu1", name: "Trim", total: 10, price: 200, starts_on: d, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}, {id: "pk-b", student_id: "stu2", name: "Trim", total: 10, price: 200, starts_on: d, expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}); }, iso(20));
-  await page.click("#areaGestao"); await page.click("#navStudio");
+  await page.click("#navContracts"); await page.waitForSelector("#navContracts.active");
+  await page.click("#navStudio");
   await page.waitForSelector("#gcalCard");
   check.check("1. Sem ligação, o cartão pede o ID de cliente e explica como o obter", /ID de cliente/.test(await page.locator("#gcalCard").textContent()) && /Google Calendar API/.test(await page.locator("#gcalCard").textContent()));
   await page.fill("#gcClient", "isto-nao-e-um-id"); await page.click("#gcSave");
@@ -103,7 +105,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.click("#gcToggle");
   await page.waitForFunction(function(){ var s = window.__fake.tables.studio_settings[0]; return s && s.value.useAsSource === true; });
   var before = await page.evaluate(function(){ return window.__fake.tables.sessions.length; });
-  await page.click("#areaAcomp"); await page.click("#navDashboard"); await page.click("#areaGestao"); await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.click("#navContracts"); await page.waitForSelector("#navContracts.active"); await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   check.check("14. Com o Google Agenda como fonte, o horário semanal não conta sessões", (await page.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 0 && before >= 3);
 
   // desligar

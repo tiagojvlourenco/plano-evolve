@@ -31,11 +31,15 @@ function fixtureRow(id, name, active){
   var errors = [];
   var ctx = await browser.newContext({viewport: {width: 390, height: 844}});
   await ctx.addInitScript(fakeSource({role: "professional", userId: "pro-1", rows: [fixtureRow("s1", "Ana Silva"), fixtureRow("s2", "Bruno Costa"), fixtureRow("s3", "Carla Dias")]}));
+  // o Estúdio só lista (e deixa abrir a ficha de) quem tem pacote a decorrer: cada aluno ganha um pacote simples, igual em cada carregamento
+  var d0 = new Date(); d0.setDate(d0.getDate() - 10);
+  var startsOn = d0.getFullYear() + "-" + String(d0.getMonth() + 1).padStart(2, "0") + "-" + String(d0.getDate()).padStart(2, "0");
+  await ctx.addInitScript("(function(){ var T = window.__fake.tables; [\"s1\", \"s2\", \"s3\"].forEach(function(id){ T.session_packs.push({id: \"pk-\" + id, student_id: id, name: \"Pack 20\", total: 20, price: 440, starts_on: \"" + startsOn + "\", expires_on: null, missed_consumes: true, late_cancel_consumes: true, used_before: 0}); }); })();");
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
-  await pg.goto(srv.url);
-  await pg.waitForSelector(".student-row");
-  await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioImportHours");
+  // o cabeçalho, a importação e a ficha com os Pacotes vivem na Gestão (gestao.html), que abre direta no Estúdio
+  await pg.goto(srv.url + "gestao.html");
+  await pg.waitForSelector("#studioImportHours");
   check.check("5. Sem horas, o cabeçalho mostra «—»", /—/.test(await pg.locator("#studioKpis").innerText()) && /Horas mensais ativas/i.test(await pg.locator("#studioKpis").innerText()));
   await pg.evaluate(function(){ document.getElementById("studioImportHours").open = true; });
   await pg.fill("#hrsText", "PT 60 - Ana Silva; 8,66\nPT Duo 60 - Bruno Costa + Carla Dias; 4\nNinguém Existe; 3");
@@ -46,15 +50,15 @@ function fixtureRow(id, name, active){
   var saved = await pg.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r ? r.value : null; });
   check.check("7. Grava em studio_settings (chave monthly_hours) por id de aluno", saved && saved.s1 === 8.66 && saved.s2 === 2 && saved.s3 === 2);
   // ficha: editar
-  await pg.goto(srv.url); await pg.waitForSelector(".student-row");
-  await pg.locator('[data-open="s3"]').first().click();
-  await pg.click('[data-sub="sessoes"]');
+  // na Gestão a ficha abre-se a partir do Estúdio e mostra só os Pacotes (sem separadores)
+  await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#studioImportHours");
+  await pg.locator('[data-open-student="s3"]').first().click();
   await pg.waitForSelector("#stuHours");
   check.check("8. A ficha mostra o campo das horas mensais (recarregar volta aos dados simulados)", (await pg.inputValue("#stuHours")) === "");
   await pg.fill("#stuHours", "6,5"); await pg.press("#stuHours", "Tab");
   await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r && r.value.s3 === 6.5; });
   check.check("9. Editar na ficha grava as horas", true);
-  await pg.click("#proBack"); await pg.click("#areaGestao"); await pg.click("#navStudio"); await pg.waitForSelector("#studioKpis");
+  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioKpis");
   check.check("10. E o cabeçalho soma-as (6,5 h)", /6,5 h/.test(await pg.locator("#studioKpis").innerText()));
   check.check("11. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));

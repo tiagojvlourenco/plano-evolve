@@ -6,7 +6,7 @@ var appSource = require("./extract-app")();
 eval(appSource);
 var check = require("./check")();
 function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); }
-var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8"); // núcleo + Gestão
+var html = require("./helpers/app-text")();
 
 // ---- 1. O que se grava de volta é o original (a normalização é só para mostrar) ----
 (function(){

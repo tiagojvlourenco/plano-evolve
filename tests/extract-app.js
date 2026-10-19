@@ -1,5 +1,5 @@
-// Lê index.html (o build standalone, gerado a partir da mesma fonte publicada) e devolve o
-// conteúdo interno do <script> da app como texto, pronto a avaliar com eval() no scope de
+// Lê app.js (o script da app, partilhado por index.html e gestao.html) e devolve o
+// conteúdo interno do script da app como texto, pronto a avaliar com eval() no scope de
 // topo de um ficheiro de teste. Não depende de nenhum caminho fora deste repositório.
 //
 // Duas transformações são feitas ao texto original:
@@ -15,22 +15,8 @@ const fs = require("fs");
 const path = require("path");
 
 function extractApp(){
-  const htmlPath = path.join(__dirname, "..", "index.html");
-  const html = fs.readFileSync(htmlPath, "utf8");
-
-  const scripts = [];
-  let pos = 0;
-  while (true){
-    const start = html.indexOf("<script", pos);
-    if (start < 0) break;
-    const tagEnd = html.indexOf(">", start);
-    const end = html.indexOf("</script>", tagEnd);
-    scripts.push({ tag: html.slice(start, tagEnd + 1), start: tagEnd + 1, end: end });
-    pos = end + 1;
-  }
-  const inline = scripts.find(function (s) { return !/src=/.test(s.tag); });
-  if (!inline) throw new Error("Não encontrei o <script> inline em index.html");
-  const full = html.slice(inline.start, inline.end);
+  // o script da app está em app.js (partilhado por index.html e gestao.html)
+  const full = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
 
   const marker = 'use strict";';
   const innerStart = full.indexOf(marker) + marker.length;

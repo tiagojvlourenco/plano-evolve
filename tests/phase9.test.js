@@ -96,14 +96,14 @@ function freshStudent(overrides){
 // 7. Falha de ligação no arranque tem um ecrã próprio (não cai silenciosamente no login)
 (function(){
   check.check("7. Existe o ecrã de erro de ligação", appSource.indexOf("connectionErrorScreen") >= 0);
-  var bootFn = appSource.slice(appSource.indexOf("function boot("), appSource.indexOf("function boot(") + 800);
+  var bootFn = appSource.slice(appSource.indexOf("function boot("), appSource.indexOf("function boot(") + 1800);
   check.check("7. boot() mostra connectionErrorScreen quando getSession() falha", bootFn.indexOf("connectionErrorScreen") >= 0);
 })();
 
 // 8. "Conta sem plano associado" foi corrigido — já não confunde com "sem aluno associado"
 // (o markup vive fora do <script>, por isso lemos o HTML completo, não appSource)
 (function(){
-  var html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  var html = require("./helpers/app-text")();
   check.check("8. Já não usa o título antigo e confuso", html.indexOf(">Conta sem plano associado<") === -1);
   check.check("8. Usa o título correto: sem ALUNO associado", html.indexOf(">Conta sem aluno associado<") >= 0);
 })();
