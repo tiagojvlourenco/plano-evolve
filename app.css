@@ -716,3 +716,7 @@ html[data-app="gestao"] .assess-form-grid .f .muted-p{font-size:0.62rem; text-tr
 html[data-app="gestao"] .assess-form-grid .f .hlabel{font-size:1rem; font-weight:500; margin-top:2px;}
 html[data-app="gestao"] .assess-form-grid .f .hlabel span{display:block; margin-top:2px;}
 html[data-app="gestao"] .history-row > div[style*="flex:1"]{flex:1 1 220px !important;}
+.ct-edit{background:transparent; border:0; padding:0; font:inherit; color:inherit; cursor:pointer; text-align:left; font-weight:700; min-height:44px; display:inline-flex; align-items:center; gap:6px;}
+.ct-edit .good{color:var(--good);} .ct-edit .warn{color:var(--warn);} .ct-edit .critical{color:var(--critical);}
+.ct-edit [aria-hidden]{color:var(--muted); font-weight:400;}
+.ct-sess span{white-space:nowrap;}
