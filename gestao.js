@@ -1595,7 +1595,7 @@ function renewPack(pack){
     if (r.error) return {error: r.error};
     var np = r.data, price = Number(pack.price) || 0;
     var charge = price > 0 ? studioInsert("payments", {student_id: pack.student_id, pack_id: np.id, amount: price, due_on: today}) : Promise.resolve({});
-    return Promise.all([charge, attachExtrasToPack(np)]).then(function(res){ return {pack: np, moved: res[1], chargeError: res[0] && res[0].error, price: price}; });
+    return Promise.all([charge, attachExtrasToPack(np)]).then(function(res){ return {pack: np, moved: res[1], chargeError: res[0] && res[0].error, price: price, chargeId: res[0] && res[0].data ? res[0].data.id : null}; });
   });
 }
 // um clique: tira a validade ao pacote e conta nele as aulas dadas depois de ele caducar (o aluno parou e voltou)
@@ -1643,6 +1643,7 @@ function wireStudioCommon(el, redraw){
     b.disabled = true;
     renewPack(pk).then(function(r){
       if (r.error){ showToast("⚠ " + r.error); b.disabled = false; return; }
+      if (b.hasAttribute("data-renew-paid") && r.chargeId){ redraw(); updateStudioBadge(); openPayModal(r.chargeId, function(){ redraw(); updateStudioBadge(); }); return; }   // «já pagou»: abre logo o registo do pagamento
       showToast("✓ Pacote renovado" + (r.moved ? " · " + r.moved + (r.moved === 1 ? " aula já dada contada" : " aulas já dadas contadas") : "") + (r.chargeError ? " · ⚠ a cobrança não foi guardada" : r.price > 0 ? " · marca «Pago» quando receberes" : ""));
       redraw(); updateStudioBadge();
     });
@@ -2056,7 +2057,8 @@ function renderProStudioMain(){
       (r.spendFrom ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">Pacote dela esgotado · a gastar o pacote de <strong>" + escapeHtml(r.spendFrom.ownerName) + "</strong> (" + (r.spendFrom.pack.price != null ? escapeHtml(eurShort(r.spendFrom.pack.price)) + " · " : "") + r.spendFrom.u.total + " aulas): restam <strong>" + r.spendFrom.u.remaining + "</strong></div>" : "") +
       (r.activeN > 1 ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + r.activeN + " pacotes ativos · no total <strong>restam " + r.activeRemaining + "</strong> (gastam-se primeiro as do pacote mais antigo)</div>" : "") +
       (r.pool.shared && r.others.length ? "<div class=\"muted-p\" style=\"font-size:0.78rem;\">👥 Partilha com " + escapeHtml(r.others.join(", ")) + " · " + (r.pool.remaining === 1 ? "no conjunto resta <strong>1</strong>" : "no conjunto restam <strong>" + r.pool.remaining + "</strong>") + " de " + r.pool.total + "</div>" : "") +
-      (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") + "</div>";
+      (flag ? "<div class=\"sr-flag\">" + flag + "</div>" : "") +
+      (r.state === "renovar" && !r.spendFrom && Number(r.pack.price) > 0 ? "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\"><button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" data-renew-paid=\"1\" title=\"Cria o pacote novo e abre o registo do pagamento\">Renovar · já pagou</button><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" title=\"Cria o pacote novo e a cobrança por pagar\">Renovar · por pagar</button></div>" : "") + "</div>";
   });
   html += "</div>";
   html += studioContactHtml(students, today);
