@@ -696,3 +696,23 @@ html[data-app="gestao"]{--display:'Space Grotesk', -apple-system, BlinkMacSystem
 .pack-row{position:relative;}
 .pack-row .assess-del{position:absolute; top:-6px; right:-6px; margin:0;}
 .pack-row > div:first-child{padding-right:36px;}
+
+/* ---- Gestão: o mesmo aspeto «limpo» em todos os ecrãs (Estúdio, fichas, modais) ---- */
+.ct-stats5{grid-template-columns:repeat(2, 1fr);}
+@media (min-width:760px){ .ct-stats5{grid-template-columns:repeat(5, 1fr);} }
+.ct-stat .v{white-space:nowrap;}
+html[data-app="gestao"] .card{border-radius:2px; box-shadow:none; border-color:var(--line-strong);}
+html[data-app="gestao"] .studio-row, html[data-app="gestao"] .student-search, html[data-app="gestao"] .mini-select, html[data-app="gestao"] .btn, html[data-app="gestao"] .checkin-field input, html[data-app="gestao"] .checkin-field select, html[data-app="gestao"] textarea{border-radius:2px;}
+html[data-app="gestao"] .modal-sheet{border-radius:4px;}
+html[data-app="gestao"] .pro-sidebar, html[data-app="gestao"] .pro-nav-item, html[data-app="gestao"] .area-switch{border-radius:2px;}
+html[data-app="gestao"] .eyebrow{font-size:0.64rem; font-weight:500; letter-spacing:0.18em;}
+html[data-app="gestao"] .studio-row{border-color:var(--line-strong); background:transparent;}
+html[data-app="gestao"] .studio-row.renovar{background:var(--critical-soft); border-color:var(--critical);}
+html[data-app="gestao"] .studio-row.acabar{background:var(--warn-soft); border-color:var(--warn);}
+html[data-app="gestao"] .history-row{flex-wrap:wrap; gap:6px 12px;}
+html[data-app="gestao"] .btn{font-weight:700; letter-spacing:0.12em;}
+html[data-app="gestao"] .assess-form-grid{grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px 16px;}
+html[data-app="gestao"] .assess-form-grid .f .muted-p{font-size:0.62rem; text-transform:uppercase; letter-spacing:0.16em;}
+html[data-app="gestao"] .assess-form-grid .f .hlabel{font-size:1rem; font-weight:500; margin-top:2px;}
+html[data-app="gestao"] .assess-form-grid .f .hlabel span{display:block; margin-top:2px;}
+html[data-app="gestao"] .history-row > div[style*="flex:1"]{flex:1 1 220px !important;}
