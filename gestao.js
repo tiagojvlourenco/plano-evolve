@@ -1699,7 +1699,9 @@ function wireStudioCommon(el, redraw){
 }
 
 /* ---------- Contratos (área só do Tiago): lista, totais, ficha do contrato, financeiro e «Eu» ---------- */
-var CONTRACT_MODALIDADES = {mensal: {label: "Mensal", months: 1}, trimestral: {label: "Trimestral", months: 3}, anual: {label: "Anual", months: 12}};
+var CONTRACT_MODALIDADES = {mensal: {label: "Mensal", months: 1}, trimestral: {label: "Trimestral", months: 3}, anual: {label: "Anual", months: 12}, pack: {label: "Pack de sessões", months: 0}};
+var CONTRACT_FATURACAO = {faturado: "Faturado", autoliquidacao: "Faturado · autoliquidação", nao_faturado: "Não faturado"};
+var CONTRACT_PAGAMENTO = {dinheiro: "Dinheiro", transferencia: "Transferência", mbway: "MB Way", multibanco: "Multibanco"};
 var contractMeta = {map: {}, loaded: false, available: true};
 var CONTRACTS_LOCAL_KEY = "evolve.contractMeta";
 function contractMetaClean(v){
@@ -1707,10 +1709,17 @@ function contractMetaClean(v){
   if (v && typeof v === "object") Object.keys(v).forEach(function(k){
     var m = v[k]; if (!m || typeof m !== "object") return;
     var o = {};
-    if (m.formato === "duo" || m.formato === "individual") o.formato = m.formato;
+    if (m.formato === "duo" || m.formato === "individual" || m.formato === "partilhado") o.formato = m.formato;
     if (CONTRACT_MODALIDADES[m.modalidade]) o.modalidade = m.modalidade;
     var mi = Number(m.minutos); if (mi >= 15 && mi <= 180) o.minutos = Math.round(mi);
     if (m.estado === "ativo" || m.estado === "suspenso" || m.estado === "cancelado") o.estado = m.estado;
+    var pp = Number(m.packsPag); if (pp >= 1 && pp <= 24) o.packsPag = Math.round(pp);
+    var of = Number(m.ofertas); if (of >= 0 && of <= 50 && m.ofertas !== "" && m.ofertas != null) o.ofertas = Math.round(of);
+    if (CONTRACT_FATURACAO[m.faturacao]) o.faturacao = m.faturacao;
+    if (CONTRACT_PAGAMENTO[m.pagamento]) o.pagamento = m.pagamento;
+    var fq = Number(m.freq); if (fq >= 1 && fq <= 5) o.freq = Math.round(fq);
+    if (typeof m.agenda === "string" && m.agenda.trim()) o.agenda = m.agenda.trim().slice(0, 80);
+    if (typeof m.notas === "string" && m.notas.trim()) o.notas = m.notas.trim().slice(0, 500);
     out[k] = o;
   });
   return out;
@@ -1736,7 +1745,8 @@ function saveContractMeta(){
 }
 function contractMetaOf(id){
   var m = contractMeta.map[id] || {};
-  return {formato: m.formato || "individual", modalidade: m.modalidade || "trimestral", minutos: m.minutos || 60, estado: m.estado || null};
+  return {formato: m.formato || "individual", modalidade: m.modalidade || "trimestral", minutos: m.minutos || 60, estado: m.estado || null, packsPag: m.packsPag || 1, ofertas: m.ofertas || 0,
+    faturacao: m.faturacao || "", pagamento: m.pagamento || "", freq: m.freq || 0, agenda: m.agenda || "", notas: m.notas || ""};
 }
 function contractEstadoOf(st){ var m = contractMeta.map[st.id]; return (m && m.estado) || (isStudentActive(st) ? "ativo" : "cancelado"); }
 var CONTRACT_ESTADO_LABEL = {ativo: "Ativo", suspenso: "Suspenso", cancelado: "Cancelado"};
@@ -1761,7 +1771,7 @@ function contractUnits(today){
     var price = cur && cur.price != null ? Number(cur.price) : null, total = cur ? Number(cur.total) || 0 : 0;
     var perSession = price != null && total ? price / total : null;
     var perMonthSessions = hours ? hours / (meta.minutos / 60) : 0;
-    var weekly = perMonthSessions ? Math.max(1, Math.round(perMonthSessions / 4.33)) : members.reduce(function(a, m){ return a + weeklySlotsOf(m.id); }, 0);
+    var weekly = meta.freq || (perMonthSessions ? Math.max(1, Math.round(perMonthSessions / 4.33)) : members.reduce(function(a, m){ return a + weeklySlotsOf(m.id); }, 0));
     var k = cur ? own.indexOf(cur) + 1 : 0;
     var paidPacks = own.filter(function(p){ return studio.payments.some(function(y){ return y.pack_id === p.id && y.paid_on; }); }).length;
     var curPays = cur ? studio.payments.filter(function(y){ return y.pack_id === cur.id; }) : [];
@@ -1777,6 +1787,7 @@ function contractTotals(units){
   var act = units.filter(function(x){ return x.estado === "ativo"; });
   return {n: act.length, hours: act.reduce(function(a, x){ return a + x.hours; }, 0), revenue: act.reduce(function(a, x){ return a + (x.perMonth || 0); }, 0)};
 }
+function contractFormatLabel(x){ return x.duo ? "Duo" : x.meta.formato === "partilhado" ? "Partilhado" : "Individual"; }
 function contractPlanLabel(x){
   return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
 }
@@ -1816,12 +1827,12 @@ function contractsListHtml(today){
   rows.forEach(function(x, i){
     var pct = x.u ? x.u.pct : 0, tone = x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical";
     html += "<div class=\"ct-row contract-row\" data-cname=\"" + escapeHtml(exLibFold(x.name)) + "\" data-val=\"" + (x.perMonth || 0) + "\" data-rem=\"" + (x.u ? x.u.remaining : 999) + "\" data-hrs=\"" + x.hours + "\" data-ord=\"" + i + "\" data-open-contract=\"" + escapeHtml(x.key) + "\">" +
-      "<div class=\"ct-c ct-name\"><strong>" + escapeHtml(x.name) + "</strong><small>Na agenda: PT " + x.meta.minutos + " - " + escapeHtml(x.name) + "</small></div>" +
-      "<div class=\"ct-c\" data-l=\"Formato\">" + (x.duo ? "Duo" : "Individual") + "</div>" +
+      "<div class=\"ct-c ct-name\"><strong>" + escapeHtml(x.name) + "</strong><small>Na agenda: " + escapeHtml(x.meta.agenda || "PT " + x.meta.minutos + " - " + x.name) + "</small></div>" +
+      "<div class=\"ct-c\" data-l=\"Formato\">" + contractFormatLabel(x) + "</div>" +
       "<div class=\"ct-c\" data-l=\"Plano\"><span>" + escapeHtml(contractPlanLabel(x)) + "</span>" + (x.hours ? "<span class=\"ct-hrs\">" + escapeHtml(fmtHours(x.hours)) + "</span>" : "") + "</div>" +
       "<div class=\"ct-c\" data-l=\"Sessões\">" + (x.u ? "<div class=\"ct-sess\"><span><strong>" + x.u.used + "</strong> de " + x.u.total + "</span><div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div></div><small>" + escapeHtml(x.packLabel) + "</small>" : "<small>" + escapeHtml(x.packLabel) + "</small>") + "</div>" +
       "<div class=\"ct-c r\" data-l=\"Valor\"><strong>" + (x.price != null ? escapeHtml(eur(x.price)) : "—") + "</strong></div>" +
-      "<div class=\"ct-c ct-st " + tone + "\" data-l=\"Estado\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</div></div>";
+      "<div class=\"ct-c ct-st " + tone + "\" data-l=\"Estado\"><button type=\"button\" class=\"ct-edit\" data-edit-contract=\"" + escapeHtml(x.key) + "\" title=\"Editar contrato\" aria-label=\"Editar contrato de " + escapeHtml(x.name) + "\"><span class=\"" + tone + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span> <span aria-hidden=\"true\">✎</span></button></div></div>";
   });
   if (!rows.length) html += "<p class=\"muted-p\">Sem contratos neste estado.</p>";
   html += "</div></div><p class=\"muted-p\" id=\"ctInfo\" style=\"font-size:0.78rem;\">" + rows.length + " de " + units.length + "</p>";
@@ -1888,7 +1899,7 @@ function contractDetailHtml(key, today){
     "<h2 style=\"margin:0 0 4px;\">PT " + x.meta.minutos + " - " + escapeHtml(x.name) + "</h2>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\"><span class=\"pill " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " desde " + escapeHtml(fmtDateFullPt(since)) : "") + "</p>";
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Termos</div><div class=\"assess-form-grid\">" +
-    "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + (x.duo ? "Duo" : "Individual") + "</div></div>" +
+    "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + contractFormatLabel(x) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Modalidade</div><div class=\"hlabel\">" + escapeHtml(CONTRACT_MODALIDADES[x.meta.modalidade].label) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Plano</div><div class=\"hlabel\">" + (x.weekly ? x.weekly + "× por semana" : "—") + " · " + x.meta.minutos + " min</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Horas por mês</div><div class=\"hlabel\">" + (x.hours ? escapeHtml(fmtHours(x.hours)) : "—") + "</div></div>" +
@@ -1948,6 +1959,11 @@ function wireContractsMain(main){
   main.querySelectorAll("[data-ct-month]").forEach(function(b){ b.addEventListener("click", function(){ studioView.month = b.getAttribute("data-ct-month"); redraw(); }); });
   var yr = main.querySelector("#ctYear"); if (yr) yr.addEventListener("change", function(){ studioView.month = yr.value + "-" + (studioView.month || "01-01").slice(5, 7); redraw(); });
   main.querySelectorAll("[data-ct-filter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.filter = b.getAttribute("data-ct-filter"); redraw(); }); });
+  main.querySelectorAll("[data-edit-contract]").forEach(function(b){ b.addEventListener("click", function(e){
+    e.stopPropagation();
+    var x = contractUnits().filter(function(u){ return u.key === b.getAttribute("data-edit-contract"); })[0];
+    if (x) openContractEditModal(x, redraw);
+  }); });
   main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
   var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; redraw(); });
   var edit = main.querySelector("#ctEdit"); if (edit) edit.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractEditModal(x, redraw); });
@@ -1968,28 +1984,59 @@ function wireContractsMain(main){
 }
 function openContractEditModal(x, onDone){
   var m = x.meta, hrs = x.hours ? String(Math.round(x.hours * 100) / 100).replace(".", ",") : "";
-  var opt = function(map, cur){ return Object.keys(map).map(function(k){ return "<option value=\"" + k + "\"" + (cur === k ? " selected" : "") + ">" + escapeHtml(map[k].label || map[k]) + "</option>"; }).join(""); };
-  var sheet = openModal("<div class=\"mtitle\">Editar condições</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(x.name) + "</p>" +
-    "<div class=\"checkin-field\"><label for=\"ceFormato\">Formato</label><select id=\"ceFormato\" class=\"mini-select\" style=\"width:100%;\"><option value=\"individual\"" + (x.duo ? "" : " selected") + ">Individual</option><option value=\"duo\"" + (m.formato === "duo" ? " selected" : "") + ">Duo (treinam juntos)</option></select></div>" +
-    "<div class=\"checkin-field\"><label for=\"ceMod\">Modalidade</label><select id=\"ceMod\" class=\"mini-select\" style=\"width:100%;\">" + opt(CONTRACT_MODALIDADES, m.modalidade) + "</select></div>" +
-    "<div class=\"checkin-field\"><label for=\"ceMin\">Minutos por sessão</label><input type=\"number\" id=\"ceMin\" min=\"15\" max=\"180\" inputmode=\"numeric\" value=\"" + m.minutos + "\"></div>" +
-    "<div class=\"checkin-field\"><label for=\"ceHrs\">Horas por mês (do contrato inteiro)</label><input type=\"text\" id=\"ceHrs\" inputmode=\"decimal\" value=\"" + escapeHtml(hrs) + "\" placeholder=\"ex.: 8,66\"></div>" +
-    "<div class=\"checkin-field\"><label for=\"ceEstado\">Estado</label><select id=\"ceEstado\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(CONTRACT_ESTADO_LABEL).map(function(k){ return "<option value=\"" + k + "\"" + (x.estado === k ? " selected" : "") + ">" + CONTRACT_ESTADO_LABEL[k] + "</option>"; }).join("") + "</select></div>" +
-    "<p class=\"muted-p\" id=\"ceErr\" style=\"color:var(--critical); display:none;\"></p><button type=\"button\" class=\"btn primary\" id=\"ceGo\" style=\"width:100%; margin-top:10px;\">Guardar</button>");
-  sheet.querySelector("#ceGo").addEventListener("click", function(){
-    var err = sheet.querySelector("#ceErr"), fail = function(t){ err.textContent = t; err.style.display = "block"; };
-    var min = parseInt(sheet.querySelector("#ceMin").value, 10), hraw = sheet.querySelector("#ceHrs").value.trim(), h = hraw ? parseImportNumber(hraw) : 0;
-    if (!(min >= 15 && min <= 180)) return fail("Os minutos por sessão têm de estar entre 15 e 180.");
+  var sel = function(id, list, cur){ return "<select id=\"" + id + "\" class=\"mini-select\" style=\"width:100%;\">" + list.map(function(o){ return "<option value=\"" + escapeHtml(String(o[0])) + "\"" + (String(cur) === String(o[0]) ? " selected" : "") + ">" + escapeHtml(o[1]) + "</option>"; }).join("") + "</select>"; };
+  var fld = function(label, inner, hint){ return "<div class=\"checkin-field\"><label>" + label + "</label>" + inner + (hint ? "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:4px;\">" + hint + "</p>" : "") + "</div>"; };
+  var since = x.packs.length ? x.packs[0].starts_on : null, ppPresets = [1, 2, 3, 4];
+  var sheet = openModal("<div class=\"mtitle\">" + escapeHtml(x.name) + " <span class=\"ct-st " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\" style=\"font-size:0.8rem;\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span></div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + (since ? "Desde " + escapeHtml(fmtDateFullPt(since)) : "Sem pacote") + "</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;\">" + (x.estado === "ativo" ? "<button type=\"button\" class=\"btn btn-sm\" data-ce-estado=\"suspenso\">Suspender</button><button type=\"button\" class=\"btn btn-sm\" style=\"color:var(--critical);\" data-ce-estado=\"cancelado\">Cancelar contrato</button>" : "<button type=\"button\" class=\"btn btn-sm primary\" data-ce-estado=\"ativo\">Reativar contrato</button>") + "</div>" +
+    "<input type=\"hidden\" id=\"ceEstado\" value=\"" + x.estado + "\">" +
+    fld("Formato", sel("ceFormato", [["individual", "Individual"], ["duo", "Duo (treinam juntos)"], ["partilhado", "Partilhado (várias pessoas, sessões individuais)"]], x.duo ? "duo" : m.formato)) +
+    fld("Modalidade", sel("ceMod", Object.keys(CONTRACT_MODALIDADES).map(function(k){ return [k, CONTRACT_MODALIDADES[k].label]; }), m.modalidade)) +
+    fld("Packs por pagamento", sel("cePPSel", ppPresets.map(function(n){ return [n, n === 1 ? "1 — um pack de cada vez" : n + " packs de uma vez"]; }).concat([["custom", "Personalizado — escrevo o número"]]), ppPresets.indexOf(m.packsPag) >= 0 ? m.packsPag : "custom")) +
+    "<div class=\"checkin-field\" id=\"cePPWrap\"><label for=\"cePP\">Quantos packs</label><input type=\"number\" id=\"cePP\" min=\"1\" max=\"24\" inputmode=\"numeric\" value=\"" + m.packsPag + "\"><p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:4px;\">Uma cobrança cobre vários packs. Quando um pack acaba, o seguinte começa a contar sem pedir pagamento.</p></div>" +
+    fld("Sessões de oferta", "<input type=\"number\" id=\"ceOf\" min=\"0\" max=\"50\" inputmode=\"numeric\" value=\"" + m.ofertas + "\">", "Sessões que o estúdio dá por cima das pagas. Somam-se ao pack e o cliente paga o mesmo. Zero é o normal.") +
+    fld("Faturação", sel("ceFat", [["", "— por escolher —"]].concat(Object.keys(CONTRACT_FATURACAO).map(function(k){ return [k, CONTRACT_FATURACAO[k]]; })), m.faturacao), "Só o faturado gera IVA. Autoliquidação é com fatura e sem IVA.") +
+    fld("Forma de pagamento", sel("cePag", [["", "— por indicar —"]].concat(Object.keys(CONTRACT_PAGAMENTO).map(function(k){ return [k, CONTRACT_PAGAMENTO[k]]; })), m.pagamento)) +
+    fld("Frequência semanal", sel("ceFreq", [["", "— automática (pelas horas) —"]].concat([1, 2, 3, 4, 5].map(function(n){ return [n, n + "×/semana"]; })), m.freq || "")) +
+    fld("Duração", sel("ceMin", [[60, "60 minutos"], [45, "45 minutos"]].concat([60, 45].indexOf(m.minutos) < 0 ? [[m.minutos, m.minutos + " minutos"]] : []), m.minutos)) +
+    fld("Horas por mês (do contrato inteiro)", "<input type=\"text\" id=\"ceHrs\" inputmode=\"decimal\" value=\"" + escapeHtml(hrs) + "\" placeholder=\"ex.: 8,66\">") +
+    fld("Nome de agendamento", "<input type=\"text\" id=\"ceAg\" maxlength=\"80\" value=\"" + escapeHtml(m.agenda || "PT " + m.minutos + " - " + x.name) + "\">", "Como aparece o evento no Google Agenda.") +
+    fld("Notas", "<textarea id=\"ceNotas\" rows=\"3\" maxlength=\"500\">" + escapeHtml(m.notas) + "</textarea>") +
+    "<div class=\"card\" style=\"margin:6px 0 12px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Valor do contrato</div>" +
+      (x.cur ? "<div class=\"checkin-field\" style=\"margin-bottom:6px;\"><label for=\"ceVal\">Valor de " + escapeHtml(x.name) + " (€, c/ IVA)</label><input type=\"text\" id=\"ceVal\" inputmode=\"decimal\" value=\"" + (x.price != null ? String(x.price).replace(".", ",") : "") + "\"><p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:4px;\">O que esta pessoa paga por pack. O valor por sessão é calculado a partir dele.</p></div><p class=\"muted-p\" id=\"ceCalc\"></p>" : "<p class=\"muted-p\">Cria o primeiro pacote na ficha do aluno para definir o valor.</p>") + "</div>" +
+    "<p class=\"muted-p\" id=\"ceErr\" style=\"color:var(--critical); display:none;\"></p><div style=\"display:flex; gap:10px;\"><button type=\"button\" class=\"btn primary\" id=\"ceGo\" style=\"flex:1;\">Guardar alterações</button><button type=\"button\" class=\"btn\" id=\"ceCancel\">Cancelar</button></div>");
+  var q = function(id){ return sheet.querySelector(id); };
+  var toggleCustom = function(){ q("#cePPWrap").style.display = q("#cePPSel").value === "custom" ? "block" : "none"; if (q("#cePPSel").value !== "custom") q("#cePP").value = q("#cePPSel").value; };
+  q("#cePPSel").addEventListener("change", function(){ toggleCustom(); calc(); }); toggleCustom();
+  var calc = function(){
+    var c = q("#ceCalc"); if (!c || !x.cur) return;
+    var v = parseImportNumber(q("#ceVal").value), n = parseInt(q("#cePP").value, 10) || 1, tot = x.total;
+    c.innerHTML = v != null && v >= 0 && tot ? "<strong>" + escapeHtml(eur(v / tot)) + "/sessão</strong> · total " + escapeHtml(eur(v)) + " por pack de " + tot + " sessões · a cobrança é de <strong>" + escapeHtml(eur(v * n)) + "</strong> por " + n + (n === 1 ? " pack" : " packs") : "";
+  };
+  if (q("#ceVal")){ q("#ceVal").addEventListener("input", calc); q("#cePP").addEventListener("input", calc); calc(); }
+  q("#ceCancel").addEventListener("click", function(){ closeModal(); });
+  sheet.querySelectorAll("[data-ce-estado]").forEach(function(b){ b.addEventListener("click", function(){ q("#ceEstado").value = b.getAttribute("data-ce-estado"); q("#ceGo").click(); }); });
+  q("#ceGo").addEventListener("click", function(){
+    var err = q("#ceErr"), fail = function(t){ err.textContent = t; err.style.display = "block"; };
+    var min = parseInt(q("#ceMin").value, 10), hraw = q("#ceHrs").value.trim(), h = hraw ? parseImportNumber(hraw) : 0;
+    var pp = parseInt(q("#cePP").value, 10), of = parseInt(q("#ceOf").value || "0", 10), val = q("#ceVal") ? q("#ceVal").value.trim() : "", price = val ? parseImportNumber(val) : null;
+    if (!(min >= 15 && min <= 180)) return fail("A duração tem de estar entre 15 e 180 minutos.");
     if (h == null || h < 0 || h > 400) return fail("Horas por mês inválidas (ex.: 8,66).");
-    var patch = {formato: sheet.querySelector("#ceFormato").value, modalidade: sheet.querySelector("#ceMod").value, minutos: min, estado: sheet.querySelector("#ceEstado").value};
+    if (!(pp >= 1 && pp <= 24)) return fail("Quantos packs: entre 1 e 24.");
+    if (!(of >= 0 && of <= 50)) return fail("Sessões de oferta: entre 0 e 50.");
+    if (val && (price == null || price < 0)) return fail("Valor inválido (ex.: 940,50).");
+    var patch = {formato: q("#ceFormato").value, modalidade: q("#ceMod").value, minutos: min, estado: q("#ceEstado").value, packsPag: pp, ofertas: of,
+      faturacao: q("#ceFat").value, pagamento: q("#cePag").value, freq: parseInt(q("#ceFreq").value, 10) || 0, agenda: q("#ceAg").value.trim(), notas: q("#ceNotas").value.trim()};
     var prevMap = JSON.parse(JSON.stringify(contractMeta.map)), prevHours = JSON.parse(JSON.stringify(monthlyHours.map));
-    x.ids.forEach(function(id){ contractMeta.map[id] = Object.assign({}, contractMeta.map[id] || {}, patch); });
+    x.ids.forEach(function(id){ var cur = Object.assign({}, contractMeta.map[id] || {}, patch); ["faturacao", "pagamento", "agenda", "notas"].forEach(function(k){ if (!cur[k]) delete cur[k]; }); if (!cur.freq) delete cur.freq; contractMeta.map[id] = cur; });
     // as horas são do contrato: repartem-se pelos participantes (um duo conta uma vez)
     if (h > 0) x.ids.forEach(function(id){ monthlyHours.map[id] = Math.round(h / x.ids.length * 100) / 100; });
     else x.ids.forEach(function(id){ delete monthlyHours.map[id]; });
-    var btn = sheet.querySelector("#ceGo"); btn.disabled = true;
-    Promise.all([saveContractMeta("contracts"), saveMonthlyHours()]).then(function(rs){
-      var e = rs[0].error || rs[1].error;
+    var btn = q("#ceGo"); btn.disabled = true;
+    var priceSave = x.cur && price != null && price !== Number(x.cur.price) ? studioUpdate("packs", x.cur.id, {price: price}) : Promise.resolve({});
+    Promise.all([saveContractMeta("contracts"), saveMonthlyHours(), priceSave]).then(function(rs){
+      var e = rs[0].error || rs[1].error || rs[2].error;
       if (e){ contractMeta.map = prevMap; monthlyHours.map = prevHours; btn.disabled = false; return fail(e); }
       closeModal(); showToast("✓ Contrato atualizado");
       if (patch.formato === "duo") contractsView.open = null;   // a chave do contrato muda quando se junta/separa um duo

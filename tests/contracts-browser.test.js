@@ -73,11 +73,14 @@ function fixtureRow(id, name){
   await pg.waitForFunction(function(){ return window.__fake.tables.payments[0].paid_on === null; });
   check.check("12. «Desmarcar» tira o pago", /por pagar/.test(await pg.locator("#proMain").innerText()) || true);
   await pg.click("#ctEdit"); await pg.waitForSelector("#ceGo");
-  await pg.selectOption("#ceMod", "mensal"); await pg.fill("#ceMin", "45"); await pg.fill("#ceHrs", "6,5"); await pg.selectOption("#ceEstado", "suspenso");
-  await pg.click("#ceGo");
+  await pg.selectOption("#ceMod", "mensal"); await pg.selectOption("#ceMin", "45"); await pg.fill("#ceHrs", "6,5");
+  await pg.selectOption("#ceFat", "faturado"); await pg.selectOption("#cePag", "mbway"); await pg.selectOption("#ceFreq", "3"); await pg.selectOption("#cePPSel", "custom"); await pg.fill("#cePP", "5"); await pg.fill("#ceOf", "2"); await pg.fill("#ceVal", "1000"); await pg.fill("#ceNotas", "Nota de teste");
+  await pg.click('[data-ce-estado="suspenso"]');   // Suspender grava logo tudo o que está no formulário
   await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "contracts"; })[0]; return r && r.value.a && r.value.a.estado === "suspenso"; });
   var sv = await pg.evaluate(function(){ var T = window.__fake.tables; return {c: T.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value.a, h: T.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0].value.a}; });
   check.check("13. Editar condições grava modalidade, minutos, estado e horas", sv.c.modalidade === "mensal" && sv.c.minutos === 45 && sv.c.estado === "suspenso" && sv.h === 6.5);
+  var ext = await pg.evaluate(function(){ var T = window.__fake.tables; return {c: T.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value.a, price: T.session_packs.filter(function(p){ return p.id === "pa"; })[0].price}; });
+  check.check("13b. O formulário completo grava faturação, pagamento, frequência, packs por pagamento, ofertas, notas e o valor do pack", ext.c.faturacao === "faturado" && ext.c.pagamento === "mbway" && ext.c.freq === 3 && ext.c.packsPag === 5 && ext.c.ofertas === 2 && ext.c.notas === "Nota de teste" && ext.price === 1000);
   await pg.click("#ctBack");
   check.check("14. Voltar à lista: a Ana aparece como Suspenso e os ativos descem para 2", /Suspenso/.test(await pg.locator('[data-open-contract="a"]').innerText()) && /\n?2\b/.test(await pg.locator("#contractTotals").innerText()));
   // importar
