@@ -560,7 +560,7 @@ function studioAttentionCount(today){
   var overdue = studio.payments.filter(function(p){ return !p.paid_on && p.due_on < today; }).length;
   return n + overdue;
 }
-function studioNavLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Estúdio" + (n ? " · " + n : ""); }
+function studioNavLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Hoje" + (n ? " · " + n : ""); }
 function gestaoAreaLabel(){ var n = studio.loaded && studio.available ? studioAttentionCount() : 0; return "Gestão" + (n ? " · " + n : ""); }
 function updateStudioBadge(){
   var b = document.getElementById("navStudio");
@@ -1815,6 +1815,60 @@ function contractsTotalsHtml(units){
   var t = contractTotals(units);
   return "<div class=\"ct-stats\" id=\"contractTotals\">" + ctStat("Horas totais", t.hours ? fmtHours(t.hours) : "—", "contratadas por mês") + ctStat("Contratos ativos", t.n, "um duo conta uma vez") + ctStat("Receita recorrente", t.revenue ? eur(t.revenue) : "—", "contratada por mês") + "</div>";
 }
+// importações (da folha de cálculo): juntas num só bloco nos Contratos
+function importsExtraHtml(){
+  var html = "";
+  html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong> (e, se quiseres, uma sexta coluna com a validade em meses ou o tipo do pack — <em>Mensal</em> 3, <em>Trimestral</em> 6, <em>Semestral</em> 9, <em>Anual</em> 15 meses, ou seja, a duração + 3 meses; sem ela o pacote não caduca — e uma sétima com o aluno com quem o pacote é partilhado, para casais com um só pagamento). O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
+    "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9; Trimestral; João Silva\"></textarea>" +
+    "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
+  html += "<details class=\"perfil-section\" id=\"studioImportHours\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as horas mensais</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com a linha «Horas mensais» da folha «Dados»: <strong>Nome; horas</strong> (ex.: Ana Silva; 8,66). Aceita o nome como na folha («PT 60 - Ana Silva»). A soma dos alunos ativos aparece no cabeçalho.</p>" +
+    "<textarea id=\"hrsText\" rows=\"5\" placeholder=\"Ana Silva; 8,66\"></textarea>" +
+    "<p class=\"muted-p\" id=\"hrsOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"hrsGo\" style=\"margin-top:8px;\">Importar horas</button></details>";
+  html += "<details class=\"perfil-section\" id=\"studioImportSched\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as datas previstas (agendadas)</summary>" +
+    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com as datas da folha «Treinos»: <strong>Nome; 20/07/2026; 21/07/2026; …</strong> (datas como 31/12/2026 ou 2026/12/31). Ficam como «agendada» na ficha do aluno, não gastam aulas do pacote, e quando o Google Agenda trouxer essa aula passam a «feita» ou «faltou». Importar duas vezes não duplica.</p>" +
+    "<textarea id=\"schText\" rows=\"5\" placeholder=\"Ana Silva; 20/07/2026; 21/07/2026; 23/07/2026\"></textarea>" +
+    "<p class=\"muted-p\" id=\"schOut\" style=\"margin-top:6px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"schGo\" style=\"margin-top:8px;\">Importar datas</button></details>";
+  return html;
+}
+function wireImportsExtra(main, redraw){
+  var hrsGo = main.querySelector("#hrsGo");
+  if (hrsGo) hrsGo.addEventListener("click", function(){
+    var out = main.querySelector("#hrsOut"); hrsGo.disabled = true; out.textContent = "A importar…";
+    studioImportHours(main.querySelector("#hrsText").value).then(function(rep){
+      var msg = "✓ " + rep.saved + (rep.saved === 1 ? " aluno atualizado" : " alunos atualizados") + (rep.saved ? " · total ativo " + fmtHours(totalActiveHours()) : "");
+      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
+      out.textContent = msg; hrsGo.disabled = false; if (rep.saved) redraw();
+    });
+  });
+  var schGo = main.querySelector("#schGo");
+  if (schGo) schGo.addEventListener("click", function(){
+    var out = main.querySelector("#schOut"); schGo.disabled = true; out.textContent = "A importar…";
+    studioImportSchedule(main.querySelector("#schText").value).then(function(rep){
+      var msg = "✓ " + rep.created + (rep.created === 1 ? " sessão agendada criada" : " sessões agendadas criadas") + " (" + rep.students + (rep.students === 1 ? " aluno" : " alunos") + ")" + (rep.skipped ? " · " + rep.skipped + " já existiam" : "");
+      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
+      out.textContent = msg; schGo.disabled = false; updateStudioBadge();
+    });
+  });
+  var impGo = main.querySelector("#impGo");
+  if (impGo) impGo.addEventListener("click", function(){
+    var out = main.querySelector("#impOut"); impGo.disabled = true; out.textContent = "A importar…";
+    studioImportPacks(main.querySelector("#impText").value).then(function(rep){
+      impGo.disabled = false;
+      var lines = [];
+      if (rep.created) lines.push("✓ " + rep.created + (rep.created === 1 ? " pacote criado." : " pacotes criados."));
+      if (rep.skipped.length) lines.push("Já existiam: " + rep.skipped.join(", ") + ".");
+      rep.errors.forEach(function(e){ lines.push("⚠ " + e); });
+      if (!lines.length) lines.push("Não encontrei nada para importar.");
+      out.innerHTML = lines.map(escapeHtml).join("<br>");
+      if (rep.created){ showToast("✓ Pacotes importados"); updateStudioBadge(); }
+    });
+  });
+}
 function contractsListHtml(today){
   var units = contractUnits(today);
   var html = contractsTotalsHtml(units);
@@ -1839,7 +1893,7 @@ function contractsListHtml(today){
   html += "<details class=\"perfil-section\" id=\"contractImport\" style=\"margin:14px 0;\"><summary class=\"eyebrow\">Importar formato, modalidade e estado dos contratos</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por contrato: <strong>Nome; modalidade; formato; estado</strong> (ex.: PT 60 - Ana Silva; Trimestral; Individual; Ativo). O «PT 45» ou «PT 60» do nome dá os minutos; em duos usa «A + B». Estado: Ativo, Suspenso ou Cancelado.</p>" +
     "<textarea id=\"ctImpText\" rows=\"5\" placeholder=\"PT 60 - Ana Silva; Trimestral; Individual; Ativo\"></textarea><p class=\"muted-p\" id=\"ctImpOut\" style=\"margin-top:6px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"ctImpGo\" style=\"margin-top:8px;\">Importar</button></details>";
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"ctImpGo\" style=\"margin-top:8px;\">Importar</button></details>" + importsExtraHtml();
   return html;
 }
 var CT_CLIENT_FILTERS = [["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["inativo", "Inativos"]];
@@ -1942,6 +1996,7 @@ function contractsFinanceHtml(today){
   var pays = studio.payments, paidIn = function(pre){ return pays.filter(function(p){ return p.paid_on && p.paid_on.indexOf(pre) === 0; }); };
   var dueIn = function(pre){ return pays.filter(function(p){ return p.due_on && p.due_on.indexOf(pre) === 0; }); };
   var years = {}; years[today.slice(0, 4)] = 1; years[year] = 1; pays.forEach(function(p){ if (p.due_on) years[p.due_on.slice(0, 4)] = 1; if (p.paid_on) years[p.paid_on.slice(0, 4)] = 1; });
+  var unpaid = pays.filter(function(p){ return !p.paid_on; }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
   var inMonth = pays.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
   var mName = MESES_PT[mi] || month;
   var html = "<p class=\"muted-p\" style=\"margin:-4px 0 12px;\">Esta página é sua.</p><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"ctYear\">Ano</label><select id=\"ctYear\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(years).sort().map(function(y){ return "<option value=\"" + y + "\"" + (y === year ? " selected" : "") + ">" + y + (y === today.slice(0, 4) ? " até " + MESES_PT[parseInt(today.slice(5, 7), 10) - 1] : "") + "</option>"; }).join("") + "</select></div>" +
@@ -1954,7 +2009,10 @@ function contractsFinanceHtml(today){
   });
   html += "</div><div class=\"checkin-field\" style=\"max-width:200px; margin-top:14px;\"><label for=\"ctMonth\">Mês em detalhe</label><input type=\"month\" id=\"ctMonth\" value=\"" + escapeHtml(month) + "\"></div>" +
     "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos de " + escapeHtml(mName) + "</div>" + (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos neste mês.</p>") + "</div>" +
-    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctCsv\">⬇ Recebimentos (CSV)</button></div>";
+    "<div class=\"card\" id=\"studioPayments\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
+    (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>" +
+    "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido em " + escapeHtml(mName) + ": " + escapeHtml(eur(sum(paidIn(month)))) + " (" + paidIn(month).length + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctCsv\">⬇ Recebimentos (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
   return html;
 }
 function wireContractsMain(main){
@@ -1977,9 +2035,12 @@ function wireContractsMain(main){
   var edit = main.querySelector("#ctEdit"); if (edit) edit.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractEditModal(x, redraw); });
   main.querySelectorAll("[data-unpay]").forEach(function(b){ b.addEventListener("click", function(){ b.disabled = true; studioUpdate("payments", b.getAttribute("data-unpay"), {paid_on: null, method: null}).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); }); }); });
   var mon = main.querySelector("#ctMonth"); if (mon) mon.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mon.value)){ studioView.month = mon.value; redraw(); } });
+  var csvP = main.querySelector("#csvPayments"); if (csvP) csvP.addEventListener("click", function(){ if (!downloadText("cobrancas-" + studioView.month + ".csv", paymentsCsv(studioView.month))) showToast("Não foi possível gerar o ficheiro"); });
+  var csvS = main.querySelector("#csvSessions"); if (csvS) csvS.addEventListener("click", function(){ if (!downloadText("sessoes-" + studioView.month + ".csv", sessionsCsv(studioView.month))) showToast("Não foi possível gerar o ficheiro"); });
   var csv = main.querySelector("#ctCsv"); if (csv) csv.addEventListener("click", function(){ downloadText("recebimentos-" + studioView.month + ".csv", paymentsCsv(studioView.month)); });
   main.querySelectorAll("[data-open-student]").forEach(function(btn){ btn.addEventListener("click", function(e){ e.stopPropagation(); state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (err) {} }); });
   wireStudioCommon(main, redraw);   // Pago, Renovar, Editar/Partilhar/Apagar pacote
+  wireImportsExtra(main, redraw);
   var imp = main.querySelector("#ctImpGo");
   if (imp) imp.addEventListener("click", function(){
     var out = main.querySelector("#ctImpOut"); imp.disabled = true; out.textContent = "A importar…";
@@ -2226,7 +2287,7 @@ function renderProStudioMain(){
   var today = localTodayISO(); if (!studioView.month) studioView.month = monthOf(today); if (!studioView.date) studioView.date = today;
   var k = studioKpis(studioView.month, today);
   var students = visibleStudentsForDashboard().filter(isStudentActive);
-  var html = "<h2 class=\"ct-title\">Estúdio</h2><div class=\"ct-stats ct-stats5\" id=\"studioKpis\">" +
+  var html = "<h2 class=\"ct-title\">Hoje</h2><div class=\"ct-stats ct-stats5\" id=\"studioKpis\">" +
     ctStat("A cobrar", eurShort(k.toCollect), "este mês") + ctStat("Em atraso", eurShort(k.overdue), k.overdueN ? k.overdueN + (k.overdueN === 1 ? " cobrança" : " cobranças") : "nada em atraso") +
     ctStat("A acabar", k.endingN, k.endingN === 1 ? "pacote" : "pacotes") + ctStat("Presença", k.attendance == null ? "—" : k.attendance + "%", "no mês") + ctStat("Horas mensais ativas", totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "contratadas") + "</div>";
 
@@ -2295,33 +2356,6 @@ function renderProStudioMain(){
   });
   html += "</div>";
 
-  var unpaid = studio.payments.filter(function(p){ return !p.paid_on; }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
-  html += "<div class=\"card\" id=\"studioPayments\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
-    (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>";
-
-  var ending = studio.packs.map(function(p){ return {p: p, u: packUsage(p, today), st: packActiveMember(p)}; }).filter(function(x){ return x.st && packEndingInPool(x.p, today); });
-  html += "<div class=\"card\" id=\"studioEnding\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Pacotes a acabar</div>" +
-    (ending.length ? ending.map(function(x){ return "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(x.st.name)) + "\" style=\"align-items:center;\"><div><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(x.st.id) + "\">" + escapeHtml(x.st.name) + "</button></div><div class=\"muted-p\" style=\"font-size:0.76rem;\">" +
-      escapeHtml(x.p.name) + " · restam " + x.u.remaining + (x.u.daysLeft != null ? " · termina em " + x.u.daysLeft + " d" : "") + "</div></div><button type=\"button\" class=\"btn btn-sm\" data-renew=\"" + escapeHtml(x.st.id) + "\">Lembrar renovação</button></div>"; }).join("") : "<p class=\"muted-p\">Nenhum pacote a acabar.</p>") + "</div>";
-
-  html += "<details class=\"perfil-section\" id=\"studioImport\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar pacotes que já estão a decorrer</summary>" +
-    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno, copiada da tua folha de cálculo: <strong>Nome; aulas do pacote; data de início; valor; aulas já dadas</strong> (e, se quiseres, uma sexta coluna com a validade em meses ou o tipo do pack — <em>Mensal</em> 3, <em>Trimestral</em> 6, <em>Semestral</em> 9, <em>Anual</em> 15 meses, ou seja, a duração + 3 meses; sem ela o pacote não caduca — e uma sétima com o aluno com quem o pacote é partilhado, para casais com um só pagamento). O nome tem de ser igual ao do aluno na app. Datas como 31/12/2026.</p>" +
-    "<textarea id=\"impText\" rows=\"5\" placeholder=\"Ana Silva; 26; 01/10/2026; 520; 9; Trimestral; João Silva\"></textarea>" +
-    "<p class=\"muted-p\" id=\"impOut\" style=\"margin-top:6px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"impGo\" style=\"margin-top:8px;\">Importar</button></details>";
-  html += "<details class=\"perfil-section\" id=\"studioImportHours\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as horas mensais</summary>" +
-    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com a linha «Horas mensais» da folha «Dados»: <strong>Nome; horas</strong> (ex.: Ana Silva; 8,66). Aceita o nome como na folha («PT 60 - Ana Silva»). A soma dos alunos ativos aparece no cabeçalho.</p>" +
-    "<textarea id=\"hrsText\" rows=\"5\" placeholder=\"Ana Silva; 8,66\"></textarea>" +
-    "<p class=\"muted-p\" id=\"hrsOut\" style=\"margin-top:6px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"hrsGo\" style=\"margin-top:8px;\">Importar horas</button></details>";
-  html += "<details class=\"perfil-section\" id=\"studioImportSched\" style=\"margin-bottom:14px;\"><summary class=\"eyebrow\">Importar as datas previstas (agendadas)</summary>" +
-    "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola uma linha por aluno com as datas da folha «Treinos»: <strong>Nome; 20/07/2026; 21/07/2026; …</strong> (datas como 31/12/2026 ou 2026/12/31). Ficam como «agendada» na ficha do aluno, não gastam aulas do pacote, e quando o Google Agenda trouxer essa aula passam a «feita» ou «faltou». Importar duas vezes não duplica.</p>" +
-    "<textarea id=\"schText\" rows=\"5\" placeholder=\"Ana Silva; 20/07/2026; 21/07/2026; 23/07/2026\"></textarea>" +
-    "<p class=\"muted-p\" id=\"schOut\" style=\"margin-top:6px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"schGo\" style=\"margin-top:8px;\">Importar datas</button></details>";
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"stMonth\">Mês</label><input type=\"month\" id=\"stMonth\" value=\"" + studioView.month + "\"></div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido no mês: " + escapeHtml(eur(k.received)) + " (" + k.receivedN + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
-    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
   var stHadFocus = document.activeElement && document.activeElement.id === "stSearch", stCaret = stHadFocus ? document.activeElement.selectionStart : null;
   main.innerHTML = html;
   applyStudioFilter();
@@ -2344,47 +2378,10 @@ function renderProStudioMain(){
     fixBtn.disabled = true;
     autoFixPacks().then(function(fx){ showToast(fx.sessions || fx.aligned || fx.reassigned ? "✓ " + (fx.sessions ? fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") : "pacotes acertados") + (fx.aligned ? " · " + fx.aligned + (fx.aligned === 1 ? " renovação a contar da 1.ª aula" : " renovações a contar da 1.ª aula") : "") + (fx.reassigned ? " · " + fx.reassigned + (fx.reassigned === 1 ? " aula voltou ao pacote certo" : " aulas voltaram ao pacote certo") : "") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
   });
-  var hrsGo = main.querySelector("#hrsGo");
-  if (hrsGo) hrsGo.addEventListener("click", function(){
-    var out = main.querySelector("#hrsOut"); hrsGo.disabled = true; out.textContent = "A importar…";
-    studioImportHours(main.querySelector("#hrsText").value).then(function(rep){
-      var msg = "✓ " + rep.saved + (rep.saved === 1 ? " aluno atualizado" : " alunos atualizados") + (rep.saved ? " · total ativo " + fmtHours(totalActiveHours()) : "");
-      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
-      out.textContent = msg; hrsGo.disabled = false; if (rep.saved) redraw();
-    });
-  });
-  var schGo = main.querySelector("#schGo");
-  if (schGo) schGo.addEventListener("click", function(){
-    var out = main.querySelector("#schOut"); schGo.disabled = true; out.textContent = "A importar…";
-    studioImportSchedule(main.querySelector("#schText").value).then(function(rep){
-      var msg = "✓ " + rep.created + (rep.created === 1 ? " sessão agendada criada" : " sessões agendadas criadas") + " (" + rep.students + (rep.students === 1 ? " aluno" : " alunos") + ")" + (rep.skipped ? " · " + rep.skipped + " já existiam" : "");
-      if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
-      out.textContent = msg; schGo.disabled = false; updateStudioBadge();
-    });
-  });
-  var impGo = main.querySelector("#impGo");
-  if (impGo) impGo.addEventListener("click", function(){
-    var out = main.querySelector("#impOut"); impGo.disabled = true; out.textContent = "A importar…";
-    studioImportPacks(main.querySelector("#impText").value).then(function(rep){
-      impGo.disabled = false;
-      var lines = [];
-      if (rep.created) lines.push("✓ " + rep.created + (rep.created === 1 ? " pacote criado." : " pacotes criados."));
-      if (rep.skipped.length) lines.push("Já existiam: " + rep.skipped.join(", ") + ".");
-      rep.errors.forEach(function(e){ lines.push("⚠ " + e); });
-      if (!lines.length) lines.push("Não encontrei nada para importar.");
-      out.innerHTML = lines.map(escapeHtml).join("<br>");
-      if (rep.created){ showToast("✓ Pacotes importados"); updateStudioBadge(); }
-    });
-  });
   main.querySelectorAll("[data-qs]").forEach(function(b){ b.addEventListener("click", function(){
     var parts = b.getAttribute("data-qs").split(":"); b.disabled = true;
     studioAddSession(parts[0], studioView.date, parts[1]).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
   }); });
-  main.querySelectorAll("[data-renew]").forEach(function(b){ b.addEventListener("click", function(){ var st = findStudent(b.getAttribute("data-renew")); if (st) openContactModal(st, "pacote-a-acabar", redraw); }); });
-  var mEl = main.querySelector("#stMonth"); if (mEl) mEl.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mEl.value)){ studioView.month = mEl.value; redraw(); } });
-  var m = function(){ var v = main.querySelector("#stMonth").value; return /^\d{4}-\d{2}$/.test(v) ? v : studioView.month; };
-  main.querySelector("#csvPayments").addEventListener("click", function(){ if (!downloadText("cobrancas-" + m() + ".csv", paymentsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
-  main.querySelector("#csvSessions").addEventListener("click", function(){ if (!downloadText("sessoes-" + m() + ".csv", sessionsCsv(m()))) showToast("Não foi possível gerar o ficheiro"); });
 }
 
 /* ---------- ligação ao núcleo ---------- */

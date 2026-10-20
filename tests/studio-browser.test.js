@@ -100,12 +100,13 @@ function fixtureRow(id, name){
   await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
   check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8) e a agenda", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 1);
   check.check("9e. A sessão contada pelo horário não se duplica ao reabrir o Estúdio", (await pg.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 1);
-  // importar pacotes a decorrer
-  await pg.click("#studioImport summary");
+  // importar pacotes a decorrer (as importações vivem nos Contratos)
+  await pg.click("#navContracts"); await pg.waitForSelector("#studioImport"); await pg.click("#studioImport summary");
   await pg.fill("#impText", "Rui Teste; 26; 01/10/2026; 520; 9\nNinguém; 10; 01/10/2026; 1; 0");
   await pg.click("#impGo");
   await pg.waitForFunction(function(){ return window.__fake.tables.session_packs.some(function(p){ return p.student_id === "stu2" && p.used_before === 9; }); });
   check.check("9f. Importar cria o pacote do aluno com as aulas já dadas e avisa do nome que não existe", /Ninguém/.test(await pg.locator("#impOut").innerText()) && /1 pacote criado/.test(await pg.locator("#impOut").innerText()));
+  await pg.click('[data-ct-tab="financeiro"]'); await pg.waitForSelector("#csvSessions");   // a exportação vive no Financeiro
   var [dl] = await Promise.all([pg.waitForEvent("download"), pg.click("#csvSessions")]);
   var csv = fs.readFileSync(await dl.path(), "utf8");
   check.check("10. O CSV das sessões descarrega com cabeçalho e as sessões do mês", /^﻿Aluno;Data;Hora;Estado;Pacote;Notas/.test(csv) && /Pack 10 sessões/.test(csv));

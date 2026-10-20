@@ -10914,7 +10914,7 @@ function renderProShell(){
     if (APP_MODE === "gestao"){
       // app da Gestão: Estúdio e Contratos, mais a ligação à app de Acompanhamento
       if (state.proView !== "studio" && state.proView !== "contracts") state.proView = "studio";
-      sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + (G.loaded ? G.studioNavLabel() : "Estúdio") + "</button>" +
+      sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + (G.loaded ? G.studioNavLabel() : "Hoje") + "</button>" +
         "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>" +
         "<a class=\"pro-nav-item pro-nav-link\" id=\"goAcomp\" href=\"index.html\">Acompanhamento ↗</a>";
     } else {
