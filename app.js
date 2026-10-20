@@ -10358,15 +10358,13 @@ function deleteStudentCompletely(s){
 }
 function openDeleteStudentModal(s){
   var sheet = openModal("<div class=\"mtitle\">Apagar " + escapeHtml(s.name) + "?</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Vai apagar a ficha, as fotografias, os pacotes e as cobranças, e o aluno deixa de ter acesso à app. <strong>Não dá para desfazer.</strong> Para confirmar, escreve o nome do aluno:</p>" +
-    "<input type=\"text\" id=\"delName\" autocomplete=\"off\" placeholder=\"" + escapeHtml(s.name) + "\" style=\"width:100%; margin-bottom:10px;\">" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Vai apagar a ficha, as fotografias, os pacotes e as cobranças, e o aluno deixa de ter acesso à app. <strong>Não dá para desfazer.</strong></p>" +
     "<p class=\"muted-p\" id=\"delErr\" style=\"color:var(--critical); display:none; margin-bottom:8px;\"></p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"delGo\" disabled style=\"width:100%; background:var(--critical); border-color:var(--critical);\">Apagar para sempre</button>");
-  var inp = sheet.querySelector("#delName"), go = sheet.querySelector("#delGo");
-  var norm = function(t){ return String(t || "").trim().toLowerCase(); };
-  inp.addEventListener("input", function(){ go.disabled = norm(inp.value) !== norm(s.name); });
+    "<div style=\"display:flex; gap:10px;\"><button type=\"button\" class=\"btn\" id=\"delCancel\" style=\"flex:1;\">Cancelar</button>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"delGo\" style=\"flex:1; background:var(--critical); border-color:var(--critical); color:#fff;\">Apagar</button></div>");
+  sheet.querySelector("#delCancel").addEventListener("click", closeModal);
+  var go = sheet.querySelector("#delGo");
   go.addEventListener("click", function(){
-    if (norm(inp.value) !== norm(s.name)) return;
     go.disabled = true;
     deleteStudentCompletely(s).then(function(r){
       if (r.error){ var e = sheet.querySelector("#delErr"); e.textContent = r.error; e.style.display = "block"; go.disabled = false; return; }
