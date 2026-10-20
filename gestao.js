@@ -1721,6 +1721,7 @@ function contractMetaClean(v){
     if (CONTRACT_PAGAMENTO[m.pagamento]) o.pagamento = m.pagamento;
     var fq = Number(m.freq); if (fq >= 1 && fq <= 5) o.freq = Math.round(fq);
     if (typeof m.agenda === "string" && m.agenda.trim()) o.agenda = m.agenda.trim().slice(0, 80);
+    if (typeof m.pt === "string" && m.pt.trim()) o.pt = m.pt.trim().slice(0, 60);
     if (typeof m.notas === "string" && m.notas.trim()) o.notas = m.notas.trim().slice(0, 500);
     out[k] = o;
   });
@@ -1748,7 +1749,7 @@ function saveContractMeta(){
 function contractMetaOf(id){
   var m = contractMeta.map[id] || {};
   return {formato: m.formato || "individual", modalidade: m.modalidade || "trimestral", minutos: m.minutos || 60, estado: m.estado || null, packsPag: m.packsPag || 1, ofertas: m.ofertas || 0,
-    faturacao: m.faturacao || "", pagamento: m.pagamento || "", freq: m.freq || 0, agenda: m.agenda || "", notas: m.notas || ""};
+    faturacao: m.faturacao || "", pagamento: m.pagamento || "", freq: m.freq || 0, agenda: m.agenda || "", notas: m.notas || "", pt: m.pt || ""};
 }
 function contractEstadoOf(st){ var m = contractMeta.map[st.id]; return (m && m.estado) || (isStudentActive(st) ? "ativo" : "cancelado"); }
 var CONTRACT_ESTADO_LABEL = {ativo: "Ativo", suspenso: "Suspenso", cancelado: "Cancelado"};
@@ -1793,7 +1794,7 @@ function contractFormatLabel(x){ return x.duo ? "Duo" : x.meta.formato === "part
 function contractPlanLabel(x){
   return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
 }
-var contractsView = {tab: "contratos", filter: "todos", cfilter: "todos", search: "", sort: "nome", open: null};
+var contractsView = {tab: "contratos", sheet: null, filter: "todos", cfilter: "todos", search: "", sort: "nome", open: null};
 function renderProContractsMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded || !contractMeta.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; Promise.all([studioRefresh(), loadContractMeta()]).then(function(){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); }); return; }
@@ -1803,6 +1804,7 @@ function renderProContractsMain(){
     return "<button type=\"button\" class=\"ct-tab" + (contractsView.tab === t[0] ? " on" : "") + "\" data-ct-tab=\"" + t[0] + "\">" + t[1] + "</button>"; }).join("") + "</div>";
   if (contractsView.tab === "financeiro") html += contractsFinanceHtml(today);
   else if (contractsView.tab === "clientes") html += contractsClientsHtml(today);
+  else if (contractsView.open && contractsView.sheet) html += contractSheetHtml(contractsView.open, contractsView.sheet, today);
   else if (contractsView.open) html += contractDetailHtml(contractsView.open, today);
   else html += contractsListHtml(today);
   main.innerHTML = html;
@@ -1947,21 +1949,31 @@ document.addEventListener("keyup", function(e){ var t = e.target; if (t && t.id 
 document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "ctSearch"){ contractsView.search = t.value; applyContractsFilter(); } });
 document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "ctSort"){ contractsView.sort = t.value; applyContractsFilter(); } });
 
+var PT_NAME_KEY = "evolve.ptName";
+function ptNameDefault(){ try { return localStorage.getItem(PT_NAME_KEY) || ""; } catch (e) { return ""; } }
+function ptNameRemember(n){ try { localStorage.setItem(PT_NAME_KEY, n); } catch (e) {} }
+function fmtNum2(n){ return (Math.round(n * 100) / 100).toString().replace(".", ","); }
+// código curto da ficha de controlo (do id do pack)
+function ctSheetCode(packId){ var h = 5381, t = String(packId || ""); for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0; var c = h.toString(36).toUpperCase(); while (c.length < 6) c = "X" + c; return c.slice(-6); }
 function contractDetailHtml(key, today){
   var x = contractUnits(today).filter(function(u){ return u.key === key; })[0];
   if (!x) return "<p class=\"muted-p\">Contrato não encontrado.</p><button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\">← Voltar aos contratos</button>";
-  var since = x.packs.length ? x.packs[0].starts_on : null;
+  var since = x.packs.length ? x.packs[0].starts_on : null, ptName = x.meta.pt || ptNameDefault();
+  var tone = x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical";
+  var allUsed = x.packs.reduce(function(a, p){ return a + packUsage(p, today).used; }, 0), allTotal = x.packs.reduce(function(a, p){ return a + (Number(p.total) || 0); }, 0);
   var html = "<button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\" style=\"margin-bottom:10px; min-height:44px;\">← Voltar aos contratos</button>" +
-    "<h2 style=\"margin:0 0 4px;\">PT " + x.meta.minutos + " - " + escapeHtml(x.name) + "</h2>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\"><span class=\"pill " + (x.estado === "ativo" ? "good" : x.estado === "suspenso" ? "warn" : "critical") + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " desde " + escapeHtml(fmtDateFullPt(since)) : "") + "</p>";
+    "<h2 class=\"ct-title\" style=\"margin-bottom:4px;\">" + escapeHtml(x.meta.agenda || "PT " + x.meta.minutos + " - " + x.name) + "</h2>" +
+    "<div class=\"card\" style=\"margin-bottom:10px;\"><p style=\"margin:0 0 10px;\"><span class=\"ct-st " + tone + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " · desde " + escapeHtml(fmtDateFullPt(since)) : "") + (ptName ? " · PT: " + escapeHtml(ptName) : "") + "</p>" +
+    (x.cur ? "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\">Ver ficha atual <span style=\"opacity:.7; margin-left:6px;\">" + ctSheetCode(x.cur.id) + "</span></button>" +
+      "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\" data-ct-print=\"1\" title=\"Guardar em PDF\" aria-label=\"Descarregar a ficha\">⬇</button></div>" : "") + "</div>";
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Termos</div><div class=\"assess-form-grid\">" +
     "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + contractFormatLabel(x) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Modalidade</div><div class=\"hlabel\">" + escapeHtml(CONTRACT_MODALIDADES[x.meta.modalidade].label) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Plano</div><div class=\"hlabel\">" + (x.weekly ? x.weekly + "× por semana" : "—") + " · " + x.meta.minutos + " min</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Horas por mês</div><div class=\"hlabel\">" + (x.hours ? escapeHtml(fmtHours(x.hours)) : "—") + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Valor do ciclo</div><div class=\"hlabel\">" + (x.price != null ? escapeHtml(eur(x.price)) : "—") + "</div></div>" +
-    "<div class=\"f\"><div class=\"muted-p\">Valor por mês</div><div class=\"hlabel\">" + (x.perMonth != null ? escapeHtml(eur(x.perMonth)) : "—") + (x.perSession != null ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">" + escapeHtml(eur(x.perSession)) + "/sessão</span>" : "") + "</div></div></div>" +
-    (x.u ? "<p class=\"muted-p\" style=\"margin-top:10px;\">Sessões: <strong>" + escapeHtml(x.packLabel) + "</strong> · " + x.u.used + " de " + x.u.total + " gastas" + "</p>" : "") +
+    "<div class=\"f\"><div class=\"muted-p\">Valor por mês</div><div class=\"hlabel\">" + (x.perMonth != null ? escapeHtml(eur(x.perMonth)) : "—") + (x.perSession != null && x.perMonthSessions ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">× " + fmtNum2(x.perMonthSessions) + " ÷ " + x.total + "</span>" : "") + "</div></div></div>" +
+    (x.u ? "<p class=\"muted-p\" style=\"margin-top:10px;\">Sessões: <strong>" + escapeHtml(x.packLabel) + "</strong>" + (x.packs.length > 1 ? " · " + allUsed + " de " + allTotal + " sessões gastas" : " · " + x.u.used + " de " + x.u.total + " gastas") + "</p>" : "") +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctEdit\" style=\"min-height:44px;\">Editar condições</button>" +
     (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" data-renew-pack=\"" + escapeHtml(x.cur.id) + "\" style=\"min-height:44px;\">Renovar</button>" : "") + "</div></div>";
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Dados pessoais</div>" + x.members.map(function(m){
@@ -1978,17 +1990,44 @@ function contractDetailHtml(key, today){
   var srow = function(s){ return "<div style=\"padding:3px 0;\">" + escapeHtml(s.date.slice(8) + "/" + s.date.slice(5, 7)) + (s.time ? " · " + escapeHtml(s.time) : "") + (x.duo ? " · " + escapeHtml(nameOf(s.student_id)) : "") + " " + sessionNumberPill(nums[s.id]) + " <span class=\"muted-p\">" + escapeHtml(((SESSION_STATUS[s.status] || {}).label || s.status)) + "</span></div>"; };
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Treinos</div><div style=\"display:grid; grid-template-columns:1fr 1fr; gap:12px;\"><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Próximos</div>" + (next.length ? next.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Últimos</div>" + (last.length ? last.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div></div></div>";
   var pays = studio.payments.filter(function(p){ return ids.indexOf(p.student_id) >= 0; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; });
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos</div>" + (pays.length ? pays.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos.</p>") + "</div>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos</div>" + (pays.length ? pays.map(function(p){ return contractPaymentRowHtml(p, today, x); }).join("") : "<p class=\"muted-p\">Sem recebimentos.</p>") + "<p class=\"muted-p\" style=\"margin-top:8px; font-size:0.78rem;\">Também se marcam como pagos no Financeiro, mês a mês.</p></div>";
   html += "<details class=\"perfil-section\" style=\"margin:10px 0;\"><summary class=\"eyebrow\">Arquivo de packs · " + x.packs.length + "</summary>" + (x.packs.length ? x.packs.slice().reverse().map(function(p){ return packBarHtml(p, packUsage(p, today), x.ids[0]); }).join("") : "<p class=\"muted-p\">Sem packs.</p>") + "</details>";
   return html;
 }
-function contractPaymentRowHtml(p, today){
+function contractPaymentRowHtml(p, today, x){
   var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
-  var pk = studio.packs.filter(function(q){ return q.id === p.pack_id; })[0];
-  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(p.due_on)) + " · " + escapeHtml(pk ? pk.name : "Cobrança") + " · " + escapeHtml(nameOf(p.student_id)) + "</div>" +
-    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (p.paid_on ? "pago a " + escapeHtml(fmtDateFullPt(p.paid_on)) + (p.method ? " (" + escapeHtml(PAYMENT_METHODS[p.method] || p.method) + ")" : "") : "por pagar") + "</div></div>" +
+  var pk = studio.packs.filter(function(q){ return q.id === p.pack_id; })[0], what = pk ? pk.name : "Cobrança";
+  if (x && pk){
+    var k = x.packs.indexOf(pk) + 1, n = x.meta.packsPag || 1;
+    if (k > 0) what = n > 1 ? n + " packs (n.º " + k + " a " + (k + n - 1) + ")" : "Pack n.º " + k;
+  }
+  var extra = x ? (x.meta.faturacao ? " · " + CONTRACT_FATURACAO[x.meta.faturacao] : "") + (x.meta.pt || ptNameDefault() ? " · por " + (x.meta.pt || ptNameDefault()) : "") : "";
+  return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0;flex:1 1 220px;\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(p.due_on)) + " · " + escapeHtml(what) + " · " + escapeHtml(nameOf(p.student_id)) + "</div>" +
+    "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (p.paid_on ? "dado por pago a " + escapeHtml(fmtDateFullPt(p.paid_on).slice(0, 5)) + (p.method ? " · " + escapeHtml(PAYMENT_METHODS[p.method] || p.method) : "") + escapeHtml(extra) : "por pagar") + "</div></div>" +
     "<span style=\"white-space:nowrap;\"><span class=\"hlabel\">" + escapeHtml(eur(p.amount)) + "</span> <span class=\"pill " + tone + "\">" + st + "</span> " +
     (p.paid_on ? "<button type=\"button\" class=\"btn btn-sm\" data-unpay=\"" + escapeHtml(p.id) + "\">Desmarcar</button>" : "<button type=\"button\" class=\"btn btn-sm primary\" data-pay=\"" + escapeHtml(p.id) + "\">Pago</button>") + "</span></div>";
+}
+// ficha de controlo: folha imprimível com as sessões do pack (guarda-se em PDF pelo ecrã de impressão)
+function contractSheetHtml(key, packId, today){
+  var x = contractUnits(today).filter(function(u){ return u.key === key; })[0], pk = x && x.packs.filter(function(p){ return p.id === packId; })[0];
+  if (!x || !pk) return "<p class=\"muted-p\">Ficha não encontrada.</p><button type=\"button\" class=\"btn btn-sm\" id=\"ctSheetBack\">← Voltar ao contrato</button>";
+  var ptName = x.meta.pt || ptNameDefault() || "—", total = Number(pk.total) || 0, k = x.packs.indexOf(pk) + 1;
+  var done = studio.sessions.filter(function(e){ return e.pack_id === pk.id && sessionConsumes(pk, e); }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
+  var before = Number(pk.used_before) || 0, rows = [];
+  for (var i = 0; i < total; i++){
+    var e = i < before ? null : done[i - before], pad = (i + 1 < 10 ? "0" : "") + (i + 1);
+    rows.push({n: pad, date: i < before ? "—" : e ? fmtDateFullPt(e.date) : "", pt: i < before ? "" : e ? ptName : "", filled: i < before || !!e});
+  }
+  var paid = studio.payments.some(function(y){ return y.paid_on && studio.packs.some(function(q){ if (q.id !== y.pack_id) return false; var s0 = x.packs.indexOf(q) + 1, n = x.meta.packsPag || 1; return s0 > 0 && k >= s0 && k <= s0 + n - 1; }); });
+  var half = Math.ceil(total / 2);
+  var col = function(from, to){ return "<div class=\"cs-col\"><div class=\"cs-h\"><span>Nº</span><span>Data</span><span>PT</span><span>Pago</span></div>" + rows.slice(from, to).map(function(r){ return "<div class=\"cs-r" + (r.filled ? "" : " empty") + "\"><span>" + r.n + "</span><span>" + escapeHtml(r.date) + "</span><span>" + escapeHtml(r.pt) + "</span><span></span></div>"; }).join("") + "</div>"; };
+  var code = ctSheetCode(pk.id);
+  return "<div class=\"cs-bar\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctSheetBack\" style=\"min-height:44px;\">← Voltar ao contrato</button><span class=\"eyebrow\">Ficha de controlo · " + code + "</span><button type=\"button\" class=\"btn btn-sm primary\" id=\"ctSheetPrint\" style=\"min-height:44px;\" title=\"Guardar em PDF\">⬇ PDF</button></div>" +
+    "<div class=\"ct-sheet\" id=\"ctSheet\"><div class=\"cs-top\"><span class=\"cs-logo\">EVOLVE</span><span class=\"cs-meta\">EV-FC · " + total + " treinos · pack " + k + " · " + code + "</span></div>" +
+    "<div class=\"cs-title\"><h3>Ficha de controlo</h3><span class=\"cs-badge" + (paid ? "" : " no") + "\">" + (paid ? "Pago até · sessão " + total + " / " + total : "Por pagar") + "</span></div>" +
+    "<div class=\"cs-fields\"><div><small>Personal trainer</small>" + escapeHtml(ptName) + "</div><div><small>Aluno</small>" + escapeHtml(x.name) + "</div><div><small>Nome de agendamento</small>" + escapeHtml(x.meta.agenda || "PT " + x.meta.minutos + " - " + x.name) + "</div><div><small>Modalidade</small>" + escapeHtml(contractPlanLabel(x)) + "</div></div>" +
+    "<div class=\"cs-grid\">" + col(0, half) + col(half, total) + "</div>" +
+    "<div class=\"cs-foot\"><span>Início " + escapeHtml(fmtDateFullPt(pk.starts_on)) + "</span><span>Também na agenda · " + escapeHtml(x.meta.agenda || x.name) + "</span><span>Gerado pela app Evolve a " + escapeHtml(fmtDateFullPt(today)) + " · atualizado diariamente</span><span>Pago: " + (paid ? "100" : "0") + "% · válido com carimbo</span></div></div>";
 }
 var MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 function contractsFinanceHtml(today){
@@ -2019,7 +2058,7 @@ function contractsFinanceHtml(today){
 }
 function wireContractsMain(main){
   var redraw = function(){ renderProContractsMain(); };
-  main.querySelectorAll("[data-ct-tab]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.tab = b.getAttribute("data-ct-tab"); contractsView.open = null; redraw(); }); });
+  main.querySelectorAll("[data-ct-tab]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.tab = b.getAttribute("data-ct-tab"); contractsView.open = null; contractsView.sheet = null; redraw(); }); });
   main.querySelectorAll("[data-ct-cfilter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.cfilter = b.getAttribute("data-ct-cfilter"); redraw(); }); });
   main.querySelectorAll("[data-ct-month]").forEach(function(b){ b.addEventListener("click", function(){ studioView.month = b.getAttribute("data-ct-month"); redraw(); }); });
   var yr = main.querySelector("#ctYear"); if (yr) yr.addEventListener("change", function(){ studioView.month = yr.value + "-" + (studioView.month || "01-01").slice(5, 7); redraw(); });
@@ -2029,11 +2068,14 @@ function wireContractsMain(main){
     var x = contractUnits().filter(function(u){ return u.key === b.getAttribute("data-edit-contract"); })[0];
     if (x) openContractEditModal(x, redraw);
   }); });
-  main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
+  main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); contractsView.sheet = null; redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
   main.querySelectorAll("[data-edit-person]").forEach(function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var st = findStudent(b.getAttribute("data-edit-person")); if (st) openPersonalDataModal(st, redraw); }); });
   var ctNew = main.querySelector("#ctNew"); if (ctNew) ctNew.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openNewContractModal(x, redraw); });
   var ctAssoc = main.querySelector("#ctAssoc"); if (ctAssoc) ctAssoc.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openAssociateContractModal(x, redraw); });
-  var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; redraw(); });
+  main.querySelectorAll("[data-ct-sheet]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.sheet = b.getAttribute("data-ct-sheet"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} if (b.hasAttribute("data-ct-print")) setTimeout(function(){ try { window.print(); } catch (e) {} }, 300); }); });
+  var shBack = main.querySelector("#ctSheetBack"); if (shBack) shBack.addEventListener("click", function(){ contractsView.sheet = null; redraw(); });
+  var shPrint = main.querySelector("#ctSheetPrint"); if (shPrint) shPrint.addEventListener("click", function(){ try { window.print(); } catch (e) {} });
+  var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; contractsView.sheet = null; redraw(); });
   var edit = main.querySelector("#ctEdit"); if (edit) edit.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractEditModal(x, redraw); });
   main.querySelectorAll("[data-unpay]").forEach(function(b){ b.addEventListener("click", function(){ b.disabled = true; studioUpdate("payments", b.getAttribute("data-unpay"), {paid_on: null, method: null}).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); }); }); });
   var mon = main.querySelector("#ctMonth"); if (mon) mon.addEventListener("change", function(){ if (/^\d{4}-\d{2}$/.test(mon.value)){ studioView.month = mon.value; redraw(); } });
@@ -2146,6 +2188,7 @@ function openContractEditModal(x, onDone){
     fld("Frequência semanal", sel("ceFreq", [["", "— automática (pelas horas) —"]].concat([1, 2, 3, 4, 5].map(function(n){ return [n, n + "×/semana"]; })), m.freq || "")) +
     fld("Duração", sel("ceMin", [[60, "60 minutos"], [45, "45 minutos"]].concat([60, 45].indexOf(m.minutos) < 0 ? [[m.minutos, m.minutos + " minutos"]] : []), m.minutos)) +
     fld("Horas por mês (do contrato inteiro)", "<input type=\"text\" id=\"ceHrs\" inputmode=\"decimal\" value=\"" + escapeHtml(hrs) + "\" placeholder=\"ex.: 8,66\">") +
+    fld("Personal trainer", "<input type=\"text\" id=\"cePT\" maxlength=\"60\" value=\"" + escapeHtml(m.pt || ptNameDefault()) + "\">", "Aparece na ficha de controlo.") +
     fld("Nome de agendamento", "<input type=\"text\" id=\"ceAg\" maxlength=\"80\" value=\"" + escapeHtml(m.agenda || "PT " + m.minutos + " - " + x.name) + "\">", "Como aparece o evento no Google Agenda.") +
     fld("Notas", "<textarea id=\"ceNotas\" rows=\"3\" maxlength=\"500\">" + escapeHtml(m.notas) + "</textarea>") +
     "<div class=\"card\" style=\"margin:6px 0 12px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Valor do contrato</div>" +
@@ -2172,9 +2215,10 @@ function openContractEditModal(x, onDone){
     if (!(of >= 0 && of <= 50)) return fail("Sessões de oferta: entre 0 e 50.");
     if (val && (price == null || price < 0)) return fail("Valor inválido (ex.: 940,50).");
     var patch = {formato: q("#ceFormato").value, modalidade: q("#ceMod").value, minutos: min, estado: q("#ceEstado").value, packsPag: pp, ofertas: of,
-      faturacao: q("#ceFat").value, pagamento: q("#cePag").value, freq: parseInt(q("#ceFreq").value, 10) || 0, agenda: q("#ceAg").value.trim(), notas: q("#ceNotas").value.trim()};
+      pt: q("#cePT").value.trim(), faturacao: q("#ceFat").value, pagamento: q("#cePag").value, freq: parseInt(q("#ceFreq").value, 10) || 0, agenda: q("#ceAg").value.trim(), notas: q("#ceNotas").value.trim()};
+    if (patch.pt) ptNameRemember(patch.pt);
     var prevMap = JSON.parse(JSON.stringify(contractMeta.map)), prevHours = JSON.parse(JSON.stringify(monthlyHours.map));
-    x.ids.forEach(function(id){ var cur = Object.assign({}, contractMeta.map[id] || {}, patch); ["faturacao", "pagamento", "agenda", "notas"].forEach(function(k){ if (!cur[k]) delete cur[k]; }); if (!cur.freq) delete cur.freq; contractMeta.map[id] = cur; });
+    x.ids.forEach(function(id){ var cur = Object.assign({}, contractMeta.map[id] || {}, patch); ["faturacao", "pagamento", "agenda", "notas", "pt"].forEach(function(k){ if (!cur[k]) delete cur[k]; }); if (!cur.freq) delete cur.freq; contractMeta.map[id] = cur; });
     // as horas são do contrato: repartem-se pelos participantes (um duo conta uma vez)
     if (h > 0) x.ids.forEach(function(id){ monthlyHours.map[id] = Math.round(h / x.ids.length * 100) / 100; });
     else x.ids.forEach(function(id){ delete monthlyHours.map[id]; });
