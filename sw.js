@@ -8,12 +8,12 @@
    Subir VERSION sempre que mudar um ficheiro de vendor/, fonts/ ou ícones (as páginas e o código atualizam-se sozinhos).
    v2 (duas apps): o service worker antigo guardava QUALQUER página da app como «index.html»; quem abrisse gestao.html antes da atualização
    deixava a Gestão no lugar do EVOLVE. Mudar o nome apaga essa cache e a cópia antiga de index.html (script inline). */
-var VERSION = "evolve-v3";
+var VERSION = "evolve-v4";
 var SHELL = [
   "./", "index.html", "gestao.html", "app.css", "app.js", "manifest.json", "manifest-gestao.json",
   "vendor/supabase.js",
   "fonts/manrope-latin-wght-normal.woff2", "fonts/jura-latin-400-normal.woff2", "fonts/jura-latin-500-normal.woff2",
-  "fonts/jura-latin-600-normal.woff2", "fonts/jura-latin-700-normal.woff2", "fonts/space-grotesk-latin-wght-normal.woff2",
+  "fonts/jura-latin-600-normal.woff2", "fonts/jura-latin-700-normal.woff2", "fonts/jura-latin-300-normal.woff2",
   "icon-32.png", "icon-120.png", "icon-152.png", "icon-180.png", "icon-192.png", "icon-512.png",
   "icon-gestao-180.png", "icon-gestao-192.png", "icon-gestao-512.png"
 ];
