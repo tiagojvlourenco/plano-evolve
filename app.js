@@ -11120,7 +11120,7 @@ function renderProDashboardMain(){
 
   // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
   // com texto na lupa estes cartões escondem-se: a lista (que fica por baixo deles) passa a estar logo debaixo do teclado
-  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + (HELP_REQUESTS_ENABLED ? tplContactQueue(activeStudents) : "") + (ONBOARDING_CARD_ENABLED ? tplOnboardingCard(activeStudents) : "") + tplStudioPulse(activeStudents) + "</div>";
+  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + (HELP_REQUESTS_ENABLED ? tplContactQueue(activeStudents) : "") + (ONBOARDING_CARD_ENABLED ? tplOnboardingCard(activeStudents) : "") + (STUDIO_PULSE_ENABLED ? tplStudioPulse(activeStudents) : "") + "</div>";
 
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
@@ -11471,6 +11471,7 @@ function renderProDetailMain(s){
     "</div>" +
     (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
       "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
+      (meState.id === s.id ? "<button type=\"button\" class=\"chip\" data-qa=\"trocareu\">Não sou eu: trocar «Eu»</button>" : "") +
       (noNutritionOf(s) ? "" : "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>") +
       "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
     "</div>") + subtabs +
@@ -11490,6 +11491,7 @@ function wireProDetailNav(main){
     b.addEventListener("click", function(){
       var act = b.getAttribute("data-qa");
       if (act === "aluno"){ setMode("aluno"); return; }
+      if (act === "trocareu"){ meState.id = null; saveMe().then(function(){ state.proSelectedId = null; renderProShell(); openMeModal(); }); return; }
       state.proTab = act === "avaliar" ? "evolucao" : "plano";
       renderProShell();
       // leva o ecrã até ao formulário (sem scrollIntoView: nos telemóveis arrastava a página inteira)
@@ -13392,6 +13394,7 @@ function tplOnboardingCard(students){
   });
   return html + "</div>";
 }
+var STUDIO_PULSE_ENABLED = false; // o «Pulso do estúdio» foi retirado do painel
 function tplStudioPulse(students){
   var p = studioPulse(students);
   if (!p.active) return "";
