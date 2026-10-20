@@ -11509,8 +11509,6 @@ function renderProDetailMain(s){
       "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
     "</div>" +
     (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
-      "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
-      (noNutritionOf(s) ? "" : "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>") +
       "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
     "</div>") + subtabs +
     "<div id=\"proTabContent\" class=\"card\"></div>";
