@@ -10335,6 +10335,46 @@ function photoGridHtml(s){
 // bucket privado, exige a política de delete do aluno/profissional) e só
 // depois tira do array e grava. Pedido explícito da Fase 9: o aluno deve
 // poder pedir a remoção de uma fotografia, com as permissões corretas.
+// Apaga um aluno de vez: fotografias no Storage, a ficha (e, em cascata, pedidos, pacotes, sessões e cobranças) e deixa de existir
+// na lista. Sem ficha, a conta do aluno já não tem nada a que aceder («Conta sem aluno associado»).
+function deleteStudentCompletely(s){
+  var id = s.id;
+  var paths = (Array.isArray(s.photos) ? s.photos : []).concat(Array.isArray(s.weightLogPhotos) ? s.weightLogPhotos : []).map(function(p){ return p && p.path; }).filter(Boolean);
+  var local = function(){
+    clearTimeout(persistTimers[id]); delete persistTimers[id]; delete persistStudents[id];
+    try { var ob = outboxRead(); if (ob[id]){ delete ob[id]; outboxWrite(); } } catch (e) {}
+    var i = STUDENTS.indexOf(s); if (i >= 0) STUDENTS.splice(i, 1);
+    if (state.proSelectedId === id) state.proSelectedId = null;
+    if (state.alunoStudentId === id) state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
+    return {};
+  };
+  if (!sbReady) return Promise.resolve(local());
+  var fail = {error: "Não foi possível apagar — verifica a ligação."};
+  var removeFiles = paths.length ? Promise.resolve(sb.storage.from("progress-photos").remove(paths)).catch(function(){ return null; }) : Promise.resolve();
+  return removeFiles.then(function(){ return Promise.resolve(sb.from("students").delete().eq("id", id)); }).then(function(res){
+    if (!res || res.error) return fail;
+    return local();
+  }, function(){ return fail; });
+}
+function openDeleteStudentModal(s){
+  var sheet = openModal("<div class=\"mtitle\">Apagar " + escapeHtml(s.name) + "?</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Vai apagar a ficha, as fotografias, os pacotes e as cobranças, e o aluno deixa de ter acesso à app. <strong>Não dá para desfazer.</strong> Para confirmar, escreve o nome do aluno:</p>" +
+    "<input type=\"text\" id=\"delName\" autocomplete=\"off\" placeholder=\"" + escapeHtml(s.name) + "\" style=\"width:100%; margin-bottom:10px;\">" +
+    "<p class=\"muted-p\" id=\"delErr\" style=\"color:var(--critical); display:none; margin-bottom:8px;\"></p>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"delGo\" disabled style=\"width:100%; background:var(--critical); border-color:var(--critical);\">Apagar para sempre</button>");
+  var inp = sheet.querySelector("#delName"), go = sheet.querySelector("#delGo");
+  var norm = function(t){ return String(t || "").trim().toLowerCase(); };
+  inp.addEventListener("input", function(){ go.disabled = norm(inp.value) !== norm(s.name); });
+  go.addEventListener("click", function(){
+    if (norm(inp.value) !== norm(s.name)) return;
+    go.disabled = true;
+    deleteStudentCompletely(s).then(function(r){
+      if (r.error){ var e = sheet.querySelector("#delErr"); e.textContent = r.error; e.style.display = "block"; go.disabled = false; return; }
+      closeModal(); showToast("✓ Aluno apagado");
+      state.proView = "dashboard"; renderProShell();
+    });
+  });
+}
 function removePhoto(s, idx, onDone){
   var photo = s.photos[idx];
   if (!photo) return;
@@ -10946,7 +10986,7 @@ function renderProShell(){
       if (state.proView === "studio" || state.proView === "contracts") state.proView = "dashboard";
       sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
         "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>" +
-        "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>";
+        "";
     }
   } else {
     // com um aluno aberto o menu são só as áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
@@ -11108,7 +11148,7 @@ function renderProDashboardMain(){
   var html = toolsHtml + "<div class=\"pro-stat-row\">" +
     proStat(activeStudents.length, "Alunos ativos", "active") +
     (WEEKLY_CHECKIN_ENABLED ? proStat(pendingCheckins, "Check-ins", "checkins") : "") +
-    proStat(alertCount, "Alertas", "alerts") +
+    (DASH_ALERTS_ENABLED ? proStat(alertCount, "Alertas", "alerts") : "") +
     proStat(visible.length, "Total de alunos", "total") +
   "</div>";
 
@@ -11471,7 +11511,6 @@ function renderProDetailMain(s){
     "</div>" +
     (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
       "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
-      (meState.id === s.id ? "<button type=\"button\" class=\"chip\" data-qa=\"trocareu\">Não sou eu: trocar «Eu»</button>" : "") +
       (noNutritionOf(s) ? "" : "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>") +
       "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
     "</div>") + subtabs +
@@ -11633,6 +11672,8 @@ function tplProPerfil(s){
       "</div>";
     }).join(""));
 
+  html += "<details class=\"perfil-section\" style=\"margin-top:22px;\"><summary class=\"eyebrow\">Apagar aluno</summary><p class=\"muted-p\" style=\"margin:8px 0;\">Apaga a ficha, as fotografias e tudo o que está ligado a " + escapeHtml(s.name) + ", e o aluno deixa de ter acesso à app. Não dá para desfazer. Se só queres arrumá-lo, usa o interruptor ativo/inativo na lista de alunos.</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"stuDeleteBtn\" style=\"border-color:var(--critical); color:var(--critical);\">Apagar " + escapeHtml(s.name) + "</button></details>";
   return html;
 }
 
@@ -13030,7 +13071,9 @@ function computeStudentSignals(s){
   ].filter(Boolean);
 }
 
+var DASH_ALERTS_ENABLED = false; // os alertas das linhas e do quadrado «Alertas» foram retirados do painel
 function computeDashboardAlerts(s){
+  if (!DASH_ALERTS_ENABLED) return [];
   if (isStudioOnly(s)) return s.alerts || []; // sem app, não há sinais de uso a avaliar
   var computed = computeStudentSignals(s).filter(function(sig){ return sig.status === "atencao"; }).map(function(sig){
     return { type: sig.severity === "high" ? "critical" : "warn", text: sig.text };
@@ -14116,6 +14159,8 @@ function wireProTab(s){
     setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
   });
 
+  var delBtn = el.querySelector("#stuDeleteBtn");
+  if (delBtn) delBtn.addEventListener("click", function(){ openDeleteStudentModal(s); });
   var nnToggle = el.querySelector("#noNutritionToggle");
   if (nnToggle) nnToggle.addEventListener("change", function(){
     s.noNutrition = nnToggle.checked;

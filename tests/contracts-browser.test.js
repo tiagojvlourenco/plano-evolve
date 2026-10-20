@@ -43,7 +43,7 @@ function fixtureRow(id, name){
   await pgA.goto(srv.url); await pgA.waitForSelector(".student-row");
   var cnt = async function(p, sel){ return await p.locator(sel).count(); };
   check.check("1. Há duas apps, cada uma só com os seus itens: Acompanhamento (Alunos, Catálogo, Eu, ligação à Gestão) e Gestão (Estúdio, Contratos, ligação ao Acompanhamento), sem o interruptor de áreas",
-    (await cnt(pgA, "#navDashboard")) === 1 && (await cnt(pgA, "#navCatalog")) === 1 && (await cnt(pgA, "#navMe")) === 1 && (await cnt(pgA, "#goGestao")) === 0 && (await cnt(pgA, "#navStudio")) === 0 && (await cnt(pgA, "#navContracts")) === 0 && (await cnt(pgA, "#areaAcomp")) === 0 && (await cnt(pgA, "#areaGestao")) === 0 &&
+    (await cnt(pgA, "#navDashboard")) === 1 && (await cnt(pgA, "#navCatalog")) === 1 && (await cnt(pgA, "#navMe")) === 0 && (await cnt(pgA, "#goGestao")) === 0 && (await cnt(pgA, "#navStudio")) === 0 && (await cnt(pgA, "#navContracts")) === 0 && (await cnt(pgA, "#areaAcomp")) === 0 && (await cnt(pgA, "#areaGestao")) === 0 &&
     (await cnt(pg, "#navStudio")) === 1 && (await cnt(pg, "#navContracts")) === 1 && (await cnt(pg, "#goAcomp")) === 0 && (await cnt(pg, "#navMe")) === 0 && (await cnt(pg, "#navDashboard")) === 0 && (await cnt(pg, "#navCatalog")) === 0 && (await cnt(pg, "#areaAcomp")) === 0 && (await cnt(pg, "#areaGestao")) === 0);
   await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
   var tot = await pg.locator("#contractTotals").innerText();
@@ -116,11 +116,7 @@ function fixtureRow(id, name){
   await pg.waitForFunction(function(){ return !document.querySelector("#acGo"); });
   var as = await pg.evaluate(function(){ var T = window.__fake.tables, v = T.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value, pc = T.session_packs.filter(function(p){ return p.id === "pc"; })[0]; return {a: v.a.formato, c: v.c.formato, sh: pc.shared_with}; });
   check.check("13e. Associar a um contrato existente: partilhado nos dois e o pacote passa a ser partilhado", as.a === "partilhado" && as.c === "partilhado" && Array.isArray(as.sh) && as.sh.indexOf("a") >= 0);
-  // Eu (app de Acompanhamento)
-  await pgA.click("#navMe"); await pgA.waitForSelector("[data-me]");
-  await pgA.locator('[data-me="b"]').click();
-  await pgA.waitForSelector(".pro-sidebar [data-t]");
-  check.check("17. «Eu» abre a minha ficha (alimentação e treino) e fica guardada", (await pgA.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "personal"; })[0]; return r && r.value.studentId; })) === "b" && /Bruno Costa/.test(await pgA.locator("#proMain").innerText()));
+  check.check("17. O botão «Eu» já não existe (o profissional tem a sua ficha na lista de alunos)", (await cnt(pgA, "#navMe")) === 0);
   check.check("18. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();
