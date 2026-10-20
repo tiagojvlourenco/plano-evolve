@@ -1690,7 +1690,8 @@ function mealRowSuffix(m){
   return "";
 }
 function effectiveMealTime(m){ return m.rescheduledTime || m.time; }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+// o dia de hoje é o dia LOCAL (toISOString é UTC: perto da meia-noite em Portugal daria o dia anterior); as datas já gravadas não se tocam
+function todayISO(){ return localTodayISO(); }
 
 /* ===================== Plano vs. execução diária =====================
    s.meals é a ESTRUTURA do plano (nome, horário, alimentos, quantidades) — só o
@@ -4960,7 +4961,7 @@ var STUDENTS = [
    para percorrer toda a app em modo local e apanhar erros. As datas são sempre relativas a hoje. Perfil propositado: peso estagnado há 3 semanas apesar de
    treinar e aderir bem, digestão fraca, e dois exercícios prontos para subir carga. */
 function buildFullDemoStudent(){
-  function dAgo(n){ return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); }
+  function dAgo(n){ return addDaysISO(localTodayISO(), -n); }
   var IMG = {"antes0": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0FTihxVYqGVYioVZgPrMMtl8B24BJzAMF4aky/W2XRI0NDT0Iujn4/6eddEfuT3oaZg40H1idKY4yg29EbpIHOI2HtD29D+ht+weWh40NDQ0dAu6okDHPuYc6HBxhRsaOgzdSVzqhoaOQXcVF7mhV0MPEOe7oaFb0cPEmW5o6Cb0YHGOG3oR9BTxTzc0dCV6ovjYDT0dPV184IaGLkYvIv7mdnOBhoaGhoaGhoaGhoaGht4B7btqTV46ujqXpFHbvQAAAABJRU5ErkJggg==", "antes1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0NTil5/WaB2WYnEWoD6zTDbfgVvACQzDhSHpcr1tlwQNDQ29CPr5uL9nXfRHbg96GiYOdJ8YnSmOckNvhC4Sh7iNB7Q9/U/oLbuHlgcNDQ0N3YKuKNCxjzkHOlxc4YaGDkN3Epe6oaFj0F3FRW7o1dADxPluaOhW9DBxphsaugk9WJzjhl4EPUX80w0NXYmeKD52Q09HTxcfuKGhi9GLiL+53VygoaGhoaGhoaGhoaGhoXdA+65akxdYsdjMMr0y+AAAAABJRU5ErkJggg==", "antes2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAx0lEQVR42u3b2QlCMRAF0NTil5+WaBVWYoEWoD6zTDbfgVvACQzDhSHperltlwQNDQ29CPr5uL9nXfRHbg96GiYOdJ8YnSmOckNvhC4Sh7iNB7Q9/U/oLbuHlgcNDQ0N3YKuKNCxjzkHOlxc4YaGDkN3Epe6oaFj0F3FRW7o1dADxPluaOhW9DBxphsaugk9WJzjhl4EPUX80w0NXYmeKD52Q09HTxcfuKGhi9GLiL+53VygoaGhoaGhoaGhoaGhoXdA+65akxd1dU+cH2ARpgAAAABJRU5ErkJggg==", "depois0": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUE+SQyfooB0jo3SwDJAerEQydvPgD/AExnwQatvrvVwaNDQ09CTo7/45Z170T24FvQ0TJ7ofjO4UZ7mhF0KHxCluzwPaP/1P6CW7h5YHDQ0NDX0HfaFA5w4DDQ29IjpdfMENDQ0NDQ0NHUcXiaNuaGho6HJ0qTjkhoZOQA8Q97uhp0IPE3e6oaFvoQeLe9ytdDNUtDeChoaGhoaGhoaGhoaGhn4u2rlqIAfJBUlZI6bECAAAAABJRU5ErkJggg==", "depois1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUM+SU4+dsXNklA6XAdKDlUjGbh78AZ7AmA9CbXu9l0uDhoaGngT93T/nzIv+ya2gt2HiRPeD0Z3iLDf0QuiQOMXteUD7p/8JvWT30PKgoaGhoe+gLxTo3GGgoaFXRKeLL7ihoaGhoaGh4+gicdQNDQ0NXY4uFYfc0NAJ6AHifjf0VOhh4k43NPQt9GBxj7uVboaK9kbQ0NDQ0NDQ0NDQ0NDQ0M9FO1cN5ABHtBW9ml+DVAAAAABJRU5ErkJggg==", "depois2": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAABaCAIAAABrM6JiAAAAuElEQVR42u3bwQnDMAwFUM+SU48dsVNkkg6YAdKDlUjGbh78AZ7AmA9C7bW9l0uDhoaGngT93T/nzIv+ya2gt2HiRPeD0Z3iLDf0QuiQOMXteUD7p/8JvWT30PKgoaGhoe+gLxTo3GGgoaFXRKeLL7ihoaGhoaGh4+gicdQNDQ0NXY4uFYfc0NAJ6AHifjf0VOhh4k43NPQt9GBxj7uVboaK9kbQ0NDQ0NDQ0NDQ0NDQ0M9FO1cN5ABkyqD+VU/jGwAAAABJRU5ErkJggg=="};
   function ex(id, name, sets, reps, rest, cues, demo){ return {id: id, name: name, sets: sets, reps: reps, rpe: null, rest: rest, notes: "", demo: demo || null, cues: cues}; }
   var program = {name: "Hipertrofia 3 dias", days: [
@@ -6030,6 +6031,50 @@ function phaseStartKcal(type, maint){
   return maint;
 }
 function dayNum(iso){ return Math.round(Date.parse(iso + "T00:00:00Z") / 86400000); }
+// Pesagens do aluno para revisões e indicadores. A fonte é weights (as avaliações do profissional e as importações escrevem lá, e os
+// check-ins antigos também escreveram na altura): checkins[].weight não se lê à parte, senão a mesma pesagem contava duas vezes.
+// O peso de uma avaliação só entra se faltar em weights (dado antigo): nunca se há já pesagem nesse dia, nem quando repete o último peso
+// conhecido (uma avaliação só de composição guarda o peso atual, não é uma pesagem nova).
+function weighInsOf(s){
+  var list = sortWeightsStable((s && s.weights || []).filter(function(w){ return w && isIsoDate(w.date) && Number(w.w) > 0; }).map(function(w){ return {date: w.date, w: Number(w.w)}; }));
+  var extra = (s && s.assessments || []).filter(function(a){ return a && isIsoDate(a.date) && Number(a.weight) > 0; })
+    .sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.time || "") < String(b.time || "") ? -1 : 1; });
+  extra.forEach(function(a){
+    var wt = Number(a.weight);
+    if (list.some(function(x){ return x.date === a.date; })) return;
+    var prev = null; list.forEach(function(x){ if (x.date <= a.date) prev = x; });
+    if (prev && prev.w.toFixed(1) === wt.toFixed(1)) return;
+    list.push({date: a.date, w: wt}); list = sortWeightsStable(list);
+  });
+  return list;
+}
+// Evolução do peso pelas datas reais das pesagens (uma por dia: a última do dia). Não pressupõe uma pesagem por semana nem conclui nada:
+// só descreve. consolidated = pontos suficientes para falar de tendência (3 ou mais, a 14 dias ou mais do primeiro).
+function weightProgress(s, today){
+  today = today || localTodayISO();
+  var byDay = {};
+  weighInsOf(s).forEach(function(w){ if (w.date <= today) byDay[w.date] = w; });
+  var pts = Object.keys(byDay).sort().map(function(d){ return byDay[d]; });
+  var out = {n: pts.length, first: pts[0] || null, last: pts[pts.length - 1] || null, spanDays: 0, deltaKg: null, deltaPct: null, kgPerWeek: null, daysSinceLast: null, consolidated: false};
+  if (!out.n) return out;
+  out.daysSinceLast = Math.max(0, dayNum(today) - dayNum(out.last.date));
+  if (out.n < 2) return out;
+  out.spanDays = dayNum(out.last.date) - dayNum(out.first.date);
+  out.deltaKg = Math.round((out.last.w - out.first.w) * 10) / 10;
+  out.deltaPct = out.first.w > 0 ? Math.round((out.last.w - out.first.w) / out.first.w * 1000) / 10 : null;
+  if (out.spanDays >= 14) out.kgPerWeek = Math.round((out.last.w - out.first.w) / out.spanDays * 7 * 100) / 100;
+  out.consolidated = out.n >= 3 && out.spanDays >= 14;
+  return out;
+}
+var WEIGHT_MISSING_TEXT = "Dados de peso insuficientes — regista o peso na próxima avaliação.";
+function signedKg(n){ return (n > 0 ? "+" : n < 0 ? "−" : "") + pt2(Math.abs(n)); }
+function weightProgressText(p){
+  if (!p || !p.n) return WEIGHT_MISSING_TEXT;
+  if (p.n === 1) return "Só há uma pesagem (" + pt2(p.last.w) + " kg a " + fmtDateFullPt(p.last.date) + "): ainda não há evolução nem tendência. Regista o peso na próxima avaliação.";
+  var txt = "Peso: " + pt2(p.first.w) + " → " + pt2(p.last.w) + " kg (" + signedKg(p.deltaKg) + " kg" + (p.deltaPct != null ? ", " + signedKg(p.deltaPct) + " %" : "") + ") entre " + fmtDateFullPt(p.first.date) + " e " + fmtDateFullPt(p.last.date) + " (" + p.spanDays + " dias, " + p.n + " pesagens)";
+  if (p.kgPerWeek != null) txt += ", ≈ " + signedKg(p.kgPerWeek) + " kg/semana";
+  return txt + "." + (p.consolidated ? "" : " Ainda não é uma tendência consolidada.");
+}
 // tendência do peso: regressão linear (por data) sobre as pesagens da janela; ignora pesagens a mais de 2 kg da mediana e junta as do mesmo dia
 function phaseWeightFit(weights, fromISO, toISO){
   var byDay = {};
@@ -6052,6 +6097,11 @@ function phaseWeightFit(weights, fromISO, toISO){
   var slope = sxx > 0 ? sxy / sxx : 0, nWeeks = Object.keys(weeks).length;
   return {n: n, spanDays: span, weeks: nWeeks, slopeKgWk: slope * 7, meanW: my, trendNow: my + slope * (span - mx),
     ok: n >= PHASE_CFG.minWeighins && nWeeks >= PHASE_CFG.minWeeks && span >= PHASE_CFG.minSpan, relaxed: n >= 3 && span >= 7};
+}
+// sem pesagens suficientes para a revisão automática: diz o que há (as avaliações do profissional) e não tira conclusões
+function phaseDataGapText(progress, what){
+  if (!progress || !progress.n) return WEIGHT_MISSING_TEXT;
+  return weightProgressText(progress) + " Para " + what + " faltam pesagens: a revisão automática precisa de " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas (últimos " + PHASE_CFG.windowMax + " dias). Sem elas não se conclui nada sobre estagnação nem ritmo — regista o peso na próxima avaliação.";
 }
 function phaseEvidenceText(fit, ratePct){
   var kg = (fit.slopeKgWk >= 0 ? "+" : "−") + pt2(Math.abs(fit.slopeKgWk)) + " kg/semana";
@@ -6090,16 +6140,16 @@ function computePhaseReview(s, today, opts){
   var from = [np.startDate, np.lastChangeDate ? addDaysISO(np.lastChangeDate, PHASE_CFG.excludeAfterChange) : null,
     np.creatineStartDate ? addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays) : null, addDaysISO(today, -PHASE_CFG.windowMax)]
     .filter(Boolean).sort().pop();
-  var fit = phaseWeightFit(s.weights, from, today);
+  var fit = phaseWeightFit(weighInsOf(s), from, today), progress = weightProgress(s, today);
   // a manutenção calcula-se com o peso da tendência (uma pesagem mal escrita não a pode deslocar)
   var sm = Object.assign({}, s, {weightCurrent: fit.n >= 3 ? Math.round(fit.trendNow * 10) / 10 : s.weightCurrent});
   var maint = computeMaintenanceKcal(sm);
   if (!maint) return null;
   var out = {studentId: s.id, name: s.name, phase: np.phase, kind: "dados", today: today, maint: maint, currentTargets: {kcal: kcal, protein: t.protein, carbs: t.carbs != null ? t.carbs : t.carbsMax, fat: t.fat != null ? t.fat : t.fatMax},
-    fit: fit, warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
+    fit: fit, progress: progress, warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
   var weightNow = fit.n ? fit.trendNow : (Number(s.weightCurrent) || 0);
   var ratePct = fit.meanW > 0 ? fit.slopeKgWk / fit.meanW * 100 : 0;
-  out.ratePct = ratePct; out.evidence = fit.n >= 2 ? phaseEvidenceText(fit, ratePct) : "";
+  out.ratePct = ratePct; out.evidence = fit.n >= 2 ? phaseEvidenceText(fit, ratePct) : (progress.n >= 2 ? weightProgressText(progress) : "");
   var wCur = Number(s.weightCurrent) || 0;
   if (fit.n >= 3 && (Math.abs(ratePct) > 3 || (wCur > 0 && Math.abs(wCur - fit.trendNow) > Math.max(3, 0.08 * fit.trendNow)))){
     out.kind = "dados"; out.text = "Pesagem suspeita: o peso registado (" + pt2(wCur) + " kg) ou a tendência (" + pt2(ratePct) + " %/semana) não são plausíveis. Confirma o peso com o aluno antes de rever o plano.";
@@ -6148,7 +6198,7 @@ function computePhaseReview(s, today, opts){
   if (np.phase === "manutencao"){
     if (early) return null;
     if (np.exiting && Math.abs(maint - kcal) >= 50) return propose(maint, "ajuste", "Completar a passagem à manutenção: " + kcal + " → " + maint + " kcal (já com o peso atual).", {completesExit: true});
-    if (!fit.ok) return info("dados", "Ainda não há pesagens suficientes (mínimo " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas) para rever a manutenção.");
+    if (!fit.ok) return info("dados", phaseDataGapText(progress, "rever a manutenção"));
     if (Math.abs(ratePct) >= PHASE_CFG.maintDrift && fit.spanDays >= PHASE_CFG.fullSpan){
       var dir = ratePct > 0 ? -1 : 1, mk = kcal + dir * PHASE_CFG.maintStep;
       if (dir < 0){   // retirar calorias nunca passa o piso de segurança
@@ -6176,7 +6226,7 @@ function computePhaseReview(s, today, opts){
   if (!fit.ok){
     var cg = np.creatineStartDate && today < addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays + PHASE_CFG.minSpan);
     return info("dados", cg ? "Há pouco que o aluno começou ou parou a creatina: a subida inicial de 0,5 a 1,5 kg é retenção de água, não gordura. A revisão espera por pesagens a partir de " + fmtDateFullPt(addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays)) + "." :
-      "Ainda não há pesagens suficientes (mínimo " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas) para propor um ajuste. Pede ao aluno para se pesar 3 vezes por semana, de manhã e em jejum.");
+      phaseDataGapText(progress, "propor um ajuste"));
   }
   var viol = move < cfg.lo ? cfg.lo - move : move > cfg.hi ? move - cfg.hi : 0;
   if (viol === 0) return info("em-linha", "A evolução está dentro do previsto (" + pt2(move) + " %/semana, banda " + pt2(cfg.lo) + "–" + pt2(cfg.hi) + "). Não é preciso alterar o plano.");
@@ -10941,7 +10991,7 @@ function wireAlunoTab(s){
     if (!isNaN(wRaw) && s.weightCurrent > 0 && Math.abs(wRaw - s.weightCurrent) / s.weightCurrent > 0.15 && !window.confirm("O peso (" + String(wRaw).replace(".", ",") + " kg) é muito diferente do último (" + String(s.weightCurrent).replace(".", ",") + " kg). Está certo?")) return;
     if (errEl) errEl.style.display = "none";
     var w = wRaw || s.weightCurrent;
-    var today = new Date().toISOString().slice(0,10);
+    var today = localTodayISO();
     pushCheckin(s, {
       date: today, weight: w,
       hunger: parseInt(el.querySelector("#ciHunger").value,10),
@@ -11444,7 +11494,7 @@ function openOnboardingForm(){
     };
 
     var suggested = computeSuggestedTargets(profile);
-    var today = new Date().toISOString().slice(0,10);
+    var today = localTodayISO();
     var baseId = slug(name) || ("aluno-" + Date.now());
     var id = baseId;
     var n = 2;
@@ -12825,9 +12875,7 @@ var ADAPTATION_TYPE_LABEL = {
 
 function computeAdaptationSummary(s, days){
   days = days || 7;
-  var cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  var cutoffISO = cutoff.toISOString().slice(0,10);
+  var cutoffISO = addDaysISO(localTodayISO(), -days);
   var counts = Object.create(null); // sem protótipo: um tipo forjado como "constructor" ou "__proto__" é só mais uma chave
   (s.adaptationHistory || []).forEach(function(e){
     if (!e || typeof e.type !== "string" || typeof e.date !== "string" || e.date < cutoffISO) return;
@@ -12904,9 +12952,10 @@ function goalDirection(s){
 }
 
 function signalWeight(s){
-  var change = computeRecentWeightChange(s.weights, SIGNAL_WEIGHT_TREND_WEEKS);
+  var ins = weighInsOf(s);   // pesagens do profissional (avaliações), sem repetir a mesma em duas estruturas
+  var change = computeRecentWeightChange(ins, SIGNAL_WEIGHT_TREND_WEEKS);
   if (change == null){
-    return signal("peso", "Peso", "insuficiente", "Sem dados suficientes para avaliar a tendência.",
+    return signal("peso", "Peso", "insuficiente", ins.length ? "Sem pesagens recentes para avaliar a tendência — regista o peso na próxima avaliação." : WEIGHT_MISSING_TEXT,
       "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
   }
   // o intervalo real entre as duas pesagens (pode ser bem menos que 3 semanas): limiares e texto escalam com ele
@@ -12917,8 +12966,8 @@ function signalWeight(s){
   }
   if (spanDays > SIGNAL_WEIGHT_MAX_SPAN_DAYS){
     // pesagem de referência antiga: tenta a mais antiga dentro da janela recente, se der pelo menos 14 dias de intervalo
-    var cutoffISO = new Date(Date.now() - SIGNAL_WEIGHT_MAX_SPAN_DAYS * 86400000).toISOString().slice(0, 10);
-    var sortedW = sortWeightsStable(s.weights || []);
+    var cutoffISO = addDaysISO(localTodayISO(), -SIGNAL_WEIGHT_MAX_SPAN_DAYS);
+    var sortedW = sortWeightsStable(ins);
     var win = sortedW.filter(function(w){ return w.date >= cutoffISO && w.date < change.to; });
     var inWin = win.length ? win.filter(function(w){ return w.date === win[0].date; }).pop() : null; // várias no mesmo dia: a última, como no cálculo principal
     var lastW = sortedW.filter(function(w){ return w.date === change.to; }).pop();
@@ -12929,7 +12978,13 @@ function signalWeight(s){
     }
   }
   if (spanDays > SIGNAL_WEIGHT_MAX_SPAN_DAYS){
-    return signal("peso", "Peso", "insuficiente", "A pesagem anterior é de há " + spanDays + " dias: faltam pesagens regulares para avaliar a tendência recente.",
+    return signal("peso", "Peso", "insuficiente", "A pesagem anterior é de há " + spanDays + " dias: não chega para avaliar a tendência recente — regista o peso na próxima avaliação.",
+      "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
+  }
+  // duas pesagens dão uma variação, não uma tendência: sem um ponto intermédio não se fala de estagnação nem de ritmo
+  var inSpan = new Set(ins.filter(function(w){ return w.date >= change.from && w.date <= change.to; }).map(function(w){ return w.date; })).size;
+  if (inSpan < 3){
+    return signal("peso", "Peso", "insuficiente", "Peso: " + (change.diff >= 0 ? "+" : "") + change.diff.toFixed(1).replace(".", ",") + " kg em " + spanDays + " dias, com só " + inSpan + " pesagens — ainda não é uma tendência.",
       "Últimas " + SIGNAL_WEIGHT_TREND_WEEKS + " semanas", "evolucao");
   }
   var weeks = spanDays / 7, nWeeks = Math.min(SIGNAL_WEIGHT_TREND_WEEKS, Math.max(1, Math.round(weeks)));
@@ -12937,7 +12992,7 @@ function signalWeight(s){
   var base = "Peso: " + diffStr + " kg nas últimas " + nWeeks + " semanas";
   var period = "Últimas " + nWeeks + " semanas";
   var dir = goalDirection(s), d = change.diff;
-  var weight = s.weightCurrent || (s.weights && s.weights.length ? s.weights[s.weights.length - 1].w : 0);
+  var weight = s.weightCurrent || (ins.length ? ins[ins.length - 1].w : 0);
   var fastKg = weight ? weight * MAX_LOSS_PCT_PER_WEEK / 100 * weeks : 0.5 * weeks;
   var stallKg = Math.max(0.1 * weeks, 0.3);   // 0,3 kg em 3 semanas; nunca abaixo do "ruído" normal de uma pesagem
   var wrongKg = Math.max(weeks / 3, 0.6);     // 1 kg em 3 semanas: viragem clara no sentido contrário
@@ -12988,19 +13043,36 @@ function daysSinceDate(iso){
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
 }
 function signalPesagem(s){
-  var dates = (s.weights || []).map(function(w){ return w.date; }).concat((s.assessments || []).filter(function(a){ return a.weight > 0; }).map(function(a){ return a.date; })).filter(Boolean).sort();
-  if (!dates.length) return signal("pesagem", "Pesagem", "insuficiente", "Sem pesagens registadas.", "Desde sempre", "evolucao");
-  var days = daysSinceDate(dates[dates.length - 1]);
-  if (days >= SIGNAL_WEIGH_LATE_DAYS) return signal("pesagem", "Pesagem", "atencao", "Sem pesagem há " + days + " dias.", "Desde a última pesagem", "evolucao", days >= 42 ? "high" : "normal");
-  return signal("pesagem", "Pesagem", "positivo", "Última pesagem " + daysAgoLabel(days) + ".", "Desde a última pesagem", "evolucao");
+  var p = weightProgress(s);
+  if (!p.n) return signal("pesagem", "Pesagem", "insuficiente", WEIGHT_MISSING_TEXT, "Desde sempre", "evolucao");
+  // o peso é registado pelo profissional nas avaliações: uma avaliação antiga é um lembrete, não uma falha do aluno
+  if (p.daysSinceLast >= SIGNAL_WEIGH_LATE_DAYS) return signal("pesagem", "Pesagem", "insuficiente", "Última pesagem (avaliação) há " + p.daysSinceLast + " dias — regista o peso na próxima avaliação.", "Desde a última pesagem", "evolucao");
+  return signal("pesagem", "Pesagem", "positivo", "Última pesagem " + daysAgoLabel(p.daysSinceLast) + ".", "Desde a última pesagem", "evolucao");
+}
+// Atividade de treino a partir das sessões registadas (workoutLogs), sem depender de check-ins
+var SIGNAL_TRAINING_IDLE_DAYS = 14;    // sem sessões registadas há este tempo, depois de já ter registado alguma
+function trainingActivity(s){
+  var today = localTodayISO(), from7 = addDaysISO(today, -6);
+  var dates = (s.workoutLogs || []).filter(function(l){ return l && isIsoDate(l.date); }).map(function(l){ return l.date; }).sort();
+  var last = dates.length ? dates[dates.length - 1] : null;
+  return {total: dates.length, last: last, daysSince: last ? Math.max(0, dayNum(today) - dayNum(last)) : null,
+    week: dates.filter(function(d){ return d >= from7 && d <= today; }).length,
+    hasProgram: trainingProgramOf(s).days.length > 0};
 }
 function signalInatividadeTreino(s){
-  var recent = recentCheckins(s, 2);
-  if (recent.length < 2 || !s.trainingsPerWeek) return signal("inatividade_treino", "Inatividade de treino", "insuficiente", "Sem check-ins suficientes para avaliar inatividade.", "Últimos 2 check-ins", "checkins");
-  var parado = recent.every(function(c){ return !(c.workouts > 0); });
-  return signal("inatividade_treino", "Inatividade de treino", parado ? "atencao" : "positivo",
-    parado ? "Sem treinos registados nos últimos 2 check-ins." : "Treinos registados nos últimos 2 check-ins.",
-    "Últimos 2 check-ins", "checkins", parado ? "high" : "normal");
+  var a = trainingActivity(s);
+  if (!a.total){
+    // «sem registos» (há programa ou treinos previstos, ninguém registou) ≠ «sem dados» (nada com que comparar); nenhum dos dois é inatividade
+    var comparable = a.hasProgram || s.trainingsPerWeek > 0;
+    return signal("inatividade_treino", "Inatividade de treino", "insuficiente",
+      comparable ? "Sem sessões de treino registadas na app — não quer dizer que o aluno não treine." : "Sem programa de treino nem sessões registadas: não há dados suficientes para avaliar.",
+      "Sessões registadas", "treino");
+  }
+  if (a.daysSince >= SIGNAL_TRAINING_IDLE_DAYS){
+    return signal("inatividade_treino", "Inatividade de treino", "atencao", "Sem sessões de treino registadas há " + a.daysSince + " dias (última a " + fmtDateFullPt(a.last) + ").",
+      "Última sessão registada", "treino", "high");
+  }
+  return signal("inatividade_treino", "Inatividade de treino", "positivo", "Última sessão de treino registada " + daysAgoLabel(a.daysSince) + ".", "Última sessão registada", "treino");
 }
 
 function signalAdherence(s){
@@ -13030,18 +13102,11 @@ function signalHungerEnergy(s){
 }
 
 function signalTreinos(s){
-  var recent = recentCheckins(s, 1);
-  var planned = s.trainingsPerWeek || 0;
-  if (!recent.length || !planned){
-    return signal("treinos", "Treinos", "insuficiente",
-      planned ? "Sem check-ins suficientes para comparar treinos." : "Sem treinos planeados definidos.",
-      "Último check-in", "checkins");
-  }
-  var last = recent[0];
-  var done = last.workouts || 0;
-  return signal("treinos", "Treinos", done < planned ? "atencao" : "positivo",
-    "Treinos: " + done + " de " + planned + " previstos no último check-in.",
-    "Último check-in (" + fmtDatePt(last.date) + ")", "checkins");
+  var planned = s.trainingsPerWeek || 0, a = trainingActivity(s);
+  if (!planned) return signal("treinos", "Treinos", "insuficiente", "Sem treinos planeados definidos.", "Últimos 7 dias", "treino");
+  if (!a.total) return signal("treinos", "Treinos", "insuficiente", "Sem sessões de treino registadas para comparar com os " + planned + " treinos previstos por semana.", "Últimos 7 dias", "treino");
+  return signal("treinos", "Treinos", a.week < planned ? "atencao" : "positivo",
+    "Treinos: " + a.week + " de " + planned + " previstos nos últimos 7 dias.", "Últimos 7 dias", "treino");
 }
 
 function signalMealsOff(s){
@@ -14312,7 +14377,7 @@ function wireProTab(s){
   var addAs = el.querySelector("#addAssessment");
   if (addAs) addAs.addEventListener("click", function(){
     var errEl = el.querySelector("#assessError");
-    var date = el.querySelector("#asDate").value || new Date().toISOString().slice(0,10);
+    var date = el.querySelector("#asDate").value || localTodayISO();
     var timeEl = el.querySelector("#asTime");
     var time = (timeEl && /^\d{2}:\d{2}$/.test(timeEl.value)) ? timeEl.value : "";
     var weight = parseFloat(el.querySelector("#asWeight").value);

@@ -229,3 +229,13 @@ O código da Gestão (Estúdio, packs, aulas, Google Agenda, Contratos, Financei
 Corre `supabase/migrations/0030_no_nutrition.sql` no SQL Editor do Supabase (é seguro repetir). Depois, na ficha do aluno → Perfil, o interruptor **«Não faz nutrição comigo»** (ou a caixa ao convidar o aluno) esconde ao aluno plano alimentar, refeições, compras e PDF — fica com treino, avaliações, fotos e evolução — e esconde-te a ti o grupo Nutrição, as macros e as revisões de plano desse aluno. O aluno não vê nem muda esta opção. Enquanto a migração não correr, a app avisa e o resto grava-se na mesma.
 
 O **check-in semanal** foi retirado da app (o aluno já não o preenche, o painel já não o conta nem o cobra). Os check-ins antigos mantêm-se no histórico. Para o voltar a ligar, `WEEKLY_CHECKIN_ENABLED = true` em `app.js`.
+
+## 8p. O peso vem das avaliações do profissional
+
+Só o profissional regista o peso (Avaliação → nova avaliação, ou a importação de pesagens). O aluno não pesa nem preenche check-ins.
+
+- **Fonte única:** `weighInsOf(s)` junta `weights` (onde as avaliações e as importações escrevem) e só acrescenta o peso de uma avaliação antiga se faltar em `weights`; nunca duas vezes o mesmo dia e nunca uma avaliação só de composição (que repete o peso atual). `checkins[].weight` não se lê à parte.
+- **Revisão de fase:** `computePhaseReview` usa essas pesagens e acrescenta `progress` (`weightProgress`: variação em kg e %, intervalo real, kg/semana). A proposta de ajuste continua a exigir 4 pesagens em 2 semanas dentro dos últimos 28 dias; com menos, a revisão fica «dados» e descreve o que há, sem falar de estagnação.
+- **Indicadores:** o peso só avalia tendência com 3 ou mais pesagens; «Pesagem» é um lembrete («regista o peso na próxima avaliação»), nunca uma falha do aluno. Treinos e inatividade usam as sessões registadas (`workoutLogs`), não os check-ins; «sem registos» e «sem dados» têm mensagens diferentes.
+- **Datas:** `todayISO()` devolve o dia **local** (antes era UTC e dava o dia anterior à meia-noite de verão em Portugal). As datas já gravadas não se alteram.
+- **Permissões:** nada mudou na base de dados. O trigger da migração 0019 continua a deixar o aluno escrever `weights`/`weight_current` (herdado do check-in); nenhum ecrã do aluno o usa. Retirar essas colunas da lista é uma migração à parte, por decidir.

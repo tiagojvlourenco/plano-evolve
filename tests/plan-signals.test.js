@@ -74,7 +74,7 @@ function freshStudent(overrides){
 (function(){
   // objetivo implica mudança mas o peso ficou estagnado (<0.3kg) -> atencao
   var s = freshStudent({goal:"Ganho de massa muscular", weights:[
-    {date:isoDaysAgo(21), w:75.0}, {date:isoDaysAgo(0), w:75.1}
+    {date:isoDaysAgo(21), w:75.0}, {date:isoDaysAgo(10), w:75.05}, {date:isoDaysAgo(0), w:75.1}
   ]});
   check.check("8. Estagnado com objetivo de mudança -> atencao", signalWeight(s).status === "atencao");
 })();
@@ -82,7 +82,7 @@ function freshStudent(overrides){
 (function(){
   // objetivo de manutenção: pequena variação não é motivo de atenção
   var s = freshStudent({goal:"Manutenção / recomposição", weights:[
-    {date:isoDaysAgo(21), w:63.0}, {date:isoDaysAgo(0), w:63.1}
+    {date:isoDaysAgo(21), w:63.0}, {date:isoDaysAgo(10), w:63.05}, {date:isoDaysAgo(0), w:63.1}
   ]});
   check.check("9. Pequena variação com objetivo de manutenção -> não é atencao", signalWeight(s).status === "positivo");
 })();
@@ -136,21 +136,22 @@ function freshStudent(overrides){
   check.check("15. Fome/energia normais -> positivo", signalHungerEnergy(s3).status === "positivo");
 })();
 
-// ---- signalTreinos (exemplo exato do pedido) ----
+// ---- signalTreinos (a partir das sessões registadas, sem check-ins) ----
 (function(){
-  var s = freshStudent({trainingsPerWeek:4, checkins:[{date:isoDaysAgo(0), adherence:7, hunger:5, energy:5, workouts:2, mealsOff:0}]});
+  var log = function(n){ return {id:"w"+n, date:isoDaysAgo(n), entries:[]}; };
+  var s = freshStudent({trainingsPerWeek:4, workoutLogs:[log(1), log(3)]});
   var sig = signalTreinos(s);
-  check.check("16. Formato exato do exemplo do pedido", sig.text === "Treinos: 2 de 4 previstos no último check-in.");
+  check.check("16. Formato do texto", sig.text === "Treinos: 2 de 4 previstos nos últimos 7 dias.");
   check.check("16. Fez menos que o previsto -> atencao", sig.status === "atencao");
 
-  var s2 = freshStudent({trainingsPerWeek:4, checkins:[{date:isoDaysAgo(0), adherence:7, hunger:5, energy:5, workouts:4, mealsOff:0}]});
+  var s2 = freshStudent({trainingsPerWeek:4, workoutLogs:[log(0), log(1), log(3), log(5)]});
   check.check("17. Cumpriu o previsto -> positivo", signalTreinos(s2).status === "positivo");
 
-  var s3 = freshStudent({trainingsPerWeek:0, checkins:[{date:isoDaysAgo(0), adherence:7, hunger:5, energy:5, workouts:0, mealsOff:0}]});
+  var s3 = freshStudent({trainingsPerWeek:0, workoutLogs:[log(0)]});
   check.check("18. Sem treinos planeados -> insuficiente (não inventa comparação)", signalTreinos(s3).status === "insuficiente");
 
-  var s4 = freshStudent({trainingsPerWeek:4, checkins:[]});
-  check.check("19. Sem check-ins -> insuficiente", signalTreinos(s4).status === "insuficiente");
+  var s4 = freshStudent({trainingsPerWeek:4, workoutLogs:[]});
+  check.check("19. Sem sessões registadas -> insuficiente (não é «atenção»)", signalTreinos(s4).status === "insuficiente" && /Sem sessões de treino registadas/.test(signalTreinos(s4).text));
 })();
 
 // ---- signalMealsOff ----
