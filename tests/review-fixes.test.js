@@ -4,6 +4,7 @@ var fs = require("fs");
 var path = require("path");
 var appSource = require("./extract-app")();
 eval(appSource);
+WEEKLY_CHECKIN_ENABLED = true; // estes testes cobrem os indicadores de check-in (a app já não pede check-ins semanais, mas os dados antigos mantêm-se)
 var check = require("./check")();
 function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); }
 

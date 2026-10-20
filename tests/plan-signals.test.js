@@ -1,6 +1,7 @@
 // Fase 6 — leitura profissional: indicadores objetivos calculados em tempo real.
 require("./setup")();
 eval(require("./extract-app")());
+WEEKLY_CHECKIN_ENABLED = true; // estes testes cobrem os indicadores de check-in (a app já não pede check-ins semanais, mas os dados antigos mantêm-se)
 var check = require("./check")();
 
 function isoDaysAgo(n){
