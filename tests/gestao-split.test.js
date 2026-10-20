@@ -88,8 +88,8 @@ function fixtureRow(id, name){
   await A.pg.waitForSelector(".student-row");
   await A.pg.waitForTimeout(500);
   var sideA = await A.pg.locator(".pro-sidebar").innerText();
-  check.check("10. No Acompanhamento: Alunos, Catálogo e Eu, mais a ligação «Gestão» para gestao.html; sem seletor de áreas, Estúdio nem Contratos; sem pedir gestao.js",
-    /Alunos/i.test(sideA) && /Cat[aá]logo/i.test(sideA) && /\bEu\b/i.test(sideA) && (await A.pg.locator("#goGestao").getAttribute("href")) === "gestao.html" &&
+  check.check("10. No Acompanhamento: Alunos, Catálogo e Eu, sem ligação para a outra app (são independentes); sem seletor de áreas, Estúdio nem Contratos; sem pedir gestao.js",
+    /Alunos/i.test(sideA) && /Cat[aá]logo/i.test(sideA) && /\bEu\b/i.test(sideA) && (await A.pg.locator("#goGestao").count()) === 0 &&
     (await A.pg.locator("#areaGestao, #areaAcomp, #navStudio, #navContracts").count()) === 0 && A.log.length === 0);
   await A.pg.locator('[data-open="a"]').first().click();
   await A.pg.waitForSelector("#proBack");
@@ -103,8 +103,8 @@ function fixtureRow(id, name){
   var G2 = await open("professional", PRO_ROWS, "gestao.html");
   await G2.pg.waitForSelector("#gcalCard");
   var sideG = await G2.pg.locator(".pro-sidebar").innerText();
-  check.check("13. Na Gestão: abre no Estúdio, menu Estúdio e Contratos com a ligação «Acompanhamento» para index.html; sem Alunos/Catálogo/Eu nem interruptor Aluno/Profissional; gestao.js pedido uma vez",
-    /Hoje/i.test(sideG) && /Contratos/i.test(sideG) && (await G2.pg.locator("#goAcomp").getAttribute("href")) === "index.html" &&
+  check.check("13. Na Gestão: abre no Estúdio, menu Estúdio e Contratos sem ligação para a outra app; sem Alunos/Catálogo/Eu nem interruptor Aluno/Profissional; gestao.js pedido uma vez",
+    /Hoje/i.test(sideG) && /Contratos/i.test(sideG) && (await G2.pg.locator("#goAcomp").count()) === 0 &&
     (await G2.pg.locator("#navDashboard, #navCatalog, #navMe, .student-row").count()) === 0 && !(await G2.pg.locator("#modeSwitch").isVisible()) && G2.log.length === 1);
   await G2.pg.click("#navContracts"); await G2.pg.waitForSelector("#contractTotals");
   await G2.pg.click("#navStudio"); await G2.pg.waitForSelector("#gcalCard");

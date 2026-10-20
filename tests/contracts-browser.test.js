@@ -43,8 +43,8 @@ function fixtureRow(id, name){
   await pgA.goto(srv.url); await pgA.waitForSelector(".student-row");
   var cnt = async function(p, sel){ return await p.locator(sel).count(); };
   check.check("1. Há duas apps, cada uma só com os seus itens: Acompanhamento (Alunos, Catálogo, Eu, ligação à Gestão) e Gestão (Estúdio, Contratos, ligação ao Acompanhamento), sem o interruptor de áreas",
-    (await cnt(pgA, "#navDashboard")) === 1 && (await cnt(pgA, "#navCatalog")) === 1 && (await cnt(pgA, "#navMe")) === 1 && (await cnt(pgA, "#goGestao")) === 1 && (await cnt(pgA, "#navStudio")) === 0 && (await cnt(pgA, "#navContracts")) === 0 && (await cnt(pgA, "#areaAcomp")) === 0 && (await cnt(pgA, "#areaGestao")) === 0 &&
-    (await cnt(pg, "#navStudio")) === 1 && (await cnt(pg, "#navContracts")) === 1 && (await cnt(pg, "#goAcomp")) === 1 && (await cnt(pg, "#navMe")) === 0 && (await cnt(pg, "#navDashboard")) === 0 && (await cnt(pg, "#navCatalog")) === 0 && (await cnt(pg, "#areaAcomp")) === 0 && (await cnt(pg, "#areaGestao")) === 0);
+    (await cnt(pgA, "#navDashboard")) === 1 && (await cnt(pgA, "#navCatalog")) === 1 && (await cnt(pgA, "#navMe")) === 1 && (await cnt(pgA, "#goGestao")) === 0 && (await cnt(pgA, "#navStudio")) === 0 && (await cnt(pgA, "#navContracts")) === 0 && (await cnt(pgA, "#areaAcomp")) === 0 && (await cnt(pgA, "#areaGestao")) === 0 &&
+    (await cnt(pg, "#navStudio")) === 1 && (await cnt(pg, "#navContracts")) === 1 && (await cnt(pg, "#goAcomp")) === 0 && (await cnt(pg, "#navMe")) === 0 && (await cnt(pg, "#navDashboard")) === 0 && (await cnt(pg, "#navCatalog")) === 0 && (await cnt(pg, "#areaAcomp")) === 0 && (await cnt(pg, "#areaGestao")) === 0);
   await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
   var tot = await pg.locator("#contractTotals").innerText();
   check.check("2. Totais: horas contratadas dos ativos (8,66 + 4,33 + o duo 8,66 contado uma vez = 21,65 h) e 3 contratos ativos (o duo conta um)", /21,65 h/.test(tot) && /\n?3\b/.test(tot));

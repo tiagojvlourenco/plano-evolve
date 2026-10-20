@@ -209,8 +209,8 @@ Novo menu «Contratos» (e «Eu»): sem migração nova. Os dados dos contratos 
 
 O mesmo site tem **duas apps instaláveis**, para não misturar o acompanhamento dos alunos com a gestão do estúdio:
 
-- **`index.html` — EVOLVE** (ícone preto e branco): os alunos usam-na; o profissional vê aqui **Alunos, Catálogo e Eu** (nutrição, treino, check-ins, a minha ficha). Tem a ligação «Gestão ↗».
-- **`gestao.html` — EVOLVE Gestão** (ícone laranja): só para o profissional. Abre no **Estúdio** e tem **Contratos**; abrir um aluno mostra só os **Pacotes** dele (aulas, recebimentos). Tem a ligação «Acompanhamento ↗». Uma conta de aluno que a abra vê «Só para o profissional» e uma ligação para a app dela.
+- **`index.html` — EVOLVE** (ícone preto e branco): os alunos usam-na; o profissional vê aqui **Alunos, Catálogo e Eu** (nutrição, treino, check-ins, a minha ficha).
+- **`gestao.html` — EVOLVE Gestão** (ícone laranja): só para o profissional. Abre no **Estúdio** e tem **Contratos**; abrir um aluno mostra só os **Pacotes** dele (aulas, recebimentos). Uma conta de aluno que a abra vê «Só para o profissional» e uma ligação para a app dela.
 
 Para instalar a Gestão no iPhone: abrir `…/gestao.html` no Safari → Partilhar → «Adicionar ao ecrã principal». No iPhone cada ícone guarda a sua própria sessão: é preciso iniciar sessão uma vez em cada app.
 
