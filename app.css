@@ -1,6 +1,6 @@
   /* Fontes guardadas no próprio site (funcionam sem rede e não enviam o IP do aluno a servidores de terceiros) */
   @font-face{font-family:'Manrope'; font-style:normal; font-weight:200 800; font-display:swap; src:url(fonts/manrope-latin-wght-normal.woff2) format('woff2');}
-  @font-face{font-family:'Space Grotesk'; font-style:normal; font-weight:300 700; font-display:swap; src:url(fonts/space-grotesk-latin-wght-normal.woff2) format('woff2');}
+  @font-face{font-family:'Jura'; font-style:normal; font-weight:300; font-display:swap; src:url(fonts/jura-latin-300-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/jura-latin-400-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/jura-latin-500-normal.woff2) format('woff2');}
   @font-face{font-family:'Jura'; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/jura-latin-600-normal.woff2) format('woff2');}
@@ -651,8 +651,9 @@
   .toast.toast-top{bottom:auto; top:calc(14px + env(safe-area-inset-top, 0px)); transform:translateX(-50%) translateY(-20px);}
   .toast.toast-top.show{transform:translateX(-50%) translateY(0);}
 
-/* ---- Gestão: letra Space Grotesk e aspeto «limpo» (cantos retos, linhas finas) nos Contratos, Clientes e Financeiro ---- */
-html[data-app="gestao"]{--display:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --sans:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --mono:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;}
+/* ---- Gestão: letra Jura e aspeto «limpo» (cantos retos, linhas finas) nos Contratos, Clientes e Financeiro ---- */
+html[data-app="gestao"]{--display:'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --sans:'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; --mono:'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size:15px;}
+html[data-app="gestao"] body{font-weight:400; letter-spacing:0.01em;}
 .ct-title{font-size:1.5rem; font-weight:500; text-transform:uppercase; letter-spacing:0.08em; margin:4px 0 14px;}
 .ct-tabs{display:grid; grid-auto-flow:column; grid-auto-columns:1fr; border:1px solid var(--line-strong); margin-bottom:14px;}
 .ct-tab{background:transparent; border:0; border-right:1px solid var(--line-strong); color:var(--muted); min-height:44px; font-size:0.68rem; font-weight:500; text-transform:uppercase; letter-spacing:0.16em; cursor:pointer; font-family:var(--sans);}
@@ -720,3 +721,21 @@ html[data-app="gestao"] .history-row > div[style*="flex:1"]{flex:1 1 220px !impo
 .ct-edit .good{color:var(--good);} .ct-edit .warn{color:var(--warn);} .ct-edit .critical{color:var(--critical);}
 .ct-edit [aria-hidden]{color:var(--muted); font-weight:400;}
 .ct-sess span{white-space:nowrap;}
+
+/* ---- Gestão: Jura leve, mais pequena e discreta (como no site do Evolve) ---- */
+.ct-title{font-size:1.3rem; font-weight:300; letter-spacing:0.2em;}
+.ct-tab{font-weight:400; letter-spacing:0.22em; font-size:0.64rem;}
+.ct-tab.on{font-weight:600;}
+.ct-stat .l{font-size:0.6rem; letter-spacing:0.24em;}
+.ct-stat .v{font-size:1.65rem; font-weight:300; letter-spacing:0;}
+.ct-stat .s{font-size:0.78rem; font-weight:300;}
+.ct-section{font-size:0.62rem; letter-spacing:0.24em;}
+.ct-f{font-size:0.64rem; font-weight:600; letter-spacing:0.2em;}
+.ct-head{font-size:0.6rem; letter-spacing:0.2em;}
+.ct-row{font-size:0.86rem;}
+.ct-name strong{font-weight:600; font-size:0.94rem;}
+.ct-name small, .ct-c small{font-weight:300;}
+html[data-app="gestao"] .eyebrow{font-size:0.6rem; font-weight:400; letter-spacing:0.24em;}
+html[data-app="gestao"] .btn{font-size:0.66rem; font-weight:600; letter-spacing:0.16em;}
+html[data-app="gestao"] .mtitle{font-weight:500; letter-spacing:0.04em;}
+html[data-app="gestao"] .muted-p{font-weight:300;}
