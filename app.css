@@ -739,3 +739,29 @@ html[data-app="gestao"] .eyebrow{font-size:0.6rem; font-weight:400; letter-spaci
 html[data-app="gestao"] .btn{font-size:0.66rem; font-weight:600; letter-spacing:0.16em;}
 html[data-app="gestao"] .mtitle{font-weight:500; letter-spacing:0.04em;}
 html[data-app="gestao"] .muted-p{font-weight:300;}
+
+/* ---- Ficha de controlo (folha imprimível) ---- */
+.cs-bar{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;}
+.ct-sheet{background:#fff; color:#111; padding:20px 18px 14px; font-family:'Jura', sans-serif;}
+.cs-top{display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap;}
+.cs-logo{font-size:1.05rem; letter-spacing:0.32em; font-weight:300;}
+.cs-meta{font-size:0.56rem; letter-spacing:0.16em; text-transform:uppercase; color:#777;}
+.cs-title{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 12px;}
+.cs-title h3{font-size:1.3rem; letter-spacing:0.22em; text-transform:uppercase; font-weight:300; margin:0; color:#111;}
+.cs-badge{border:1px solid #e85d2c; color:#e85d2c; font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; padding:5px 9px;}
+.cs-badge.no{border-color:#999; color:#777;}
+.cs-fields{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px 16px; margin-bottom:14px; font-size:0.8rem;}
+.cs-fields div{border-bottom:1px solid #ccc; padding-bottom:4px;}
+.cs-fields small{display:block; font-size:0.52rem; letter-spacing:0.2em; text-transform:uppercase; color:#888; margin-bottom:2px;}
+.cs-grid{display:grid; grid-template-columns:1fr; gap:14px;}
+@media (min-width:640px){ .cs-grid{grid-template-columns:1fr 1fr; gap:28px;} .cs-fields{grid-template-columns:repeat(4, minmax(0, 1fr));} }
+.cs-h, .cs-r{display:grid; grid-template-columns:34px 1fr 1.3fr 44px; gap:6px; padding:6px 0; font-size:0.72rem; border-bottom:1px solid #ddd;}
+.cs-h{font-size:0.5rem; letter-spacing:0.2em; text-transform:uppercase; color:#888; border-bottom:1px solid #999;}
+.cs-r.empty{color:#ccc;}
+.cs-foot{display:flex; justify-content:space-between; gap:6px 14px; flex-wrap:wrap; margin-top:16px; font-size:0.5rem; letter-spacing:0.18em; text-transform:uppercase; color:#999;}
+@media print{
+  body *{visibility:hidden !important;}
+  #ctSheet, #ctSheet *{visibility:visible !important;}
+  #ctSheet{position:absolute; left:0; top:0; width:100%; padding:14mm;}
+  @page{size:A4; margin:0;}
+}

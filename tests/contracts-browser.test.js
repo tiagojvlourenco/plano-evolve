@@ -96,6 +96,10 @@ function fixtureRow(id, name){
   check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido em/i.test(fin) && /Previsto em/i.test(fin) && /Esta página é sua/.test(fin) && /451,25 €/.test(fin));
   // dados pessoais, outro contrato e associar (por último: mexem nos contratos e nos pacotes dos exemplos)
   await pg.click('[data-ct-tab="contratos"]'); await pg.waitForSelector("#contractList"); await pg.click('[data-open-contract="a"]'); await pg.waitForSelector("[data-edit-person]");
+  await pg.click("[data-ct-sheet]"); await pg.waitForSelector("#ctSheet");
+  var sh = await pg.evaluate(function(){ var el = document.getElementById("ctSheet"); return {rows: el.querySelectorAll(".cs-r").length, filled: el.querySelectorAll(".cs-r:not(.empty)").length, txt: el.innerText}; });
+  check.check("13b2. A ficha de controlo mostra as 26 sessões do pack (12 já dadas), o aluno e o código", sh.rows === 26 && sh.filled === 12 && /Ana Silva/.test(sh.txt) && /FICHA DE CONTROLO/i.test(sh.txt));
+  await pg.click("#ctSheetBack"); await pg.waitForSelector("[data-edit-person]");
   await pg.click('[data-edit-person="a"]'); await pg.waitForSelector("#pdGo");
   await pg.fill("#pdName", "Ana Silva Costa"); await pg.fill("#pdPhone", "912345678"); await pg.fill("#pdBirth", "1990-05-04"); await pg.click("#pdGo");
   await pg.waitForFunction(function(){ return !document.querySelector("#pdGo"); });
