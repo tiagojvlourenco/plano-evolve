@@ -30,4 +30,5 @@ check.check("9. Sem nutrição não há revisões de plano nem motivos de contac
 
 // check-in semanal retirado
 check.check("10. O Progresso do aluno já não pede o check-in semanal e o painel não o conta", WEEKLY_CHECKIN_ENABLED === false && !/id="submitCheckin"/.test(tplEvolucaoAluno(studentView(off), {editable: false})) && !contactReasonsFor(off, localTodayISO()).some(function(r){ return r.key === "sem-checkin"; }));
+check.check("11. Na ficha marcada como «Eu» há a opção «Não sou eu: trocar» e o «Pulso do estúdio» saiu do painel", /data-qa=\\"trocareu\\"/.test(appSource) && STUDIO_PULSE_ENABLED === false);
 check.summarize();
