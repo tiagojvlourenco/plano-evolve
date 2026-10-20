@@ -5198,6 +5198,7 @@ function studentToRow(s){
   // telefone e registo de contactos (migração 0022): só se a base de dados já as tem; só o profissional os altera
   if (contactColumnsAvailable){ row.phone = s.phone || null; row.contact_log = s.contactLog || []; }
   if (studioOnlyColumnAvailable) row.studio_only = !!s.studioOnly; // migração 0026
+  if (noNutritionColumnAvailable) row.no_nutrition = !!s.noNutrition; // migração 0030 (aluno que não faz nutrição com o profissional)
   if (phaseColumnAvailable) row.nutrition_phase = s.nutritionPhase || null; // migração 0029 (fase bulk/cut e creatina)
   // colunas do módulo de treino (migração 0019): só se a base de dados já as tem
   // Cada papel só escreve o que é seu (uma cópia antiga nunca apaga sessões novas nem choca com o programa mudado):
@@ -5234,6 +5235,7 @@ function rowToStudent(r){
     physicalLimitations: r.physical_limitations || null, medicalNotes: r.medical_notes || null,
     weightLogPhotos: normalizePhotos(r.weight_log_photos),
     studioOnly: !!r.studio_only,
+    noNutrition: !!r.no_nutrition,
     nutritionPhase: r.nutrition_phase && typeof r.nutrition_phase === "object" && !Array.isArray(r.nutrition_phase) ? r.nutrition_phase : null,
     phone: r.phone || null, contactLog: Array.isArray(r.contact_log) ? r.contact_log : [], createdAt: r.created_at || null,
     trainingProgram: r.training_program || null,
@@ -5271,6 +5273,7 @@ var TRAINING_COLUMNS = ["training_program", "workout_logs"];
 var CONTACT_COLUMNS = ["phone", "contact_log"];
 var contactColumnsAvailable = true; // migração 0022 (telefone e registo de contactos)
 var studioOnlyColumnAvailable = true; // migração 0026 (aluno só de estúdio)
+var noNutritionColumnAvailable = true; // migração 0030 (aluno sem nutrição)
 var phaseColumnAvailable = true; // migração 0029 (fase nutricional bulk/cut)
 var outboxMem = null;
 var persistTimers = {}, persistStudents = {};
@@ -5475,6 +5478,11 @@ function outboxSendCols(id, cols){
       showToast("⚠ O telefone e o registo de contactos ainda não podem ser guardados: falta correr a migração 0022 no Supabase.");
       return outboxSendOne(id);
     }
+    if (noNutritionColumnAvailable && /no_nutrition/.test(msg) && /column|schema|does not exist/i.test(msg)){
+      noNutritionColumnAvailable = false; // migração 0030 por aplicar: o resto grava-se na mesma
+      showToast("⚠ «Não faz nutrição comigo» ainda não pode ser guardado: falta correr a migração 0030 no Supabase.");
+      return outboxSendOne(id);
+    }
     if (studioOnlyColumnAvailable && /studio_only/.test(msg) && /column|schema|does not exist/i.test(msg)){
       studioOnlyColumnAvailable = false; // migração 0026 por aplicar: o resto grava-se na mesma
       return outboxSendOne(id);
@@ -5513,6 +5521,7 @@ function outboxSendOne(id){
   if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!studioOnlyColumnAvailable) delete cols.studio_only;
+  if (!noNutritionColumnAvailable) delete cols.no_nutrition;
   if (!phaseColumnAvailable) delete cols.nutrition_phase;
   if (!Object.keys(cols).length){ delete outboxRead()[id]; outboxWrite(); return Promise.resolve(true); }
   return outboxSendCols(id, cols);
@@ -5605,6 +5614,10 @@ function insertStudent(s){
       }
       if (contactColumnsAvailable && /\bphone\b|contact_log/.test(res.error.message || "")){
         contactColumnsAvailable = false; // migração 0022 por aplicar: cria o aluno sem telefone nem registo de contactos
+        return insertStudent(s);
+      }
+      if (noNutritionColumnAvailable && /no_nutrition/.test(res.error.message || "")){
+        noNutritionColumnAvailable = false; // migração 0030 por aplicar: cria o aluno sem a marca
         return insertStudent(s);
       }
       if (studioOnlyColumnAvailable && /studio_only/.test(res.error.message || "")){
@@ -6191,6 +6204,7 @@ function collectPhaseReviews(today){
   var out = [];
   (STUDENTS || []).forEach(function(st){
     if (st.isDemo && !state.showDemoStudents) return;
+    if (noNutritionOf(st)) return;   // a nutrição é de outra pessoa: sem revisões de plano
     var rv; try { rv = computePhaseReview(st, today); } catch (e) { rv = null; }
     if (phaseNeedsAttention(rv)) out.push({student: st, review: rv});
   });
@@ -7143,7 +7157,7 @@ function renderAlunoTab(s){
   else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
   else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
   else {
-    el.innerHTML = tplCheckin(sv) + tplEvolucaoAluno(sv, {editable:false}); // Progresso: check-in da semana + evolução
+    el.innerHTML = tplEvolucaoAluno(sv, {editable:false}); // Progresso: a evolução (o check-in semanal foi retirado: o profissional vê o aluno 2-3 vezes por semana)
     lazyPhotos(s, function(){ if (state.alunoStudentId === s.id && state.alunoTab === "evolucao" && !modalRoot.firstChild) renderAlunoTab(s); });
   }
   restoreTabUi(el, keep);
@@ -7505,6 +7519,7 @@ function tplTodayMeals(s){
 
 function tplHoje(s){
   var html = tplTodayWorkout(s);
+  if (noNutritionOf(s)) return html;   // faz a nutrição com outra pessoa: só treino
   if (!s.meals.length){
     return html + `<div class="card" style="text-align:center;">` +
       `<div class="eyebrow">Alimentação</div>` +
@@ -7514,7 +7529,7 @@ function tplHoje(s){
   }
   html += tplTodayMeals(s);
   var ciDays = computeLastCheckinDaysAgo(s);
-  if (ciDays >= 7){
+  if (WEEKLY_CHECKIN_ENABLED && ciDays >= 7){
     html += `<div class="card ci-nudge"><div><div class="eyebrow">Check-in semanal</div><p class="muted-p" style="margin:4px 0 0;">${ciDays === 999 ? "Ainda não enviaste nenhum." : "O último foi " + daysAgoLabel(ciDays) + "."} Demora um minuto.</p></div>` +
       `<button type="button" class="btn" id="goCheckin">Fazer</button></div>`;
   }
@@ -8180,6 +8195,9 @@ function pdfDeliver(blob, name){
 }
 
 function tplPlanoTabs(s){
+  if (noNutritionOf(s)){   // só o programa de treino
+    return workoutDaysWithExercises(s).length ? tplTrainingProgramCard(s) : "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Treino</div><p class=\"muted-p\" style=\"margin-top:8px;\">O teu programa de treino ainda não foi definido.</p></div>";
+  }
   var hasProgram = workoutDaysWithExercises(s).length > 0, hasMeals = (s.meals || []).length > 0;
   var sec = hasProgram && state.planoSection === "treino" ? "treino" : (hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao");
   function segBtn(id, label){ return "<button type=\"button\" data-plano-sec=\"" + id + "\" aria-pressed=\"" + (sec === id) + "\" class=\"" + (sec === id ? "on" : "") + "\">" + label + "</button>"; }
@@ -10909,6 +10927,7 @@ function renderProShell(){
   // com a ficha aberta, cada app mostra só o seu separador (Gestão: Pacotes; Acompanhamento: tudo menos Pacotes)
   if (selected && APP_MODE === "gestao") state.proTab = "sessoes";
   else if (selected && state.proTab === "sessoes") state.proTab = "leitura";
+  if (selected && noNutritionOf(selected) && state.proTab === "plano") state.proTab = "leitura";
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
     if (APP_MODE === "gestao"){
@@ -10995,6 +11014,8 @@ function visibleStudentsForDashboard(){
 // inativo quem o profissional marcar explicitamente.
 function isStudentActive(s){ return s.active !== false; }
 // aluno criado a partir da agenda que não usa a app: não há registos a esperar dele (migração 0026); com convite ou conta deixa de o ser
+// aluno que faz a nutrição com outra pessoa: a app esconde-lhe (e esconde ao profissional) tudo o que é alimentação
+function noNutritionOf(s){ return !!(s && s.noNutrition); }
 function isStudioOnly(s){ return !!(s && s.studioOnly && !s.inviteEmail && !s.authUserId); }
 // dias sem check-in para o painel (quem não usa a app nunca está "em atraso")
 function dashLateDays(s){ return isStudioOnly(s) ? 0 : computeLastCheckinDaysAgo(s); }
@@ -11081,7 +11102,7 @@ function renderProDashboardMain(){
       "<select id=\"stuSort\" class=\"mini-select\" aria-label=\"Ordenar alunos\">" + [["atencao", "Por atenção"], ["az", "Nome A → Z"], ["za", "Nome Z → A"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + ((state.dashSort || "atencao") === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>") : "";
   var html = toolsHtml + "<div class=\"pro-stat-row\">" +
     proStat(activeStudents.length, "Alunos ativos", "active") +
-    proStat(pendingCheckins, "Check-ins", "checkins") +
+    (WEEKLY_CHECKIN_ENABLED ? proStat(pendingCheckins, "Check-ins", "checkins") : "") +
     proStat(alertCount, "Alertas", "alerts") +
     proStat(visible.length, "Total de alunos", "total") +
   "</div>";
@@ -11193,6 +11214,7 @@ function openOnboardingForm(){
     "<div class=\"onb-section-title\">Informações pessoais</div>" +
     "<div class=\"onb-field\"><label>Nome completo</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
     "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
+    "<label style=\"display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; margin:4px 0 12px;\"><input type=\"checkbox\" id=\"obNoNutrition\"> Não faz nutrição comigo (fica sem o bloco de alimentação)</label>" +
     "<div class=\"onb-field\"><label>Telefone / WhatsApp (opcional)</label><input type=\"tel\" id=\"obPhone\" placeholder=\"912 345 678\" autocomplete=\"off\"></div>" +
     "<p class=\"muted-p\" id=\"obError\" style=\"color:var(--critical); display:none; margin:-6px 0 10px;\"></p>" +
     "<div class=\"onb-field\"><label>Género</label><select id=\"obSex\"><option>Masculino</option><option>Feminino</option><option>Outro</option><option>Prefiro não dizer</option></select></div>" +
@@ -11383,6 +11405,7 @@ function openOnboardingForm(){
       lastCheckinDaysAgo:0,
       fromOnboarding:true,
       inviteEmail: inviteEmail || null,
+      noNutrition: !!sheet.querySelector("#obNoNutrition").checked,
       phone: normalizePhone(sheet.querySelector("#obPhone").value).ok ? sheet.querySelector("#obPhone").value.trim().slice(0, 30) : null,
       createdAt: new Date().toISOString()
     };
@@ -11419,7 +11442,8 @@ var PRO_NAV = APP_MODE === "gestao" ? [
 // as 4 áreas do aluno aberto (o ponto vermelho em "Resumo" avisa que há pedidos de ajuda por tratar)
 function proStudentNavHtml(){
   var curGroup = proNavGroupOf(state.proTab);
-  return PRO_NAV.map(function(g){
+  var stu = findStudent(state.proSelectedId);
+  return PRO_NAV.filter(function(g){ return !(g.id === "nutricao" && noNutritionOf(stu)); }).map(function(g){
     var on = g === curGroup, pend = g.id === "resumo" && pendingHelpFor(state.proSelectedId) > 0;
     return "<button type=\"button\" class=\"pro-nav-item" + (on ? " active" : "") + (pend ? " has-pending" : "") + "\" data-g=\"" + g.id + "\" data-t=\"" + (on ? state.proTab : g.tabs[0]) + "\">" + g.label + "</button>";
   }).join("");
@@ -11442,7 +11466,7 @@ function renderProDetailMain(s){
     "</div>" +
     (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
       "<button type=\"button\" class=\"chip\" data-qa=\"avaliar\" aria-label=\"Registar nova avaliação\">+ Avaliação</button>" +
-      "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>" +
+      (noNutritionOf(s) ? "" : "<button type=\"button\" class=\"chip\" data-qa=\"macros\" aria-label=\"Ajustar macros\">Macros</button>") +
       "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
     "</div>") + subtabs +
     "<div id=\"proTabContent\" class=\"card\"></div>";
@@ -11512,12 +11536,15 @@ function renderProTabContent(s){
 
 function fRow(label, val){ return "<div class=\"f\"><label>" + label + "</label><div class=\"v\">" + val + "</div></div>"; }
 
+function tplNoNutritionToggle(s){
+  return "<div class=\"card\" style=\"margin-bottom:12px;\"><label style=\"display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;\"><input type=\"checkbox\" id=\"noNutritionToggle\" style=\"margin-top:3px;\"" + (s.noNutrition ? " checked" : "") + "> <span><strong>Não faz nutrição comigo</strong><br><span class=\"muted-p\">O aluno (e tu) deixam de ver plano alimentar, refeições, compras e PDF; ficam o treino, as avaliações e as fotos.</span></span></label></div>";
+}
 function tplProPerfil(s){
   // Fase 10: o perfil já não é uma lista contínua de secções — cada uma é um
   // <details> recolhível (nativo, sem JS a mais). Fase 11: todas começam
   // fechadas, incluindo "Dados pessoais" — pedido explícito para não ter
   // informação sempre à vista, igual ao resto das secções.
-  var html = perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
+  var html = tplNoNutritionToggle(s) + perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
     fRow("Idade", s.age == null ? "—" : s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex || "—") + fRow("Altura", s.height == null ? "—" : s.height + " cm") +
     fRow("Peso atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
@@ -12980,7 +13007,7 @@ function safeSignal(fn, s){
 }
 function computeStudentSignals(s){
   return [
-    safeSignal(signalCheckin, s),
+    WEEKLY_CHECKIN_ENABLED ? safeSignal(signalCheckin, s) : null,
     safeSignal(signalPlanoAtivo, s),
     safeSignal(signalAdherence, s),
     safeSignal(signalWeight, s),
@@ -12993,7 +13020,7 @@ function computeStudentSignals(s){
     safeSignal(signalProgressaoCarga, s),
     safeSignal(signalMealsOff, s),
     safeSignal(signalAdaptacoes, s)
-  ];
+  ].filter(Boolean);
 }
 
 function computeDashboardAlerts(s){
@@ -13150,6 +13177,7 @@ var ONBOARDING_WINDOW_DAYS = 30;   // um aluno é "novo" durante este tempo
 var ONBOARDING_STALL_DAYS = 7;     // sem nenhum registo passado este tempo = onboarding parado
 var PLAN_OLD_DAYS = 42;
 var CHECKIN_LATE_DAYS = 10;
+var WEEKLY_CHECKIN_ENABLED = false; // o check-in semanal foi retirado da app (os dados antigos continuam no histórico)
 
 var CONTACT_REASONS = {
   "pedido-ajuda": {label: "Pedido de ajuda por tratar", template: "Olá {nome}! Recebi o teu pedido na app e já estou a tratar disso. Respondo-te ainda hoje."},
@@ -13248,12 +13276,12 @@ function contactReasonsFor(s, today){
     var crit = by["sem-registos"].tone === "critical" || idle == null;
     out.push({key: "sem-registos", label: idle == null ? "Nunca registou nada" : "Sem registos há " + idle + " dias", weight: crit ? 90 : 55, hint: by["sem-registos"].hint});
   }
-  if (by["adesao-a-cair"]) out.push({key: "adesao-a-cair", label: "Adesão a cair", weight: 50, hint: by["adesao-a-cair"].hint});
+  if (by["adesao-a-cair"] && !noNutritionOf(s)) out.push({key: "adesao-a-cair", label: "Adesão a cair", weight: 50, hint: by["adesao-a-cair"].hint});
   var late = isStudioOnly(s) ? 999 : computeLastCheckinDaysAgo(s);
-  if (late !== 999 && late >= CHECKIN_LATE_DAYS && !by["sem-registos"]) out.push({key: "sem-checkin", label: "Check-in há " + late + " dias", weight: 35, hint: "Último check-in há " + late + " dias."});
-  if (by["estagnado"] || by["estagnado-a-treinar"]) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
+  if (WEEKLY_CHECKIN_ENABLED && late !== 999 && late >= CHECKIN_LATE_DAYS && !by["sem-registos"]) out.push({key: "sem-checkin", label: "Check-in há " + late + " dias", weight: 35, hint: "Último check-in há " + late + " dias."});
+  if (!noNutritionOf(s) && (by["estagnado"] || by["estagnado-a-treinar"])) out.push({key: "estagnado", label: "Peso estagnado", weight: by["estagnado"] ? 35 : 25, hint: (by["estagnado"] || by["estagnado-a-treinar"]).hint});
   var planDays = isStudioOnly(s) ? null : lastPlanChangeDays(s);
-  if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
+  if (planDays != null && planDays >= PLAN_OLD_DAYS && !ob.inOnboarding && !noNutritionOf(s)) out.push({key: "plano-antigo", label: "Plano sem ajustes há " + Math.floor(planDays / 7) + " semanas", weight: 20, hint: "Última alteração ao plano há " + planDays + " dias."});
   if (isBirthdayToday(s, today)) out.push({key: "aniversario", label: "Faz anos hoje", weight: 25, hint: "Um parabéns fortalece a relação."});
   if (by["sobrecarga"] || by["alta-adesao"]) out.push({key: "boa-noticia", label: by["sobrecarga"] ? "Pronto para subir carga" : "Adesão muito boa", weight: 15, hint: "Uma mensagem positiva também retém alunos."});
   return out.sort(function(a, b){ return b.weight - a.weight; });
@@ -14079,6 +14107,14 @@ function wireProTab(s){
     setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
   });
 
+  var nnToggle = el.querySelector("#noNutritionToggle");
+  if (nnToggle) nnToggle.addEventListener("change", function(){
+    s.noNutrition = nnToggle.checked;
+    if (s.noNutrition && state.proTab === "plano") state.proTab = "leitura";
+    persistStudent(s);
+    showToast(s.noNutrition ? "✓ Sem nutrição para este aluno" : "✓ Nutrição ativa para este aluno");
+    renderProShell();
+  });
   var saveWG = el.querySelector("#saveWeightGoal");
   if (saveWG) saveWG.addEventListener("click", function(){
     var raw = el.querySelector("#weightGoalInput").value;
