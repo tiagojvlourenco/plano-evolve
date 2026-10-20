@@ -107,7 +107,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   var gain = computeSuggestedTargets({sex:"Masculino", weight:70, height:175, age:25, trainingsPerWeek:3, weightGoal:75});
   var maint = Math.round(computeBMR("Masculino", 70, 175, 25) * activityFromTrainings(3));
   check.check("5. O excedente nunca passa de +15 % da manutenção", gain.kcal <= maint * 1.151);
-  var sig = signalWeight({goal:"Aumento de massa muscular", weightCurrent:61.5, weights:[{date:daysAgo(21), w:60}, {date:daysAgo(0), w:60.8}]});
+  var sig = signalWeight({goal:"Aumento de massa muscular", weightCurrent:61.5, weights:[{date:daysAgo(21), w:60}, {date:daysAgo(10), w:60.4}, {date:daysAgo(0), w:60.8}]});
   check.check("5. Ganhar o que a app prescreve (≈0,25 kg/semana) não dá 'ganho rápido'", sig.status === "positivo");
 })();
 
@@ -124,9 +124,9 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 (function(){
   check.check("7. Duas pesagens com 7 dias: 'cedo para avaliar' (não alerta por água)", signalWeight({goal:"Perda de peso", weightCurrent:81.2, weights:[{date:daysAgo(7), w:80}, {date:daysAgo(0), w:81.2}]}).status === "insuficiente");
   check.check("7. 2 dias de intervalo também", signalWeight({goal:"Perda de peso", weightCurrent:80, weights:[{date:daysAgo(2), w:80.1}, {date:daysAgo(0), w:80}]}).status === "insuficiente");
-  var sig = signalWeight({goal:"Perda de peso", weightCurrent:79, weights:[{date:daysAgo(14), w:80}, {date:daysAgo(0), w:79}]});
+  var sig = signalWeight({goal:"Perda de peso", weightCurrent:79, weights:[{date:daysAgo(14), w:80}, {date:daysAgo(7), w:79.5}, {date:daysAgo(0), w:79}]});
   check.check("7. 14 dias, −1 kg, em perda → positivo, e o texto diz 2 semanas", sig.status === "positivo" && /últimas 2 semanas/.test(sig.text));
-  check.check("7. 14 dias e +0,6 kg em perda → atenção (limiar 0,2 kg para 2 semanas)", signalWeight({goal:"Perda de peso", weightCurrent:80.6, weights:[{date:daysAgo(14), w:80}, {date:daysAgo(0), w:80.6}]}).status === "atencao");
+  check.check("7. 14 dias e +0,6 kg em perda → atenção (limiar 0,2 kg para 2 semanas)", signalWeight({goal:"Perda de peso", weightCurrent:80.6, weights:[{date:daysAgo(14), w:80}, {date:daysAgo(7), w:80.3}, {date:daysAgo(0), w:80.6}]}).status === "atencao");
 })();
 
 // ---- 8. Dados forjados/mal formados ----

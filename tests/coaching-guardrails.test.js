@@ -41,7 +41,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 
 // ---- 3. Indicador de peso com direção ----
 (function(){
-  function mk(goal, from, to, extra){ return Object.assign({goal:goal, weightCurrent:to, weights:[{date:daysAgo(20), w:from}, {date:daysAgo(0), w:to}]}, extra || {}); }
+  function mk(goal, from, to, extra){ return Object.assign({goal:goal, weightCurrent:to, weights:[{date:daysAgo(20), w:from}, {date:daysAgo(10), w:(from + to) / 2}, {date:daysAgo(0), w:to}]}, extra || {}); }
   check.check("3. Perda de peso mas SUBIU 2 kg → atenção (e grave)", signalWeight(mk("Perda de peso", 70, 72)).status === "atencao" && signalWeight(mk("Perda de peso", 70, 72)).severity === "high");
   check.check("3. Perda de peso e desceu 1 kg → positivo", signalWeight(mk("Perda de peso", 70, 69)).status === "positivo");
   check.check("3. Perda de peso estagnada → atenção", signalWeight(mk("Perda de peso", 70, 70.1)).status === "atencao");
@@ -56,12 +56,12 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 // ---- 4. Inatividade ----
 (function(){
   var late = signalPesagem({weights:[{date:daysAgo(30), w:70}], assessments:[]});
-  check.check("4. Sem pesagem há 30 dias → atenção", late.status === "atencao" && /30 dias/.test(late.text));
-  check.check("4. Sem pesagem há 50 dias → crítico", signalPesagem({weights:[{date:daysAgo(50), w:70}]}).severity === "high");
+  check.check("4. Última avaliação com peso há 30 dias → só lembrete (insuficiente), nunca falha do aluno", late.status === "insuficiente" && /30 dias/.test(late.text) && /próxima avaliação/.test(late.text) && late.severity === "normal");
+  check.check("4. Há 50 dias continua sem ser alerta", signalPesagem({weights:[{date:daysAgo(50), w:70}]}).status === "insuficiente");
   check.check("4. Pesagem de há 3 dias → positivo", signalPesagem({weights:[{date:daysAgo(3), w:70}]}).status === "positivo");
   check.check("4. Sem pesagens → dados insuficientes", signalPesagem({weights:[], assessments:[]}).status === "insuficiente");
-  var parado = signalInatividadeTreino({trainingsPerWeek:3, checkins:[{date:daysAgo(14), workouts:0}, {date:daysAgo(7), workouts:0}]});
-  check.check("4. 2 check-ins seguidos com 0 treinos → atenção grave", parado.status === "atencao" && parado.severity === "high");
-  check.check("4. Treinou num deles → positivo", signalInatividadeTreino({trainingsPerWeek:3, checkins:[{date:daysAgo(14), workouts:0}, {date:daysAgo(7), workouts:2}]}).status === "positivo");
+  var parado = signalInatividadeTreino({trainingsPerWeek:3, workoutLogs:[{date:daysAgo(40)}, {date:daysAgo(20)}]});
+  check.check("4. Última sessão registada há 20 dias → atenção grave", parado.status === "atencao" && parado.severity === "high" && /20 dias/.test(parado.text));
+  check.check("4. Sessão recente → positivo (sem precisar de check-ins)", signalInatividadeTreino({trainingsPerWeek:3, workoutLogs:[{date:daysAgo(20)}, {date:daysAgo(2)}]}).status === "positivo");
 })();
 check.summarize();

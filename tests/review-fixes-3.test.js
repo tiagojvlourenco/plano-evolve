@@ -80,7 +80,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 
 // ---- 5. Tendência do peso: pouca pesagem recente não cai no 'insuficiente' se houver 14+ dias na janela ----
 (function(){
-  var s = {goal: "Perder peso", weightGoal: 60, weightCurrent: 70, weights: [{date: daysAgo(120), w: 80}, {date: daysAgo(25), w: 71}, {date: daysAgo(2), w: 70}]};
+  var s = {goal: "Perder peso", weightGoal: 60, weightCurrent: 70, weights: [{date: daysAgo(120), w: 80}, {date: daysAgo(25), w: 71}, {date: daysAgo(12), w: 70.5}, {date: daysAgo(2), w: 70}]};
   var sig = signalWeight(s);
   check.check("5. Referência antiga (120 dias) mas há pesagem a 25 dias → avalia com a da janela", sig.status !== "insuficiente" && /1,0 kg/.test(sig.text.replace("−", "-")) );
   var s2 = {goal: "Perder peso", weightGoal: 60, weightCurrent: 70, weights: [{date: daysAgo(120), w: 80}, {date: daysAgo(5), w: 70}]};

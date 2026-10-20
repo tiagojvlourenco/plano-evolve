@@ -135,7 +135,7 @@ var evil = '<img src=x onerror=alert(1)>';
   var old = signalWeight({goal:"Perda de peso", weightCurrent:79, weights:[{date:daysAgo(90), w:85}, {date:daysAgo(0), w:79}]});
   check.check("7. Pesagem anterior de há 90 dias: 'faltam pesagens regulares', não 'últimas 3 semanas'", old.status === "insuficiente" && /há 90 dias/.test(old.text));
   check.check("7. 16 dias e +0,25 kg em perda: dentro do ruído de uma pesagem, não alerta", signalWeight({goal:"Perda de peso", weightCurrent:80.25, weights:[{date:daysAgo(16), w:80}, {date:daysAgo(0), w:80.25}]}).status !== "atencao" || /estagnado/.test(signalWeight({goal:"Perda de peso", weightCurrent:80.25, weights:[{date:daysAgo(16), w:80}, {date:daysAgo(0), w:80.25}]}).text));
-  var ok = signalWeight({goal:"Perda de peso", weightCurrent:79.2, weights:[{date:daysAgo(21), w:80.5}, {date:daysAgo(0), w:79.2}]});
+  var ok = signalWeight({goal:"Perda de peso", weightCurrent:79.2, weights:[{date:daysAgo(21), w:80.5}, {date:daysAgo(10), w:79.9}, {date:daysAgo(0), w:79.2}]});
   check.check("7. 21 dias, −1,3 kg: positivo, 'últimas 3 semanas'", ok.status === "positivo" && /últimas 3 semanas/.test(ok.text));
 })();
 check.summarize();

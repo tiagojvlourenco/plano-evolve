@@ -72,7 +72,7 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   check.check("18. Perda rápida demais (1,5 %/semana): propõe subir um passo para proteger a massa magra", fast.kind === "ajuste" && fast.deltaKcal > 0 && fast.deltaKcal <= 300 && /acima/.test(fast.text));
   var urgent = computePhaseReview(stu({weights: wts(90, -1.8, 9, 3)}), today);
   check.check("19. Perda >1,5 %/semana com poucos dias de pesagens: aviso urgente (+300 kcal no máximo), sem esperar pelos 14 dias", urgent.kind === "ajuste" && urgent.urgent === true && urgent.deltaKcal > 0 && urgent.deltaKcal <= 300);
-  check.check("20. Dados a menos: não propõe nada e diz o que falta", computePhaseReview(stu({weights: wts(90, 0, 6, 3)}), today).kind === "dados" && /mínimo 4/.test(computePhaseReview(stu({weights: wts(90, 0, 6, 3)}), today).text));
+  check.check("20. Dados a menos: não propõe nada e diz o que falta", computePhaseReview(stu({weights: wts(90, 0, 6, 3)}), today).kind === "dados" && /precisa de 4/.test(computePhaseReview(stu({weights: wts(90, 0, 6, 3)}), today).text));
   var short = computePhaseReview(stu({weights: wts(90, -0.3, 16, 2)}, {lastChangeDate: d(-24)}), today);
   check.check("21. Com só 16 dias de pesagens e um desvio pequeno, deixa a decisão para a próxima revisão", short.kind === "em-linha" && /margem de erro/.test(short.text));
   // limites de segurança: teto de défice e piso
