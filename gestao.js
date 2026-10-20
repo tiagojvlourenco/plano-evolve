@@ -1157,13 +1157,15 @@ function calendarCardHtml(){
       "<li>Copia o ID de cliente e cola aqui. (Para não teres de voltar a autorizar de 7 em 7 dias, publica a aplicação em <em>Produção</em> no ecrã de consentimento.)</li></ol></details></div>";
     return html;
   }
-  html += "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + (cs.useAsSource ? "✓ É a fonte das sessões (o horário semanal fica em pausa)." : "Ainda não é a fonte das sessões: o horário semanal continua a contar.") + "</p>" +
-    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSync\">⟳ Sincronizar agora</button>" +
+  var hasCands = !!(ls && ls.unmatched && ls.unmatched.length && calStudentCandidates(ls.unmatched).length);
+  html += "<div style=\"display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:6px;\"><button type=\"button\" class=\"btn primary btn-sm\" id=\"gcSync\" style=\"min-height:44px;\">⟳ Sincronizar agora</button><span class=\"muted-p\" id=\"gcOut\" style=\"flex:1 1 200px; margin:0;\">" + (ls ? calendarSummaryText(ls) : "Ainda não sincronizaste. A primeira vez pede autorização ao Google.") + "</span></div>" +
+    "<details class=\"perfil-section\" id=\"gcMore\"" + (hasCands ? " open" : "") + "><summary class=\"eyebrow\">Definições" + (hasCands ? " e alunos por criar" : "") + "</summary><div style=\"margin-top:8px;\">" +
+    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + (cs.useAsSource ? "✓ É a fonte das sessões (o horário semanal fica em pausa)." : "Ainda não é a fonte das sessões: o horário semanal continua a contar.") + "</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;\">" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcToggle\">" + (cs.useAsSource ? "Voltar ao horário semanal" : "Usar como fonte das sessões") + "</button>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcOff\">Desligar</button></div>" +
     "<div class=\"checkin-field\" style=\"max-width:320px;\"><label for=\"gcCal\">Agenda (por omissão a principal)</label><input type=\"text\" id=\"gcCal\" value=\"" + escapeHtml(cs.calendarId) + "\" autocomplete=\"off\"></div>" +
-    "<div class=\"checkin-field\" style=\"max-width:320px; margin-top:8px;\"><label for=\"gcPrefix\">Só eventos que começam por (vazio = todos)</label><input type=\"text\" id=\"gcPrefix\" maxlength=\"30\" value=\"" + escapeHtml(cs.titlePrefix) + "\" placeholder=\"PT\" autocomplete=\"off\"></div>" +
-    "<p class=\"muted-p\" id=\"gcOut\" style=\"margin-top:8px;\">" + (ls ? calendarSummaryText(ls) : "Ainda não sincronizaste. A primeira vez pede autorização ao Google.") + "</p>";
+    "<div class=\"checkin-field\" style=\"max-width:320px; margin-top:8px;\"><label for=\"gcPrefix\">Só eventos que começam por (vazio = todos)</label><input type=\"text\" id=\"gcPrefix\" maxlength=\"30\" value=\"" + escapeHtml(cs.titlePrefix) + "\" placeholder=\"PT\" autocomplete=\"off\"></div>";
   if (ls && ls.unmatched && ls.unmatched.length){
     var cands = calStudentCandidates(ls.unmatched);
     if (cands.length){
@@ -1179,7 +1181,7 @@ function calendarCardHtml(){
     html += "<details class=\"perfil-section\" style=\"margin-top:12px;\"><summary class=\"eyebrow\">Associar a um aluno que já existe</summary><p class=\"muted-p\" style=\"margin:6px 0;\">Se algum destes é um aluno com o nome escrito de outra forma, associa-o (fica guardado para as próximas vezes).</p>" +
       ls.unmatched.map(function(u, i){ return "<div class=\"history-row\" style=\"align-items:center; gap:6px; flex-wrap:wrap;\"><div class=\"hlabel\" style=\"flex:1 1 120px;\">" + escapeHtml(u.title) + " <span class=\"muted-p\">×" + u.n + "</span></div><select class=\"mini-select\" data-gc-alias=\"" + i + "\"><option value=\"\">Associar a…</option>" + visibleStudentsForDashboard().filter(isStudentActive).map(function(st){ return "<option value=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</option>"; }).join("") + "</select></div>"; }).join("") + "</details>";
   }
-  return html + "</div>";
+  return html + "</div></details></div>";
 }
 function calendarSummaryText(ls){
   var days = Math.floor((Date.now() - new Date(ls.at).getTime()) / 86400000);
@@ -2229,8 +2231,13 @@ function applyStudioFilter(){
   var main = document.getElementById("proMain");
   if (!main || !main.querySelector("#studioTools")) return;
   var q = exLibFold(studioView.search || ""), rows = [].slice.call(main.querySelectorAll("[data-sname]")), seen = {}, shown = 0;
-  rows.forEach(function(r){ var nm = r.getAttribute("data-sname"), ok = !q || nameStartsWithQuery(nm, q); r.hidden = !ok; if (ok && !seen[nm]){ seen[nm] = true; shown++; } });
+  rows.forEach(function(r){ var nm = r.getAttribute("data-sname"), ok = !q || nameStartsWithQuery(nm, q); if (ok && !q && !studioView.showAll && r.hasAttribute("data-calm")) ok = false; r.hidden = !ok; if (ok && !seen[nm]){ seen[nm] = true; shown++; } });
   var box = main.querySelector("#studioSummary");
+  if (box){
+    var allRows = box.querySelectorAll(".studio-row"), calmN = box.querySelectorAll("[data-calm]").length, attn = main.querySelector("#stAttn"), tog = main.querySelector("#stShowAll");
+    if (attn) attn.textContent = allRows.length - calmN ? (allRows.length - calmN) + (allRows.length - calmN === 1 ? " aluno precisa de atenção" : " alunos precisam de atenção") : (allRows.length ? "✓ Ninguém a precisar de atenção" : "");
+    if (tog){ tog.hidden = !calmN; tog.textContent = studioView.showAll ? "Só quem precisa de atenção" : "Ver todos (" + allRows.length + ")"; }
+  }
   if (box){
     var list = [].slice.call(box.querySelectorAll(".studio-row")), sort = studioView.sort || "urgencia";
     var key = function(r){ return r.getAttribute("data-sname"); };
@@ -2250,7 +2257,7 @@ document.addEventListener("keyup", function(e){ var t = e.target; if (t && t.id 
 document.addEventListener("search", function(e){ var t = e.target; if (t && t.id === "stSearch"){ studioView.search = t.value; applyStudioFilter(); } });
 document.addEventListener("change", function(e){ var t = e.target; if (t && t.id === "stSort"){ studioView.sort = t.value; applyStudioFilter(); var b = document.getElementById("studioSummary"); if (b && b.scrollIntoView){ try { b.scrollIntoView({block: "start", behavior: "smooth"}); } catch (err) { b.scrollIntoView(); } } } });
 /* visão geral do estúdio (menu "Estúdio") */
-var studioView = {month: null, date: null, search: "", sort: "urgencia"};
+var studioView = {month: null, date: null, search: "", sort: "urgencia", showAll: false};
 /* «Quem contactar» da Gestão: pagamento em atraso, pacote a acabar/terminado e faltas (estes avisos vivem aqui, não na app de Acompanhamento) */
 function studioContactReasons(studentId, today){
   var out = [], ss = studentStudioSummary(studentId, today);
@@ -2299,13 +2306,14 @@ function renderProStudioMain(){
 
   // resumo de treinos (o que o e-mail semanal mostrava): quem está a acabar, quem aguarda renovação, aulas extra
   var sumRows = studioSummaryRows(today), sumOrd = 0;
-  html += "<div class=\"card\" id=\"studioSummary\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;\"><div class=\"eyebrow\">Resumo de treinos</div><button type=\"button\" class=\"btn btn-sm\" id=\"fixPacks\" style=\"min-height:44px;\" title=\"Conta nos pacotes as aulas que ficaram sem pacote\">↻ Acertar pacotes</button></div>";
+  html += "<div class=\"card\" id=\"studioSummary\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;\"><div class=\"eyebrow\">Resumo de treinos</div><button type=\"button\" class=\"btn btn-sm\" id=\"fixPacks\" style=\"min-height:44px;\" title=\"Conta nos pacotes as aulas que ficaram sem pacote\">↻ Acertar pacotes</button></div>" +
+    "<div style=\"display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;\"><span class=\"muted-p\" id=\"stAttn\"></span><button type=\"button\" class=\"btn btn-sm\" id=\"stShowAll\" style=\"min-height:44px;\"></button></div>";
   if (!sumRows.length) html += "<p class=\"muted-p\">Ainda sem pacotes. Importa os que já estão a decorrer (no fim desta página) ou cria-os na ficha de cada aluno.</p>";
   sumRows.forEach(function(r){
     var flag = r.state === "renovar" ? "🔄 Aguarda renovação" + (r.extras.n ? " · +" + r.extras.n + (r.extras.n === 1 ? " aula extra" : " aulas extra") + " (desde " + escapeHtml(fmtDateFullPt(r.extras.since)) + ")" : "")
       : r.state === "acabar" ? "⚠️ A acabar" + (r.u.daysLeft != null && r.u.daysLeft <= PACK_ENDING_DAYS ? " · termina em " + r.u.daysLeft + " dias" : "")
       : r.state === "pendente" ? "Começa a " + escapeHtml(fmtDateFullPt(r.pack.starts_on)) : "";
-    html += "<div class=\"studio-row " + r.state + "\" data-sname=\"" + escapeHtml(exLibFold(r.student.name)) + "\" data-ord=\"" + (sumOrd++) + "\" data-rem=\"" + r.u.remaining + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
+    html += "<div class=\"studio-row " + r.state + "\"" + (r.state === "renovar" || r.state === "acabar" || r.extras.n ? "" : " data-calm=\"1\"") + " data-sname=\"" + escapeHtml(exLibFold(r.student.name)) + "\" data-ord=\"" + (sumOrd++) + "\" data-rem=\"" + r.u.remaining + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
       "<div class=\"bar-track\" style=\"margin:8px 0 4px;\"><div class=\"bar-fill\" style=\"width:" + (r.state === "pendente" ? 0 : r.u.pct) + "%\"></div></div>" +
       "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + (r.state === "pendente" ? 0 : r.u.used) + "/" + r.u.total + " feitas · <strong>faltam " + r.u.remaining + "</strong>" + (r.weekly ? " · " + r.weekly + "×/semana" : "") + "</div>" +
@@ -2317,13 +2325,6 @@ function renderProStudioMain(){
   });
   html += "</div>";
   html += studioContactHtml(students, today);
-  // alunos ainda sem pacote: sem isto, na app de Gestão não havia como abrir a ficha deles para lhes criar o primeiro pacote
-  var noPack = students.filter(function(st){ return !packsOf(st.id).length && !usablePacksOf(st.id).length; });
-  if (noPack.length){
-    html += "<div class=\"card\" id=\"studioNoPack\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Alunos sem pacote (" + noPack.length + ")</div>" +
-      noPack.map(function(st){ return "<div class=\"studio-row\" data-sname=\"" + escapeHtml(exLibFold(st.name)) + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button><span class=\"muted-p\" style=\"white-space:nowrap;\">Criar pacote →</span></div></div>"; }).join("") + "</div>";
-  }
-
   // agenda do dia (horários semanais)
   if (studio.slotsAvailable){
     var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
@@ -2343,7 +2344,7 @@ function renderProStudioMain(){
 
   // registo rápido
   var withPack = students.filter(function(st){ return pickPackForSession(st.id, studioView.date); });
-  html += "<div class=\"card\" id=\"quickSessions\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">" + (studio.slotsAvailable ? "Sessão fora do horário" : "Registar sessões") + "</div>" +
+  html += "<details class=\"card\" id=\"quickSessions\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">" + (studio.slotsAvailable ? "Registar sessão fora do horário" : "Registar sessões") + "</summary><div style=\"margin-top:8px;\"></div>" +
     (studio.slotsAvailable ? "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Para uma sessão extra ou mudada de dia (a data é a escolhida na agenda).</p>" : "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>");
   if (!withPack.length) html += "<p class=\"muted-p\">Nenhum aluno com pacote a decorrer neste dia. Cria pacotes na ficha do aluno (separador Pacotes).</p>";
   withPack.forEach(function(st){
@@ -2354,7 +2355,7 @@ function renderProStudioMain(){
       (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
         : Object.keys(SESSION_STATUS).filter(function(key){ return key !== "agendada"; }).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
   });
-  html += "</div>";
+  html += "</details>";
 
   var stHadFocus = document.activeElement && document.activeElement.id === "stSearch", stCaret = stHadFocus ? document.activeElement.selectionStart : null;
   main.innerHTML = html;
@@ -2373,6 +2374,7 @@ function renderProStudioMain(){
     done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
   }); });
   wireCalendarCard(main, redraw);
+  var allBtn = main.querySelector("#stShowAll"); if (allBtn) allBtn.addEventListener("click", function(){ studioView.showAll = !studioView.showAll; applyStudioFilter(); });
   var fixBtn = main.querySelector("#fixPacks");
   if (fixBtn) fixBtn.addEventListener("click", function(){
     fixBtn.disabled = true;

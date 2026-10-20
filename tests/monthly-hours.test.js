@@ -54,6 +54,7 @@ function fixtureRow(id, name, active){
   // ficha: editar
   // na Gestão a ficha abre-se a partir do Estúdio e mostra só os Pacotes (sem separadores)
   await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#studioKpis");
+  await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   await pg.locator('[data-open-student="s3"]').first().click();
   await pg.waitForSelector("#stuHours");
   check.check("8. A ficha mostra o campo das horas mensais (recarregar volta aos dados simulados)", (await pg.inputValue("#stuHours")) === "");
