@@ -10931,17 +10931,15 @@ function renderProShell(){
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
     if (APP_MODE === "gestao"){
-      // app da Gestão: Estúdio e Contratos, mais a ligação à app de Acompanhamento
+      // app da Gestão: Estúdio e Contratos (as duas apps são independentes: sem ligações entre elas)
       if (state.proView !== "studio" && state.proView !== "contracts") state.proView = "studio";
       sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="studio" ? " active" : "") + "\" id=\"navStudio\">" + (G.loaded ? G.studioNavLabel() : "Hoje") + "</button>" +
-        "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>" +
-        "<a class=\"pro-nav-item pro-nav-link\" id=\"goAcomp\" href=\"index.html\">Acompanhamento ↗</a>";
+        "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="contracts" ? " active" : "") + "\" id=\"navContracts\">Contratos</button>";
     } else {
       if (state.proView === "studio" || state.proView === "contracts") state.proView = "dashboard";
       sidebar += "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="dashboard" ? " active" : "") + "\" id=\"navDashboard\">Alunos</button>" +
         "<button type=\"button\" class=\"pro-nav-item" + (state.proView==="catalog" ? " active" : "") + "\" id=\"navCatalog\">Catálogo</button>" +
-        "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>" +
-        "<a class=\"pro-nav-item pro-nav-link\" id=\"goGestao\" href=\"gestao.html\">Gestão ↗</a>";
+        "<button type=\"button\" class=\"pro-nav-item\" id=\"navMe\">Eu</button>";
     }
   } else {
     // com um aluno aberto o menu são só as áreas desse aluno; voltar à lista é o botão "← Alunos" do cabeçalho
