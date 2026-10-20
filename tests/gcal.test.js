@@ -97,7 +97,7 @@ check.check("34. Aluno arquivado: eventos novos dele não criam sessões", planC
   var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0025_google_calendar.sql", "utf8");
   check.check("30. A migração 0025: definições só para profissionais, 'calendario' como origem e id do evento único", /create table if not exists studio_settings/.test(mig) && /exists \(select 1 from professionals where user_id = auth\.uid\(\)\)/.test(mig) && /source in \('manual', 'agenda', 'calendario'\)/.test(mig) && /sessions_calendar_unique on sessions\(external_id\) where source = 'calendario'/.test(mig) && !/drop table|delete from|truncate/i.test(mig));
   check.check("31. O pedido de autorização é só de leitura e o token não é guardado", appSource.indexOf('var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"') >= 0 && !/localStorage\.setItem\([^)]*access_token/.test(appSource) && !/calSettings\.token/.test(appSource));
-  check.check("32. Mexer numa sessão do calendário na app desliga-a do calendário", /ses\.source === "calendario" \? \{status: status, source: "manual"\}/.test(appSource));
+  check.check("32. Mexer numa sessão do calendário na app desliga-a do calendário", /ses\.source === "calendario" \|\| ses\.source === "folha"\) patch\.source = "manual"/.test(appSource));
   studio.slots = [{id: "sl1", student_id: "a", weekday: 1, time: "10:00", counts_from: d(90), generated_until: d(60)}];
   studio.loaded = true; studio.available = true; studio.slotsAvailable = true; calSettings.clientId = "123.apps.googleusercontent.com"; calSettings.useAsSource = true;
   await studioAutoSessions();

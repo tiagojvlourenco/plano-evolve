@@ -102,7 +102,7 @@ function fixtureRow(id, name){
   await pg.waitForFunction(function(){ var sl = window.__fake.tables.session_slots[0]; return sl && sl.generated_until; });
   check.check("9c. O horário fica marcado como contado até ontem, para não repetir", !!(await pg.evaluate(function(){ return window.__fake.tables.session_slots[0].generated_until; })));
   await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
-  check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8) e a agenda", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 1);
+  check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8), sem o cartão da agenda do dia", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 0);
   check.check("9e. A sessão contada pelo horário não se duplica ao reabrir o Estúdio", (await pg.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 1);
   // importar pacotes a decorrer (as importações vivem nos Contratos)
   await pg.click("#navContracts"); await pg.waitForSelector("#studioImport"); await pg.click("#studioImport summary");
