@@ -8412,6 +8412,24 @@ function logWorkout(s, data){
 }
 // Profissional a registar um treino (pré-visualização / o próprio profissional que treina): nunca envia a lista da sua cópia —
 // lê a lista atual do servidor, acrescenta esta sessão e grava (assim não apaga sessões que o aluno tenha registado entretanto)
+// o profissional apaga sessões registadas (e, com elas, a progressão de carga, que sai dos registos)
+function sameWorkoutLog(raw, log){
+  if (!raw || !log) return false;
+  if (raw.id) return raw.id === log.id;
+  return raw.date === log.date && (raw.dayId || null) === (log.dayId || null) && String(raw.notes || "").slice(0, 500) === String(log.notes || "");
+}
+function deleteWorkoutLogs(s, which){   // which: uma sessão ou "all"
+  var keep = function(l){ return which !== "all" && !(which && (l === which || sameWorkoutLog(l, which))); };
+  s.workoutLogs = (s.workoutLogs || []).filter(function(l){ return which === "all" ? false : l !== which && l.id !== which.id; });
+  s.workoutLogsRaw = (Array.isArray(s.workoutLogsRaw) ? s.workoutLogsRaw : []).filter(function(l){ return which === "all" ? false : !sameWorkoutLog(l, which); });
+  return keep && true;
+}
+// o profissional nunca grava workout_logs pela gravação normal (não apagar sessões que o aluno registe entretanto): a remoção grava a lista já sem as sessões apagadas
+function saveWorkoutLogsAsPro(s){
+  if (!sbReady) { persistStudent(s); return Promise.resolve(true); }
+  if (!trainingColumnsAvailable) return Promise.resolve(false);
+  return Promise.resolve(sb.from("students").update({workout_logs: workoutLogsForWrite(s)}).eq("id", s.id)).then(function(res){ return !(res && res.error); }, function(){ return false; });
+}
 function undoWorkoutLog(s, log){
   s.workoutLogs = (s.workoutLogs || []).filter(function(l){ return l !== log; });
   if (Array.isArray(s.workoutLogsRaw)) s.workoutLogsRaw = s.workoutLogsRaw.filter(function(l){ return l !== log; });
@@ -9554,9 +9572,10 @@ function tplProTreino(s){
       html += `<div class="history-row" style="align-items:flex-start;"><div><div class="hlabel">${escapeHtml(fmtDateFullPt(l.date))} · ${escapeHtml(l.dayName || "Treino")}</div>` +
         (l.notes ? `<div class="muted-p">${escapeHtml(l.notes)}</div>` : "") +
         `<div class="muted-p" style="font-size:0.74rem;">${(l.entries || []).map(function(e){ var st = workoutEntryStats(e); return escapeHtml(e.name) + " " + escapeHtml(fmtLoadSet(st.topSet)); }).join(" · ")}</div></div>` +
-        `<div class="hval">${Number(l.rpe) > 0 ? "RPE " + Number(l.rpe) : "—"}</div></div>`;
+        `<div class="hval">${Number(l.rpe) > 0 ? "RPE " + Number(l.rpe) : "—"}<br><button type="button" class="assess-del" data-del-log="${escapeHtml(l.id)}" aria-label="Apagar esta sessão" title="Apagar esta sessão">✕</button></div></div>`;
     });
   }
+  if (logs.length) html += `<button type="button" class="btn btn-sm" id="delAllLogs" style="margin-top:14px; border-color:var(--critical); color:var(--critical);">Apagar todas as sessões e a progressão de carga</button>`;
   return html;
 }
 
@@ -9625,6 +9644,20 @@ function wireProTreino(s, el){
       removeTrainingDay(s, btn.getAttribute("data-del-day"));
       persistStudent(s); renderProTabContent(s);
     });
+  });
+  el.querySelectorAll("[data-del-log]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var log = (s.workoutLogs || []).filter(function(l){ return l.id === btn.getAttribute("data-del-log"); })[0];
+      if (!log || !window.confirm("Apagar esta sessão (" + fmtDateFullPt(log.date) + ")? A progressão de carga é recalculada sem ela.")) return;
+      deleteWorkoutLogs(s, log); renderProTabContent(s);
+      saveWorkoutLogsAsPro(s).then(function(ok){ if (!ok) showToast("⚠ Não foi possível guardar a remoção — verifica a ligação"); });
+    });
+  });
+  var delAll = el.querySelector("#delAllLogs");
+  if (delAll) delAll.addEventListener("click", function(){
+    if (!window.confirm("Apagar TODAS as sessões registadas e a progressão de carga deste aluno? Não dá para desfazer.")) return;
+    deleteWorkoutLogs(s, "all"); renderProTabContent(s);
+    saveWorkoutLogsAsPro(s).then(function(ok){ showToast(ok ? "✓ Sessões e progressão apagadas" : "⚠ Não foi possível guardar a remoção — verifica a ligação"); });
   });
   var sel = el.querySelector("#exChartSel");
   if (sel) sel.addEventListener("change", function(){
