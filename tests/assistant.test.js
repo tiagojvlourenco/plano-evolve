@@ -4,6 +4,7 @@ const path = require("path");
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
+HELP_REQUESTS_ENABLED = true; // estes testes cobrem os pedidos de ajuda (a app já não os usa, mas o código mantém-se atrás desta chave)
 var check = require("./check")();
 
 function freshStudent(overrides){

@@ -2,6 +2,7 @@
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
+HELP_REQUESTS_ENABLED = true; // estes testes cobrem os pedidos de ajuda (a app já não os usa, mas o código mantém-se atrás desta chave)
 WEEKLY_CHECKIN_ENABLED = true; // estes testes cobrem os indicadores de check-in (a app já não pede check-ins semanais, mas os dados antigos mantêm-se)
 var check = require("./check")();
 var fs = require("fs");
@@ -104,7 +105,7 @@ check.check("20. A lista mostra no máximo 8 e diz quantos mais há", qm.shown.l
 })();
 
 // ---------- interface e base de dados ----------
-check.check("37. O painel está no dashboard, antes da lista de alunos", /tplContactQueue\(activeStudents\) \+ tplOnboardingCard\(activeStudents\) \+ tplStudioPulse\(activeStudents\)[^;]*;[\s\S]{0,400}if \(state\.dashboardListMode\)/.test(appSource));
+check.check("37. O painel está no dashboard, antes da lista de alunos", /\(HELP_REQUESTS_ENABLED \? tplContactQueue\(activeStudents\) : ""\) \+ tplOnboardingCard\(activeStudents\) \+ tplStudioPulse\(activeStudents\)[^;]*;[\s\S]{0,400}if \(state\.dashboardListMode\)/.test(appSource));
 check.check("38. O cartão tem botão Contactar com o motivo principal", /data-contact="/.test(tplContactQueue([gone])) && /data-reason="sem-registos"/.test(tplContactQueue([gone])));
 check.check("39. Sem ninguém a contactar diz que está tudo bem", /Ninguém precisa de contacto hoje/.test(tplContactQueue([ok])));
 check.check("40. O convite pede o telefone (opcional) e a ficha tem o campo Contacto", /id=\\"obPhone\\"/.test(appSource) && /saveContactPhone/.test(appSource));
