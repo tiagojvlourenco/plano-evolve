@@ -94,6 +94,24 @@ function fixtureRow(id, name){
   await pg.click('[data-ct-tab="financeiro"]'); await pg.waitForSelector("#ctMonth");
   var fin = await pg.locator("#proMain").innerText();
   check.check("16. O Financeiro mostra o mês, o recebido, o a receber e os recebimentos", /Recebido em/i.test(fin) && /Previsto em/i.test(fin) && /Esta página é sua/.test(fin) && /451,25 €/.test(fin));
+  // dados pessoais, outro contrato e associar (por último: mexem nos contratos e nos pacotes dos exemplos)
+  await pg.click('[data-ct-tab="contratos"]'); await pg.waitForSelector("#contractList"); await pg.click('[data-open-contract="a"]'); await pg.waitForSelector("[data-edit-person]");
+  await pg.click('[data-edit-person="a"]'); await pg.waitForSelector("#pdGo");
+  await pg.fill("#pdName", "Ana Silva Costa"); await pg.fill("#pdPhone", "912345678"); await pg.fill("#pdBirth", "1990-05-04"); await pg.click("#pdGo");
+  await pg.waitForFunction(function(){ return !document.querySelector("#pdGo"); });
+  await pg.waitForFunction(function(){ var r = (window.__fake.tables.students || window.__fake.rows || []).filter(function(x){ return x.id === "a"; })[0]; return r && r.name === "Ana Silva Costa" && r.phone; }, null, {timeout: 8000});
+  var pd = await pg.evaluate(function(){ var r = (window.__fake.tables.students || window.__fake.rows || []).filter(function(x){ return x.id === "a"; })[0]; return {n: r.name, p: r.phone, b: r.birth_date, i: r.initials}; });
+  check.check("13c. Dados pessoais: guarda nome, telemóvel e data de nascimento", pd.n === "Ana Silva Costa" && pd.p === "912345678" && pd.b === "1990-05-04" && pd.i === "AC");
+  await pg.click("#ctNew"); await pg.waitForSelector("#ncGo");
+  await pg.fill("#ncTotal", "13"); await pg.fill("#ncPrice", "500"); await pg.click("#ncGo");
+  await pg.waitForFunction(function(){ return !document.querySelector("#ncGo"); });
+  var np = await pg.evaluate(function(){ var T = window.__fake.tables; return {packs: T.session_packs.filter(function(p){ return p.student_id === "a"; }).length, pay: T.payments.filter(function(p){ return p.student_id === "a" && p.amount === 500; }).length}; });
+  check.check("13d. Criar outro contrato cria um pacote novo e a cobrança por pagar", np.packs === 2 && np.pay === 1);
+  await pg.click("#ctAssoc"); await pg.waitForSelector("#acGo");
+  await pg.selectOption("#acTarget", "c"); await pg.click("#acGo");
+  await pg.waitForFunction(function(){ return !document.querySelector("#acGo"); });
+  var as = await pg.evaluate(function(){ var T = window.__fake.tables, v = T.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value, pc = T.session_packs.filter(function(p){ return p.id === "pc"; })[0]; return {a: v.a.formato, c: v.c.formato, sh: pc.shared_with}; });
+  check.check("13e. Associar a um contrato existente: partilhado nos dois e o pacote passa a ser partilhado", as.a === "partilhado" && as.c === "partilhado" && Array.isArray(as.sh) && as.sh.indexOf("a") >= 0);
   // Eu (app de Acompanhamento)
   await pgA.click("#navMe"); await pgA.waitForSelector("[data-me]");
   await pgA.locator('[data-me="b"]').click();
