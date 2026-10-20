@@ -6450,7 +6450,7 @@ function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
 function initialsOf(name){ var parts=name.trim().split(/\s+/); return ((parts[0]||"")[0]||"") .toUpperCase()+ ((parts[parts.length-1]||"")[0]||"").toUpperCase(); }
 
 /* ===================== STATE ===================== */
-var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"leitura", proView:"dashboard", showDemoStudents:false, dashboardListMode:"active", planoSection:"alimentacao", ciOpen:false, pendingHelp:{} };
+var state = { workoutDayId:null, mode:"aluno", alunoStudentId:"maria", alunoTab:"hoje", proSelectedId:null, proTab:"perfil", proView:"dashboard", showDemoStudents:false, dashboardListMode:"active", planoSection:"alimentacao", ciOpen:false, pendingHelp:{} };
 var authRole = null; // 'professional' | 'student' | null
 var currentAuthUserId = null;
 
@@ -10971,8 +10971,9 @@ function renderProShell(){
   // qualquer aluno selecionado tem sempre prioridade sobre os dois.
   // com a ficha aberta, cada app mostra só o seu separador (Gestão: Pacotes; Acompanhamento: tudo menos Pacotes)
   if (selected && APP_MODE === "gestao") state.proTab = "sessoes";
-  else if (selected && state.proTab === "sessoes") state.proTab = "leitura";
-  if (selected && noNutritionOf(selected) && state.proTab === "plano") state.proTab = "leitura";
+  else if (selected && state.proTab === "sessoes") state.proTab = "perfil";
+  if (selected && (state.proTab === "leitura" || state.proTab === "checkins" || state.proTab === "historico")) state.proTab = "perfil";   // separadores retirados
+  if (selected && noNutritionOf(selected) && state.proTab === "plano") state.proTab = "perfil";
   var sidebar = "<div class=\"pro-sidebar" + (selected ? " pro-sidebar-student-open" : "") + "\">";
   if (!selected){
     if (APP_MODE === "gestao"){
@@ -11114,7 +11115,7 @@ function studentListRowsHtml(allRows){
 }
 function wireStudentList(root){
   root.querySelectorAll("[data-open]").forEach(function(el){
-    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+    el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="perfil"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   });
   root.querySelectorAll("[data-active-toggle]").forEach(function(input){
     input.addEventListener("click", function(e){ e.stopPropagation(); });
@@ -11200,7 +11201,7 @@ function renderProDashboardMain(){
     });
   });
   main.querySelectorAll("[data-open-student]").forEach(function(btn){
-    btn.addEventListener("click", function(){ state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+    btn.addEventListener("click", function(){ state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "perfil"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
   });
   main.querySelectorAll("[data-stat-key]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -11477,7 +11478,7 @@ function proStat(v, l, key){
 var PRO_NAV = APP_MODE === "gestao" ? [
   {id: "pacotes", label: "Pacotes", tabs: ["sessoes"]}
 ] : [
-  {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"] : ["leitura", "checkins", "perfil", "notas", "historico"]},
+  {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["pedidos", "perfil", "notas"] : ["perfil", "notas"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
@@ -14162,7 +14163,7 @@ function wireProTab(s){
   var nnToggle = el.querySelector("#noNutritionToggle");
   if (nnToggle) nnToggle.addEventListener("change", function(){
     s.noNutrition = nnToggle.checked;
-    if (s.noNutrition && state.proTab === "plano") state.proTab = "leitura";
+    if (s.noNutrition && state.proTab === "plano") state.proTab = "perfil";
     persistStudent(s);
     showToast(s.noNutrition ? "✓ Sem nutrição para este aluno" : "✓ Nutrição ativa para este aluno");
     renderProShell();
