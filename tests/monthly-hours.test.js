@@ -39,19 +39,21 @@ function fixtureRow(id, name, active){
   pg.on("pageerror", function(e){ errors.push(e.message); }); pg.on("dialog", function(d){ d.accept(); });
   // o cabeçalho, a importação e a ficha com os Pacotes vivem na Gestão (gestao.html), que abre direta no Estúdio
   await pg.goto(srv.url + "gestao.html");
-  await pg.waitForSelector("#studioImportHours");
+  await pg.waitForSelector("#studioKpis");
   check.check("5. Sem horas, o cabeçalho mostra «—»", /—/.test(await pg.locator("#studioKpis").innerText()) && /Horas mensais ativas/i.test(await pg.locator("#studioKpis").innerText()));
+  await pg.click("#navContracts"); await pg.waitForSelector("#studioImportHours");   // as importações vivem nos Contratos
   await pg.evaluate(function(){ document.getElementById("studioImportHours").open = true; });
   await pg.fill("#hrsText", "PT 60 - Ana Silva; 8,66\nPT Duo 60 - Bruno Costa + Carla Dias; 4\nNinguém Existe; 3");
   await pg.click("#hrsGo");
-  await pg.waitForFunction(function(){ return /alunos atualizados/.test(document.getElementById("hrsOut").textContent) || /12,66/.test(document.getElementById("studioKpis").textContent); });
+  await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r && r.value.s1 === 8.66; });
+  await pg.click("#navStudio"); await pg.waitForSelector("#studioKpis");
   var kp = await pg.locator("#studioKpis").innerText();
   check.check("6. O cabeçalho passa a mostrar a soma (12,66 h)", /12,66 h/.test(kp));
   var saved = await pg.evaluate(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r ? r.value : null; });
   check.check("7. Grava em studio_settings (chave monthly_hours) por id de aluno", saved && saved.s1 === 8.66 && saved.s2 === 2 && saved.s3 === 2);
   // ficha: editar
   // na Gestão a ficha abre-se a partir do Estúdio e mostra só os Pacotes (sem separadores)
-  await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#studioImportHours");
+  await pg.goto(srv.url + "gestao.html"); await pg.waitForSelector("#studioKpis");
   await pg.locator('[data-open-student="s3"]').first().click();
   await pg.waitForSelector("#stuHours");
   check.check("8. A ficha mostra o campo das horas mensais (recarregar volta aos dados simulados)", (await pg.inputValue("#stuHours")) === "");

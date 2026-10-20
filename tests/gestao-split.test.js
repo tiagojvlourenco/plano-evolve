@@ -104,7 +104,7 @@ function fixtureRow(id, name){
   await G2.pg.waitForSelector("#gcalCard");
   var sideG = await G2.pg.locator(".pro-sidebar").innerText();
   check.check("13. Na Gestão: abre no Estúdio, menu Estúdio e Contratos com a ligação «Acompanhamento» para index.html; sem Alunos/Catálogo/Eu nem interruptor Aluno/Profissional; gestao.js pedido uma vez",
-    /Est[uú]dio/i.test(sideG) && /Contratos/i.test(sideG) && (await G2.pg.locator("#goAcomp").getAttribute("href")) === "index.html" &&
+    /Hoje/i.test(sideG) && /Contratos/i.test(sideG) && (await G2.pg.locator("#goAcomp").getAttribute("href")) === "index.html" &&
     (await G2.pg.locator("#navDashboard, #navCatalog, #navMe, .student-row").count()) === 0 && !(await G2.pg.locator("#modeSwitch").isVisible()) && G2.log.length === 1);
   await G2.pg.click("#navContracts"); await G2.pg.waitForSelector("#contractTotals");
   await G2.pg.click("#navStudio"); await G2.pg.waitForSelector("#gcalCard");
