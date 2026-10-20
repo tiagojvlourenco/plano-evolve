@@ -1908,9 +1908,14 @@ function contractDetailHtml(key, today){
     (x.u ? "<p class=\"muted-p\" style=\"margin-top:10px;\">Sessões: <strong>" + escapeHtml(x.packLabel) + "</strong> · " + x.u.used + " de " + x.u.total + " gastas" + "</p>" : "") +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctEdit\" style=\"min-height:44px;\">Editar condições</button>" +
     (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" data-renew-pack=\"" + escapeHtml(x.cur.id) + "\" style=\"min-height:44px;\">Renovar</button>" : "") + "</div></div>";
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Participantes</div>" + x.members.map(function(m){
-    return "<div class=\"history-row\" style=\"align-items:center;\"><div><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(m.id) + "\">" + escapeHtml(m.name) + "</button> <span class=\"muted-p\">" + (isStudentActive(m) ? "ativo" : "inativo") + "</span></div></div>"; }).join("") +
-    "<p class=\"muted-p\" style=\"margin-top:8px;\">" + (x.duo ? "Contrato duo: treinam os dois ao mesmo tempo e conta uma vez nos totais." : "Contrato individual. Para duplas que treinam juntas, «Editar condições» → formato duo (nos dois alunos). Para duas pessoas a gastar o mesmo pack em sessões individuais, usa «Partilhar» no pacote.") + "</p></div>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Dados pessoais</div>" + x.members.map(function(m){
+    return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0; flex:1 1 200px;\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(m.id) + "\">" + escapeHtml(m.name) + "</button> <span class=\"muted-p\">" + (isStudentActive(m) ? "ativo" : "inativo") + "</span>" +
+      (m.phone ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + escapeHtml(m.phone) + "</div>" : "") + "</div><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-edit-person=\"" + escapeHtml(m.id) + "\">Abrir e editar</button></div>"; }).join("") +
+    "<p class=\"muted-p\" style=\"margin-top:8px;\">" + (x.duo ? "Contrato duo: treinam os dois ao mesmo tempo e conta uma vez nos totais." : "Contrato individual. Para duplas que treinam juntas, «Editar contrato» → formato duo (nos dois alunos). Para duas pessoas a gastar o mesmo pack em sessões individuais, usa «Partilhar» no pacote.") + "</p></div>";
+  html += "<div class=\"card\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;\"><div class=\"eyebrow\">Contratos desta pessoa</div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctNew\">Criar outro contrato</button></div>" +
+    "<p class=\"muted-p\">" + escapeHtml(x.name) + " " + (x.duo ? "participa neste contrato (duo)." : "só participa neste contrato.") + "</p>" +
+    "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px; margin-top:8px;\" id=\"ctAssoc\">Associar a um contrato existente</button></div>";
   var ids = x.ids, nums = sessionNumberMap();
   var sess = studio.sessions.filter(function(s){ return ids.indexOf(s.student_id) >= 0; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
   var next = sess.filter(function(s){ return s.status === "agendada" && s.date >= today; }).slice(0, 6), last = sess.filter(function(s){ return !(s.status === "agendada" && s.date >= today); }).slice(-6).reverse();
@@ -1965,6 +1970,9 @@ function wireContractsMain(main){
     if (x) openContractEditModal(x, redraw);
   }); });
   main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
+  main.querySelectorAll("[data-edit-person]").forEach(function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var st = findStudent(b.getAttribute("data-edit-person")); if (st) openPersonalDataModal(st, redraw); }); });
+  var ctNew = main.querySelector("#ctNew"); if (ctNew) ctNew.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openNewContractModal(x, redraw); });
+  var ctAssoc = main.querySelector("#ctAssoc"); if (ctAssoc) ctAssoc.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openAssociateContractModal(x, redraw); });
   var back = main.querySelector("#ctBack"); if (back) back.addEventListener("click", function(){ contractsView.open = null; redraw(); });
   var edit = main.querySelector("#ctEdit"); if (edit) edit.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractEditModal(x, redraw); });
   main.querySelectorAll("[data-unpay]").forEach(function(b){ b.addEventListener("click", function(){ b.disabled = true; studioUpdate("payments", b.getAttribute("data-unpay"), {paid_on: null, method: null}).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); }); }); });
@@ -1979,6 +1987,80 @@ function wireContractsMain(main){
       var msg = "✓ " + rep.saved + (rep.saved === 1 ? " contrato atualizado" : " contratos atualizados");
       if (rep.errors.length) msg += " · ⚠ " + rep.errors.slice(0, 6).join(" ") + (rep.errors.length > 6 ? " (+" + (rep.errors.length - 6) + ")" : "");
       out.textContent = msg; imp.disabled = false; if (rep.saved) redraw();
+    });
+  });
+}
+// dados pessoais do aluno (nome, telemóvel, data de nascimento): o nome antigo fica como alias para a agenda continuar a reconhecer as aulas
+function openPersonalDataModal(st, onDone){
+  var sheet = openModal("<div class=\"mtitle\">Dados pessoais</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(st.name) + "</p>" +
+    "<div class=\"checkin-field\"><label for=\"pdName\">Nome</label><input type=\"text\" id=\"pdName\" maxlength=\"80\" value=\"" + escapeHtml(st.name) + "\" autocomplete=\"off\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"pdPhone\">Telemóvel</label><input type=\"tel\" id=\"pdPhone\" value=\"" + escapeHtml(st.phone || "") + "\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"pdBirth\">Data de nascimento</label><input type=\"date\" id=\"pdBirth\" value=\"" + escapeHtml(st.birthDate || "") + "\"></div>" +
+    "<p class=\"muted-p\" style=\"font-size:0.76rem;\">Se mudares o nome, atualiza também o evento no Google Agenda (a app continua a reconhecer os títulos com o nome antigo).</p>" +
+    "<p class=\"muted-p\" id=\"pdErr\" style=\"color:var(--critical); display:none;\"></p><button type=\"button\" class=\"btn primary\" id=\"pdGo\" style=\"width:100%; margin-top:10px;\">Guardar</button>");
+  sheet.querySelector("#pdGo").addEventListener("click", function(){
+    var err = sheet.querySelector("#pdErr"), fail = function(t){ err.textContent = t; err.style.display = "block"; };
+    var name = sheet.querySelector("#pdName").value.replace(/\s+/g, " ").trim(), phone = sheet.querySelector("#pdPhone").value.trim(), birth = sheet.querySelector("#pdBirth").value;
+    if (!name) return fail("Indica o nome.");
+    if (phone && !normalizePhone(phone).ok) return fail("Telemóvel inválido (ex.: 912 345 678 ou +351 912 345 678).");
+    if (birth && !isIsoDate(birth)) return fail("Data de nascimento inválida.");
+    var old = st.name, renamed = name !== old;
+    if (renamed && STUDENTS.some(function(o){ return o !== st && (!o.isDemo || state.showDemoStudents) && exLibFold(o.name) === exLibFold(name); })) return fail("Já existe outro aluno com este nome.");
+    st.name = name; st.initials = initialsOf(name); st.phone = phone ? phone.slice(0, 30) : null; st.birthDate = birth || null;
+    if (renamed){ [old, "PT 60 - " + old, "PT 45 - " + old].forEach(function(t){ calSettings.aliases[calTitleKey(t)] = st.id; }); }
+    persistStudent(st);
+    Promise.resolve(renamed ? calSaveSettings() : null).then(function(){ closeModal(); showToast("✓ Dados guardados"); if (onDone) onDone(); });
+  });
+}
+// outro contrato para a mesma pessoa: um pacote novo com as suas próprias condições (e a cobrança por pagar)
+function openNewContractModal(x, onDone){
+  var owner = x.members[0], cur = x.cur, today = localTodayISO();
+  var sheet = openModal("<div class=\"mtitle\">Criar outro contrato</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(owner.name) + " — cria um pacote novo (as aulas já dadas depois do início passam para ele).</p>" +
+    "<div class=\"checkin-field\"><label for=\"ncTotal\">Aulas do pacote</label><input type=\"number\" id=\"ncTotal\" min=\"1\" max=\"500\" inputmode=\"numeric\" value=\"" + (cur ? Number(cur.total) || 26 : 26) + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ncPrice\">Valor do pack (€, c/ IVA)</label><input type=\"text\" id=\"ncPrice\" inputmode=\"decimal\" value=\"" + (x.price != null ? String(x.price).replace(".", ",") : "") + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ncStart\">Início</label><input type=\"date\" id=\"ncStart\" value=\"" + today + "\"></div>" +
+    "<div class=\"checkin-field\"><label for=\"ncMonths\">Validade em meses (vazio = sem validade)</label><input type=\"number\" id=\"ncMonths\" min=\"0\" max=\"36\" inputmode=\"numeric\"></div>" +
+    "<p class=\"muted-p\" id=\"ncErr\" style=\"color:var(--critical); display:none;\"></p><button type=\"button\" class=\"btn primary\" id=\"ncGo\" style=\"width:100%; margin-top:10px;\">Criar contrato</button>");
+  sheet.querySelector("#ncGo").addEventListener("click", function(){
+    var err = sheet.querySelector("#ncErr"), fail = function(t){ err.textContent = t; err.style.display = "block"; }, btn = sheet.querySelector("#ncGo");
+    var total = parseInt(sheet.querySelector("#ncTotal").value, 10), pv = sheet.querySelector("#ncPrice").value.trim(), price = pv ? parseImportNumber(pv) : null, start = sheet.querySelector("#ncStart").value, months = parseInt(sheet.querySelector("#ncMonths").value || "0", 10) || 0;
+    if (!(total >= 1 && total <= 500)) return fail("Aulas do pacote: entre 1 e 500.");
+    if (pv && (price == null || price < 0)) return fail("Valor inválido (ex.: 940,50).");
+    if (!isIsoDate(start)) return fail("Indica a data de início.");
+    if (months < 0 || months > 36) return fail("Validade: entre 0 e 36 meses.");
+    btn.disabled = true;
+    var row = {student_id: owner.id, name: "Pacote " + total + " aulas", total: total, price: price, starts_on: start, expires_on: months ? addMonthsISO(start, months) : null, missed_consumes: true, late_cancel_consumes: true};
+    if (studio.slotsAvailable) row.used_before = 0;
+    studioInsert("packs", row).then(function(r){
+      if (r.error){ btn.disabled = false; return fail(r.error); }
+      var charge = price > 0 ? studioInsert("payments", {student_id: owner.id, pack_id: r.data.id, amount: price, due_on: today}) : Promise.resolve({});
+      return Promise.all([charge, attachExtrasToPack(r.data)]).then(function(){ closeModal(); showToast("✓ Contrato criado" + (price > 0 ? " · marca «Pago» quando receberes" : "")); if (onDone) onDone(); });
+    });
+  });
+}
+// associar esta pessoa a outro contrato: passam a gastar o mesmo pack (duo = treinam juntos; partilhado = sessões individuais)
+function openAssociateContractModal(x, onDone){
+  var others = contractUnits().filter(function(u){ return u.key !== x.key && u.cur; });
+  if (!others.length){ showToast("Não há outros contratos com pacote para associar."); return; }
+  var sheet = openModal("<div class=\"mtitle\">Associar a um contrato existente</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(x.name) + " passa a gastar o pack do contrato escolhido.</p>" +
+    "<div class=\"checkin-field\"><label for=\"acTarget\">Contrato</label><select id=\"acTarget\" class=\"mini-select\" style=\"width:100%;\">" + others.map(function(u){ return "<option value=\"" + escapeHtml(u.key) + "\">" + escapeHtml(u.name) + "</option>"; }).join("") + "</select></div>" +
+    "<div class=\"checkin-field\"><label for=\"acFmt\">Formato</label><select id=\"acFmt\" class=\"mini-select\" style=\"width:100%;\"><option value=\"partilhado\">Partilhado (várias pessoas, sessões individuais)</option><option value=\"duo\">Duo (treinam juntos)</option></select></div>" +
+    "<p class=\"muted-p\" id=\"acErr\" style=\"color:var(--critical); display:none;\"></p><button type=\"button\" class=\"btn primary\" id=\"acGo\" style=\"width:100%; margin-top:10px;\">Associar</button>");
+  sheet.querySelector("#acGo").addEventListener("click", function(){
+    var err = sheet.querySelector("#acErr"), btn = sheet.querySelector("#acGo");
+    var target = others.filter(function(u){ return u.key === sheet.querySelector("#acTarget").value; })[0], fmt = sheet.querySelector("#acFmt").value;
+    if (!target) return;
+    btn.disabled = true;
+    var prevMap = JSON.parse(JSON.stringify(contractMeta.map));
+    var all = target.ids.concat(x.ids.filter(function(id){ return target.ids.indexOf(id) < 0; }));
+    all.forEach(function(id){ contractMeta.map[id] = Object.assign({}, contractMeta.map[id] || {}, {formato: fmt}); });
+    var shareIds = sharedIdsOf(target.cur).concat(x.ids).filter(function(id, i, a){ return id !== target.cur.student_id && a.indexOf(id) === i; });
+    studioSetPackSharing(target.cur, shareIds, true).then(function(r){
+      if (r && r.error){ contractMeta.map = prevMap; btn.disabled = false; err.textContent = r.error; err.style.display = "block"; return; }
+      return saveContractMeta("contracts").then(function(sv){
+        if (sv.error){ contractMeta.map = prevMap; btn.disabled = false; err.textContent = sv.error; err.style.display = "block"; return; }
+        closeModal(); showToast("✓ Contrato associado"); contractsView.open = null; if (onDone) onDone();
+      });
     });
   });
 }
