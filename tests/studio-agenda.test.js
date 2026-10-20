@@ -117,6 +117,6 @@ STUDENTS = [mkStudent("a", "Ana Silva"), mkStudent("b", "Rui Costa")];
   var tab2 = tplProSessoes(mkStudent("a", "Ana Silva"));
   check.check("34. Sem a migração 0024 a ficha continua a funcionar, sem horário nem aulas já dadas", !/Horário semanal/.test(tab2) && !/id="pkUsed"/.test(tab2) && /id="pkAdd"/.test(tab2));
   check.check("35. Sem a migração 0024 não se contam sessões nem se rebenta", (await studioAutoSessions()) === 0);
-  check.check("36. O resumo, a agenda e a importação estão ligados ao ecrã Estúdio", /id=\\"studioSummary\\"/.test(appSource) && /id=\\"studioAgenda\\"/.test(appSource) && /id=\\"impGo\\"/.test(appSource) && /studioRefresh\(\)/.test(appSource));
+  check.check("36. O resumo e a importação estão ligados ao ecrã Estúdio", /id=\\"studioSummary\\"/.test(appSource) && /id=\\"impGo\\"/.test(appSource) && /studioRefresh\(\)/.test(appSource));
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", e && e.stack || e); process.exit(1); });

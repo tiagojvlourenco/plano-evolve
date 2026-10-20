@@ -2312,22 +2312,6 @@ function renderProStudioMain(){
       (r.state === "renovar" && !r.spendFrom && Number(r.pack.price) > 0 ? "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\"><button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" data-renew-paid=\"1\" title=\"Cria o pacote novo e abre o registo do pagamento\">Renovar · já pagou</button><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" title=\"Cria o pacote novo e a cobrança por pagar\">Renovar · por pagar</button></div>" : "") + "</div>";
   });
   html += "</div>";
-  // agenda do dia (horários semanais)
-  if (studio.slotsAvailable){
-    var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
-    html += "<div class=\"card\" id=\"studioAgenda\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Agenda — " + escapeHtml(WEEKDAY_NAMES[isoWeekday(studioView.date)]) + ", " + escapeHtml(fmtDateFullPt(studioView.date)) + "</div>" +
-      "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>";
-    var agendaNums = sessionNumberMap();
-    if (!agenda.length) html += "<p class=\"muted-p\">Nenhuma sessão neste dia." + (calUsesCalendar() ? " Sincroniza o Google Agenda para trazer as aulas." : " Define o horário semanal de cada aluno na ficha (separador Pacotes).") + "</p>";
-    agenda.forEach(function(sl){
-      var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
-      var past = studioView.date < today || (studioView.date === today);
-      html += "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(nameOf(sl.student_id))) + "\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 150px;\"><div class=\"hlabel\">" + escapeHtml(sl.time) + " · <button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(sl.student_id) + "\">" + escapeHtml(nameOf(sl.student_id)) + "</button> " + (ses ? sessionNumberPill(agendaNums[ses.id]) : "") + "</div>" +
-        "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (ses ? sessionStatusPill(ses.status) + (ses.source === "agenda" ? " contada pelo horário" : "") : (studioView.date > today ? "agendada" : "ainda por contar")) + "</div></div>" +
-        "<select class=\"mini-select\" data-sched=\"" + escapeHtml(sl.id) + "\" aria-label=\"Alterar resultado\"><option value=\"\">Alterar…</option>" + Object.keys(SESSION_STATUS).map(function(k){ return "<option value=\"" + k + "\">" + SESSION_STATUS[k].label + "</option>"; }).join("") + "</select></div>";
-    });
-    html += "</div>";
-  }
 
 
   var stHadFocus = document.activeElement && document.activeElement.id === "stSearch", stCaret = stHadFocus ? document.activeElement.selectionStart : null;
@@ -2337,15 +2321,6 @@ function renderProStudioMain(){
 
   var redraw = function(){ renderProStudioMain(); };
   wireStudioCommon(main, redraw);
-  main.querySelector("#qsDate") && main.querySelector("#qsDate").addEventListener("change", function(e){ if (isIsoDate(e.target.value)){ studioView.date = e.target.value; redraw(); } });
-  main.querySelectorAll("[data-sched]").forEach(function(sel){ sel.addEventListener("change", function(){
-    var sl = studio.slots.filter(function(x){ return x.id === sel.getAttribute("data-sched"); })[0], status = sel.value;
-    if (!sl || !status) return;
-    sel.disabled = true;
-    var ses = studio.sessions.filter(function(x){ return x.student_id === sl.student_id && x.date === studioView.date && (!x.time || x.time === sl.time); })[0];
-    var done = ses ? studioUpdate("sessions", ses.id, ses.source === "calendario" ? {status: status, source: "manual"} : {status: status}) : (function(){ var pk = pickPackForSession(sl.student_id, studioView.date); return studioInsert("sessions", {student_id: sl.student_id, pack_id: pk ? pk.id : null, date: studioView.date, time: sl.time, status: status}); })();
-    done.then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); updateStudioBadge(); });
-  }); });
   wireCalendarCard(main, redraw);
   var allBtn = main.querySelector("#stShowAll"); if (allBtn) allBtn.addEventListener("click", function(){ studioView.showAll = !studioView.showAll; applyStudioFilter(); });
   var fixBtn = main.querySelector("#fixPacks");
