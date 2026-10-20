@@ -11120,7 +11120,7 @@ function renderProDashboardMain(){
 
   // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
   // com texto na lupa estes cartões escondem-se: a lista (que fica por baixo deles) passa a estar logo debaixo do teclado
-  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + (HELP_REQUESTS_ENABLED ? tplContactQueue(activeStudents) : "") + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents) + "</div>";
+  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + (HELP_REQUESTS_ENABLED ? tplContactQueue(activeStudents) : "") + (ONBOARDING_CARD_ENABLED ? tplOnboardingCard(activeStudents) : "") + tplStudioPulse(activeStudents) + "</div>";
 
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
@@ -13375,6 +13375,7 @@ function tplContactQueue(students){
 var CONTACT_OPEN_KEY = "evolve.contactQueueOpen";
 function contactQueueOpen(){ if (typeof state.contactQueueOpen === "boolean") return state.contactQueueOpen; try { state.contactQueueOpen = localStorage.getItem(CONTACT_OPEN_KEY) === "1"; } catch (e) { state.contactQueueOpen = false; } return state.contactQueueOpen; }
 function setContactQueueOpen(v){ state.contactQueueOpen = !!v; try { localStorage.setItem(CONTACT_OPEN_KEY, v ? "1" : "0"); } catch (e) {} }
+var ONBOARDING_CARD_ENABLED = false; // a lista «Alunos novos» foi retirada do painel
 function tplOnboardingCard(students){
   var rows = students.filter(isStudentActive).map(function(s){ return {s: s, ob: onboardingOf(s)}; }).filter(function(r){ return r.ob.inOnboarding; })
     .sort(function(a, b){ return (b.ob.stalled - a.ob.stalled) || (a.ob.done / a.ob.total) - (b.ob.done / b.ob.total); });
