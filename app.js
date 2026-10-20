@@ -1815,7 +1815,10 @@ function logAdaptation(s, meal, type, details){
    Continuam a alimentar adaptationHistory (tipo "pedido_profissional"), para que
    os indicadores da Leitura profissional e o resumo do Histórico não percam
    nada — só o detalhe rico (texto livre, estado, nota) é que vive à parte. */
+var HELP_REQUESTS_ENABLED = false; // os pedidos de ajuda foram retirados da app (o profissional fala com o aluno nos treinos)
+var HELP_OFF_MSG = "Fala com o teu profissional no próximo treino.";
 function createHelpRequest(s, meal, situation, note){
+  if (!HELP_REQUESTS_ENABLED) return Promise.resolve(false);
   logAdaptation(s, meal, "pedido_profissional", {situation: situation, note: note || ""});
   persistStudent(s);
   if (!sbReady) return Promise.resolve({success:false, offline:true});
@@ -1867,8 +1870,9 @@ function loadPendingHelpCounts(){
     return map;
   }, function(err){ console.error("help_requests: falhou a contagem de pendentes", err); return null; });
 }
-function pendingHelpFor(studentId){ return (state.pendingHelp && state.pendingHelp[studentId]) || 0; }
+function pendingHelpFor(studentId){ if (!HELP_REQUESTS_ENABLED) return 0; return (state.pendingHelp && state.pendingHelp[studentId]) || 0; }
 function refreshPendingHelp(){
+  if (!HELP_REQUESTS_ENABLED) return Promise.resolve();
   return loadPendingHelpCounts().then(function(map){
     if (map && JSON.stringify(map) !== JSON.stringify(state.pendingHelp || {})){ state.pendingHelp = map; updatePendingBadges(); }
   });
@@ -1985,10 +1989,11 @@ var DIET_RISK_SAFE_MESSAGE = "Tens restrições registadas. Para garantir uma al
 function renderDietRiskBlocked(sheet, s, meal, situation, note){
   var html = "<div class=\"mtitle\">Restrição registada</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:14px;\">" + escapeHtml(DIET_RISK_SAFE_MESSAGE) + "</p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"askProRisk\" style=\"width:100%;\">Pedir ajuda ao profissional</button>";
+    (HELP_REQUESTS_ENABLED ? "<button type=\"button\" class=\"btn primary\" id=\"askProRisk\" style=\"width:100%;\">Pedir ajuda ao profissional</button>" : "<p class=\"muted-p\">" + HELP_OFF_MSG + "</p>");
   sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
   sheet.querySelector(".mclose button").addEventListener("click", closeModal);
-  sheet.querySelector("#askProRisk").addEventListener("click", function(){
+  var askRisk = sheet.querySelector("#askProRisk");
+  if (askRisk) askRisk.addEventListener("click", function(){
     createHelpRequest(s, meal, situation, note || "Aluno tem alergias/restrições registadas — pedido de alternativa segura.");
     showToast("O teu profissional vai ver este pedido");
     closeModal();
@@ -6549,7 +6554,7 @@ function openSubstitution(f, onConfirm, s, meal, opts){
       "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Alternativas equivalentes (mais parecidas primeiro):</p>";
     if (!options.length){
       html += "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Não encontrei uma substituição definida para este alimento.</p>" +
-        "<button type=\"button\" class=\"btn\" id=\"askProfessional\" style=\"width:100%;\">Perguntar ao profissional</button>";
+        (HELP_REQUESTS_ENABLED ? "<button type=\"button\" class=\"btn\" id=\"askProfessional\" style=\"width:100%;\">Perguntar ao profissional</button>" : "<p class=\"muted-p\">" + HELP_OFF_MSG + "</p>");
     } else {
       if (options.length > 8) html += "<input type=\"text\" id=\"subSearch\" placeholder=\"Pesquisar alternativa...\" autocomplete=\"off\" style=\"width:100%; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); color:var(--ink); font-size:0.9rem; margin-bottom:8px;\">";
       html += "<div id=\"subOptionsList\">" + optionsHtml("") + "</div>";
@@ -6810,10 +6815,11 @@ function handleAssistantSituation(s, key){
 
 function openAssistantNoMeal(s, situation){
   var html = "<div class=\"mtitle\">Sem refeições previstas</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Não há mais refeições previstas para hoje. Se precisares mesmo de ajuda, pede ao teu profissional.</p>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"askPro\" style=\"width:100%;\">Pedir ajuda ao profissional</button>";
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Não há mais refeições previstas para hoje. Se precisares mesmo de ajuda, fala com o teu profissional.</p>" +
+    (HELP_REQUESTS_ENABLED ? "<button type=\"button\" class=\"btn primary\" id=\"askPro\" style=\"width:100%;\">Pedir ajuda ao profissional</button>" : "");
   var sheet = openModal(html);
-  sheet.querySelector("#askPro").addEventListener("click", function(){
+  var askPro = sheet.querySelector("#askPro");
+  if (askPro) askPro.addEventListener("click", function(){
     createHelpRequest(s, null, situation, "Sem refeições previstas para hoje.");
     showToast("O teu profissional vai ver este pedido");
     closeModal();
@@ -6853,6 +6859,7 @@ function openAssistantPickFood(s, m, swappable){
 }
 
 function openAssistantAskProfessional(s, meal, situation, prefilledNote){
+  if (!HELP_REQUESTS_ENABLED){ openModal("<div class=\"mtitle\">Precisas de ajuda?</div><p class=\"muted-p\">" + HELP_OFF_MSG + "</p>"); return; }
   var html = "<div class=\"mtitle\">Pedir ajuda ao profissional</div>" +
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + (meal ? "Sobre: " + escapeHtml(meal.name) : "Descreve a tua dúvida.") + "</p>" +
     "<textarea id=\"helpNote\" placeholder=\"Descreve a situação (opcional)\" style=\"width:100%; min-height:80px; border:1px solid var(--line-strong); border-radius:10px; padding:9px 11px; background:var(--bg); font-size:0.88rem; margin-bottom:12px;\">" + escapeHtml(prefilledNote || "") + "</textarea>" +
@@ -11113,7 +11120,7 @@ function renderProDashboardMain(){
 
   // Retenção: quem contactar hoje, alunos novos e pulso do estúdio (só com alunos reais ativos)
   // com texto na lupa estes cartões escondem-se: a lista (que fica por baixo deles) passa a estar logo debaixo do teclado
-  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + tplContactQueue(activeStudents) + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents) + "</div>";
+  html += "<div id=\"dashExtras\"" + (String(state.dashSearch || "").trim() ? " hidden" : "") + ">" + tplPhaseReviews() + (HELP_REQUESTS_ENABLED ? tplContactQueue(activeStudents) : "") + tplOnboardingCard(activeStudents) + tplStudioPulse(activeStudents) + "</div>";
 
   // A lista de alunos está sempre à vista, por ordem de atenção (alertas críticos primeiro, depois quem está há mais tempo sem check-in).
   // Os quatro blocos de contagem filtram a lista: "Alunos ativos" (por omissão), "Check-ins" em atraso, "Alertas" e "Total de alunos"
@@ -11432,7 +11439,7 @@ function proStat(v, l, key){
 var PRO_NAV = APP_MODE === "gestao" ? [
   {id: "pacotes", label: "Pacotes", tabs: ["sessoes"]}
 ] : [
-  {id: "resumo", label: "Resumo", tabs: ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"]},
+  {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["leitura", "pedidos", "checkins", "perfil", "notas", "historico"] : ["leitura", "checkins", "perfil", "notas", "historico"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}

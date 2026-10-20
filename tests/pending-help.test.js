@@ -2,6 +2,7 @@
 require("./setup")();
 var appSource = require("./extract-app")();
 eval(appSource);
+HELP_REQUESTS_ENABLED = true; // estes testes cobrem os pedidos de ajuda (a app já não os usa, mas o código mantém-se atrás desta chave)
 var check = require("./check")();
 
 (async function(){
@@ -25,7 +26,7 @@ var check = require("./check")();
   check.check("5. O menu do aluno com pedidos por tratar mostra o ponto em Resumo e só aí", /has-pending" data-g="resumo"/.test(proStudentNavHtml()) && (proStudentNavHtml().match(/has-pending/g) || []).length === 1);
   state.proSelectedId = "sem-pedidos";
   check.check("6. Sem pedidos não há ponto", proStudentNavHtml().indexOf("has-pending") < 0);
-  check.check("7. O menu do aluno tem 4 entradas e todas as chaves antigas continuam num grupo", (proStudentNavHtml().match(/data-g=/g) || []).length === 4 && PRO_TABS.filter(function(t){ return t[0] !== "sessoes"; }).every(function(t){ return PRO_NAV.some(function(g){ return g.tabs.indexOf(t[0]) >= 0; }); }));
+  check.check("7. O menu do aluno tem 4 entradas e todas as chaves antigas continuam num grupo", (proStudentNavHtml().match(/data-g=/g) || []).length === 4 && PRO_TABS.filter(function(t){ return t[0] !== "sessoes" && t[0] !== "pedidos"; }).every(function(t){ return PRO_NAV.some(function(g){ return g.tabs.indexOf(t[0]) >= 0; }); }));
   state.pendingHelp = {}; state.proSelectedId = null;
 
   // 3. lista de alimentos ordenada em cache

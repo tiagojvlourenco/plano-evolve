@@ -8,6 +8,7 @@ var fs = require("fs");
 var path = require("path");
 var appSource = require("./extract-app")();
 eval(appSource);
+HELP_REQUESTS_ENABLED = true; // estes testes cobrem os pedidos de ajuda (a app já não os usa, mas o código mantém-se atrás desta chave)
 var check = require("./check")();
 
 // Cliente falso: só regista o pedido quando .then() é chamado (tal como o supabase-js).
