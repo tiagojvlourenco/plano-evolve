@@ -63,7 +63,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   var saved = await page.evaluate(function(){ return window.__fake.tables.studio_settings[0]; });
   check.check("3. O ID fica guardado nas definições do estúdio (e nenhum token)", saved && saved.key === "google_calendar" && saved.value.clientId === "123456-abc.apps.googleusercontent.com" && JSON.stringify(saved).indexOf("fake-token") < 0);
 
-  await page.fill("#gcPrefix", ""); // estes testes usam eventos de todos os tipos; o filtro por prefixo tem o seu teste
+  await page.evaluate(function(){ var d = document.getElementById("gcMore"); if (d) d.open = true; }); await page.fill("#gcPrefix", ""); // estes testes usam eventos de todos os tipos; o filtro por prefixo tem o seu teste
   await page.click("#gcSync");
   await page.waitForFunction(function(){ return window.__fake.tables.sessions.length >= 3; });
   var tok = requests[0];
@@ -75,6 +75,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   check.check("7. Cada sessão é descontada ao pacote do aluno e guarda a hora", byExt["e1_20261001"].pk === "pk-a" && byExt["e2"].pk === "pk-b" && byExt["e1_20261001"].t === "10:00");
   var txt = await page.locator("#gcalCard").evaluate(function(el){ return el.textContent; });
   check.check("8. O resumo conta eventos lidos e novas sessões, e lista os eventos sem aluno", /6 eventos lidos/.test(txt) && /3 novas/.test(txt) && /Dentista/.test(txt) && /Mãe \+ Pai/.test(txt));
+  await page.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   var sumTxt = await page.locator("#studioSummary").innerText();
   check.check("9. O Resumo de treinos usa estas sessões (Ana: 2 feitas, faltam 8)", /Ana Teste[\s\S]*?2\/10 feitas/.test(sumTxt));
 
@@ -89,7 +90,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
 
   // associar um título à mão
   await page.evaluate(function(){ document.querySelectorAll('#gcalCard details').forEach(function(d){ d.open = true; }); });
-  await page.selectOption('[data-gc-alias="0"]', {index: 0}).catch(function(){});
+  await page.evaluate(function(){ var d = document.getElementById("gcMore"); if (d) d.open = true; }); await page.selectOption('[data-gc-alias="0"]', {index: 0}).catch(function(){});
   var opts = await page.locator('[data-gc-alias] option').allTextContents();
   check.check("12. Os eventos sem aluno podem ser associados a um aluno (lista de alunos no seletor)", opts.some(function(o){ return /Rui Teste/.test(o); }));
   var firstAlias = page.locator("[data-gc-alias]").first();
@@ -102,14 +103,14 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
 
   // fonte das sessões: o horário semanal fica em pausa
   await page.evaluate(function(){ window.__fake.tables.session_slots.push({id: "slx", student_id: "stu1", weekday: 1, time: "07:00", counts_from: "2020-01-01", generated_until: null}); });
-  await page.click("#gcToggle");
+  await page.evaluate(function(){ var d = document.getElementById("gcMore"); if (d) d.open = true; }); await page.click("#gcToggle");
   await page.waitForFunction(function(){ var s = window.__fake.tables.studio_settings[0]; return s && s.value.useAsSource === true; });
   var before = await page.evaluate(function(){ return window.__fake.tables.sessions.length; });
   await page.click("#navContracts"); await page.waitForSelector("#navContracts.active"); await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   check.check("14. Com o Google Agenda como fonte, o horário semanal não conta sessões", (await page.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 0 && before >= 3);
 
   // desligar
-  await page.click("#gcOff");
+  await page.evaluate(function(){ var d = document.getElementById("gcMore"); if (d) d.open = true; }); await page.click("#gcOff");
   await page.waitForSelector("#gcClient");
   check.check("15. Desligar apaga o ID e mantém as sessões já contadas", (await page.evaluate(function(){ return window.__fake.tables.studio_settings[0].value.clientId; })) === "" && (await page.evaluate(function(){ return window.__fake.tables.sessions.length; })) >= 3);
   check.check("16. Nenhum erro de JavaScript", errors.length === 0);

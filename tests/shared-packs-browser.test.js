@@ -155,7 +155,7 @@ function localISO(d){ return d.getFullYear() + "-" + String(d.getMonth() + 1).pa
   await gp.locator("[data-share-pack]").first().click(); await gp.waitForSelector("#shList");
   await gp.locator('#shList input[data-sh-id="s2"]').check(); await gp.click("#shGo");
   await gp.waitForFunction(function(){ return window.__fake.tables.session_packs[0].shared_with.length === 1; });
-  await gp.click("#proBack"); await gp.click("#navStudio"); await gp.waitForSelector("#studioSummary");
+  await gp.click("#proBack"); await gp.click("#navStudio"); await gp.waitForSelector("#studioSummary"); await gp.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); });
   var sum = await gp.locator("#studioSummary").innerText();
   check.check("23. O resumo do estúdio mostra a partilha e o que resta no conjunto (38 de 39)", /Partilha com/.test(sum) && /restam\s*38\s*de 39/.test(sum.replace(/\n/g, " ")));
 

@@ -61,6 +61,7 @@ function ev(id, title, daysAgo, hhmm){ return {id: id, summary: title, colorId: 
   check.check("3. As 10 aulas contam no pacote, que perdeu a validade", feitas.every(function(x){ return x.p === "pkm"; }) && fk.pk.expires_on === null);
   // a ficha do aluno na Gestão mostra só os Pacotes (sem separadores de acompanhamento): abre-se a partir do Estúdio
   await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
+  await page.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   await page.locator('[data-open-student="m1"]').first().click();
   await page.waitForSelector("#proBack");
   await page.waitForFunction(function(){ return /10 de 13 usadas/.test(document.getElementById("proMain").innerText); });
