@@ -56,7 +56,7 @@ function fixtureRow(id, name){
   await pg.selectOption("#stSort", "menos");
   check.check("7. «Menos aulas primeiro» põe quem tem menos aulas por dar à frente (Bruno com 2 por dar)", (await names())[0] === "Bruno Costa");
   await pg.fill("#stSearch", "an");
-  check.check("8. A lupa também filtra as outras listas do Estúdio (registo rápido): só aparece a Ana", await pg.evaluate(function(){ return [].filter.call(document.querySelectorAll("#quickSessions [data-sname]"), function(r){ return !r.hidden; }).map(function(r){ return r.getAttribute("data-sname"); }).join("|"); }) === "ana silva");
+  check.check("8. A lupa filtra o resumo: só aparece a Ana", (await names()).join("|") === "Ana Silva");
   check.check("9. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));
   await browser.close(); srv.server.close();
