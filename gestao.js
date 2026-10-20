@@ -2275,18 +2275,6 @@ function studioContactReasons(studentId, today){
   if (ss.absences >= ABSENCE_ALERT) out.push({key: "faltas", label: ss.absences + " faltas nos últimos " + ABSENCE_WINDOW_DAYS + " dias", weight: 40, vars: {}});
   return out.sort(function(a, b){ return b.weight - a.weight; });
 }
-function studioContactHtml(students, today){
-  var rows = students.map(function(st){ return {st: st, reasons: studioContactReasons(st.id, today)}; }).filter(function(r){ return r.reasons.length; })
-    .sort(function(a, b){ return b.reasons[0].weight - a.reasons[0].weight || String(a.st.name).localeCompare(String(b.st.name), "pt"); });
-  if (!rows.length) return "";
-  return "<div class=\"card\" id=\"studioContact\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Quem contactar (" + rows.length + ")</div>" +
-    rows.map(function(r){
-      var wa = r.st.phone ? whatsappUrl(r.st.phone, contactMessageFor(r.reasons[0].key, r.st, r.reasons[0].vars)) : "";
-      return "<div class=\"studio-row\" data-sname=\"" + escapeHtml(exLibFold(r.st.name)) + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.st.id) + "\">" + escapeHtml(r.st.name) + "</button>" +
-        (wa ? "<a class=\"btn btn-sm\" target=\"_blank\" rel=\"noopener\" href=\"" + escapeHtml(wa) + "\">WhatsApp</a>" : "") + "</div>" +
-        "<div class=\"muted-p\" style=\"font-size:0.78rem;\">" + r.reasons.map(function(x){ return escapeHtml(x.label); }).join(" · ") + "</div></div>";
-    }).join("") + "</div>";
-}
 function renderProStudioMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; studioRefresh().then(function(){ if (state.proView === "studio" && !state.proSelectedId) renderProStudioMain(); }); return; }
@@ -2324,7 +2312,6 @@ function renderProStudioMain(){
       (r.state === "renovar" && !r.spendFrom && Number(r.pack.price) > 0 ? "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;\"><button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" data-renew-paid=\"1\" title=\"Cria o pacote novo e abre o registo do pagamento\">Renovar · já pagou</button><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-renew-pack=\"" + escapeHtml(r.pack.id) + "\" title=\"Cria o pacote novo e a cobrança por pagar\">Renovar · por pagar</button></div>" : "") + "</div>";
   });
   html += "</div>";
-  html += studioContactHtml(students, today);
   // agenda do dia (horários semanais)
   if (studio.slotsAvailable){
     var agenda = studio.slots.filter(function(sl){ var st = findStudent(sl.student_id); return st && isStudentActive(st) && isoWeekday(studioView.date) === sl.weekday; }).sort(function(a, b){ return a.time < b.time ? -1 : 1; });
@@ -2342,20 +2329,6 @@ function renderProStudioMain(){
     html += "</div>";
   }
 
-  // registo rápido
-  var withPack = students.filter(function(st){ return pickPackForSession(st.id, studioView.date); });
-  html += "<details class=\"card\" id=\"quickSessions\"><summary class=\"eyebrow\" style=\"cursor:pointer;\">" + (studio.slotsAvailable ? "Registar sessão fora do horário" : "Registar sessões") + "</summary><div style=\"margin-top:8px;\"></div>" +
-    (studio.slotsAvailable ? "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Para uma sessão extra ou mudada de dia (a data é a escolhida na agenda).</p>" : "<div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"qsDate\">Dia</label><input type=\"date\" id=\"qsDate\" value=\"" + studioView.date + "\"></div>");
-  if (!withPack.length) html += "<p class=\"muted-p\">Nenhum aluno com pacote a decorrer neste dia. Cria pacotes na ficha do aluno (separador Pacotes).</p>";
-  withPack.forEach(function(st){
-    var existing = studio.sessions.filter(function(x){ return x.student_id === st.id && x.date === studioView.date; });
-    var pk = pickPackForSession(st.id, studioView.date), u = pk ? packUsage(pk, studioView.date) : null;
-    html += "<div class=\"history-row\" data-sname=\"" + escapeHtml(exLibFold(st.name)) + "\" style=\"align-items:center; flex-wrap:wrap; gap:6px;\"><div style=\"min-width:0;flex:1 1 140px;\"><div class=\"hlabel\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(st.id) + "\">" + escapeHtml(st.name) + "</button></div>" +
-      "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + (u ? "restam " + u.remaining + " de " + u.total : "") + "</div></div><span style=\"display:flex; gap:6px; flex-wrap:wrap;\">" +
-      (existing.length ? existing.map(function(x){ return sessionStatusPill(x.status) + " <button type=\"button\" class=\"assess-del\" data-del-session=\"" + escapeHtml(x.id) + "\" aria-label=\"Anular registo\" title=\"Anular\">↶</button>"; }).join(" ")
-        : Object.keys(SESSION_STATUS).filter(function(key){ return key !== "agendada"; }).map(function(key){ return "<button type=\"button\" class=\"btn btn-sm" + (key === "feita" ? " primary" : "") + "\" data-qs=\"" + escapeHtml(st.id) + ":" + key + "\">" + SESSION_STATUS[key].short + "</button>"; }).join("")) + "</span></div>";
-  });
-  html += "</details>";
 
   var stHadFocus = document.activeElement && document.activeElement.id === "stSearch", stCaret = stHadFocus ? document.activeElement.selectionStart : null;
   main.innerHTML = html;
@@ -2380,10 +2353,6 @@ function renderProStudioMain(){
     fixBtn.disabled = true;
     autoFixPacks().then(function(fx){ showToast(fx.sessions || fx.aligned || fx.reassigned ? "✓ " + (fx.sessions ? fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") : "pacotes acertados") + (fx.aligned ? " · " + fx.aligned + (fx.aligned === 1 ? " renovação a contar da 1.ª aula" : " renovações a contar da 1.ª aula") : "") + (fx.reassigned ? " · " + fx.reassigned + (fx.reassigned === 1 ? " aula voltou ao pacote certo" : " aulas voltaram ao pacote certo") : "") + (fx.extended ? " · " + fx.extended + (fx.extended === 1 ? " pacote sem validade" : " pacotes sem validade") : "") : "Está tudo certo: nenhuma aula por acertar"); redraw(); updateStudioBadge(); });
   });
-  main.querySelectorAll("[data-qs]").forEach(function(b){ b.addEventListener("click", function(){
-    var parts = b.getAttribute("data-qs").split(":"); b.disabled = true;
-    studioAddSession(parts[0], studioView.date, parts[1]).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
-  }); });
 }
 
 /* ---------- ligação ao núcleo ---------- */

@@ -44,9 +44,8 @@ function fixtureRow(id, name){
   var st = await session({role: "professional", userId: "pro-1", rows: rows}, function(){ window.__fake.tables.studio_settings.push({key: "contracts", value: {stu1: {modalidade: "trimestral", minutos: 60}}}); });
   var pg = st.page;
   await pg.goto(srv.url + "gestao.html");
-  await pg.waitForSelector("#quickSessions");
-  await pg.evaluate(function(){ document.getElementById("quickSessions").open = true; }); 
-  check.check("1. O ecrã Estúdio abre e diz que não há pacotes a decorrer", /Nenhum aluno com pacote/.test(await pg.locator("#quickSessions").innerText()));
+  await pg.waitForSelector("#studioSummary");
+  check.check("1. O ecrã Hoje abre e diz que ainda não há pacotes", /Ainda sem pacotes/.test(await pg.locator("#studioSummary").innerText()));
 
   // criar pacote na ficha
   await pg.click("#navContracts"); await pg.waitForSelector("#contractList [data-open-contract]");
@@ -80,12 +79,14 @@ function fixtureRow(id, name){
   await pg.evaluate(function(){ window.__fake.tables.session_packs.push({id: "pk-x", student_id: "stu2", name: "Pack 20", total: 20, price: 440, starts_on: "2026-01-01", expires_on: null, missed_consumes: true, late_cancel_consumes: true}); });
   await pg.click("#proBack");
   await pg.click("#navStudio");
-  await pg.waitForSelector("#quickSessions");
-  await pg.evaluate(function(){ document.getElementById("quickSessions").open = true; }); 
-  check.check("8. O Estúdio lê os dados de novo ao abrir e mostra o aluno que tem pacote a decorrer", (await pg.locator('#quickSessions [data-qs="stu2:feita"]').count()) === 1);
-  await pg.locator('#quickSessions [data-qs="stu2:feita"]').click();
+  await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
+  check.check("8. O Hoje lê os dados de novo ao abrir e mostra o aluno que tem pacote a decorrer", (await pg.locator('#studioSummary [data-open-student="stu2"]').count()) === 1);
+  await pg.locator('#studioSummary [data-open-student="stu2"]').first().click(); await pg.waitForSelector("#seAdd", {state: "attached"});
+  await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
+  await pg.selectOption("#seStatus", "feita"); await pg.click("#seAdd");
   await pg.waitForFunction(function(){ return window.__fake.tables.sessions.length === 3; });
-  check.check("9. O registo rápido grava a sessão de hoje como feita", (await pg.evaluate(function(){ var l = window.__fake.tables.sessions; return l[l.length - 1].status; })) === "feita");
+  check.check("9. Registar a sessão na ficha grava-a como feita", (await pg.evaluate(function(){ var l = window.__fake.tables.sessions; return l[l.length - 1].status; })) === "feita");
+  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
   // horário semanal: conta sozinho as sessões que já passaram
   await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   await pg.locator('#studioSummary [data-open-student="stu1"]').first().click();

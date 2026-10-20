@@ -74,7 +74,7 @@ studio.available = false;
 check.check("25. Com a migração por correr não há motivos novos nem erros", !studioContactReasons("a", today).some(function(r){ return r.key === "pagamento-atrasado"; }) && /migração <strong>0023/.test(tplProSessoes(ana)));
 studio.available = true;
 reset([pack({total: 4})], [sess(), sess(), sess()], [{id: "1", student_id: "a", amount: 100, due_on: d(10), paid_on: null}]);
-check.check("25b. O núcleo (Acompanhamento) já não mistura avisos de pacotes e pagamentos na lista de contactos: vivem na Gestão", !contactReasonsFor(ana, today).some(function(r){ return ["pagamento-atrasado", "pacote-a-acabar", "faltas"].indexOf(r.key) >= 0; }) && /id="studioContact"/.test(studioContactHtml([ana], today)) && /data-open-student="a"/.test(studioContactHtml([ana], today)));
+check.check("25b. O núcleo (Acompanhamento) já não mistura avisos de pacotes e pagamentos na lista de contactos", !contactReasonsFor(ana, today).some(function(r){ return ["pagamento-atrasado", "pacote-a-acabar", "faltas"].indexOf(r.key) >= 0; }));
 
 // ---- CSV ----
 reset([pack({name: 'Pack "especial"; 10'})], [sess({date: today, status: "faltou", notes: "x"})], [{id: "1", student_id: "a", amount: 250, due_on: today, paid_on: null, notes: "linha1\nlinha2"}]);
