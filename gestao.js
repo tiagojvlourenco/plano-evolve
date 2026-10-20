@@ -1236,7 +1236,7 @@ function packBarHtml(pack, u, viewerId){
   return "<div class=\"history-row pack-row\" style=\"align-items:flex-start; flex-wrap:wrap; gap:10px;\"><div style=\"min-width:0; flex:1 1 100%;\">" +
     "<div class=\"hlabel\">" + escapeHtml(pack.name) + (u.expired ? " <span class=\"pill\">caducado</span>" : u.exhausted ? " <span class=\"pill\">esgotado</span>" : u.ending ? " <span class=\"pill warn\">a acabar</span>" : "") + "</div>" +
     "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + u.used + " de " + u.total + " usadas · restam " + u.remaining +
-      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) + (u.daysLeft != null && u.daysLeft >= 0 ? " (" + u.daysLeft + " d)" : "") : renewMonthsPending(pack) ? " · a validade conta a partir da 1.ª aula" : " · sem validade") + "</div>" +
+      (pack.expires_on ? " · validade até " + escapeHtml(fmtDateFullPt(pack.expires_on)) : renewMonthsPending(pack) ? " · a validade conta a partir da 1.ª aula" : " · sem validade") + "</div>" +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">👥 " + escapeHtml(shareLine) + " · as aulas descontam ao mesmo pacote</div>" : "") +
     (shareLine ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">Aulas usadas: " + (function(){ var l = packUsageByStudent(pack).map(function(x){ return "<strong>" + escapeHtml(x.name) + "</strong> " + x.n; }); if (Number(pack.used_before) > 0) l.unshift("antes da app " + Number(pack.used_before)); return l.length ? l.join(" · ") : "nenhuma ainda"; })() + "</div>" : "") +
     "<div class=\"bar-track\" style=\"margin-top:6px;\"><div class=\"bar-fill\" style=\"width:" + u.pct + "%\"></div></div></div>" +
@@ -2299,7 +2299,7 @@ function renderProStudioMain(){
   if (!sumRows.length) html += "<p class=\"muted-p\">Ainda sem pacotes. Importa os que já estão a decorrer (no fim desta página) ou cria-os na ficha de cada aluno.</p>";
   sumRows.forEach(function(r){
     var flag = r.state === "renovar" ? "🔄 Aguarda renovação" + (r.extras.n ? " · +" + r.extras.n + (r.extras.n === 1 ? " aula extra" : " aulas extra") + " (desde " + escapeHtml(fmtDateFullPt(r.extras.since)) + ")" : "")
-      : r.state === "acabar" ? "⚠️ A acabar" + (r.u.daysLeft != null && r.u.daysLeft <= PACK_ENDING_DAYS ? " · termina em " + r.u.daysLeft + " dias" : "")
+      : r.state === "acabar" ? "⚠️ A acabar"
       : r.state === "pendente" ? "Começa a " + escapeHtml(fmtDateFullPt(r.pack.starts_on)) : "";
     html += "<div class=\"studio-row " + r.state + "\"" + (r.state === "renovar" || r.state === "acabar" || r.extras.n ? "" : " data-calm=\"1\"") + " data-sname=\"" + escapeHtml(exLibFold(r.student.name)) + "\" data-ord=\"" + (sumOrd++) + "\" data-rem=\"" + r.u.remaining + "\"><div class=\"sr-head\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(r.student.id) + "\">" + escapeHtml(r.student.name) + "</button>" +
       "<span class=\"muted-p\" style=\"white-space:nowrap;\">" + (r.pack.price != null ? escapeHtml(eurShort(r.pack.price)) + " · " : "") + r.u.total + " aulas</span></div>" +
