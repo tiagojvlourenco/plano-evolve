@@ -88,15 +88,14 @@ function fixtureRow(id, name){
   await A.pg.waitForSelector(".student-row");
   await A.pg.waitForTimeout(500);
   var sideA = await A.pg.locator(".pro-sidebar").innerText();
-  check.check("10. No Acompanhamento: Alunos, Catálogo e Eu, sem ligação para a outra app (são independentes); sem seletor de áreas, Estúdio nem Contratos; sem pedir gestao.js",
-    /Alunos/i.test(sideA) && /Cat[aá]logo/i.test(sideA) && /\bEu\b/i.test(sideA) && (await A.pg.locator("#goGestao").count()) === 0 &&
+  check.check("10. No Acompanhamento: Alunos e Catálogo, sem ligação para a outra app (são independentes); sem seletor de áreas, Estúdio nem Contratos; sem pedir gestao.js",
+    /Alunos/i.test(sideA) && /Cat[aá]logo/i.test(sideA) && !/\bEu\b/i.test(sideA) && (await A.pg.locator("#goGestao").count()) === 0 &&
     (await A.pg.locator("#areaGestao, #areaAcomp, #navStudio, #navContracts").count()) === 0 && A.log.length === 0);
   await A.pg.locator('[data-open="a"]').first().click();
   await A.pg.waitForSelector("#proBack");
   check.check("11. A ficha do aluno no Acompanhamento não tem o separador Pacotes", (await A.pg.locator('[data-sub="sessoes"]').count()) === 0 && !/Pacotes/.test(await A.pg.locator(".pro-subtabs").innerText()));
   await A.pg.click("#proBack"); await A.pg.waitForSelector(".student-row");
-  await A.pg.click("#navMe"); await A.pg.waitForSelector("[data-me]");
-  check.check("12. «Eu» continua no Acompanhamento (escolher a minha ficha)", (await A.pg.locator("[data-me]").count()) === 2);
+  check.check("12. O botão «Eu» foi retirado do Acompanhamento", (await A.pg.locator("#navMe").count()) === 0);
   await A.ctx.close();
 
   // 13. a app de Gestão: abre no Estúdio, descarrega gestao.js uma vez, sem lista de alunos nem menu de acompanhamento
