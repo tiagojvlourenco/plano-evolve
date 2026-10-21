@@ -257,3 +257,12 @@ A revisão (`computePhaseReview`) tem duas vias. **Pesagens frequentes** (4 em 2
 - **Adesão:** abaixo da banda num cut, sem 2+ check-ins preenchidos nos últimos 42 dias, não se sugere reduzir: aviso para o PT confirmar a adesão com o aluno.
 - **Sem repetição:** a via espaçada só volta a aparecer com uma avaliação posterior à última revisão aplicada ou adiada (`lastReviewDate`, `seenWeighInDate`).
 - As propostas só se aplicam quando o PT as valida (`applyPhaseReview`).
+
+### 8r.1 Correções finais da revisão de fase
+
+- **Pesagem discrepante:** na via espaçada o filtro de pontos discrepantes está desligado; um salto de mais de 3 %/semana ou um ponto a mais de 2 kg da reta devolve «Pesagem suspeita» com a data e o valor, mantém tudo no histórico e não propõe calorias até o peso ser confirmado/corrigido.
+- **Revisão vista:** ao aplicar ou adiar guarda-se `nutritionPhase.seenWeighInDate` (a avaliação mais recente com data até hoje; as futuras não contam). Nas duas vias (frequente e espaçada) a revisão só volta com uma avaliação válida **7 dias ou mais** depois dela. «Rever agora» responde «Sem avaliação nova desde a última revisão.». A 2.ª etapa de uma saída para a manutenção é um passo combinado e não é bloqueada.
+- **Resumo do peso:** o intervalo mostrado na revisão começa no ponto de partida da fase atual (pesagem do dia da alteração, ou a de até 3 dias antes), não em todo o histórico.
+- **Fome, energia e adesão:** só contam check-ins com valores preenchidos, de 42 dias ou menos e desde a última alteração de calorias (fase atual). Sem eles é «sem dados». Os indicadores (`recentCheckins`) usam a janela de 42 dias.
+- **Confirmação da adesão:** no pop-up da revisão do tipo «adesão» o PT regista *Cumprida / Parcial / Não cumprida* (`confirmPhaseAdherence` → `nutritionPhase.adherenceConfirmed = {date, level}`, gravado pela coluna `nutrition_phase`, só o profissional). Vale 42 dias e só desde a última alteração de calorias; aplicar uma revisão ou mudar as calorias à mão invalida-a. «Cumprida» continua a avaliação (o PT valida a proposta); «Parcial» e «Não cumprida» adiam e não propõem reduzir.
+- **Reduções de calorias** (cut abaixo da banda, manutenção com o peso a subir, bulk acima da banda, incluindo o aviso urgente do bulk) exigem adesão confirmada (PT ou check-ins). Os aumentos (perda demasiado rápida, bulk parado) não dependem dela. Nenhuma decisão altera o plano sem o OK do PT.

@@ -156,7 +156,8 @@ check.check("10b. (o aluno de teste está num cut a ~10 % abaixo da manutenção
   check.check("48. Uma revisão sem alterações (aderência) não se pode «aplicar»", !!applyPhaseReview(stu({weights: wts(90, 0, 28), checkins: checkins(3)}), computePhaseReview(stu({weights: wts(90, 0, 28), checkins: checkins(3)}), today)).error);
   var p = stu({weights: wts(90, 0, 28)});
   postponePhaseReview(p, 7);
-  check.check("49. Adiar 7 dias esconde a proposta e não mexe no plano", p.nutritionPhase.snoozeUntil === d(7) && computePhaseReview(p, today) === null && p.targets.kcal === CUT && computePhaseReview(p, d(7)).kind === "ajuste");
+  check.check("49. Adiar 7 dias esconde a proposta e não mexe no plano", p.nutritionPhase.snoozeUntil === d(7) && computePhaseReview(p, today) === null && p.targets.kcal === CUT);
+  check.check("49b. Passados os 7 dias, sem avaliação nova a proposta adiada não reaparece; com uma pesagem 7+ dias depois da vista, volta", computePhaseReview(p, d(7)) === null && (function(){ p.weights = p.weights.concat([{date: d(7), w: 90}, {date: d(8), w: 90}]); var r = computePhaseReview(p, d(8)); return !!r && r.kind === "ajuste"; })());
 })();
 
 // ---- definir a fase ----
