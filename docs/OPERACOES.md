@@ -239,3 +239,9 @@ Só o profissional regista o peso (Avaliação → nova avaliação, ou a import
 - **Indicadores:** o peso só avalia tendência com 3 ou mais pesagens; «Pesagem» é um lembrete («regista o peso na próxima avaliação»), nunca uma falha do aluno. Treinos e inatividade usam as sessões registadas (`workoutLogs`), não os check-ins; «sem registos» e «sem dados» têm mensagens diferentes.
 - **Datas:** `todayISO()` devolve o dia **local** (antes era UTC e dava o dia anterior à meia-noite de verão em Portugal). As datas já gravadas não se alteram.
 - **Permissões:** nada mudou na base de dados. O trigger da migração 0019 continua a deixar o aluno escrever `weights`/`weight_current` (herdado do check-in); nenhum ecrã do aluno o usa. Retirar essas colunas da lista é uma migração à parte, por decidir.
+
+## 8q. Migração 0031: o aluno deixa de poder escrever o peso
+
+Corre `supabase/migrations/0031_weight_professional_only.sql` no SQL Editor do Supabase (é seguro repetir). Tira `weights` e `weight_current` da lista de colunas que o aluno pode escrever (o gatilho de 0004→0019); o profissional continua a escrever tudo e o aluno continua a escrever o diário do dia, check-ins antigos, histórico de substituições/adaptações, fotos e sessões de treino. Não altera dados. Depois de correr, confirma com o bloco I de `supabase/verify_security.sql` (ainda por validar no projeto real).
+
+O teste `tests/weight-permissions-db.test.js` exercita o gatilho num Postgres temporário local (se a máquina tiver um), mas é um harness: não substitui a verificação no Supabase. `checkins[].weight` continua escrevível pelo aluno (é histórico) e a app não o lê como pesagem.

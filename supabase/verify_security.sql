@@ -247,3 +247,15 @@ where schemaname = 'storage' and tablename = 'objects'
 -- sb.rpc("claim_student_row") em vez de um UPDATE direto (ver handleSession
 -- em evolve-nutrition.html). A política "student claims invited row" continua
 -- a existir (não faz mal manter), mas deixou de ser o caminho usado pela app.
+
+-- ===================== Teste funcional I: o peso é só do profissional (migração 0031) =====================
+-- Corre DEPOIS de 0031. Não validado ainda no projeto Supabase real: faz estes passos com a conta de um aluno real e com a do profissional.
+--   I1. select pg_get_functiondef('enforce_student_column_permissions'::regproc) like '%''weights''%';
+--       Esperado: false (nem 'weights' nem 'weight_current' na lista de colunas do aluno).
+--   I2. Sessão do ALUNO, na consola do browser:
+--         await sb.from('students').update({weights: [{date:'2026-01-01', w: 50}]}).eq('id', '<id do aluno>').select('id')
+--       Esperado: erro «Só o profissional pode alterar estes dados do plano.»
+--   I3. Idem com {weight_current: 50} — Esperado: o mesmo erro.
+--   I4. Sessão do ALUNO: {assessments: []} — Esperado: o mesmo erro (já era assim).
+--   I5. Sessão do ALUNO: registar uma refeição/um treino na app — Esperado: grava normalmente (colunas autorizadas).
+--   I6. Sessão do PROFISSIONAL: guardar uma avaliação com peso — Esperado: grava (weights, weight_current e assessments).
