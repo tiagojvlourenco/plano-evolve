@@ -1,21 +1,23 @@
 /* EVOLVE — service worker: a app abre sem rede.
    - Navegação (index.html): rede primeiro (sempre a versão mais recente quando há ligação), cache como reserva.
-   - app.js, app.css e gestao.js (o código): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
-   - Duas apps no mesmo site: index.html (Acompanhamento) e gestao.html (Gestão, só o profissional); cada uma guarda a sua página.
+   - app.js, app.css, gestao.js e corrida.js (o código): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
+   - Três apps no mesmo site: index.html (Acompanhamento: alimentação e avaliações), treino.html (EVOLVE Treino: musculação e corrida) e
+     gestao.html (Gestão, só o profissional); cada uma guarda a sua página.
    - Ficheiros do próprio site (fontes, ícones, Supabase local, animações dos exercícios): cache primeiro.
    - Tudo o que é de outro servidor (Supabase, Open Food Facts, YouTube...) passa direto: nunca se guarda em cache
      (dados de saúde, sessões e fotos não ficam na cache do service worker).
    Subir VERSION sempre que mudar um ficheiro de vendor/, fonts/ ou ícones (as páginas e o código atualizam-se sozinhos).
    v2 (duas apps): o service worker antigo guardava QUALQUER página da app como «index.html»; quem abrisse gestao.html antes da atualização
    deixava a Gestão no lugar do EVOLVE. Mudar o nome apaga essa cache e a cópia antiga de index.html (script inline). */
-var VERSION = "evolve-v4";
+var VERSION = "evolve-v5";
 var SHELL = [
-  "./", "index.html", "gestao.html", "app.css", "app.js", "manifest.json", "manifest-gestao.json",
+  "./", "index.html", "gestao.html", "treino.html", "app.css", "app.js", "corrida.js", "manifest.json", "manifest-gestao.json", "manifest-treino.json",
   "vendor/supabase.js",
   "fonts/manrope-latin-wght-normal.woff2", "fonts/jura-latin-400-normal.woff2", "fonts/jura-latin-500-normal.woff2",
   "fonts/jura-latin-600-normal.woff2", "fonts/jura-latin-700-normal.woff2", "fonts/jura-latin-300-normal.woff2",
   "icon-32.png", "icon-120.png", "icon-152.png", "icon-180.png", "icon-192.png", "icon-512.png",
-  "icon-gestao-180.png", "icon-gestao-192.png", "icon-gestao-512.png"
+  "icon-gestao-180.png", "icon-gestao-192.png", "icon-gestao-512.png",
+  "icon-treino-180.png", "icon-treino-192.png", "icon-treino-512.png"
 ];
 var NAV_TIMEOUT_MS = 4000;
 
@@ -36,10 +38,10 @@ self.addEventListener("activate", function(event){
 // só se guarda como "a página" uma resposta boa, em HTML e da app (um portal de Wi-Fi ou uma página de erro nunca substituem a cópia boa)
 function isAppPage(res, text){ return res && res.ok && /text\/html/i.test(res.headers.get("Content-Type") || "") && text.indexOf('id="alunoApp"') >= 0; }
 
-// cada página (index.html, gestao.html) tem a sua cópia guardada; «/» é o index.html
+// cada página (index.html, gestao.html, treino.html) tem a sua cópia guardada; «/» é o index.html
 function pageKey(request){
   var p = new URL(request.url).pathname;
-  return /\/gestao\.html$/.test(p) ? "gestao.html" : "index.html";
+  return /\/gestao\.html$/.test(p) ? "gestao.html" : /\/treino\.html$/.test(p) ? "treino.html" : "index.html";
 }
 
 function networkFirst(event){
@@ -85,7 +87,7 @@ function cacheFirst(event){
   });
 }
 
-// código da app (app.js, app.css) e da Gestão (gestao.js): sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
+// código da app (app.js, app.css), da Gestão (gestao.js) e da Corrida (corrida.js): sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
 function networkFirstFile(event){
   var request = event.request;
   return new Promise(function(resolve){
@@ -120,6 +122,6 @@ self.addEventListener("fetch", function(event){
   var sameSite = url.origin === self.location.origin;
   if (!sameSite) return;
   if (req.mode === "navigate"){ event.respondWith(networkFirst(event)); return; }
-  if (/\/(gestao|app)\.(js|css)$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
+  if (/\/(gestao|corrida|app)\.(js|css)$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
   event.respondWith(cacheFirst(event).catch(function(){ return Response.error(); }));
 });

@@ -2,7 +2,7 @@
 "use strict";
 /* Duas apps no mesmo código: index.html (Acompanhamento: alunos, catálogo, «Eu») e gestao.html (Gestão: estúdio, packs, contratos; só o profissional).
    A página diz qual é com <html data-app="gestao">; sem isso é o Acompanhamento. */
-var APP_MODE = (typeof document !== "undefined" && document.documentElement && document.documentElement.getAttribute && document.documentElement.getAttribute("data-app") === "gestao") ? "gestao" : "acomp";
+var APP_MODE = (function(){ var a = (typeof document !== "undefined" && document.documentElement && document.documentElement.getAttribute) ? document.documentElement.getAttribute("data-app") : null; return a === "gestao" ? "gestao" : a === "treino" ? "treino" : "acomp"; })();
 /* ---------- Rede de segurança contra HTML injetado ----------
    O aluno consegue escrever JSON na sua própria linha (fotos, históricos, estado das refeições...) e esse texto acaba em
    templates do ecrã do profissional. Cada sítio deve usar escapeHtml, mas como defesa em profundidade TODO o HTML que a app
@@ -7329,6 +7329,7 @@ function renderAlunoShell(){
   try { dateLine = new Date().toLocaleDateString("pt-PT", {weekday: "long", day: "numeric", month: "long"}); dateLine = dateLine.charAt(0).toUpperCase() + dateLine.slice(1); } catch (e) { dateLine = ""; }
   // o ecrã de treino é uma etapa de "Hoje": o separador Hoje fica aceso
   var activeTab = state.alunoTab === "treino" ? "hoje" : state.alunoTab;
+  var treinoApp = APP_MODE === "treino";
   var icon = function(paths){ return "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" + paths + "</svg>"; };
   alunoRoot.innerHTML =
     (showSwitcher ? previewBannerHtml(s) : "") +
@@ -7338,9 +7339,13 @@ function renderAlunoShell(){
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
     "<div class=\"tabbar\">" +
+    (treinoApp ?
+      "<button data-tab=\"hoje\" aria-label=\"Treino\">" + icon("<path d=\"M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11\"/>") + "<span>Treino</span></button>" +
+      "<button data-tab=\"corrida\" aria-label=\"Corrida\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Corrida</span></button>"
+    :
       "<button data-tab=\"hoje\" aria-label=\"Hoje\">" + icon("<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>") + "<span>Hoje</span></button>" +
-      "<button data-tab=\"plano\" aria-label=\"Plano de alimentação e treino\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
-      "<button data-tab=\"evolucao\" aria-label=\"Progresso\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Progresso</span></button>" +
+      "<button data-tab=\"plano\" aria-label=\"Plano de alimentação\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
+      "<button data-tab=\"evolucao\" aria-label=\"Progresso\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Progresso</span></button>") +
     "</div>";
   var switcherEl = document.getElementById("alunoStudentSwitch");
   if (switcherEl) switcherEl.addEventListener("change", function(e){
@@ -7388,9 +7393,17 @@ function renderAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   var keep = captureTabUi(el);
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
+  if (APP_MODE === "treino"){
+    if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
+    else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
+    else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
+    restoreTabUi(el, keep);
+    wireAlunoTab(s);
+    return;
+  }
+  if (state.alunoTab==="treino" || state.alunoTab==="corrida") state.alunoTab = "hoje"; // o treino e a corrida vivem na app «EVOLVE Treino»
   if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
   else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
-  else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
   else {
     el.innerHTML = tplEvolucaoAluno(sv, {editable:false}); // Progresso: a evolução (o check-in semanal foi retirado: o profissional vê o aluno 2-3 vezes por semana)
     lazyPhotos(s, function(){ if (state.alunoStudentId === s.id && state.alunoTab === "evolucao" && !modalRoot.firstChild) renderAlunoTab(s); });
@@ -7752,9 +7765,58 @@ function tplTodayMeals(s){
   return html;
 }
 
-function tplHoje(s){
+/* ---------- App EVOLVE Treino (treino.html): treino de musculação + corrida ---------- */
+// Corrida (corrida.js): carregada à parte, só quando se abre o separador «Corrida» da app EVOLVE Treino. É avaliada aqui dentro (eval direto,
+// como a Gestão) para usar o mesmo scope; o que o núcleo precisa de chamar fica em C. Se falhar (sem rede na primeira vez), só a Corrida
+// fica indisponível: o treino e o resto da app funcionam.
+var C = {loaded: false, failed: false};
+var corridaPromise = null;
+function loadCorrida(){
+  if (C.loaded) return Promise.resolve(true);
+  if (corridaPromise) return corridaPromise;
+  corridaPromise = Promise.resolve().then(function(){ return fetch("corrida.js", {cache: "no-cache"}); }).then(function(r){
+    if (!r || !r.ok) throw new Error("corrida.js " + (r && r.status));
+    return r.text();
+  }).then(function(code){
+    eval(code + "\n//# sourceURL=corrida.js");
+    return !!C.loaded;
+  }).catch(function(){ corridaPromise = null; return false; });
+  return corridaPromise;
+}
+function tplCorridaTab(sv, s){
+  if (C.loaded) return C.render(sv);
+  if (!C.failed){
+    loadCorrida().then(function(ok){
+      if (!ok) C.failed = true;
+      if (APP_MODE === "treino" && state.alunoTab === "corrida" && String(state.alunoStudentId) === String(s.id) && !modalRoot.firstChild) renderAlunoTab(s);
+    });
+    return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">A abrir a Corrida…</p></div>";
+  }
+  return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir a Corrida. Verifica a ligação e tenta outra vez.</p>" +
+    "<button type=\"button\" class=\"btn\" id=\"corridaRetry\" style=\"margin-top:10px;\">Tentar outra vez</button></div>";
+}
+// separador «Treino» da app EVOLVE Treino: o treino de hoje, o programa e os últimos treinos
+function tplTreinoHome(s){
   var html = tplTodayWorkout(s);
-  if (noNutritionOf(s)) return html;   // faz a nutrição com outra pessoa: só treino
+  if (workoutDaysWithExercises(s).length) html += tplTrainingProgramCard(s);
+  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 5);
+  if (logs.length){
+    html += "<div class=\"card\"><div class=\"eyebrow\">Últimos treinos</div>" + logs.map(function(l){
+      var sets = (l.entries || []).reduce(function(a, e){ return a + ((e && e.sets) || []).length; }, 0);
+      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(l.dayName || "Treino") + "</div>" +
+        "<div class=\"pd-meta\">" + escapeHtml(fmtDatePt(l.date)) + " · " + plural(sets, "série", "séries") + (l.rpe ? " · esforço " + l.rpe + "/10" : "") + "</div></div></div></div>";
+    }).join("") + "</div>";
+  }
+  html += "<a class=\"btn ghost help-link\" href=\"index.html\">Alimentação e avaliações → app EVOLVE</a>";
+  return html;
+}
+// o treino e a corrida têm app própria: aqui fica só um atalho
+function tplTreinoAppLink(){
+  return "<a class=\"card treino-app-link\" href=\"treino.html\"><div><div class=\"eyebrow\">Treino e corrida</div><p class=\"muted-p\" style=\"margin:4px 0 0;\">Abre a app EVOLVE Treino: o teu programa, o registo de cada sessão e as tuas corridas.</p></div><span class=\"btn btn-sm\">Abrir</span></a>";
+}
+function tplHoje(s){
+  var html = tplTreinoAppLink();
+  if (noNutritionOf(s)) return html;   // faz a nutrição com outra pessoa: só o atalho para o treino
   if (!s.meals.length){
     return html + `<div class="card" style="text-align:center;">` +
       `<div class="eyebrow">Alimentação</div>` +
@@ -8445,14 +8507,12 @@ function pdfDeliver(blob, name){
 }
 
 function tplPlanoTabs(s){
-  if (noNutritionOf(s)){   // só o programa de treino
-    return workoutDaysWithExercises(s).length ? tplTrainingProgramCard(s) : "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Treino</div><p class=\"muted-p\" style=\"margin-top:8px;\">O teu programa de treino ainda não foi definido.</p></div>";
-  }
-  var hasProgram = workoutDaysWithExercises(s).length > 0, hasMeals = (s.meals || []).length > 0;
-  var sec = hasProgram && state.planoSection === "treino" ? "treino" : (hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao");
+  if (noNutritionOf(s)) return tplTreinoAppLink();   // não faz nutrição com o profissional: não há plano alimentar aqui
+  var hasMeals = (s.meals || []).length > 0;
+  var sec = hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao";
   function segBtn(id, label){ return "<button type=\"button\" data-plano-sec=\"" + id + "\" aria-pressed=\"" + (sec === id) + "\" class=\"" + (sec === id ? "on" : "") + "\">" + label + "</button>"; }
-  var seg = hasProgram || hasMeals ? "<div class=\"seg\">" + segBtn("alimentacao", "Alimentação") + (hasProgram ? segBtn("treino", "Treino") : "") + (hasMeals ? segBtn("compras", "Compras") : "") + "</div>" : "";
-  return seg + (sec === "treino" ? tplTrainingProgramCard(s) : sec === "compras" ? tplShoppingList(s) : tplPlano(s));
+  var seg = hasMeals ? "<div class=\"seg\">" + segBtn("alimentacao", "Alimentação") + segBtn("compras", "Compras") + "</div>" : "";
+  return seg + (sec === "compras" ? tplShoppingList(s) : tplPlano(s));
 }
 
 // Plano > Treino: o programa da semana, com um botão para iniciar qualquer dia
@@ -8471,7 +8531,7 @@ function tplTrainingProgramCard(s){
 
 // ecrã de treino: um passo de "Hoje" (volta atrás com ← Hoje), com o progresso das séries no topo
 function tplTreinoScreen(s){
-  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Hoje</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
   var day = workoutDayFor(s);
   if (!day) return head + tplWorkoutLogger(s);
   var total = workoutSetCount(day), done = workoutDraftDone(s, day);
@@ -11018,6 +11078,11 @@ function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
   wireTrainingNav(s, el);
+  if (APP_MODE === "treino" && state.alunoTab === "corrida"){
+    var retry = el.querySelector("#corridaRetry");
+    if (retry) retry.addEventListener("click", function(){ C.failed = false; renderAlunoTab(s); });
+    if (C.loaded) C.wire(s, el);
+  }
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
     row.addEventListener("click", function(){
@@ -14834,13 +14899,16 @@ function finishBoot(rows, isProfessional, offline){
         document.getElementById("modeSwitch").classList.add("hidden");
         document.getElementById("proApp").classList.remove("hidden");
         state.proView = "studio";
+      } else if (APP_MODE === "treino"){ // app EVOLVE Treino: o profissional só pré-visualiza o ecrã do aluno
+        document.getElementById("modeSwitch").classList.add("hidden");
+        document.getElementById("alunoApp").classList.remove("hidden");
       } else {
         document.getElementById("modeSwitch").classList.remove("hidden");
         document.getElementById("alunoApp").classList.remove("hidden");
         document.getElementById("proApp").classList.remove("hidden");
       }
       state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
-      setMode("pro");
+      setMode(APP_MODE === "treino" ? "aluno" : "pro");
     } else if (APP_MODE === "gestao"){ // uma conta de aluno não tem nada a fazer na Gestão
       authRole = STUDENTS.length ? "student" : null;
       hideAllScreens();
@@ -14868,7 +14936,7 @@ function finishBoot(rows, isProfessional, offline){
     }
     syncPillUpdate();
     if (!offline) outboxFlush();
-    if (isProfessional && APP_MODE !== "gestao") setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
+    if (isProfessional && APP_MODE === "acomp") setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
   });
 }
 
@@ -15120,6 +15188,11 @@ function boot(){
       state.proView = "studio";
       whenGestao(function(){ return G.studioRefresh(); });
       setMode("pro");
+      return;
+    }
+    if (APP_MODE === "treino"){ // modo local (demonstração) da app EVOLVE Treino: só o ecrã do aluno
+      document.getElementById("proApp").classList.add("hidden");
+      setMode("aluno");
       return;
     }
     document.getElementById("modeSwitch").classList.remove("hidden");

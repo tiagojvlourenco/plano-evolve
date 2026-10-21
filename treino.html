@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt" data-app="treino">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Evolve Treino</title>
+<meta name="description" content="Treino de musculação e corrida do estúdio Evolve.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Treino">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0D0F12">
+<link rel="manifest" href="manifest-treino.json">
+<link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="icon-treino-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icon-treino-180.png">
+
+<link rel="preload" href="fonts/manrope-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/jura-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script src="vendor/supabase.js"></script>
+<link rel="stylesheet" href="app.css">
+
+</head>
+<body>
+
+<div class="app-wrap">
+  <div class="brand-header">
+    <svg class="evolve-mark" viewBox="0 0 1160 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Evolve">
+      <rect x="0" y="80" width="160" height="20" fill="currentColor"></rect>
+      <rect x="0" y="150" width="160" height="20" fill="currentColor"></rect>
+      <rect x="0" y="220" width="160" height="20" fill="currentColor"></rect>
+      <polyline points="240,80 320,240 400,80" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
+      <circle cx="580" cy="160" r="90" fill="none" stroke="currentColor" stroke-width="20"></circle>
+      <line x1="580" y1="0" x2="580" y2="320" stroke="currentColor" stroke-width="20"></line>
+      <polyline points="760,80 840,240 920,80" fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="butt" stroke-linejoin="miter"></polyline>
+      <rect x="1000" y="80" width="160" height="20" fill="currentColor"></rect>
+      <rect x="1000" y="150" width="160" height="20" fill="currentColor"></rect>
+      <rect x="1000" y="220" width="160" height="20" fill="currentColor"></rect>
+    </svg>
+    <div class="mode-switch hidden" id="modeSwitch">
+      <button data-mode="aluno">Aluno</button>
+      <button data-mode="pro">Profissional</button>
+    </div>
+    <button type="button" class="btn btn-sm hidden" id="signOutBtn">Sair</button>
+  </div>
+
+  <div class="proto-ribbon" id="protoRibbon">
+    <span>Evolve Nutrition · protótipo <span class="dim" id="dbStatusLabel">· a verificar ligação...</span></span>
+  </div>
+
+  <div id="appLoading" class="card" style="max-width:430px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Evolve Nutrition</div>
+    <p class="muted-p" id="appLoadingText">A carregar...</p>
+  </div>
+
+  <div id="authScreen" class="hidden" style="max-width:380px; margin:40px auto;">
+    <div class="card">
+      <div class="eyebrow" style="margin-bottom:4px;" id="authTitle">Entrar</div>
+      <p class="muted-p" style="margin-bottom:16px;" id="authSubtitle">Acede à tua conta Evolve.</p>
+      <form id="authForm">
+        <div class="checkin-field">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" name="email" autocomplete="username" required>
+        </div>
+        <div class="checkin-field" id="authPasswordField">
+          <label for="authPassword">Password</label>
+          <input type="password" id="authPassword" name="password" autocomplete="current-password" minlength="6" required>
+        </div>
+        <p class="muted-p" id="authError" style="display:none; margin-bottom:10px;"></p>
+        <button type="submit" class="btn primary" id="authSubmit" style="width:100%;">Entrar</button>
+      </form>
+      <p class="muted-p" style="margin-top:14px; text-align:center;">
+        <a href="#" id="authToggle" class="linklike">Ainda não tens conta? Criar conta</a>
+      </p>
+      <p class="muted-p" style="margin-top:8px; text-align:center;" id="authForgotWrap">
+        <a href="#" id="authForgot" class="linklike">Esqueci-me da password</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="recoveryScreen" class="hidden" style="max-width:380px; margin:40px auto;">
+    <div class="card">
+      <div class="eyebrow" id="recoveryTitle" style="margin-bottom:4px;">Nova password</div>
+      <p class="muted-p" id="recoveryText" style="margin-bottom:16px;">Confirmaste o link de recuperação — escolhe uma password nova para a tua conta.</p>
+      <form id="recoveryForm">
+        <div class="checkin-field">
+          <label for="recoveryPassword">Nova password</label>
+          <input type="password" id="recoveryPassword" name="password" autocomplete="new-password" minlength="6" required>
+        </div>
+        <p class="muted-p" id="recoveryError" style="display:none; margin-bottom:10px;"></p>
+        <button type="submit" class="btn primary" id="recoverySubmit" style="width:100%;">Guardar nova password</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="connectionErrorScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Sem ligação</div>
+    <p class="muted-p">Não foi possível ligar ao servidor. Verifica a tua ligação à internet.</p>
+    <button type="button" class="btn primary" id="connectionRetry" style="margin-top:14px;">Tentar novamente</button>
+  </div>
+
+  <div id="noStudentScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:8px;">Conta sem aluno associado</div>
+    <p class="muted-p">A tua conta ainda não está associada a nenhum aluno. Se achas que isto é um erro, confirma com o teu profissional Evolve que este é o email exato para o qual foste convidado — ou pede um novo convite.</p>
+    <button type="button" class="btn" id="noStudentSignOut" style="margin-top:14px;">Sair</button>
+  </div>
+
+  <div id="alunoApp" class="hidden"></div>
+  <div id="proApp" class="hidden"></div>
+</div>
+
+<div id="restTimer" class="hidden" role="region" aria-label="Cronómetro de descanso"></div>
+<div id="modalRoot"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

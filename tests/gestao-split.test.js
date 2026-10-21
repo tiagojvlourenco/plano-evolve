@@ -40,7 +40,7 @@ check.check("2. O núcleo não usa nenhum nome do módulo sem passar por G (" + 
 check.check("3. O módulo exporta o que o núcleo chama e marca-se como carregado", ["G.enter", "G.studioNavLabel", "G.studio", "G.renderProStudioMain", "G.renderProContractsMain", "G.tplProSessoes", "G.wireProSessoes", "G.studentStudioSummary", "G.studioRefresh", "G.studioAutoSessions", "G.studioAfterAutoSessions", "G.loaded = true"].every(function(s){ return gestao.indexOf(s) >= 0; }));
 var pageA = fs.readFileSync(path.join(root, "index.html"), "utf8"), pageG = fs.readFileSync(path.join(root, "gestao.html"), "utf8");
 check.check("4. Nenhuma das duas páginas carrega gestao.js como script nem o service worker o pré-guarda; o núcleo carrega-o com loadGestao()", !/<script[^>]*gestao\.js/.test(pageA + pageG) && !/SHELL = \[[^\]]*"gestao\.js"/.test(sw) && /function loadGestao\(/.test(html));
-check.check("5. O service worker serve app.js, app.css e gestao.js com rede primeiro (nunca uma cópia antiga com rede) e cache como reserva", /networkFirstFile/.test(sw) && /\(gestao\|app\)\\\.\(js\|css\)/.test(sw) && /no-cache/.test(sw.slice(sw.indexOf("function networkFirstFile"))));
+check.check("5. O service worker serve app.js, app.css e gestao.js com rede primeiro (nunca uma cópia antiga com rede) e cache como reserva", /networkFirstFile/.test(sw) && /\(gestao\|corrida\|app\)\\\.\(js\|css\)/.test(sw) && /no-cache/.test(sw.slice(sw.indexOf("function networkFirstFile"))));
 check.check("6. O núcleo (app.js) ficou sem a Gestão: menos de 1,1 MB (o núcleo foi crescendo com o treino, a nutrição e o convite por link; a Gestão já não conta), e a Gestão (gestao.js) tem mais de 150 KB", Buffer.byteLength(html) < 1100000 && Buffer.byteLength(gestao) > 150000);
 // as duas páginas têm o mesmo corpo (ecrãs de entrada, modais...) e só diferem no cabeçalho (nome, manifesto, ícone) e em data-app
 var bodyOf = function(t){ return t.slice(t.indexOf("<body>")); };
@@ -146,8 +146,8 @@ function fixtureRow(id, name){
   await W.pg.waitForFunction(function(){ return navigator.serviceWorker && navigator.serviceWorker.controller; }, null, {timeout: 8000}).catch(function(){});
   await W.pg.reload(); await W.pg.waitForSelector("#gcalCard");
   var names = ["gestao.js", "app.js", "app.css", "gestao.html"];
-  await W.pg.waitForFunction(function(n){ return caches.open("evolve-v4").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x); })); }).then(function(m){ return m.every(Boolean); }); }, names, {timeout: 8000}).catch(function(){});
-  var cached = await W.pg.evaluate(function(n){ return caches.open("evolve-v4").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x).then(function(m){ return !!m; }); })); }); }, names);
+  await W.pg.waitForFunction(function(n){ return caches.open("evolve-v5").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x); })); }).then(function(m){ return m.every(Boolean); }); }, names, {timeout: 8000}).catch(function(){});
+  var cached = await W.pg.evaluate(function(n){ return caches.open("evolve-v5").then(function(c){ return Promise.all(n.map(function(x){ return c.match(x).then(function(m){ return !!m; }); })); }); }, names);
   check.check("18. O service worker guarda gestao.js, app.js, app.css e a página gestao.html (rede primeiro)", cached.every(Boolean));
   await W.ctx.setOffline(true);
   var offStatus = await W.pg.evaluate(function(){ return fetch("gestao.js").then(function(r){ return r.status; }).catch(function(e){ return "erro " + e.message; }); });
