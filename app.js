@@ -11716,8 +11716,10 @@ function openOnboardingForm(){
     };
 
     STUDENTS.push(newStudent);
-    insertStudent(newStudent);
+    var inserted = insertStudent(newStudent);
     closeModal();
+    // o aluno só pode receber link depois de a ficha existir no servidor
+    if (inviteEmail) Promise.resolve(inserted).then(function(ok){ if (ok !== false && state.proSelectedId === newStudent.id) openInviteLinkModal(newStudent); });
     state.proSelectedId = id;
     state.proTab = "plano";
     renderProShell();
@@ -11869,6 +11871,7 @@ function tplProPerfil(s){
 
   html += perfilSection("Contacto", false,
     "<div class=\"field-row\">" + fRow("Email do convite", s.inviteEmail ? escapeHtml(s.inviteEmail) : "—") + "</div>" +
+    (s.inviteEmail && authRole === "professional" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"genInvite\" style=\"margin-top:8px;\">" + (s.authUserId ? "Link para nova password" : "Gerar link de convite") + "</button>" : "") +
     "<div class=\"checkin-field\" style=\"margin-top:10px; max-width:260px;\"><label for=\"contactPhone\">Telefone / WhatsApp</label>" +
       "<input type=\"tel\" id=\"contactPhone\" value=\"" + escapeHtml(s.phone || "") + "\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
     "<p class=\"muted-p\" id=\"contactPhoneErr\" style=\"color:var(--critical); display:none;\"></p>" +
@@ -14473,6 +14476,8 @@ function wireProTab(s){
   // sozinho para calcular a manutenção/TDEE. Só grava o valor; não força um
   // recálculo automático dos alvos (o profissional decide quando ajustar,
   // tal como já acontece para o resto do perfil).
+  var genInv = el.querySelector("#genInvite");
+  if (genInv) genInv.addEventListener("click", function(){ openInviteLinkModal(s); });
   var saveAL = el.querySelector("#saveActivityLevel");
   if (saveAL) saveAL.addEventListener("click", function(){
     var raw = el.querySelector("#activityLevelInput").value;
@@ -14960,16 +14965,24 @@ document.getElementById("recoveryForm").addEventListener("submit", function(e){
   errEl.style.display = "none";
   var submitBtn = document.getElementById("recoverySubmit");
   submitBtn.disabled = true;
-  sb.auth.updateUser({ password: password }).then(function(res){
+  inviteVerify().then(function(v){
+    if (v.error) return v;
+    return sb.auth.updateUser({ password: password });
+  }).then(function(res){
     submitBtn.disabled = false;
     if (res.error){
       errEl.style.color = "var(--critical)";
-      errEl.textContent = translateAuthError(res.error.message);
+      errEl.textContent = res.error.translated ? res.error.message : translateAuthError(res.error.message);
       errEl.style.display = "block";
       return;
     }
-    showToast("Password atualizada");
-    sb.auth.getSession().then(function(sessRes){ handleSession(sessRes.data && sessRes.data.session); });
+    var wasInvite = !!inviteFlow; inviteFlow = null;
+    showToast(wasInvite ? "Conta ativa — bem-vindo!" : "Password atualizada");
+    sb.auth.getSession().then(function(sessRes){
+      var sess = sessRes.data && sessRes.data.session;
+      if (wasInvite && sess && sess.user && sess.user.email) offerToSaveCredential(sess.user.email, password);
+      handleSession(sess);
+    });
   }).catch(function(){
     submitBtn.disabled = false;
     errEl.style.color = "var(--critical)";
@@ -14977,6 +14990,87 @@ document.getElementById("recoveryForm").addEventListener("submit", function(e){
     errEl.style.display = "block";
   });
 });
+
+/* ---------- Link de convite (sem email): o PT gera o link, o aluno abre-o e define a password ---------- */
+// O link aponta para a própria app (?convite=<token>&tipo=invite|recovery). O token só é gasto quando o aluno carrega em «Definir password»:
+// pré-visualizações de mensagens e antivírus que abrem o link não o inutilizam (não correm JavaScript).
+var inviteFlow = null;
+function readInviteFromUrl(){
+  try {
+    var q = new URLSearchParams(window.location.search), tok = q.get("convite"), tipo = q.get("tipo") === "recovery" ? "recovery" : "invite";
+    if (!tok) return null;
+    try { history.replaceState(null, "", window.location.pathname + window.location.hash); } catch (e) {}   // o token sai do endereço
+    if (!/^[A-Za-z0-9_-]{10,200}$/.test(tok)) return {bad: true};
+    return {token: tok, type: tipo, verified: false};
+  } catch (e) { return null; }
+}
+function showInviteScreen(flow){
+  inviteFlow = flow;
+  hideAllScreens();
+  var invalid = !!flow.bad;
+  document.getElementById("recoveryScreen").classList.remove("hidden");
+  document.getElementById("recoveryTitle").textContent = flow.type === "recovery" ? "Nova password" : "Ativa a tua conta";
+  document.getElementById("recoveryText").textContent = invalid ? "Este link não é válido. Pede um novo ao teu profissional."
+    : flow.type === "recovery" ? "Escolhe uma password nova para a tua conta." : "Bem-vindo à EVOLVE. Define a password com que vais entrar: a conta fica logo ativa.";
+  document.getElementById("recoverySubmit").textContent = flow.type === "recovery" ? "Guardar nova password" : "Definir password e entrar";
+  document.getElementById("recoverySubmit").disabled = invalid;
+  document.getElementById("recoveryPassword").disabled = invalid;
+}
+function translateInviteError(msg){
+  if (/expired|invalid|otp|token|not found|used/i.test(msg || "")) return "Este link já foi usado ou expirou. Pede um novo ao teu profissional.";
+  return translateAuthError(msg || "");
+}
+// a primeira vez (ainda sem sessão) troca o token por uma sessão; depois é só definir a password
+function inviteVerify(){
+  if (!inviteFlow || inviteFlow.verified) return Promise.resolve({});
+  return sb.auth.verifyOtp({token_hash: inviteFlow.token, type: inviteFlow.type}).then(function(res){
+    if (res.error) return {error: {message: translateInviteError(res.error.message), translated: true}};
+    inviteFlow.verified = true; return {};
+  });
+}
+function inviteLinkUrl(data){
+  var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, "");
+  return base + "?convite=" + encodeURIComponent(data.token_hash) + "&tipo=" + (data.tipo === "recovery" ? "recovery" : "invite");
+}
+// PT: pede à função segura do Supabase um link para este aluno (não envia email). Resolve {link, tipo} ou {error}
+function requestInviteLink(s){
+  if (authRole !== "professional") return Promise.resolve({error: "Só o profissional pode gerar links de convite."});
+  if (!s || !s.inviteEmail) return Promise.resolve({error: "Este aluno não tem email de convite."});
+  if (!sbReady || !sb.functions) return Promise.resolve({error: "Sem ligação ao servidor."});
+  return withTimeout(Promise.resolve(sb.functions.invoke("convidar-aluno", {body: {email: s.inviteEmail}})), 20000).then(function(res){
+    if (res && !res.error && res.data && res.data.token_hash) return {link: inviteLinkUrl(res.data), tipo: res.data.tipo};
+    var ctx = res && res.error && res.error.context;
+    if (ctx && typeof ctx.json === "function") return ctx.json().then(function(b){
+      return {error: b && b.erro ? b.erro : "A função «convidar-aluno» ainda não está publicada no Supabase (ver docs/OPERACOES.md, secção 8s)."};
+    }, function(){ return {error: "A função «convidar-aluno» ainda não está publicada no Supabase (ver docs/OPERACOES.md, secção 8s)."}; });
+    return {error: "Não foi possível gerar o link. Verifica a ligação e tenta de novo."};
+  }, function(){ return {error: "Não foi possível gerar o link. Verifica a ligação e tenta de novo."}; });
+}
+function openInviteLinkModal(s){
+  var recovery = !!s.authUserId;
+  var sheet = openModal("<div class=\"mtitle\">" + (recovery ? "Link para nova password" : "Link de convite") + " — " + escapeHtml(s.name) + "</div>" +
+    "<p class=\"muted-p\" id=\"invMsg\">A gerar o link…</p>" +
+    "<div id=\"invBox\" class=\"hidden\"><div class=\"checkin-field\"><label for=\"invLink\">Link (só para " + escapeHtml(s.name) + ")</label><input type=\"text\" id=\"invLink\" readonly></div>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn primary\" id=\"invCopy\">Copiar link</button><button type=\"button\" class=\"btn hidden\" id=\"invShare\">Partilhar…</button></div>" +
+    "<p class=\"muted-p\" style=\"font-size:0.8rem; margin-top:10px;\">Envia-o só ao aluno (WhatsApp, SMS…). Quando o abrir, define a password e a conta fica logo ativa. O link só pode ser usado uma vez e tem validade limitada; se falhar, gera outro.</p></div>");
+  requestInviteLink(s).then(function(r){
+    var msg = sheet.querySelector("#invMsg");
+    if (!msg) return;   // a janela foi fechada entretanto
+    if (r.error){ msg.textContent = "⚠ " + r.error; return; }
+    msg.textContent = r.tipo === "recovery" ? "Este aluno já tem conta: o link serve para definir uma password nova." : "Link pronto.";
+    var box = sheet.querySelector("#invBox"), inp = sheet.querySelector("#invLink");
+    box.classList.remove("hidden"); inp.value = r.link;
+    sheet.querySelector("#invCopy").addEventListener("click", function(){
+      var done = function(){ showToast("Link copiado"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(r.link).then(done, function(){ inp.select(); });
+      else { inp.select(); try { document.execCommand("copy"); done(); } catch (e) {} }
+    });
+    if (navigator.share){
+      var sh = sheet.querySelector("#invShare"); sh.classList.remove("hidden");
+      sh.addEventListener("click", function(){ navigator.share({title: "EVOLVE", text: "O teu convite para a EVOLVE:", url: r.link}).catch(function(){}); });
+    }
+  });
+}
 
 function doSignOut(){
   persistPrepareAll();
@@ -15017,10 +15111,12 @@ function boot(){
     setMode("aluno");
     return;
   }
-  showLoading("A verificar sessão...");
-  sb.auth.getSession().then(function(res){
+  var inviteInUrl = APP_MODE === "gestao" ? null : readInviteFromUrl();
+  if (inviteInUrl) showInviteScreen(inviteInUrl);
+  else showLoading("A verificar sessão...");
+  (inviteInUrl ? Promise.resolve(null) : sb.auth.getSession().then(function(res){
     handleSession(res.data && res.data.session);
-  }).catch(function(){
+  })).catch(function(){
     hideAllScreens();
     document.getElementById("connectionErrorScreen").classList.remove("hidden");
   });

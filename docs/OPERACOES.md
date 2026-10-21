@@ -266,3 +266,23 @@ A revisão (`computePhaseReview`) tem duas vias. **Pesagens frequentes** (4 em 2
 - **Fome, energia e adesão:** só contam check-ins com valores preenchidos, de 42 dias ou menos e desde a última alteração de calorias (fase atual). Sem eles é «sem dados». Os indicadores (`recentCheckins`) usam a janela de 42 dias.
 - **Confirmação da adesão:** no pop-up da revisão do tipo «adesão» o PT regista *Cumprida / Parcial / Não cumprida* (`confirmPhaseAdherence` → `nutritionPhase.adherenceConfirmed = {date, level}`, gravado pela coluna `nutrition_phase`, só o profissional). Vale 42 dias e só desde a última alteração de calorias; aplicar uma revisão ou mudar as calorias à mão invalida-a. «Cumprida» continua a avaliação (o PT valida a proposta); «Parcial» e «Não cumprida» adiam e não propõem reduzir.
 - **Reduções de calorias** (cut abaixo da banda, manutenção com o peso a subir, bulk acima da banda, incluindo o aviso urgente do bulk) exigem adesão confirmada (PT ou check-ins). Os aumentos (perda demasiado rápida, bulk parado) não dependem dela. Nenhuma decisão altera o plano sem o OK do PT.
+
+## 8s. Convite por link (sem email)
+
+O Supabase tem um serviço de email incluído que não serve para uso real (só entrega a membros da equipa e tem um limite baixíssimo): por isso o aluno não recebia o email de confirmação. Agora o PT gera um **link**, envia-o ao aluno por WhatsApp/SMS, e o aluno define a password e entra: a conta fica logo ativa, sem email.
+
+**Como funciona:** na ficha do aluno (Resumo → Perfil → Contacto) o botão «Gerar link de convite» (e, logo ao criar um aluno com email, abre sozinho) pede o link à função `convidar-aluno`. O link aponta para a própria app. O token só é gasto quando o aluno carrega em «Definir password e entrar», por isso as pré-visualizações do WhatsApp ou antivírus não o inutilizam. Se o aluno já tem conta, o botão passa a «Link para nova password» (serve também para quem esqueceu a password, sem email).
+
+**Publicar a função (uma vez):**
+1. Instala o CLI do Supabase (`brew install supabase/tap/supabase`) e faz `supabase login`.
+2. Na pasta do projeto: `supabase link --project-ref <referência do teu projeto>` e `supabase functions deploy convidar-aluno`. Deixa a verificação de JWT ligada (por omissão).
+3. Se a app não estiver em `https://tiagojvlourenco.github.io`, define o segredo `ALLOWED_ORIGINS` com o endereço certo (`supabase secrets set ALLOWED_ORIGINS=https://o-teu-endereço`).
+4. Em Authentication → (definições do email), põe a validade do link («Email OTP expiration») no máximo (86400 s = 24 h). Por omissão é 1 h, o que é pouco para enviar por WhatsApp.
+
+**Validar (ainda não foi feito no teu projeto):**
+1. Cria um aluno com um segundo email teu e gera o link.
+2. Abre-o numa janela privada: deve pedir a password. Define-a e confirma que entras na app como aluno.
+3. Em Authentication → Users o aluno deve aparecer **confirmado** (sem «Waiting for verification»). Se não aparecer confirmado, diz-me: o ramo «recovery» para contas já criadas depende desse comportamento do Supabase.
+4. Abre o mesmo link outra vez: deve dizer que já foi usado ou expirou.
+
+**Segurança:** quem tiver o link define a password dessa conta; envia-o só ao aluno. Cada link só serve uma vez e expira. A função recusa quem não é profissional e emails sem convite; a chave de serviço nunca sai do servidor. Testes: `tests/convidar-aluno.test.js` (função, em Node com dependências simuladas) e `tests/invite-link-browser.test.js` (ecrãs, Chromium com Supabase simulado). Não cobrem o Supabase real.

@@ -117,10 +117,34 @@ module.exports = function fakeSupabaseSource(initial){
     var client = {
       from: function(t){ return new Builder(t); },
       rpc: function(){ return Promise.resolve({data: {success: true}, error: null}); },
+      // convite por link: INIT.noSession = arranca sem sessão; INIT.inviteTokens = {token: {type, email}} (cada token só serve uma vez)
+      functions: { invoke: function(name, opts){
+        F.invokes = F.invokes || []; F.invokes.push({name: name, body: clone(opts && opts.body)});
+        if (INIT.functionMissing) return Promise.resolve({data: null, error: {message: "Function not found", context: {json: function(){ return Promise.resolve({code: "NOT_FOUND", message: "Requested function was not found"}); }}}});
+        var email = opts && opts.body && opts.body.email, mine = F.rows.filter(function(r){ return r.invite_email === email; })[0];
+        if (F.role !== "professional") return Promise.resolve({data: null, error: {message: "403", context: {json: function(){ return Promise.resolve({erro: "Só o profissional pode gerar links de convite."}); }}}});
+        if (!mine) return Promise.resolve({data: null, error: {message: "404", context: {json: function(){ return Promise.resolve({erro: "Não há nenhum aluno convidado com este email. Cria primeiro a ficha do aluno.", codigo: "sem_convite"}); }}}});
+        var tok = "tok" + Math.random().toString(36).slice(2) + "ABCDEFGHIJ", tipo = mine.auth_user_id ? "recovery" : "invite";
+        F.issued = F.issued || {}; F.issued[tok] = {type: tipo, email: email};
+        return Promise.resolve({data: {tipo: tipo, token_hash: tok, email: email}, error: null});
+      } },
       auth: {
-        getSession: function(){ return Promise.resolve({data: {session: {user: {id: INIT.userId, email: INIT.email || "x@y.test"}}}}); },
+        getSession: function(){ if (INIT.noSession && !F.signedIn) return Promise.resolve({data: {session: null}}); return Promise.resolve({data: {session: {user: {id: INIT.userId, email: INIT.email || "x@y.test"}}}}); },
         onAuthStateChange: function(){ return {data: {subscription: {unsubscribe: function(){}}}}; },
-        signOut: function(){ return Promise.resolve({}); }
+        signOut: function(){ return Promise.resolve({}); },
+        verifyOtp: function(p){
+          F.verifies = (F.verifies || 0) + 1;
+          var tk = (F.issued || {})[p.token_hash] || (INIT.inviteTokens || {})[p.token_hash];
+          if (!tk || tk.used || tk.type !== p.type) return Promise.resolve({data: {session: null}, error: {message: "Email link is invalid or has expired"}});
+          tk.used = true; F.signedIn = true; F.passwordSet = false;
+          return Promise.resolve({data: {session: {user: {id: INIT.userId, email: tk.email}}}, error: null});
+        },
+        updateUser: function(p){
+          if (!F.signedIn) return Promise.resolve({data: null, error: {message: "Auth session missing!"}});
+          if (!p.password || p.password.length < 6) return Promise.resolve({data: null, error: {message: "Password should be at least 6 characters"}});
+          F.passwordSet = true; F.lastPassword = p.password;
+          return Promise.resolve({data: {user: {id: INIT.userId}}, error: null});
+        }
       },
       storage: { from: function(){ return {
         createSignedUrl: function(path){ F.signedUrls.push(path); return Promise.resolve({data: {signedUrl: "https://signed.test/" + path}, error: null}); },
