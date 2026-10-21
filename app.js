@@ -7846,7 +7846,11 @@ function tplCorridaTab(sv, s){
 }
 // separador «Treino» da app EVOLVE Treino: o treino de hoje, o programa e os últimos treinos
 function tplTreinoHome(s){
-  var html = tplTodayWorkout(s);
+  var html = "";
+  if (corridaModeOf(s) !== "off" && runPendingCount() > 0){ // uma gravação interrompida ou corridas por enviar: o aluno não pode deixá-las esquecidas
+    html += "<div class=\"card\" id=\"runPendingCard\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin:6px 0 10px;\">Tens uma corrida por terminar ou por enviar neste telemóvel.</p><button type=\"button\" class=\"btn primary\" id=\"openRunsPending\">Abrir a Corrida</button></div>";
+  }
+  html += tplTodayWorkout(s);
   if (workoutDaysWithExercises(s).length) html += tplTrainingProgramCard(s);
   var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 5);
   if (logs.length){
@@ -8599,6 +8603,8 @@ function wireTrainingNav(s, el){
   }
   var start = el.querySelector("#startWorkout");
   if (start) start.addEventListener("click", function(){ go("treino", start.getAttribute("data-day")); });
+  var openRunsPending = el.querySelector("#openRunsPending");
+  if (openRunsPending) openRunsPending.addEventListener("click", function(){ go("corrida"); });
   el.querySelectorAll("[data-start-day]").forEach(function(b){ b.addEventListener("click", function(){ go("treino", b.getAttribute("data-start-day")); }); });
   wireExerciseInfo(s, el);
   var back = el.querySelector("#backToHoje");
