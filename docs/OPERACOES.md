@@ -289,10 +289,10 @@ O Supabase tem um serviço de email incluído que não serve para uso real (só 
 
 ## 8t. Música no treino
 
-No ecrã de treino do aluno há «♪ Música no treino»: o aluno cola o link de uma playlist (Spotify, Apple Music ou YouTube Music) e passa a ter o botão «Abrir Spotify» (ou o serviço do link). A EVOLVE **não toca nem controla música**: só abre o link na app de música; é ela que toca, por isso a música continua quando o aluno sai da EVOLVE (o treino fica guardado no telemóvel e o cronómetro de descanso conta pela hora, não pelo ecrã).
+No ecrã de treino do aluno há três botões: «♪ Spotify», «♪ Apple Music» e «♪ YouTube Music». Cada um abre essa app de música no telemóvel. A EVOLVE **não toca nem controla música** e **não guarda nada** (sem links, sem localStorage, sem Supabase, sem migração): é a app de música que toca, por isso a música continua quando o aluno sai da EVOLVE (o treino fica guardado no telemóvel e o cronómetro de descanso conta pela hora, não pelo ecrã).
 
-- A playlist é do aluno e fica **só no telemóvel dele** (localStorage por aluno); não vai para o Supabase nem exige migração. Se mudar de telemóvel, cola o link outra vez.
-- Só aceita links `https` dos domínios `open.spotify.com`, `spotify.link`, `music.apple.com`, `music.youtube.com`, `youtube.com` e `youtu.be`. Qualquer outro endereço é recusado.
-- Fora de âmbito: ler ou controlar a reprodução dentro da app (exigiria OAuth do Spotify ou a conta paga da Apple, ver a conversa do GPS/HealthKit) e a parte da Corrida (fica para depois dos testes de GPS).
-- **Por validar no iPhone:** se o link do Spotify abre a app do Spotify (e não o navegador) quando a EVOLVE está instalada no ecrã principal, e se ao voltar à EVOLVE o treino está como ficou.
+- Os botões são links `https` para a página inicial de cada serviço (`open.spotify.com`, `music.apple.com`, `music.youtube.com`), que o telemóvel entrega à app se estiver instalada; se não estiver, abrem no navegador. Escolheu-se https em vez de endereços próprios da app (`spotify:`, `music://`) porque estes ficam mortos quando a app não existe.
+- Abrem sem referência à EVOLVE (`noopener noreferrer`); a EVOLVE nunca contacta os serviços.
+- Não abre uma playlist específica nem sabe o que está a tocar (isso exigiria OAuth do Spotify ou a conta paga da Apple).
+- **Por validar no iPhone e no Android:** se cada botão abre a app (e não o navegador) com a EVOLVE instalada no ecrã principal, e se ao voltar à EVOLVE o treino está como ficou. Se o iPhone abrir o navegador, troca-se para os endereços próprios da app.
 - Testes: `tests/workout-music.test.js`.

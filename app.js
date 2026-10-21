@@ -8043,48 +8043,19 @@ function shopWeekKey(){
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // segunda-feira desta semana
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
-/* ---------- Música no treino: a playlist do aluno ---------- */
-// A EVOLVE não toca nem controla música: só guarda o link que o aluno cola (neste telemóvel) e abre-o na app de música. Quem toca é o Spotify,
-// o Apple Music ou o YouTube Music, por isso a música continua quando o aluno sai da EVOLVE (o treino e o cronómetro de descanso ficam guardados).
-var PLAYLIST_HOSTS = {"open.spotify.com": "Spotify", "spotify.link": "Spotify", "music.apple.com": "Apple Music", "music.youtube.com": "YouTube Music", "youtube.com": "YouTube", "www.youtube.com": "YouTube", "youtu.be": "YouTube"};
-function playlistKey(s){ return "evolve_playlist_v1:" + String(s.id); }
-// só links https de serviços de música conhecidos; devolve {ok, url, service} ou {ok:false, error}
-function normalizePlaylistLink(raw){
-  var v = String(raw == null ? "" : raw).trim();
-  if (!v) return {ok: false, error: "Cola o link da playlist."};
-  if (v.length > 400) return {ok: false, error: "Esse link é demasiado longo."};
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = "https://" + v;
-  var u; try { u = new URL(v); } catch (e) { return {ok: false, error: "Esse link não é válido."}; }
-  if (u.protocol !== "https:" || u.username || u.password) return {ok: false, error: "Só aceito links https de playlists."};
-  var service = PLAYLIST_HOSTS[u.hostname.toLowerCase()];
-  if (!service) return {ok: false, error: "Só aceito links do Spotify, Apple Music ou YouTube Music."};
-  return {ok: true, url: u.href, service: service};
-}
-function playlistLoad(s){ try { var raw = localStorage.getItem(playlistKey(s)); var n = raw ? normalizePlaylistLink(raw) : null; return n && n.ok ? n : null; } catch (e) { return null; } }
-function playlistSave(s, url){ try { localStorage.setItem(playlistKey(s), url); return true; } catch (e) { return false; } }
-function playlistClear(s){ try { localStorage.removeItem(playlistKey(s)); } catch (e) {} }
-function playlistRowHtml(s){
-  var p = playlistLoad(s);
-  if (!p) return "<div class=\"playlist-row\"><button type=\"button\" class=\"btn btn-sm\" id=\"playlistAdd\">♪ Música no treino</button></div>";
-  return "<div class=\"playlist-row\"><a class=\"btn btn-sm primary\" id=\"playlistOpen\" href=\"" + escapeHtml(p.url) + "\" target=\"_blank\" rel=\"noopener noreferrer\">♪ Abrir " + escapeHtml(p.service) + "</a>" +
-    "<button type=\"button\" class=\"btn btn-sm\" id=\"playlistEdit\">Alterar</button></div>" +
-    "<p class=\"muted-p\" style=\"font-size:0.78rem;\">A música toca na app de música: podes sair da EVOLVE e voltar. O treino fica guardado neste telemóvel.</p>";
-}
-function openPlaylistModal(s, onDone){
-  var cur = playlistLoad(s);
-  var sheet = openModal("<div class=\"mtitle\">Música no treino</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Cola o link de uma playlist do Spotify, Apple Music ou YouTube Music (na app de música: Partilhar → Copiar link). Fica só neste telemóvel.</p>" +
-    "<div class=\"checkin-field\"><label for=\"plLink\">Link da playlist</label><input type=\"url\" id=\"plLink\" inputmode=\"url\" autocomplete=\"off\" autocapitalize=\"off\" placeholder=\"https://open.spotify.com/playlist/…\" value=\"" + escapeHtml(cur ? cur.url : "") + "\"></div>" +
-    "<p class=\"muted-p\" id=\"plErr\" style=\"color:var(--critical); display:none;\"></p>" +
-    "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn primary\" id=\"plSave\" style=\"flex:1 1 140px;\">Guardar</button>" + (cur ? "<button type=\"button\" class=\"btn\" id=\"plRemove\">Remover</button>" : "") + "</div>");
-  sheet.querySelector("#plSave").addEventListener("click", function(){
-    var n = normalizePlaylistLink(sheet.querySelector("#plLink").value), err = sheet.querySelector("#plErr");
-    if (!n.ok){ err.textContent = n.error; err.style.display = "block"; return; }
-    if (!playlistSave(s, n.url)){ err.textContent = "Não foi possível guardar neste telemóvel."; err.style.display = "block"; return; }
-    closeModal(); showToast("Playlist guardada"); if (onDone) onDone();
-  });
-  var rm = sheet.querySelector("#plRemove");
-  if (rm) rm.addEventListener("click", function(){ playlistClear(s); closeModal(); showToast("Playlist removida"); if (onDone) onDone(); });
+/* ---------- Música no treino: botões para abrir a app de música ---------- */
+// A EVOLVE não toca nem controla música e não guarda nada: só tem botões que abrem a app de música do telemóvel (endereços https que o telemóvel
+// entrega à app, se estiver instalada; senão abrem no navegador). Quem toca é a app de música, por isso a música continua quando o aluno sai da EVOLVE.
+var MUSIC_APPS = [
+  {id: "spotify", name: "Spotify", url: "https://open.spotify.com/"},
+  {id: "apple", name: "Apple Music", url: "https://music.apple.com/"},
+  {id: "ytmusic", name: "YouTube Music", url: "https://music.youtube.com/"}
+];
+function playlistRowHtml(){
+  return "<div class=\"playlist-row\">" + MUSIC_APPS.map(function(m){
+    return "<a class=\"btn btn-sm\" data-music=\"" + m.id + "\" href=\"" + m.url + "\" target=\"_blank\" rel=\"noopener noreferrer\">♪ " + m.name + "</a>";
+  }).join("") + "</div>" +
+    "<p class=\"muted-p\" style=\"font-size:0.78rem;\">Abre a tua app de música: podes sair da EVOLVE e voltar. O treino fica guardado neste telemóvel.</p>";
 }
 
 function shopStoreKey(s){ return "evolve_shop_v1:" + s.id + ":" + shopWeekKey(); }
@@ -8500,7 +8471,7 @@ function tplTrainingProgramCard(s){
 
 // ecrã de treino: um passo de "Hoje" (volta atrás com ← Hoje), com o progresso das séries no topo
 function tplTreinoScreen(s){
-  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Hoje</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml(s);
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Hoje</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
   var day = workoutDayFor(s);
   if (!day) return head + tplWorkoutLogger(s);
   var total = workoutSetCount(day), done = workoutDraftDone(s, day);
@@ -8523,10 +8494,6 @@ function wireTrainingNav(s, el){
   wireExerciseInfo(s, el);
   var back = el.querySelector("#backToHoje");
   if (back) back.addEventListener("click", function(){ go("hoje"); });
-  ["#playlistAdd", "#playlistEdit"].forEach(function(sel){
-    var b = el.querySelector(sel);
-    if (b) b.addEventListener("click", function(){ openPlaylistModal(s, function(){ renderAlunoTab(s); }); });
-  });
   el.querySelectorAll("[data-plano-sec]").forEach(function(b){
     b.addEventListener("click", function(){ state.planoSection = b.getAttribute("data-plano-sec"); renderAlunoTab(s); });
   });
