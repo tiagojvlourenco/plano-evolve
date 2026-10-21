@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Isolada da app EVOLVE: nenhum pedido de rede é possível (connect-src 'none'), nada é guardado no dispositivo e não há ficheiros de terceiros. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; manifest-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="GPS teste">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>EVOLVE · Teste de GPS</title>
+<style>
+  :root { --bg:#000; --fg:#fff; --mut:#a3a3a3; --line:#2a2a2a; --card:#111; --ok:#fff; --warn:#f5c542; --bad:#ff5a5a; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); max-width: 640px; margin: 0 auto; line-height: 1.45; }
+  h1 { font-size: 1.35rem; margin: 4px 0 2px; letter-spacing: .02em; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; color: var(--mut); margin: 0 0 8px; font-weight: 600; }
+  p { margin: 6px 0; }
+  .muted { color: var(--mut); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 12px 0; }
+  .sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0 6px; margin: 0 -2px; }
+  .sticky .banner { margin: 0 0 8px; }
+  .banner { border-radius: 14px; padding: 14px; margin: 12px 0; font-weight: 700; text-align: center; border: 1px solid var(--line); background: var(--card); }
+  .banner.on { background: #fff; color: #000; border-color: #fff; }
+  .banner.err { border-color: var(--bad); color: var(--bad); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background: var(--bad); margin-right:8px; animation: pulse 1s infinite; vertical-align: middle; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  label { display:block; font-size:.85rem; color: var(--mut); margin: 10px 0 4px; }
+  input[type=text], textarea, select { width:100%; background:#000; color:#fff; border:1px solid var(--line); border-radius:10px; padding:12px; font-size:16px; font-family: inherit; }
+  textarea { min-height: 64px; }
+  .row { display:flex; gap:10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 140px; }
+  button { font: inherit; font-size: 1rem; font-weight: 700; border-radius: 12px; border: 1px solid #fff; background: #000; color: #fff; padding: 15px 14px; min-height: 52px; width: 100%; }
+  button.primary { background:#fff; color:#000; }
+  button:disabled { opacity: .35; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .k { color: var(--mut); font-size: .78rem; }
+  .v { font-size: 1.05rem; font-variant-numeric: tabular-nums; word-break: break-word; }
+  .big { font-size: 1.6rem; font-weight: 700; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+  ol, ul { padding-left: 20px; margin: 6px 0; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; font-variant-numeric: tabular-nums; }
+  td, th { border-bottom: 1px solid var(--line); padding: 4px 3px; text-align: left; vertical-align: top; }
+  th { color: var(--mut); font-weight: 600; }
+  .t-erro { color: var(--bad); } .t-aviso { color: var(--warn); }
+  .hidden { display: none !important; }
+  .check { display:flex; gap:10px; align-items:flex-start; margin: 8px 0; }
+  .check input { width: 22px; height: 22px; margin-top: 2px; flex: 0 0 auto; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: .8rem; margin: 6px 0; }
+</style>
+</head>
+<body>
+<h1>EVOLVE · Teste de GPS</h1>
+<p class="muted">Página de diagnóstico, separada da app EVOLVE. Serve só para descobrir o que o teu telemóvel faz ao GPS quando a página fica em segundo plano ou o ecrã bloqueia.</p>
+
+<div class="sticky">
+  <div id="banner" class="banner">Teste parado — nenhuma localização a ser lida.</div>
+  <div class="row">
+    <button id="bStart" class="primary">Iniciar teste</button>
+    <button id="bStop" disabled>Parar teste</button>
+  </div>
+  <p class="muted" style="margin:6px 0 0">A localização só é lida depois de carregares em «Iniciar teste». Nada é enviado para lado nenhum.</p>
+</div>
+
+<div class="card">
+  <h2>Privacidade</h2>
+  <ul class="muted">
+    <li>A localização só é pedida quando carregas em «Iniciar teste», e só é lida enquanto o teste estiver ativo.</li>
+    <li>As coordenadas ficam apenas nesta página (memória). <strong>Não são enviadas para nenhum servidor</strong> (a página nem tem permissão para fazer pedidos de rede) e não ficam guardadas no telemóvel.</li>
+    <li>Só saem daqui no ficheiro que tu exportares, se o exportares. Se fechares a página sem exportar, perdem-se.</li>
+    <li>Ao carregar em «Parar teste» o GPS é desligado.</li>
+  </ul>
+</div>
+
+
+<div class="card">
+  <h2>Antes de começar (preenche tu)</h2>
+  <p class="muted">Nada disto é recolhido sozinho. É o que escreveres aqui que vai no ficheiro.</p>
+  <label for="fModelo">Modelo do telemóvel</label>
+  <input type="text" id="fModelo" placeholder="ex.: iPhone 14, Samsung Galaxy S23" autocomplete="off">
+  <label for="fSO">Sistema e versão</label>
+  <input type="text" id="fSO" placeholder="ex.: iOS 18.3, Android 14" autocomplete="off">
+  <label for="fNav">Navegador</label>
+  <input type="text" id="fNav" placeholder="ex.: Safari, Chrome" autocomplete="off">
+  <label for="fModo">Modo de execução</label>
+  <select id="fModo">
+    <option value="">— escolhe —</option>
+    <option>No navegador (separador normal)</option>
+    <option>PWA instalada no ecrã principal</option>
+  </select>
+  <label for="fPerm">Permissão de localização concedida</label>
+  <select id="fPerm">
+    <option value="">— escolhe —</option>
+    <option>Só enquanto uso a app</option>
+    <option>Sempre</option>
+    <option>Perguntar da próxima vez</option>
+    <option>Localização precisa desligada</option>
+    <option>Outra (ver notas)</option>
+  </select>
+  <label for="fCenario">Cenário deste teste</label>
+  <select id="fCenario">
+    <option value="">— escolhe —</option>
+    <option>1 · Ecrã ligado, página aberta (5 min)</option>
+    <option>2 · Ecrã bloqueado ou outra app (10 min)</option>
+    <option>3 · Sem internet, página aberta</option>
+    <option>4 · Poupança de energia ligada</option>
+    <option>Outro (ver notas)</option>
+  </select>
+  <label for="fNotas">Notas (o que fizeste, onde estavas a andar/correr)</label>
+  <textarea id="fNotas"></textarea>
+  <div class="check"><input type="checkbox" id="fWake"><label for="fWake" style="margin:0;color:var(--fg)">Tentar manter o ecrã ligado (Wake Lock). Deixa <strong>desligado</strong> no cenário 2, para ver o que acontece sem ajuda.</label></div>
+</div>
+
+<details class="card">
+  <summary>Como fazer o teste (protocolo)</summary>
+  <ol>
+    <li><strong>Cenário 1 — 5 min, ecrã ligado:</strong> «Iniciar teste», caminha ou corre com a página aberta e o ecrã ligado. «Parar teste».</li>
+    <li><strong>Cenário 2 — 10 min, em segundo plano / ecrã bloqueado:</strong> «Iniciar teste», espera pelo estado «Sinal recebido», bloqueia o ecrã (ou muda para outra app) e caminha 10 minutos. Desbloqueia e <em>volta à página</em>. Vê se continuam a chegar posições. «Parar teste».</li>
+    <li><strong>Cenário 3 — sem internet:</strong> abre a página <em>com internet</em>, «Iniciar teste», liga o modo avião e caminha uns 5 minutos. O GPS não precisa de internet. Não recarregues a página sem rede. «Parar teste».</li>
+    <li>Repete em cada telemóvel e em cada modo (navegador e PWA instalada).</li>
+    <li>No fim, «Exportar diagnóstico» e envia os ficheiros.</li>
+  </ol>
+  <p class="muted">Uma ausência de dados não prova, por si só, o que o sistema fez: a página pode ter sido suspensa ou fechada. Por isso este teste regista também quando a página esteve visível, oculta e se o relógio da própria página deixou de andar.</p>
+</details>
+
+<div class="card">
+  <h2>Estado ao vivo</h2>
+  <div class="grid">
+    <div><div class="k">Permissão</div><div class="v" id="vPerm">—</div></div>
+    <div><div class="k">Página</div><div class="v" id="vVis">—</div></div>
+    <div><div class="k">Precisão</div><div class="v big" id="vAcc">—</div></div>
+    <div><div class="k">Posições recebidas</div><div class="v big" id="vCount">0</div></div>
+    <div><div class="k">Última posição (hora)</div><div class="v" id="vLast">—</div></div>
+    <div><div class="k">Intervalo (último / máx.)</div><div class="v" id="vInt">—</div></div>
+    <div style="grid-column: 1 / -1"><div class="k">Coordenadas</div><div class="v" id="vCoord">—</div></div>
+    <div><div class="k">Distância aproximada (só diagnóstico)</div><div class="v" id="vDist">—</div></div>
+    <div><div class="k">Duração do teste</div><div class="v" id="vDur">—</div></div>
+    <div><div class="k">Ecrã ligado (Wake Lock)</div><div class="v" id="vWake">—</div></div>
+    <div><div class="k">Modo detetado (só informativo)</div><div class="v" id="vModo">—</div></div>
+  </div>
+  <p class="muted" id="vNota"></p>
+</div>
+
+<div id="resumoCard" class="card hidden">
+  <h2>Resumo do teste</h2>
+  <div id="resumo"></div>
+</div>
+
+<div class="card">
+  <h2>Exportar</h2>
+  <button id="bExport" disabled>Exportar diagnóstico</button>
+  <div id="exportOpts" class="hidden" style="margin-top:10px">
+    <div class="row">
+      <button id="bJson">Guardar JSON</button>
+      <button id="bCsv">Guardar CSV</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="bShare" class="hidden">Partilhar…</button>
+      <button id="bCopy">Copiar JSON</button>
+    </div>
+    <p class="muted" id="exportMsg"></p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Registo (últimos eventos)</h2>
+  <table><thead><tr><th>Hora</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody id="logBody"></tbody></table>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var VERSAO = "gps-teste-1";
+  var GAP_MS = 15000;          // intervalo entre posições a partir do qual se regista uma lacuna
+  var BEAT_MS = 1000;          // batimento da própria página (para ver suspensões do JavaScript)
+  var BEAT_LATE_MS = 2500;     // atraso do batimento a partir do qual se regista
+  var ACC_BAD_M = 30;          // precisão considerada fraca
+  var ACC_DIAG_M = 50;         // só se soma distância entre posições com precisão melhor que isto
+  var $ = function(id){ return document.getElementById(id); };
+
+  var S = null;                // estado do teste atual (só em memória)
+  var lastExportName = "";
+
+  function nowIso(ms){ return new Date(ms).toISOString(); }
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+  function hhmmss(ms){ var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()); }
+  function fmtDur(ms){ var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return (h ? h + " h " : "") + (h || m ? pad(m) + " min " : "") + pad(s % 60) + " s"; }
+  function visState(){ return document.visibilityState || "desconhecido"; }
+
+  // Haversine (metros). Só para diagnóstico.
+  function haversine(a, b){
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+  function median(arr){ if (!arr.length) return null; var a = arr.slice().sort(function(x, y){ return x - y; }), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+
+  /* ---------- registo ---------- */
+  function log(type, detail, extra){
+    if (!S) return;
+    var t = Date.now();
+    var ev = {n: S.events.length + 1, t_ms: t, t_iso: nowIso(t), tipo: type, pagina: visState(), detalhe: detail || ""};
+    if (extra) Object.keys(extra).forEach(function(k){ ev[k] = extra[k]; });
+    S.events.push(ev);
+    renderLog();
+    return ev;
+  }
+  function renderLog(){
+    var body = $("logBody"), rows = S ? S.events.slice(-25).reverse() : [];
+    body.innerHTML = "";
+    rows.forEach(function(ev){
+      var tr = document.createElement("tr");
+      var cls = /erro|lacuna|atraso|piorou|suspens/.test(ev.tipo) ? (/erro/.test(ev.tipo) ? "t-erro" : "t-aviso") : "";
+      [hhmmss(ev.t_ms), ev.tipo, ev.detalhe].forEach(function(txt, i){
+        var td = document.createElement("td"); td.textContent = txt; if (cls && i === 1) td.className = cls; tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  /* ---------- estado ao vivo ---------- */
+  function setBanner(kind, text){
+    var b = $("banner");
+    b.className = "banner" + (kind === "on" ? " on" : kind === "err" ? " err" : "");
+    if (kind === "on"){ b.innerHTML = ""; var d = document.createElement("span"); d.className = "dot"; b.appendChild(d); b.appendChild(document.createTextNode(text)); }
+    else b.textContent = text;
+  }
+  function renderLive(){
+    $("vVis").textContent = visState() === "visible" ? "visível" : visState() === "hidden" ? "oculta" : visState();
+    if (!S){ return; }
+    $("vCount").textContent = String(S.count);
+    $("vDur").textContent = S.running ? fmtDur(Date.now() - S.startMs) : fmtDur((S.stopMs || Date.now()) - S.startMs);
+    $("vDist").textContent = S.distM ? (S.distM / 1000).toFixed(3).replace(".", ",") + " km (aprox.)" : "—";
+    if (S.lastPos){
+      var p = S.lastPos;
+      $("vAcc").textContent = Math.round(p.accuracy) + " m";
+      $("vLast").textContent = hhmmss(S.lastRecvMs);
+      $("vCoord").textContent = p.lat.toFixed(6) + ", " + p.lon.toFixed(6);
+    }
+    $("vInt").textContent = S.lastIntMs != null ? (S.lastIntMs / 1000).toFixed(1) + " s / " + (S.maxIntMs / 1000).toFixed(1) + " s" : "—";
+  }
+
+  /* ---------- análise (sem conclusões) ---------- */
+  function hiddenOverlap(a, b, intervals){
+    var tot = 0;
+    intervals.forEach(function(iv){ var s = Math.max(a, iv[0]), e = Math.min(b, iv[1]); if (e > s) tot += e - s; });
+    return tot;
+  }
+  function summarize(st){
+    var end = st.stopMs || Date.now();
+    var recv = st.events.filter(function(e){ return e.tipo === "posicao"; });
+    var ints = recv.map(function(e){ return e.intervalo_ms; }).filter(function(x){ return x != null; });
+    var accs = recv.map(function(e){ return e.precisao_m; });
+    var hidden = st.hiddenIntervals.slice();
+    if (st.hiddenSince != null) hidden.push([st.hiddenSince, end]);
+    var hiddenTotal = hidden.reduce(function(a, iv){ return a + (iv[1] - iv[0]); }, 0);
+    var gaps = st.events.filter(function(e){ return e.tipo === "lacuna_gps"; }).map(function(e){ return {de_iso: e.t_iso, segundos: e.lacuna_s, pagina_oculta_s: e.oculta_s}; });
+    var lateBeats = st.events.filter(function(e){ return e.tipo === "atraso_do_relogio_da_pagina"; });
+    var posHidden = recv.filter(function(e){ return e.pagina === "hidden"; }).length;
+    var out = {
+      duracao_s: Math.round((end - st.startMs) / 1000),
+      posicoes_total: recv.length,
+      posicoes_com_pagina_visivel: recv.length - posHidden,
+      posicoes_com_pagina_oculta: posHidden,
+      tempo_pagina_oculta_s: Math.round(hiddenTotal / 1000),
+      intervalo_mediano_s: ints.length ? +(median(ints) / 1000).toFixed(2) : null,
+      intervalo_maximo_s: ints.length ? +(Math.max.apply(null, ints) / 1000).toFixed(2) : null,
+      lacunas_gps_mais_de_15s: gaps,
+      precisao_mediana_m: accs.length ? Math.round(median(accs)) : null,
+      precisao_pior_m: accs.length ? Math.round(Math.max.apply(null, accs)) : null,
+      avisos_de_precisao_pior: st.events.filter(function(e){ return e.tipo === "precisao_piorou"; }).length,
+      atrasos_do_relogio_da_pagina: lateBeats.length,
+      maior_atraso_do_relogio_s: lateBeats.length ? Math.max.apply(null, lateBeats.map(function(e){ return e.atraso_s; })) : 0,
+      distancia_aproximada_m: Math.round(st.distM),
+      erros_gps: st.events.filter(function(e){ return e.tipo === "erro_gps"; }).length
+    };
+    return out;
+  }
+  function observacoes(r){
+    var o = [];
+    if (!r.posicoes_total) o.push("Não chegou nenhuma posição. Pode ser permissão recusada, sem sinal, ou a página ter sido suspensa — vê o registo.");
+    if (r.tempo_pagina_oculta_s > 0){
+      if (r.posicoes_com_pagina_oculta > 0) o.push("Chegaram " + r.posicoes_com_pagina_oculta + " posições enquanto a página estava oculta (" + r.tempo_pagina_oculta_s + " s no total).");
+      else o.push("A página esteve oculta " + r.tempo_pagina_oculta_s + " s e não chegou nenhuma posição nesse período. Isto sozinho não diz se o sistema parou o GPS ou suspendeu a página: confirma com os atrasos do relógio da página.");
+    }
+    if (r.atrasos_do_relogio_da_pagina) o.push("O relógio da própria página parou ou atrasou " + r.atrasos_do_relogio_da_pagina + " vez(es) (até " + r.maior_atraso_do_relogio_s + " s): o navegador suspendeu a execução da página nesses momentos.");
+    if (r.lacunas_gps_mais_de_15s.length) o.push(r.lacunas_gps_mais_de_15s.length + " lacuna(s) de mais de 15 s entre posições.");
+    if (r.avisos_de_precisao_pior) o.push("A precisão piorou de forma notória " + r.avisos_de_precisao_pior + " vez(es).");
+    if (!o.length && r.posicoes_total) o.push("Sem lacunas nem atrasos relevantes neste teste.");
+    return o;
+  }
+  function renderResumo(){
+    if (!S) return;
+    var r = summarize(S), box = $("resumo");
+    box.innerHTML = "";
+    var obs = observacoes(r);
+    var ul = document.createElement("ul");
+    obs.forEach(function(t){ var li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+    box.appendChild(ul);
+    var pre = document.createElement("pre"); pre.textContent = JSON.stringify(r, null, 2); box.appendChild(pre);
+    var n = document.createElement("p"); n.className = "muted"; n.textContent = "Este resumo descreve o que foi registado. Não é uma conclusão sobre o comportamento do sistema operativo.";
+    box.appendChild(n);
+    $("resumoCard").classList.remove("hidden");
+  }
+
+  /* ---------- permissão ---------- */
+  function queryPermission(){
+    try {
+      if (!navigator.permissions || !navigator.permissions.query){ $("vPerm").textContent = "não consultável neste navegador"; return; }
+      navigator.permissions.query({name: "geolocation"}).then(function(res){
+        var show = function(){ $("vPerm").textContent = ({granted: "concedida", denied: "recusada", prompt: "por pedir"})[res.state] || res.state; if (S) log("permissao", "estado: " + res.state, {estado: res.state}); };
+        $("vPerm").textContent = ({granted: "concedida", denied: "recusada", prompt: "por pedir"})[res.state] || res.state;
+        res.onchange = show;
+      }, function(){ $("vPerm").textContent = "não consultável"; });
+    } catch (e) { $("vPerm").textContent = "não consultável"; }
+  }
+
+  /* ---------- GPS ---------- */
+  var GEO_ERR = {1: "Permissão de localização recusada", 2: "Posição indisponível (sem sinal ou serviço de localização desligado)", 3: "Tempo esgotado à espera de uma posição"};
+  function onPos(p){
+    if (!S || !S.running) return;
+    var t = Date.now(), c = p.coords, cur = {lat: c.latitude, lon: c.longitude, accuracy: c.accuracy, ts: p.timestamp};
+    var interval = S.lastRecvMs != null ? t - S.lastRecvMs : null;
+    var stampInt = S.lastPos ? p.timestamp - S.lastPos.ts : null;
+    if (interval != null && interval > GAP_MS){
+      var ovl = hiddenOverlap(S.lastRecvMs, t, S.hiddenIntervals.concat(S.hiddenSince != null ? [[S.hiddenSince, t]] : []));
+      log("lacuna_gps", "sem posições durante " + (interval / 1000).toFixed(0) + " s (página oculta nesse período: " + Math.round(ovl / 1000) + " s)", {lacuna_s: Math.round(interval / 1000), oculta_s: Math.round(ovl / 1000)});
+    }
+    // precisão piorou de forma notória face à mediana recente
+    S.recentAcc.push(c.accuracy); if (S.recentAcc.length > 10) S.recentAcc.shift();
+    if (S.recentAcc.length >= 5){
+      var base = median(S.recentAcc.slice(0, -1));
+      if (c.accuracy > ACC_BAD_M && base != null && c.accuracy > 2 * base) log("precisao_piorou", "precisão " + Math.round(c.accuracy) + " m (mediana recente " + Math.round(base) + " m)");
+    }
+    if (S.lastPos && S.lastPos.accuracy <= ACC_DIAG_M && cur.accuracy <= ACC_DIAG_M) S.distM += haversine(S.lastPos, cur);
+    S.count++; S.lastPos = cur; S.lastRecvMs = t;
+    if (interval != null){ S.lastIntMs = interval; S.maxIntMs = Math.max(S.maxIntMs || 0, interval); }
+    var ev = log("posicao", cur.lat.toFixed(5) + ", " + cur.lon.toFixed(5) + " · ±" + Math.round(cur.accuracy) + " m", {
+      lat: cur.lat, lon: cur.lon, precisao_m: c.accuracy, velocidade_ms: c.speed, rumo: c.heading, altitude_m: c.altitude,
+      timestamp_posicao_ms: p.timestamp, intervalo_ms: interval, intervalo_timestamps_ms: stampInt
+    });
+    if (S.count === 1) setBanner("on", "A RECOLHER LOCALIZAÇÃO — sinal recebido");
+    renderLive();
+  }
+  function onErr(e){
+    if (!S || !S.running) return;
+    var msg = GEO_ERR[e.code] || ("Erro de localização " + e.code);
+    log("erro_gps", msg + (e.message ? " (" + e.message + ")" : ""), {codigo: e.code});
+    $("vNota").textContent = msg + ".";
+    if (e.code === 1){ setBanner("err", "Localização recusada. Ativa-a nas definições do navegador e volta a tentar."); stopTest(true); }
+    renderLive();
+  }
+
+  /* ---------- batimento, visibilidade, rede ---------- */
+  function beat(){
+    if (!S || !S.running) return;
+    var t = Date.now(), d = t - S.lastBeat;
+    S.ticks++;
+    if (d > BEAT_LATE_MS) log("atraso_do_relogio_da_pagina", "o relógio da página só avançou ao fim de " + (d / 1000).toFixed(1) + " s (esperado 1 s): execução suspensa ou atrasada", {atraso_s: +(d / 1000).toFixed(1)});
+    S.lastBeat = t;
+    renderLive();
+  }
+  function onVis(){
+    renderLive();
+    if (!S || !S.running) return;
+    var t = Date.now();
+    if (visState() === "hidden"){ S.hiddenSince = t; log("pagina_oculta", "a página passou para segundo plano / ecrã bloqueado"); }
+    else {
+      if (S.hiddenSince != null){ S.hiddenIntervals.push([S.hiddenSince, t]); log("pagina_visivel", "voltou ao primeiro plano após " + Math.round((t - S.hiddenSince) / 1000) + " s"); S.hiddenSince = null; }
+      else log("pagina_visivel", "visível");
+      if (S.wantWake) requestWake();
+    }
+  }
+  function onNet(){ if (S && S.running) log("rede", navigator.onLine ? "ligação à internet disponível" : "sem ligação à internet"); }
+
+  /* ---------- Wake Lock (opcional) ---------- */
+  function requestWake(){
+    if (!S || !S.running || !S.wantWake) return;
+    if (!("wakeLock" in navigator)){ $("vWake").textContent = "não suportado"; if (!S.wakeWarned){ S.wakeWarned = true; log("ecra_ligado", "Wake Lock não suportado neste navegador/modo"); } return; }
+    if (S.wake) return;
+    navigator.wakeLock.request("screen").then(function(lock){
+      S.wake = lock; $("vWake").textContent = "ativo"; log("ecra_ligado", "Wake Lock concedido");
+      lock.addEventListener("release", function(){ if (S){ S.wake = null; $("vWake").textContent = "libertado"; log("ecra_ligado", "Wake Lock libertado pelo sistema"); } });
+    }, function(err){ $("vWake").textContent = "recusado"; log("ecra_ligado", "Wake Lock recusado: " + (err && err.name ? err.name : err)); });
+  }
+
+  /* ---------- iniciar / parar ---------- */
+  function collectMeta(){
+    return {modelo: $("fModelo").value.trim(), sistema: $("fSO").value.trim(), navegador: $("fNav").value.trim(), modo_de_execucao: $("fModo").value, permissao_concedida: $("fPerm").value, cenario: $("fCenario").value, notas: $("fNotas").value.trim(), wake_lock_pedido: $("fWake").checked};
+  }
+  function startTest(){
+    if (S && S.running) return;
+    if (!window.isSecureContext){ setBanner("err", "Esta página tem de abrir por HTTPS (ou localhost) para usar o GPS."); return; }
+    if (!("geolocation" in navigator)){ setBanner("err", "Este navegador não tem localização."); return; }
+    var t = Date.now();
+    S = {running: true, startMs: t, stopMs: null, events: [], count: 0, distM: 0, lastPos: null, lastRecvMs: null, lastIntMs: null, maxIntMs: 0, recentAcc: [], hiddenIntervals: [], hiddenSince: visState() === "hidden" ? t : null,
+         lastBeat: t, ticks: 0, watchId: null, beatTimer: null, durTimer: null, wake: null, wantWake: $("fWake").checked, meta: collectMeta()};
+    $("resumoCard").classList.add("hidden");
+    $("bStart").disabled = true; $("bStop").disabled = false; $("bExport").disabled = true; $("exportOpts").classList.add("hidden");
+    $("vNota").textContent = "";
+    setBanner("on", "A PROCURAR GPS — ainda sem posição");
+    log("teste_iniciado", "versão " + VERSAO + (S.wantWake ? " · Wake Lock pedido" : ""), {versao: VERSAO});
+    log("rede", navigator.onLine ? "ligação à internet disponível" : "sem ligação à internet");
+    S.beatTimer = setInterval(beat, BEAT_MS);
+    S.durTimer = setInterval(renderLive, 1000);
+    requestWake();
+    S.watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 0, timeout: 30000});
+    renderLive();
+  }
+  function stopTest(fromError){
+    if (!S || !S.running) return;
+    var t = Date.now();
+    if (S.watchId != null){ try { navigator.geolocation.clearWatch(S.watchId); } catch (e) {} S.watchId = null; }
+    clearInterval(S.beatTimer); clearInterval(S.durTimer);
+    if (S.hiddenSince != null){ S.hiddenIntervals.push([S.hiddenSince, t]); S.hiddenSince = null; }
+    if (S.wake){ try { S.wake.release(); } catch (e) {} S.wake = null; }
+    log("teste_parado", fromError ? "parado por erro" : "parado pelo utilizador");
+    S.running = false; S.stopMs = t; S.meta = collectMeta();
+    $("bStart").disabled = false; $("bStop").disabled = true; $("bExport").disabled = false;
+    if (!fromError) setBanner("", "Teste parado — GPS desligado. Podes exportar o diagnóstico.");
+    $("vWake").textContent = "—";
+    renderLive(); renderResumo();
+  }
+
+  /* ---------- exportar ---------- */
+  function buildExport(){
+    var st = S, summary = summarize(st);
+    return {
+      versao_do_teste: VERSAO, iniciado_em: nowIso(st.startMs), terminado_em: st.stopMs ? nowIso(st.stopMs) : null,
+      dispositivo_indicado_pelo_utilizador: st.meta,
+      modo_detetado_pela_pagina: detectMode(),
+      resumo: summary, observacoes: observacoes(summary),
+      aviso: "Registos incompletos não provam uma causa: a página pode ter sido suspensa ou fechada pelo sistema.",
+      eventos: st.events
+    };
+  }
+  var CSV_COLS = ["n", "t_iso", "t_ms", "tipo", "pagina", "lat", "lon", "precisao_m", "velocidade_ms", "rumo", "altitude_m", "timestamp_posicao_ms", "intervalo_ms", "intervalo_timestamps_ms", "lacuna_s", "oculta_s", "atraso_s", "codigo", "detalhe"];
+  function csvCell(v){ if (v == null) return ""; var s = String(v); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function buildCsv(){ return [CSV_COLS.join(",")].concat(S.events.map(function(e){ return CSV_COLS.map(function(c){ return csvCell(e[c]); }).join(","); })).join("\n"); }
+  function stamp(){ var d = new Date(S.startMs); return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + "-" + pad(d.getHours()) + pad(d.getMinutes()); }
+  function download(name, mime, text){
+    var url = URL.createObjectURL(new Blob([text], {type: mime}));
+    var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+    lastExportName = name; $("exportMsg").textContent = "Ficheiro «" + name + "» preparado. Se não aparecer, usa «Partilhar…» ou «Copiar JSON».";
+  }
+  function detectMode(){
+    var standalone = false;
+    try { standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; } catch (e) {}
+    return standalone ? "aberta como app instalada (ecrã principal)" : "aberta no navegador";
+  }
+
+  /* ---------- ligações ---------- */
+  $("bStart").addEventListener("click", startTest);
+  $("bStop").addEventListener("click", function(){ stopTest(false); });
+  $("bExport").addEventListener("click", function(){ if (S) $("exportOpts").classList.toggle("hidden"); });
+  $("bJson").addEventListener("click", function(){ if (S) download("gps-teste-" + stamp() + ".json", "application/json", JSON.stringify(buildExport(), null, 2)); });
+  $("bCsv").addEventListener("click", function(){ if (S) download("gps-teste-" + stamp() + ".csv", "text/csv", buildCsv()); });
+  $("bCopy").addEventListener("click", function(){
+    if (!S) return;
+    var txt = JSON.stringify(buildExport(), null, 2);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ $("exportMsg").textContent = "JSON copiado. Cola-o numa mensagem ou nota."; }, function(){ $("exportMsg").textContent = "Não foi possível copiar. Usa «Guardar JSON»."; });
+    else $("exportMsg").textContent = "Copiar não é suportado aqui. Usa «Guardar JSON».";
+  });
+  if (navigator.share && navigator.canShare){
+    $("bShare").classList.remove("hidden");
+    $("bShare").addEventListener("click", function(){
+      if (!S) return;
+      var file = new File([JSON.stringify(buildExport(), null, 2)], "gps-teste-" + stamp() + ".json", {type: "application/json"});
+      if (navigator.canShare({files: [file]})) navigator.share({files: [file], title: "Diagnóstico GPS"}).catch(function(){});
+      else $("exportMsg").textContent = "Partilhar ficheiros não é suportado aqui. Usa «Guardar JSON».";
+    });
+  }
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", function(e){ if (S && S.running) log("pagina_pagehide", e && e.persisted ? "a página foi para a cache do navegador" : "a página está a ser fechada"); });
+  window.addEventListener("pageshow", function(e){ if (S && S.running) log("pagina_pageshow", e && e.persisted ? "página restaurada da cache" : "página mostrada"); });
+  window.addEventListener("focus", function(){ if (S && S.running) log("foco", "janela com foco"); });
+  window.addEventListener("blur", function(){ if (S && S.running) log("foco", "janela sem foco"); });
+  document.addEventListener("freeze", function(){ if (S && S.running) log("pagina_congelada", "o navegador congelou a página"); });
+  document.addEventListener("resume", function(){ if (S && S.running) log("pagina_retomada", "o navegador retomou a página"); });
+  window.addEventListener("online", onNet);
+  window.addEventListener("offline", onNet);
+
+  $("vModo").textContent = detectMode();
+  if (!window.isSecureContext) $("vNota").textContent = "Aviso: esta página não está em HTTPS; o GPS não vai funcionar.";
+  queryPermission();
+  renderLive();
+
+  // só para testes automáticos (leitura): não altera nada
+  window.GPSTESTE = {haversine: haversine, summarize: function(){ return S ? summarize(S) : null; }, events: function(){ return S ? S.events.slice() : []; }, running: function(){ return !!(S && S.running); }, csv: function(){ return S ? buildCsv() : ""; }, exportObj: function(){ return S ? buildExport() : null; }};
+})();
+</script>
+</body>
+</html>
