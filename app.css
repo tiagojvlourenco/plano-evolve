@@ -542,6 +542,8 @@
   .help-link{width:100%; color:var(--muted); font-size:0.78rem; text-transform:none; letter-spacing:0; min-height:44px;}
   .treino-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .treino-head .btn{min-height:44px;}
+  .playlist-row{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 4px;}
+  .playlist-row .btn{min-height:44px; text-decoration:none; display:inline-flex; align-items:center;}
   .wl-progress{display:flex; flex-direction:column; gap:10px;}
   .prog-day{border-top:1px solid var(--line); padding-top:12px; margin-top:12px;}
   .pd-row{display:flex; align-items:center; justify-content:space-between; gap:12px;}

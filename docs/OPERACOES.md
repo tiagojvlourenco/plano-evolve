@@ -286,3 +286,13 @@ O Supabase tem um serviço de email incluído que não serve para uso real (só 
 4. Abre o mesmo link outra vez: deve dizer que já foi usado ou expirou.
 
 **Segurança:** quem tiver o link define a password dessa conta; envia-o só ao aluno. Cada link só serve uma vez e expira. A função recusa quem não é profissional e emails sem convite; a chave de serviço nunca sai do servidor. Testes: `tests/convidar-aluno.test.js` (função, em Node com dependências simuladas) e `tests/invite-link-browser.test.js` (ecrãs, Chromium com Supabase simulado). Não cobrem o Supabase real.
+
+## 8t. Música no treino
+
+No ecrã de treino do aluno há «♪ Música no treino»: o aluno cola o link de uma playlist (Spotify, Apple Music ou YouTube Music) e passa a ter o botão «Abrir Spotify» (ou o serviço do link). A EVOLVE **não toca nem controla música**: só abre o link na app de música; é ela que toca, por isso a música continua quando o aluno sai da EVOLVE (o treino fica guardado no telemóvel e o cronómetro de descanso conta pela hora, não pelo ecrã).
+
+- A playlist é do aluno e fica **só no telemóvel dele** (localStorage por aluno); não vai para o Supabase nem exige migração. Se mudar de telemóvel, cola o link outra vez.
+- Só aceita links `https` dos domínios `open.spotify.com`, `spotify.link`, `music.apple.com`, `music.youtube.com`, `youtube.com` e `youtu.be`. Qualquer outro endereço é recusado.
+- Fora de âmbito: ler ou controlar a reprodução dentro da app (exigiria OAuth do Spotify ou a conta paga da Apple, ver a conversa do GPS/HealthKit) e a parte da Corrida (fica para depois dos testes de GPS).
+- **Por validar no iPhone:** se o link do Spotify abre a app do Spotify (e não o navegador) quando a EVOLVE está instalada no ecrã principal, e se ao voltar à EVOLVE o treino está como ficou.
+- Testes: `tests/workout-music.test.js`.
