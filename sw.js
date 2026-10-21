@@ -87,7 +87,8 @@ function cacheFirst(event){
   });
 }
 
-// código da app (app.js, app.css), da Gestão (gestao.js) e da Corrida (corrida.js, corrida-core.js): sempre a versão mais recente quando há ligação; sem rede usa a última guardada (não está no SHELL: os alunos nunca o descarregam)
+// código da app (app.js, app.css), da Gestão (gestao.js) e da Corrida (corrida.js, corrida-core.js): sempre a versão mais recente quando há ligação; sem rede usa a última guardada
+// (gestao.js não está no SHELL: os alunos nunca o descarregam; a Corrida está, para o aluno a abrir sem rede, ao ar livre)
 function networkFirstFile(event){
   var request = event.request;
   return new Promise(function(resolve){
