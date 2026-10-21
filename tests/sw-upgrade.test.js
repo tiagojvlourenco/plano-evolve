@@ -49,14 +49,14 @@ async function install(initial, absent){
   var keys = Object.keys(caches.stores);
   check.check("1. Depois da atualização só existe a cache nova (a antiga, com a página trocada, foi apagada)", keys.length === 1 && keys[0] !== "evolve-v1");
   var cur = caches.stores[keys[0]];
-  ["index.html", "gestao.html", "treino.html", "app.js", "app.css", "manifest-gestao.json", "manifest-treino.json", "icon-gestao-192.png", "icon-treino-192.png", "corrida-core.js", "corrida.js"].forEach(function(f, i){
+  ["index.html", "gestao.html", "treino.html", "app.js", "app.css", "manifest-gestao.json", "manifest-treino.json", "icon-gestao-192.png", "icon-treino-192.png", "corrida-core.js", "corrida.js", "corrida-live.js"].forEach(function(f, i){
     check.check("2." + (i + 1) + ". A cache nova guarda " + f, !!cur[f]);
   });
   check.check("3. Nenhuma cópia antiga de index.html sobrevive", !JSON.stringify(cur["index.html"] && cur["index.html"].fetched).includes("GESTAO"));
   check.check("4. A shell é pedida sem a cache HTTP do browser (cache: reload)", Object.keys(cur).every(function(k){ return cur[k].fetched && cur[k].fetched.cache === "reload"; }));
   // 5. a Corrida ainda não está no servidor (404): a instalação acaba na mesma e o resto fica guardado
-  var caches2 = await install({}, ["corrida.js", "corrida-core.js"]);
+  var caches2 = await install({}, ["corrida.js", "corrida-core.js", "corrida-live.js"]);
   var cur2 = caches2.stores[Object.keys(caches2.stores)[0]] || {};
-  check.check("5. Sem corrida.js nem corrida-core.js no servidor a instalação conclui-se e o resto da shell fica guardado", !cur2["corrida.js"] && !cur2["corrida-core.js"] && !!cur2["index.html"] && !!cur2["treino.html"] && !!cur2["app.js"]);
+  check.check("5. Sem corrida.js nem corrida-core.js no servidor a instalação conclui-se e o resto da shell fica guardado", !cur2["corrida.js"] && !cur2["corrida-core.js"] && !cur2["corrida-live.js"] && !!cur2["index.html"] && !!cur2["treino.html"] && !!cur2["app.js"]);
   check.summarize();
 })();

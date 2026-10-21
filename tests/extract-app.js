@@ -31,7 +31,7 @@ function extractApp(){
   // para G já estar carregado quando o arranque o pedir (na app real isto acontece logo a seguir, pela rede).
   const gestao = fs.readFileSync(path.join(__dirname, "..", "gestao.js"), "utf8");
   // a Corrida (núcleo + ecrãs): na app real é um eval só, com o núcleo primeiro; aqui entra o que existir
-  const corrida = ["corrida-core.js", "corrida.js"].map(function (f) {
+  const corrida = ["corrida-core.js", "corrida.js", "corrida-live.js"].map(function (f) {
     const p = path.join(__dirname, "..", f);
     return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
   }).join("\n");

@@ -170,6 +170,7 @@ function row(id, name, runsMode){
     await ctx.addInitScript(fakeSource({role: role, userId: role === "professional" ? "pro-1" : "user-1", email: "ana@x.test", rows: rows}));
     if (o.seed) await ctx.addInitScript(function(seed){ try { Object.keys(seed).forEach(function(k){ localStorage.setItem(k, seed[k]); }); } catch (e) {} }, o.seed);
     await ctx.route(/\/corrida-core\.js(\?|$)/, function(route){ ctl.core++; if (ctl.coreStatus === 200) route.fulfill({status: 200, contentType: "text/javascript", body: FAKE_CORE}); else route.fulfill({status: ctl.coreStatus, body: "no"}); });
+    await ctx.route(/\/corrida-live\.js(\?|$)/, function(route){ ctl.live = (ctl.live || 0) + 1; route.fulfill({status: 200, contentType: "text/javascript", body: "/* gravador de mentira */\n"}); });
     await ctx.route(/\/corrida\.js(\?|$)/, function(route){ ctl.module++; if (ctl.moduleStatus === 200) route.fulfill({status: 200, contentType: "text/javascript", body: FAKE_MODULE}); else route.fulfill({status: ctl.moduleStatus, body: "no"}); });
     var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
     pg.on("pageerror", function(e){ errors.push(e.message); });

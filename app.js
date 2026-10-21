@@ -7773,7 +7773,8 @@ function tplTodayMeals(s){
 // Corrida (corrida.js): carregada à parte, só quando se abre o separador «Corrida» da app EVOLVE Treino. É avaliada aqui dentro (eval direto,
 // como a Gestão) para usar o mesmo scope; o que o núcleo precisa de chamar fica em C. Se falhar (sem rede na primeira vez), só a Corrida
 // fica indisponível: o treino e o resto da app funcionam.
-// Contrato: corrida-core.js (funções puras run*) e corrida.js (ecrãs) acabam com RUN.loaded = true e definem RUN.screen(sv) (HTML do separador),
+// Contrato: corrida-core.js (funções puras run*), corrida.js (ecrãs, importar, à mão, lista, profissional) e corrida-live.js (gravador GPS com o ecrã ligado)
+// são avaliados juntos, nesta ordem; o último a correr (corrida-live.js) acaba com RUN.loaded = true e definem RUN.screen(sv) (HTML do separador),
 // RUN.wire(s, el) (eventos), RUN.proTab(s, el) (separador «Corridas» na ficha do profissional) e RUN.flush() (envia a fila de corridas; devolve
 // uma Promise). Opcional: RUN.reset() — chamada ao sair da conta, antes de apagar as chaves locais: pára o GPS e esquece o estado em memória.
 // Tudo atrás de students.runs_mode ('off' | 'import' | 'live'): com 'off' (ou sem a coluna) o módulo nem é pedido.
@@ -7811,12 +7812,12 @@ function loadCorrida(){
   if (corridaPromise) return corridaPromise;
   // dois ficheiros, avaliados juntos (um eval só: num eval estrito as declarações de um não se veem no outro)
   corridaPromise = Promise.resolve().then(function(){
-    return Promise.all(["corrida-core.js", "corrida.js"].map(function(f){ return fetch(f, {cache: "no-cache"}); }));
+    return Promise.all(["corrida-core.js", "corrida.js", "corrida-live.js"].map(function(f){ return fetch(f, {cache: "no-cache"}); }));
   }).then(function(rs){
     rs.forEach(function(r){ if (!r || !r.ok) throw new Error("corrida " + (r && r.status)); });
     return Promise.all(rs.map(function(r){ return r.text(); }));
   }).then(function(codes){
-    eval(codes[0] + "\n//# sourceURL=corrida-core.js\n" + codes[1] + "\n//# sourceURL=corrida.js");
+    eval(codes[0] + "\n//# sourceURL=corrida-core.js\n" + codes[1] + "\n//# sourceURL=corrida.js\n" + codes[2] + "\n//# sourceURL=corrida-live.js");
     return !!RUN.loaded;
   }).catch(function(){ corridaPromise = null; return false; });
   return corridaPromise;

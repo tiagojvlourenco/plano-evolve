@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 module.exports = function appText(){
-  return ["index.html", "app.css", "app.js", "gestao.js", "corrida-core.js", "corrida.js"].filter(function (f) {
+  return ["index.html", "app.css", "app.js", "gestao.js", "corrida-core.js", "corrida.js", "corrida-live.js"].filter(function (f) {
     return fs.existsSync(path.join(__dirname, "..", "..", f));
   }).map(function (f) {
     return fs.readFileSync(path.join(__dirname, "..", "..", f), "utf8");
