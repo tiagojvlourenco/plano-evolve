@@ -74,7 +74,7 @@ var noAdjust = function(r){ return r && !r.proposedTargets && r.deltaKcal === 0;
   check.check("16. Só contam as avaliações a partir da alteração (e a de 1 dia antes como ponto de partida): 3 pontos", r.fit.sparse === true && r.fit.n === 3 && r.fit.pts[0].date === d(-29) && r.fit.pts.every(function(p){ return p.date >= d(-29); }));
   var onlyTwo = stu([[84, 92], [56, 90], [28, 88], [0, 87.5]], {change: 28, start: 84, checkins: good()});
   var r2 = computePhaseReview(onlyTwo, today);
-  check.check("17. A avaliação do dia da alteração é o ponto de partida: com só 2 pontos desde então, em observação", r2.kind === "dados" && r2.evidenceState === "observacao" && noAdjust(r2) && r2.progress.n === 4);
+  check.check("17. A avaliação do dia da alteração é o ponto de partida: com só 2 pontos desde então, em observação", r2.kind === "dados" && r2.evidenceState === "observacao" && noAdjust(r2) && r2.progress.n === 2);   // o resumo só conta as avaliações da fase atual (o ponto de partida e a mais recente)
   var older = stu([[84, 92], [40, 91], [10, 89]], {change: 28, start: 84, checkins: good()});
   check.check("18. Uma avaliação de 12 dias antes da alteração não é o ponto de partida", computePhaseReview(older, today).evidenceState !== "suficiente");
 })();
@@ -97,7 +97,7 @@ var noAdjust = function(r){ return r && !r.proposedTargets && r.deltaKcal === 0;
 (function(){
   var pts = [[84, 90], [56, 89], [28, 88], [0, 87]];
   var none = R(pts), old = R(pts, {checkins: [{date: d(-60), adherence: 9, hunger: 4, energy: 7}, {date: d(-67), adherence: 9, hunger: 4, energy: 7}]});
-  check.check("23. Abaixo da banda sem dados de adesão: não reduz calorias, avisa o PT para confirmar", none.kind === "aderencia" && noAdjust(none) && /não há dados fiáveis de adesão/.test(none.text) && /Não sugiro reduzir/.test(none.text));
+  check.check("23. Abaixo da banda sem dados de adesão: não reduz calorias, avisa o PT para confirmar", none.kind === "aderencia" && noAdjust(none) && /Não há dados fiáveis de adesão/.test(none.text) && /não sugiro alterar as calorias/.test(none.text) && none.needsAdherence === true);
   check.check("24. Check-ins muito antigos (60+ dias) também não são dados fiáveis", old.kind === "aderencia" && noAdjust(old));
   var low = R(pts, {checkins: [{date: d(-14), adherence: 3, hunger: 4, energy: 7}, {date: d(-7), adherence: 4, hunger: 4, energy: 7}]});
   check.check("25. Adesão fiável mas baixa: mantém o aviso de adesão (regra de sempre)", low.kind === "aderencia" && noAdjust(low) && /adesão recente é baixa/.test(low.text));

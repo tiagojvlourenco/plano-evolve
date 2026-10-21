@@ -24,13 +24,14 @@ function fixtureRow(id, name, o){
   var s = buildFullDemoStudent();
   s.id = id; s.name = name; s.isDemo = false; s.active = true; s.photos = [];
   s.sex = "Masculino"; s.age = 35; s.height = 178; s.weightCurrent = 90; s.weightInitial = 90; s.trainingsPerWeek = 3; s.weightGoal = 82; s.supplements = [];
-  s.weights = flat(90, 28);
-  s.checkins = [1, 2, 3, 4].map(function(i){ return {date: d(-i * 7), adherence: 8, hunger: 4, energy: 7, weight: 90}; });
+  s.weights = o && o.weights ? o.weights : flat(90, 28);
+  if (o && o.weights) s.assessments = o.weights.map(function(w){ return {date: w.date, weight: w.w}; });
+  s.checkins = o && o.checkins ? o.checkins : [1, 2, 3, 4].map(function(i){ return {date: d(-i * 7), adherence: 8, hunger: 4, energy: 7, weight: 90}; });
   var maint = computeMaintenanceKcal(s), kcal = Math.round(maint * 0.9 / 25) * 25;
   s.targets = {kcal: kcal, protein: 160, fat: 75, carbs: Math.round((kcal - 640 - 675) / 4)};
   s.meals = [meal("Pequeno-almoço", "08:00", [food("Aveia", "100 g", "hidratos"), food("Iogurte grego natural", "300 g"), food("Banana", "2 unid.")]), meal("Almoço", "13:00", [food("Arroz (cozido)", "300 g", "hidratos"), food("Frango (peito)", "250 g"), food("Azeite", "15 ml")]), meal("Jantar", "20:00", [food("Batata-doce", "350 g", "hidratos"), food("Pescada", "250 g"), food("Azeite", "10 ml")])];
   autoAdjustPlanQuantities(s);
-  s.nutritionPhase = o && o.noPhase ? null : {phase: "cut", startDate: d(-35), startWeight: 90, targetWeight: 82, level: "novato", stage: 0, lastChangeDate: d(-35), lastReviewDate: null, nextReviewDate: d(-1), reviewEveryDays: 14, reviews: []};
+  s.nutritionPhase = o && o.noPhase ? null : o && o.phase ? o.phase : {phase: "cut", startDate: d(-35), startWeight: 90, targetWeight: 82, level: "novato", stage: 0, lastChangeDate: d(-35), lastReviewDate: null, nextReviewDate: d(-1), reviewEveryDays: 14, reviews: []};
   return JSON.parse(JSON.stringify(studentToRow(s)));
 }
 (async function(){
@@ -84,8 +85,8 @@ function fixtureRow(id, name, o){
   var panel = await pg.locator("#phaseCard").innerText();
   check.check("10. A ficha de Nutrição mostra a fase Cut, o objetivo (82 kg), as calorias face à manutenção e a próxima revisão", /cut/i.test(panel) && /82 kg/.test(panel) && /da manutenção de/.test(panel) && /Próxima revisão/.test(panel));
   await pg.click("#phaseReviewNow");
-  var toastOk = await pg.locator(".toast", {hasText: /pesagens|Nada a rever|margem|previsto/}).first().waitFor({timeout: 4000}).then(function(){ return true; }, function(){ return false; });
-  check.check("11. «Rever agora» logo depois de uma alteração não abre janela: mostra um aviso de que não há nada a rever", (await pg.locator("#prOk").count()) === 0 && toastOk);
+  var toastOk = await pg.locator(".toast", {hasText: /Sem avaliação nova desde a última revisão\./}).first().waitFor({timeout: 4000}).then(function(){ return true; }, function(){ return false; });
+  check.check("11. «Rever agora» logo depois de uma alteração não abre janela: mostra um aviso de que não há nada a rever", (await pg.locator("#prOk").count()) === 0 && toastOk && !(await pg.locator(".toast", {hasText: /Sem fase definida/}).count()));
 
   // aluno sem fase: definir
   await pg.click("#proBack");
@@ -146,6 +147,36 @@ function fixtureRow(id, name, o){
   var rM2 = await pm.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "m2"; })[0].targets.kcal; });
   check.check("23. Depois de saber que falta a migração, o OK seguinte não finge que guardou: avisa da 0029 e não mexe no plano do aluno", blockedToast && rM2 === kM);
   await ctxM.close();
+
+  // ---------- adesão: o PT confirma no próprio pop-up (sem novo ecrã) ----------
+  function sparseW(){ return [[84, 90], [56, 89], [28, 88], [0, 87]].map(function(x){ return {date: d(-x[0]), w: x[1]}; }); }
+  var sparsePhase = {phase: "cut", startDate: d(-84), startWeight: 90, targetWeight: 82, level: "novato", stage: 0, lastChangeDate: d(-84), lastReviewDate: null, nextReviewDate: d(-1), reviewEveryDays: 28, reviews: []};
+  var rowsS = [fixtureRow("s1", "Sara Espaçada", {weights: sparseW(), checkins: [], phase: sparsePhase}), fixtureRow("s2", "Sérgio Espaçado", {weights: sparseW(), checkins: [], phase: sparsePhase})];
+  var kS = rowsS[0].targets.kcal;
+  var ss = await session(rowsS), ps = ss.page;
+  await ps.goto(srv.url);
+  await ps.waitForSelector("#prAdh0");
+  var txtS = await ps.locator(".modal-sheet").innerText();
+  check.check("24. Sem confirmação nem check-ins: o pop-up explica que não há dados fiáveis de adesão e que não se reduz, e oferece os 3 níveis", /não há dados fiáveis de adesão/i.test(txtS) && /não sugiro alterar as calorias/.test(txtS) && (await ps.locator("#prAdh1").count()) === 1 && (await ps.locator("#prAdh2").count()) === 1 && !/OK — aplicar/.test(txtS));
+  await ps.waitForTimeout(100);
+  await ps.click("#prAdh0");
+  await ps.waitForFunction(function(){ var r = window.__fake.rows.filter(function(x){ return x.id === "s1"; })[0]; return r.nutrition_phase && r.nutrition_phase.adherenceConfirmed; });
+  var s1 = await ps.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "s1"; })[0]; });
+  check.check("25. «Cumprida» grava {date, level} na fase pela gravação normal e não mexe nos alvos, pesagens nem check-ins", s1.nutrition_phase.adherenceConfirmed.level === "cumprida" && s1.nutrition_phase.adherenceConfirmed.date === today && s1.targets.kcal === kS && s1.checkins.length === 0);
+  await ps.waitForFunction(function(){ var b = document.getElementById("prOk"); return b && /aplicar/.test(b.textContent); });
+  check.check("26. …e o mesmo pop-up passa a mostrar a proposta de redução para o PT validar (ainda nada aplicado)", (await ps.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "s1"; })[0].targets.kcal; })) === kS && /kcal/.test(await ps.locator(".modal-sheet").innerText()));
+  await ps.waitForTimeout(700);
+  await ps.click("#prOk");
+  await ps.waitForFunction(function(k){ return window.__fake.rows.filter(function(x){ return x.id === "s1"; })[0].targets.kcal !== k; }, kS);
+  var s1b = await ps.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "s1"; })[0]; });
+  check.check("27. Só ao dar OK as calorias baixam; a confirmação anterior fica invalidada e a avaliação vista guardada", s1b.targets.kcal < kS && s1b.nutrition_phase.adherenceConfirmed === null && s1b.nutrition_phase.seenWeighInDate === today);
+  await ps.waitForSelector("#prAdh1");
+  await ps.waitForTimeout(700);
+  await ps.click("#prAdh1");
+  await ps.waitForFunction(function(){ var r = window.__fake.rows.filter(function(x){ return x.id === "s2"; })[0]; return r.nutrition_phase && r.nutrition_phase.adherenceConfirmed; });
+  var s2r = await ps.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.id === "s2"; })[0]; });
+  check.check("28. «Parcial» regista a confirmação, adia a revisão e deixa as calorias como estão", s2r.nutrition_phase.adherenceConfirmed.level === "parcial" && !!s2r.nutrition_phase.seenWeighInDate && s2r.targets.kcal === kS);
+  await ss.ctx.close();
 
   // ---------- o aluno nunca escreve a fase ----------
   var ctx2 = await browser.newContext({viewport: {width: 390, height: 844}});
