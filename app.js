@@ -7769,25 +7769,30 @@ function tplTodayMeals(s){
 // Corrida (corrida.js): carregada à parte, só quando se abre o separador «Corrida» da app EVOLVE Treino. É avaliada aqui dentro (eval direto,
 // como a Gestão) para usar o mesmo scope; o que o núcleo precisa de chamar fica em C. Se falhar (sem rede na primeira vez), só a Corrida
 // fica indisponível: o treino e o resto da app funcionam.
-var C = {loaded: false, failed: false};
+// Contrato: corrida-core.js (funções puras run*) e corrida.js (ecrãs) acabam com RUN.loaded = true e definem RUN.screen(sv) (HTML do separador),
+// RUN.wire(s, el) (eventos) e RUN.proTab(s, el) (separador «Corridas» na ficha do profissional).
+var RUN = {loaded: false, failed: false};
 var corridaPromise = null;
 function loadCorrida(){
-  if (C.loaded) return Promise.resolve(true);
+  if (RUN.loaded) return Promise.resolve(true);
   if (corridaPromise) return corridaPromise;
-  corridaPromise = Promise.resolve().then(function(){ return fetch("corrida.js", {cache: "no-cache"}); }).then(function(r){
-    if (!r || !r.ok) throw new Error("corrida.js " + (r && r.status));
-    return r.text();
-  }).then(function(code){
-    eval(code + "\n//# sourceURL=corrida.js");
-    return !!C.loaded;
+  // dois ficheiros, avaliados juntos (um eval só: num eval estrito as declarações de um não se veem no outro)
+  corridaPromise = Promise.resolve().then(function(){
+    return Promise.all(["corrida-core.js", "corrida.js"].map(function(f){ return fetch(f, {cache: "no-cache"}); }));
+  }).then(function(rs){
+    rs.forEach(function(r){ if (!r || !r.ok) throw new Error("corrida " + (r && r.status)); });
+    return Promise.all(rs.map(function(r){ return r.text(); }));
+  }).then(function(codes){
+    eval(codes[0] + "\n//# sourceURL=corrida-core.js\n" + codes[1] + "\n//# sourceURL=corrida.js");
+    return !!RUN.loaded;
   }).catch(function(){ corridaPromise = null; return false; });
   return corridaPromise;
 }
 function tplCorridaTab(sv, s){
-  if (C.loaded) return C.render(sv);
-  if (!C.failed){
+  if (RUN.loaded) return RUN.screen(sv);
+  if (!RUN.failed){
     loadCorrida().then(function(ok){
-      if (!ok) C.failed = true;
+      if (!ok) RUN.failed = true;
       if (APP_MODE === "treino" && state.alunoTab === "corrida" && String(state.alunoStudentId) === String(s.id) && !modalRoot.firstChild) renderAlunoTab(s);
     });
     return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">A abrir a Corrida…</p></div>";
@@ -11080,8 +11085,8 @@ function wireAlunoTab(s){
   wireTrainingNav(s, el);
   if (APP_MODE === "treino" && state.alunoTab === "corrida"){
     var retry = el.querySelector("#corridaRetry");
-    if (retry) retry.addEventListener("click", function(){ C.failed = false; renderAlunoTab(s); });
-    if (C.loaded) C.wire(s, el);
+    if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderAlunoTab(s); });
+    if (RUN.loaded) RUN.wire(s, el);
   }
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
