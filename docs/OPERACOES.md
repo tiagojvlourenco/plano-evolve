@@ -245,3 +245,15 @@ Só o profissional regista o peso (Avaliação → nova avaliação, ou a import
 Corre `supabase/migrations/0031_weight_professional_only.sql` no SQL Editor do Supabase (é seguro repetir). Tira `weights` e `weight_current` da lista de colunas que o aluno pode escrever (o gatilho de 0004→0019); o profissional continua a escrever tudo e o aluno continua a escrever o diário do dia, check-ins antigos, histórico de substituições/adaptações, fotos e sessões de treino. Não altera dados. Depois de correr, confirma com o bloco I de `supabase/verify_security.sql` (ainda por validar no projeto real).
 
 O teste `tests/weight-permissions-db.test.js` exercita o gatilho num Postgres temporário local (se a máquina tiver um), mas é um harness: não substitui a verificação no Supabase. `checkins[].weight` continua escrevível pelo aluno (é histórico) e a app não o lê como pesagem.
+
+## 8r. Revisão de fase com avaliações espaçadas (4–6 semanas)
+
+A revisão (`computePhaseReview`) tem duas vias. **Pesagens frequentes** (4 em 2 semanas, nos últimos 28 dias): a regra de sempre. **Avaliações do profissional**: 3 ou mais avaliações com peso, 28 dias ou mais da primeira à última, dentro de 84 dias, a última com 42 dias ou menos (`PHASE_CFG.sparse*`, `phaseSparseEvidence`).
+
+- **Estados** (`evidenceState`): `insuficiente` (menos de 2 avaliações ou menos de 21 dias), `observacao` (2 avaliações a 21+ dias, ou 3 com menos de 28), `desatualizado` (última há mais de 42 dias), `suficiente-espaçadas`. Nenhum dos três primeiros propõe calorias, e a falta de avaliação recente nunca é «estagnação» nem «falta de adesão».
+- **Ponto de partida:** as avaliações contam desde a data da última alteração de calorias (ou do início da fase); o último peso até 3 dias antes é o ponto de partida; as anteriores não entram.
+- **Confirmação:** só se propõe ajuste quando o ritmo da reta e o do último intervalo (vs. uma avaliação 14+ dias antes) estão fora da banda no mesmo sentido. Isto vale também para a manutenção e para o aviso urgente (que exige 3+ avaliações).
+- **Suspeitas:** um salto de mais de 3 %/semana entre avaliações, ou um ponto a mais de 2 kg da reta, pede para confirmar o peso e não sustenta proposta.
+- **Adesão:** abaixo da banda num cut, sem 2+ check-ins preenchidos nos últimos 42 dias, não se sugere reduzir: aviso para o PT confirmar a adesão com o aluno.
+- **Sem repetição:** a via espaçada só volta a aparecer com uma avaliação posterior à última revisão aplicada ou adiada (`lastReviewDate`, `seenWeighInDate`).
+- As propostas só se aplicam quando o PT as valida (`applyPhaseReview`).
