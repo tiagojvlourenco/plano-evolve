@@ -79,7 +79,7 @@ function plain(t){ return String(t).replace(/−/g, "-"); }
   var r = computePhaseReview(s, today), p = weightProgress(s, today);
   check.check("4. Não exige pesagem semanal: três avaliações a cada 5 semanas descrevem a evolução", p.n === 3 && p.deltaKg === -1.6 && p.consolidated === true);
   check.check("4. …mas a revisão automática não conclui nada (sem estagnação, sem ajuste)", r.kind === "dados" && !r.proposedTargets && r.deltaKcal === 0 && !/estagnad|estagnou/i.test(r.text));
-  check.check("4. O texto explica o que a revisão precisa e pede o peso na próxima avaliação", /precisa de 4/.test(r.text) && /próxima avaliação/.test(r.text) && r.evidence.length > 0);
+  check.check("4. O texto explica o que a revisão precisa e pede o peso na próxima avaliação", /precisa de 3 ou mais avaliações/.test(r.text) && /próxima avaliação/.test(r.text) && r.evidence.length > 0);
   var old = stu(); assess(old, 60, 90); assess(old, 40, 89.8);
   check.check("4. A falta de avaliação recente não vira estagnação nem falha do aluno", signalWeight(old).status === "insuficiente" && signalPesagem(old).status === "insuficiente" && computePhaseReview(old, today).kind === "dados");
   var two = stu(); assess(two, 20, 90); assess(two, 0, 90);

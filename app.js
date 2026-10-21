@@ -5999,7 +5999,9 @@ var PHASE_CFG = {
   stepPct: 5, stepMin: 100, stepMax: 200, safetyStep: 300, maxCum4wk: 400,
   reviewDays: 21, excludeAfterChange: 7, windowMax: 28, minWeighins: 4, minWeeks: 2, minSpan: 14, fullSpan: 21, shortSpanAct: 0.25, outlierKg: 2,
   minAdherence: 6, hungerStop: 7, energyStop: 4, goalTol: 0.3, creatineGraceDays: 14,
-  maintDrift: 0.25, maintStep: 100, eaHard: 30
+  maintDrift: 0.25, maintStep: 100, eaHard: 30,
+  // avaliações profissionais espaçadas (4–6 semanas): 3 ou mais, a 28 dias ou mais da primeira à última, dentro de 84 dias, a última com 42 dias ou menos
+  sparseMinPoints: 3, sparseMinSpan: 28, sparseObsSpan: 21, sparseWindow: 84, staleDays: 42, baselineDays: 3, confirmGapDays: 14, adherenceWindow: 42, stepMaxPctPerWk: 3
 };
 function round25(n){ return Math.round(n / 25) * 25; }
 function clampN(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
@@ -6093,20 +6095,69 @@ function phaseWeightFit(weights, fromISO, toISO){
     pts = pts.filter(function(p){ return Math.abs(p.w - med) <= PHASE_CFG.outlierKg; });
   }
   var n = pts.length;
-  if (n < 2) return {n: n, ok: false, relaxed: false, spanDays: 0, weeks: n ? 1 : 0, slopeKgWk: 0, meanW: n ? pts[0].w : 0, trendNow: n ? pts[0].w : 0};
+  if (n < 2) return {n: n, pts: pts, ok: false, relaxed: false, spanDays: 0, weeks: n ? 1 : 0, slopeKgWk: 0, meanW: n ? pts[0].w : 0, trendNow: n ? pts[0].w : 0};
   var x0 = pts[0].x, span = pts[n - 1].x - x0, weeks = {};
   pts.forEach(function(p){ weeks[Math.floor((p.x - x0) / 7)] = true; });
   var mx = pts.reduce(function(a, p){ return a + (p.x - x0); }, 0) / n, my = pts.reduce(function(a, p){ return a + p.w; }, 0) / n, sxx = 0, sxy = 0;
   pts.forEach(function(p){ sxx += (p.x - x0 - mx) * (p.x - x0 - mx); sxy += (p.x - x0 - mx) * (p.w - my); });
   var slope = sxx > 0 ? sxy / sxx : 0, nWeeks = Object.keys(weeks).length;
-  return {n: n, spanDays: span, weeks: nWeeks, slopeKgWk: slope * 7, meanW: my, trendNow: my + slope * (span - mx),
+  return {n: n, pts: pts, spanDays: span, weeks: nWeeks, slopeKgWk: slope * 7, meanW: my, trendNow: my + slope * (span - mx),
     ok: n >= PHASE_CFG.minWeighins && nWeeks >= PHASE_CFG.minWeeks && span >= PHASE_CFG.minSpan, relaxed: n >= 3 && span >= 7};
 }
-// sem pesagens suficientes para a revisão automática: diz o que há (as avaliações do profissional) e não tira conclusões
-function phaseDataGapText(progress, what){
-  if (!progress || !progress.n) return WEIGHT_MISSING_TEXT;
-  return weightProgressText(progress) + " Para " + what + " faltam pesagens: a revisão automática precisa de " + PHASE_CFG.minWeighins + " em " + PHASE_CFG.minWeeks + " semanas (últimos " + PHASE_CFG.windowMax + " dias). Sem elas não se conclui nada sobre estagnação nem ritmo — regista o peso na próxima avaliação.";
+// --- avaliações espaçadas: o que há, o que falta e se chega para sugerir um ajuste ---
+// Um salto de peso impossível entre duas pesagens seguidas (mais de 3 %/semana; menos de 7 dias conta como 7) ou um ponto a mais de 2 kg da reta
+// não sustentam recomendação nenhuma: pede-se para confirmar o peso.
+function phaseSuspectPoints(pts){
+  if (!pts || pts.length < 2) return false;
+  for (var i = 1; i < pts.length; i++){
+    var days = Math.max(7, pts[i].x - pts[i - 1].x), pct = Math.abs(pts[i].w - pts[i - 1].w) / pts[i - 1].w * 100 / (days / 7);
+    if (pct > PHASE_CFG.stepMaxPctPerWk) return true;
+  }
+  if (pts.length < 3) return false;
+  var n = pts.length, mx = pts.reduce(function(a, p){ return a + p.x; }, 0) / n, my = pts.reduce(function(a, p){ return a + p.w; }, 0) / n, sxx = 0, sxy = 0;
+  pts.forEach(function(p){ sxx += (p.x - mx) * (p.x - mx); sxy += (p.x - mx) * (p.w - my); });
+  var slope = sxx > 0 ? sxy / sxx : 0;
+  return pts.some(function(p){ return Math.abs(p.w - (my + slope * (p.x - mx))) > PHASE_CFG.outlierKg; });
 }
+// Estado das avaliações desde o início da fase / da última alteração de calorias (a avaliação feita no momento da alteração é o ponto de partida;
+// as anteriores não entram). state: insuficiente · desatualizado · observacao · sem-novidade · suficiente
+function phaseSparseEvidence(s, np, today){
+  var anchor = np.lastChangeDate && np.lastChangeDate > np.startDate ? np.lastChangeDate : np.startDate;
+  var floor = [addDaysISO(today, -PHASE_CFG.sparseWindow), np.creatineStartDate ? addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays) : null].filter(Boolean).sort().pop();
+  var ins = weighInsOf(s);
+  var raw = phaseWeightFit(ins, floor > addDaysISO(anchor, -PHASE_CFG.baselineDays) ? floor : addDaysISO(anchor, -PHASE_CFG.baselineDays), today).pts;
+  var before = raw.filter(function(p){ return p.date < anchor; }), pts = raw.filter(function(p){ return p.date >= anchor; });
+  if (before.length && floor <= before[before.length - 1].date) pts.unshift(before[before.length - 1]);   // o último peso antes da alteração (no máximo 3 dias antes) é o ponto de partida
+  var ev = {state: "insuficiente", n: pts.length, pts: pts, anchor: anchor, fit: null, ageDays: null, spanDays: 0, last: pts.length ? pts[pts.length - 1] : null};
+  if (!pts.length) return ev;
+  ev.ageDays = dayNum(today) - pts[pts.length - 1].x;
+  ev.spanDays = pts[pts.length - 1].x - pts[0].x;
+  if (ev.ageDays > PHASE_CFG.staleDays){ ev.state = "desatualizado"; return ev; }
+  if (pts.length < 2 || ev.spanDays < PHASE_CFG.sparseObsSpan) return ev;
+  if (pts.length < PHASE_CFG.sparseMinPoints || ev.spanDays < PHASE_CFG.sparseMinSpan){ ev.state = "observacao"; return ev; }
+  var seen = [np.lastReviewDate, np.seenWeighInDate].filter(Boolean).sort().pop();
+  if (seen && ev.last.date <= seen){ ev.state = "sem-novidade"; return ev; }
+  var fit = phaseWeightFit(pts.map(function(p){ return {date: p.date, w: p.w}; }), pts[0].date, today);
+  fit.ok = true; fit.relaxed = true; fit.sparse = true;
+  ev.fit = fit; ev.state = "suficiente";
+  return ev;
+}
+// ritmo do último intervalo (%/semana, com o mesmo peso médio da reta): entre a última avaliação e a mais recente com pelo menos 14 dias antes
+function phaseLastIntervalRate(pts, meanW){
+  if (!pts || pts.length < 2 || !(meanW > 0)) return null;
+  var last = pts[pts.length - 1], ref = null;
+  pts.forEach(function(p){ if (p.x <= last.x - PHASE_CFG.confirmGapDays) ref = p; });
+  return ref ? (last.w - ref.w) / (last.x - ref.x) * 7 / meanW * 100 : null;
+}
+// o que falta, em português claro, quando não há dados para propor (nunca é «estagnação» nem «falta de adesão»)
+function phaseSparseText(ev, progress){
+  var need = "A revisão automática precisa de " + PHASE_CFG.sparseMinPoints + " ou mais avaliações com peso, com " + PHASE_CFG.sparseMinSpan + " dias ou mais da primeira à última (dentro de " + PHASE_CFG.sparseWindow + " dias), ou de " + PHASE_CFG.minWeighins + " pesagens em " + PHASE_CFG.minWeeks + " semanas.";
+  if (!progress || !progress.n) return WEIGHT_MISSING_TEXT;
+  if (ev && ev.state === "desatualizado") return "A última avaliação com peso é de há " + ev.ageDays + " dias (o limite é " + PHASE_CFG.staleDays + "). Sem avaliação recente não há como rever o plano — isto não indica estagnação nem falta de adesão. Regista o peso na próxima avaliação.";
+  if (ev && ev.state === "observacao") return "Tendência em observação. " + weightProgressText(progress) + " Ainda não chega para propor um ajuste: " + need + " A próxima avaliação decide.";
+  return weightProgressText(progress) + " " + need + " Sem elas não se conclui nada sobre estagnação nem ritmo — regista o peso na próxima avaliação.";
+}
+// sem pesagens suficientes para a revisão automática: diz o que há (as avaliações do profissional) e não tira conclusões
 function phaseEvidenceText(fit, ratePct){
   var kg = (fit.slopeKgWk >= 0 ? "+" : "−") + pt2(Math.abs(fit.slopeKgWk)) + " kg/semana";
   return "Peso: " + kg + " (" + (ratePct >= 0 ? "+" : "−") + pt2(Math.abs(ratePct)) + " %/semana) com " + fit.n + " pesagens em " + fit.spanDays + " dias.";
@@ -6145,17 +6196,20 @@ function computePhaseReview(s, today, opts){
     np.creatineStartDate ? addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays) : null, addDaysISO(today, -PHASE_CFG.windowMax)]
     .filter(Boolean).sort().pop();
   var fit = phaseWeightFit(weighInsOf(s), from, today), progress = weightProgress(s, today);
+  // pesagens frequentes: a regra de sempre (4 em 2 semanas, 28 dias). Senão, as avaliações espaçadas do profissional (3+, 28 dias, janela de 84)
+  var sparse = fit.ok ? null : phaseSparseEvidence(s, np, today);
+  if (sparse && sparse.state === "suficiente") fit = sparse.fit;
   // a manutenção calcula-se com o peso da tendência (uma pesagem mal escrita não a pode deslocar)
   var sm = Object.assign({}, s, {weightCurrent: fit.n >= 3 ? Math.round(fit.trendNow * 10) / 10 : s.weightCurrent});
   var maint = computeMaintenanceKcal(sm);
   if (!maint) return null;
   var out = {studentId: s.id, name: s.name, phase: np.phase, kind: "dados", today: today, maint: maint, currentTargets: {kcal: kcal, protein: t.protein, carbs: t.carbs != null ? t.carbs : t.carbsMax, fat: t.fat != null ? t.fat : t.fatMax},
-    fit: fit, progress: progress, warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
+    fit: fit, progress: progress, evidenceState: fit.ok ? (fit.sparse ? "suficiente-espaçadas" : "suficiente") : (sparse ? sparse.state : "insuficiente"), warnings: [], deltaKcal: 0, proposedTargets: null, text: "", evidence: ""};
   var weightNow = fit.n ? fit.trendNow : (Number(s.weightCurrent) || 0);
   var ratePct = fit.meanW > 0 ? fit.slopeKgWk / fit.meanW * 100 : 0;
   out.ratePct = ratePct; out.evidence = fit.n >= 2 ? phaseEvidenceText(fit, ratePct) : (progress.n >= 2 ? weightProgressText(progress) : "");
   var wCur = Number(s.weightCurrent) || 0;
-  if (fit.n >= 3 && (Math.abs(ratePct) > 3 || (wCur > 0 && Math.abs(wCur - fit.trendNow) > Math.max(3, 0.08 * fit.trendNow)))){
+  if (fit.n >= 3 && (Math.abs(ratePct) > 3 || (wCur > 0 && Math.abs(wCur - fit.trendNow) > Math.max(3, 0.08 * fit.trendNow)) || phaseSuspectPoints(fit.pts))){
     out.kind = "dados"; out.text = "Pesagem suspeita: o peso registado (" + pt2(wCur) + " kg) ou a tendência (" + pt2(ratePct) + " %/semana) não são plausíveis. Confirma o peso com o aluno antes de rever o plano.";
     return out;
   }
@@ -6179,7 +6233,11 @@ function computePhaseReview(s, today, opts){
     return out;
   }
   function info(kind, text){ out.kind = kind; out.text = text; return out; }
-  function recentAdherence(){ var l = (s.checkins || []).slice(-4); return l.length ? l.reduce(function(a, c){ return a + (Number(c.adherence) || 0); }, 0) / l.length : null; }
+  // só conta a adesão de check-ins recentes e preenchidos (2 ou mais nos últimos 42 dias); sem eles não há dados fiáveis
+  function recentAdherence(){
+    var l = (s.checkins || []).filter(function(c){ return c && c.date >= addDaysISO(today, -PHASE_CFG.adherenceWindow) && c.date <= today && Number(c.adherence) > 0; }).slice(-4);
+    return l.length >= 2 ? l.reduce(function(a, c){ return a + (Number(c.adherence) || 0); }, 0) / l.length : null;
+  }
   function hungerEnergyStop(){
     var l = (s.checkins || []).slice(-4); if (!l.length) return false;
     var h = l.reduce(function(a, c){ return a + (Number(c.hunger) || 0); }, 0) / l.length, e = l.reduce(function(a, c){ return a + (Number(c.energy) || 0); }, 0) / l.length;
@@ -6190,7 +6248,7 @@ function computePhaseReview(s, today, opts){
 
   // --- objetivo atingido ---
   var wrongSide = np.startWeight > 0 && target && ((np.phase === "cut" && np.startWeight <= target + PHASE_CFG.gapKg) || (np.phase === "bulk" && np.startWeight >= target - PHASE_CFG.gapKg));
-  if (target && !early && !wrongSide && fit.n >= PHASE_CFG.minWeighins){
+  if (target && !early && !wrongSide && fit.n >= (fit.sparse ? PHASE_CFG.sparseMinPoints : PHASE_CFG.minWeighins)){
     var reached = np.phase === "cut" ? weightNow <= target + PHASE_CFG.goalTol : np.phase === "bulk" ? weightNow >= target - PHASE_CFG.goalTol : false;
     if (reached){
       var firstStep = np.phase === "cut" && deficitPct > 3 ? round25(kcal + (maint - kcal) * 0.5) : maint;
@@ -6202,7 +6260,11 @@ function computePhaseReview(s, today, opts){
   if (np.phase === "manutencao"){
     if (early) return null;
     if (np.exiting && Math.abs(maint - kcal) >= 50) return propose(maint, "ajuste", "Completar a passagem à manutenção: " + kcal + " → " + maint + " kcal (já com o peso atual).", {completesExit: true});
-    if (!fit.ok) return info("dados", phaseDataGapText(progress, "rever a manutenção"));
+    if (sparse && sparse.state === "sem-novidade") return null;
+    if (!fit.ok) return info("dados", phaseSparseText(sparse, progress));
+    var lastRate = fit.sparse ? phaseLastIntervalRate(fit.pts, fit.meanW) : null;
+    if (fit.sparse && Math.abs(ratePct) >= PHASE_CFG.maintDrift && !(lastRate != null && Math.abs(lastRate) >= PHASE_CFG.maintDrift && lastRate * ratePct > 0))
+      return info("dados", "Tendência em observação: o ritmo global (" + pt2(ratePct) + " %/semana) sai da margem da manutenção, mas o último intervalo não o confirma" + (lastRate == null ? " (não há avaliação com " + PHASE_CFG.confirmGapDays + " dias ou mais antes da última)" : " (" + pt2(lastRate) + " %/semana)") + ". A próxima avaliação decide.");
     if (Math.abs(ratePct) >= PHASE_CFG.maintDrift && fit.spanDays >= PHASE_CFG.fullSpan){
       var dir = ratePct > 0 ? -1 : 1, mk = kcal + dir * PHASE_CFG.maintStep;
       if (dir < 0){   // retirar calorias nunca passa o piso de segurança
@@ -6220,20 +6282,26 @@ function computePhaseReview(s, today, opts){
   var alert = np.phase === "cut" ? PHASE_CFG.alertLoss : PHASE_CFG.alertGain;
   out.band = [cfg.lo, cfg.hi]; out.targetRate = cfg.rate;
   // rápido de mais é sempre prioritário (e não espera pelos 14 dias de dados)
-  if (fit.relaxed && move > alert){
+  var lastRateCb = fit.sparse ? phaseLastIntervalRate(fit.pts, fit.meanW) : null, lastMove = lastRateCb == null ? null : (np.phase === "cut" ? -lastRateCb : lastRateCb);
+  if (fit.relaxed && move > alert && (!fit.sparse || (lastMove != null && lastMove > cfg.hi))){
     var back = np.phase === "cut" ? Math.min(kcal + PHASE_CFG.safetyStep, maint) : Math.max(kcal - step, maint);
     var wrongWay = np.phase === "cut" ? back <= kcal : back >= kcal;   // calorias do lado errado da manutenção: nada a subir (cut) nem a descer (bulk)
     if (wrongWay) return info("limite", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite, mas as calorias (" + kcal + " kcal) já estão " + (np.phase === "cut" ? "acima" : "abaixo") + " da manutenção estimada (" + maint + " kcal): não há " + (np.phase === "cut" ? "subida" : "descida") + " a propor. Confirma a adesão e se a manutenção está bem estimada.");
     return propose(back, "ajuste", (np.phase === "cut" ? "A perda está a ser de " : "O ganho está a ser de ") + pt2(move) + " %/semana, acima do limite de " + pt2(alert) + " %/semana. Sugestão: " + (np.phase === "cut" ? "aumentar " : "reduzir ") + Math.abs(back - kcal) + " kcal/dia (de " + kcal + " para " + back + ")" + (np.phase === "cut" ? " para proteger a massa magra." : " para limitar o ganho de gordura."), {urgent: true});
   }
   if (early) return null;
+  if (sparse && sparse.state === "sem-novidade") return null;   // nenhuma avaliação nova desde a última revisão: não se repete como se houvesse informação nova
   if (!fit.ok){
     var cg = np.creatineStartDate && today < addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays + PHASE_CFG.minSpan);
     return info("dados", cg ? "Há pouco que o aluno começou ou parou a creatina: a subida inicial de 0,5 a 1,5 kg é retenção de água, não gordura. A revisão espera por pesagens a partir de " + fmtDateFullPt(addDaysISO(np.creatineStartDate, PHASE_CFG.creatineGraceDays)) + "." :
-      phaseDataGapText(progress, "propor um ajuste"));
+      phaseSparseText(sparse, progress));
   }
   var viol = move < cfg.lo ? cfg.lo - move : move > cfg.hi ? move - cfg.hi : 0;
   if (viol === 0) return info("em-linha", "A evolução está dentro do previsto (" + pt2(move) + " %/semana, banda " + pt2(cfg.lo) + "–" + pt2(cfg.hi) + "). Não é preciso alterar o plano.");
+  if (fit.sparse){
+    var side = move > cfg.hi ? 1 : -1, lastSide = lastMove == null ? 0 : lastMove > cfg.hi ? 1 : lastMove < cfg.lo ? -1 : 0;
+    if (lastSide !== side) return info("dados", "Tendência em observação: o ritmo global (" + pt2(move) + " %/semana) está fora da banda " + pt2(cfg.lo) + "–" + pt2(cfg.hi) + ", mas o último intervalo " + (lastMove == null ? "não pode ser confirmado (não há avaliação com " + PHASE_CFG.confirmGapDays + " dias ou mais antes da última)" : "não o confirma (" + pt2(lastMove) + " %/semana)") + ". Uma variação isolada não justifica mexer nas calorias: a próxima avaliação decide.");
+  }
   if (fit.spanDays < PHASE_CFG.fullSpan && viol < PHASE_CFG.shortSpanAct) return info("em-linha", "Tendência ainda dentro da margem de erro (" + pt2(move) + " %/semana com " + fit.spanDays + " dias de pesagens). A decisão fica para a próxima revisão.");
   if (move > cfg.hi){
     var up = np.phase === "cut" ? Math.min(kcal + step, maint) : Math.max(kcal - step, maint);
@@ -6242,6 +6310,7 @@ function computePhaseReview(s, today, opts){
   }
   // abaixo da banda (estagnou ou vai ao contrário): primeiro a adesão, depois os limites, só então mais um passo
   var adh = recentAdherence();
+  if (adh == null && np.phase === "cut") return info("aderencia", "A evolução está abaixo do previsto (" + pt2(move) + " %/semana, banda " + pt2(cfg.lo) + "–" + pt2(cfg.hi) + "), mas não há dados fiáveis de adesão. Não sugiro reduzir calorias: confirma com o aluno se o plano está a ser cumprido (refeições, fins de semana, bebidas) antes de decidir. Se estiver, ajusta à mão ou espera pela próxima avaliação.");
   if (adh != null && adh < PHASE_CFG.minAdherence) return info("aderencia", "A adesão recente é baixa (" + pt2(adh) + "/10). Antes de mexer nas calorias, confirma se o plano está a ser cumprido: a estagnação por incumprimento não se corrige com mais " + (np.phase === "cut" ? "défice." : "excedente."));
   if (np.phase === "cut" && hungerEnergyStop()) return info("limite", "A fome está alta ou a energia baixa: não propor mais corte. Considera uma pausa de 1 semana na manutenção (" + maint + " kcal) para recuperar energia e adesão.");
   if (room < 50) return info("limite", "Já houve " + cum + " kcal de alterações nas últimas 4 semanas (máximo " + PHASE_CFG.maxCum4wk + "): esperar pela próxima revisão.");
@@ -6319,7 +6388,8 @@ function applyPhaseReview(s, rv){
 function postponePhaseReview(s, days){
   if (!phaseColumnAvailable) return {error: PHASE_MIGRATION_MSG};
   ensureSyncBaseline(s);
-  s.nutritionPhase = Object.assign({}, s.nutritionPhase, {snoozeUntil: addDaysISO(localTodayISO(), days || 7)});
+  var seenIns = weighInsOf(s), seenLast = seenIns.length ? seenIns[seenIns.length - 1].date : null;   // adiar não faz da mesma avaliação uma novidade
+  s.nutritionPhase = Object.assign({}, s.nutritionPhase, {snoozeUntil: addDaysISO(localTodayISO(), days || 7), seenWeighInDate: seenLast});
   persistStudent(s);
   return {};
 }
