@@ -54,26 +54,26 @@ function persistNow(s){ persistStudents[s.id] = s; persistPrepare(s.id); }
   // ---- 1. alteração feita com um pedido em voo não se perde ----
   resetServer(baseRow());
   var s = load(baseRow());
-  s.weights.push({date: "2026-10-01", w: 70}); persistNow(s);
+  pushCheckin(s, {date: "2026-10-01", weight: 70}); persistNow(s);
   holdNext = true;
   var f1 = outboxFlush();
   await tick();
-  s.weights.push({date: "2026-10-02", w: 69}); persistNow(s);   // muda a MESMA lista enquanto o 1.º pedido segue
+  pushCheckin(s, {date: "2026-10-02", weight: 69}); persistNow(s);   // muda a MESMA lista enquanto o 1.º pedido segue
   gates[0](); await f1; await tick(200);
-  check.check("1. A pesagem feita durante o envio também chega ao servidor", server.weights.length === 2 && server.weights[1].w === 69);
+  check.check("1. A pesagem feita durante o envio também chega ao servidor", server.checkins.length === 2 && server.checkins[1].weight === 69);
   check.check("2. Depois de tudo enviado a fila está vazia", outboxCount() === 0);
-  check.check("3. O 1.º pedido levou só a 1.ª pesagem (cópia, não a lista viva)", calls[0].weights.length === 1);
+  check.check("3. O 1.º pedido levou só a 1.ª pesagem (cópia, não a lista viva)", calls[0].checkins.length === 1);
 
   // ---- 2. coluna recusada não leva as outras ----
   resetServer(baseRow({workout_logs: [{id: "w1", date: "2026-10-01", dayId: "d", dayName: "A", entries: []}]}));
   s = load(baseRow({workout_logs: [{id: "w1", date: "2026-10-01", dayId: "d", dayName: "A", entries: []}]}));
   var seenRefusals = 0;
   refuse = function(p){ if ("workout_logs" in p && p.workout_logs.length === 2 && p.workout_logs[0].id !== "w1") { seenRefusals++; return "Não é permitido alterar ou remover sessões de treino já registadas."; } return null; };
-  s.weights.push({date: "2026-10-03", w: 68});
+  pushCheckin(s, {date: "2026-10-03", weight: 68});
   s.workoutLogsRaw = [{id: "w2", date: "2026-10-03", dayId: "d", dayName: "A", entries: []}, {id: "w1", date: "2026-10-01", dayId: "d", dayName: "A", entries: []}]; // outro aparelho tinha ordem diferente: recusado
   persistNow(s);
   await outboxFlush(); await tick(100);
-  check.check("4. A pesagem seguiu mesmo com a coluna dos treinos recusada", server.weights.length === 1 && server.weights[0].w === 68);
+  check.check("4. A pesagem seguiu mesmo com a coluna dos treinos recusada", server.checkins.length === 1 && server.checkins[0].weight === 68);
   check.check("5. Os treinos recusados foram fundidos por id (servidor primeiro) e reenviados", server.workout_logs.length === 2 && server.workout_logs[0].id === "w1" && server.workout_logs[1].id === "w2");
   check.check("6. A ficha do aluno ficou com os dois treinos", s.workoutLogsRaw.length === 2 && s.workoutLogs.length === 2);
   check.check("7. A fila ficou vazia (nada a repetir em ciclo)", outboxCount() === 0);
@@ -83,11 +83,11 @@ function persistNow(s){ persistStudents[s.id] = s; persistPrepare(s.id); }
   resetServer(baseRow({checkins: [{date: "2026-10-01", weight: 70, adherence: 7}]}));
   s = load(baseRow());
   refuse = function(p){ return "checkins" in p ? "Só o profissional pode alterar estes dados do plano." : null; };
-  s.weights.push({date: "2026-10-04", w: 67});
+  pushCheckin(s, {date: "2026-10-04", weight: 67});
   s.checkinsRaw = [{date: "2026-10-04", weight: 67, adherence: 9}];
   persistNow(s);
   await outboxFlush(); await tick(100);
-  check.check("8. A pesagem seguiu e a coluna recusada foi descartada", server.weights.length === 1 && outboxCount() === 0);
+  check.check("8. A pesagem seguiu e a coluna recusada foi descartada", server.checkins.length === 1 && outboxCount() === 0);
   check.check("9. A ficha foi reposta com a versão do servidor (sem o check-in recusado)", s.checkinsRaw.length === 1 && s.checkinsRaw[0].date === "2026-10-01");
   refuse = null;
 
@@ -97,7 +97,7 @@ function persistNow(s){ persistStudents[s.id] = s; persistPrepare(s.id); }
   var realSend = sb.from;
   sb.from = function(){ var a = realSend(); var origThen = a.then; var upd = false; a.update = (function(u){ return function(p){ upd = true; return u(p); }; })(a.update);
     a.then = function(ok, bad){ if (upd) return Promise.resolve({data: [], error: null, status: 200}).then(ok, bad); return origThen(ok, bad); }; return a; };
-  s.weights.push({date: "2026-10-05", w: 66}); persistNow(s);
+  pushCheckin(s, {date: "2026-10-05", weight: 66}); persistNow(s);
   await outboxFlush(); await tick(100);
   sb.from = realSend;
   check.check("10. Se o servidor não alterou nenhuma linha, a alteração não é dada como enviada sem aviso", outboxCount() === 0 && /* foi tratada como recusa */ calls.length === 0);

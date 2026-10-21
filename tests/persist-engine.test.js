@@ -31,14 +31,14 @@ check.check("7. E volta a ler-se depois de fechar a app", outboxRead().a.cols.we
   authRole = "student"; sbReady = true;
   ensureSyncBaseline(s);
   s.notes = "primeira"; // ainda não existe 'notes' nas colunas do aluno; usa um campo que studentToRow grava
-  s.weightCurrent = 70;
+  s.mealsDate = "2026-10-01";
   persistStudents["a"] = s; persistPrepare("a");
   var first = Object.assign({}, outboxRead().a && outboxRead().a.cols);
-  s.weightCurrent = undefined; delete s.weightCurrent;
+  s.mealsDate = null;
   persistStudents["a"] = s; persistPrepare("a");
   var cols = outboxRead().a ? outboxRead().a.cols : {};
-  check.check("8. A fila só leva colunas que mudaram desde a versão de partida", Object.keys(first).every(function(k){ return k === "weight_current" || k === "notes"; }) && "weight_current" in first);
-  check.check("9. Uma alteração desfeita antes de seguir substitui a que estava na fila", !("weight_current" in cols) || cols.weight_current == null);
+  check.check("8. A fila só leva colunas que mudaram desde a versão de partida", Object.keys(first).every(function(k){ return k === "meals_date" || k === "notes"; }) && "meals_date" in first);
+  check.check("9. Uma alteração desfeita antes de seguir substitui a que estava na fila", !("meals_date" in cols) || cols.meals_date == null);
   authRole = null; sbReady = false;
 })();
 

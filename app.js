@@ -5374,6 +5374,9 @@ function withTimeout(promise, ms){
 }
 
 // o pedido à fila: só as colunas que mudaram desde a última versão aceite (síncrono, é seguro chamar ao fechar a app)
+// O peso é só do profissional (migração 0031): o aluno nunca envia weights nem weight_current. A base de dados já o recusa; isto evita que uma
+// alteração antiga, ainda na fila do telemóvel, fique presa a ser recusada.
+function studentMayNotWrite(col){ return authRole === "student" && (col === "weights" || col === "weight_current"); }
 function persistPrepare(id){
   var s = persistStudents[id];
   clearTimeout(persistTimers[id]); delete persistTimers[id]; delete persistStudents[id];
@@ -5386,6 +5389,7 @@ function persistPrepare(id){
     // uma alteração desfeita antes de seguir tem de substituir a que está na fila
     if (!(k in patch) && k in row && jsonOf(row[k]) !== jsonOf(pending.cols[k])) patch[k] = row[k];
   });
+  Object.keys(patch).forEach(function(k){ if (studentMayNotWrite(k)) delete patch[k]; });
   if (!Object.keys(patch).length) return;
   // a ficha é alterada no sítio (marcar outra refeição, registar outro treino): a fila guarda cópias, nunca referências vivas
   Object.keys(patch).forEach(function(k){ patch[k] = cloneJson(patch[k]); });
@@ -5523,7 +5527,7 @@ function outboxSendOne(id){
   var entry = outboxRead()[id];
   if (!entry) return Promise.resolve(true);
   var cols = {};
-  Object.keys(entry.cols).forEach(function(k){ cols[k] = entry.cols[k]; });
+  Object.keys(entry.cols).forEach(function(k){ if (studentMayNotWrite(k)) delete entry.cols[k]; else cols[k] = entry.cols[k]; });
   if (!trainingColumnsAvailable) TRAINING_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!contactColumnsAvailable) CONTACT_COLUMNS.forEach(function(c){ delete cols[c]; });
   if (!studioOnlyColumnAvailable) delete cols.studio_only;
