@@ -787,7 +787,11 @@ function runUiWireImport(s, el){
 function runUiManualHtml(){
   var f = RUN.v.form;
   return '<div class="card run-form" id="runManual"><button type="button" class="btn btn-sm run-back" id="runBack">← Corridas</button>' +
-    '<h3 class="run-h">Registar à mão</h3><p class="muted-p">Para o tapete rolante ou quando o GPS falhou.</p>' +
+    '<h3 class="run-h">Registar à mão</h3><p class="muted-p">Para o tapete rolante, para corridas gravadas na app Fitness da Apple ou quando o GPS falhou.</p>' +
+    '<div class="run-field run-quick"><label for="runManLine">Tudo numa linha (opcional)</label>' +
+    '<input type="text" inputmode="text" autocomplete="off" autocapitalize="off" id="runManLine" maxlength="200" placeholder="5,2 km 28:30  ·  ontem 18:30 5,23 km 27:58">' +
+    '<button type="button" class="btn btn-sm run-quick-btn" id="runManFill">Preencher</button>' +
+    '<p class="muted-p run-note">Copia a distância e o tempo da app Fitness e escreve-os aqui. Também aceita «hoje», «ontem», «22/10 às 20:17» e «1h05».</p></div>' +
     '<div class="run-field"><label for="runManDate">Data</label><input type="date" id="runManDate" data-f="date" min="2000-01-01" max="' + escapeHtml(localTodayISO()) + '" value="' + escapeHtml(f.date) + '"></div>' +
     '<div class="run-field"><label for="runManTime">Hora de início (opcional)</label><input type="time" id="runManTime" data-f="time" value="' + escapeHtml(f.time) + '"></div>' +
     '<div class="run-field"><label for="runManKm">Distância (km)</label><input type="text" inputmode="decimal" autocomplete="off" id="runManKm" data-f="km" placeholder="5,2" value="' + escapeHtml(f.km) + '"></div>' +
@@ -830,6 +834,19 @@ function runUiWireManual(s, el){
   var v = RUN.v;
   runUiBindFields(el, v.form);
   runUiOn(el, "#runBack", function(){ RUN.go("home"); });
+  runUiOn(el, "#runManFill", function(){
+    var line = document.getElementById("runManLine"), box = document.getElementById("runManErr");
+    var q = runParseQuick(line ? line.value : "");
+    if (!q.ok){ if (box) box.textContent = q.error; return; }
+    if (box) box.textContent = "";
+    if (q.date) v.form.date = q.date;
+    v.form.time = q.time || "";
+    v.form.km = (q.distM / 1000).toFixed(2).replace(".", ",");
+    v.form.dur = runDurStr(q.durS);
+    [["runManDate", "date"], ["runManTime", "time"], ["runManKm", "km"], ["runManDur", "dur"]].forEach(function(p){
+      var inp = document.getElementById(p[0]); if (inp) inp.value = v.form[p[1]];
+    });
+  });
   runUiOn(el, "#runManNext", function(){
     var c = runUiManualCheck(v.form), box = document.getElementById("runManErr");
     if (c.errs.length){ if (box) box.textContent = c.errs.join(" "); return; }

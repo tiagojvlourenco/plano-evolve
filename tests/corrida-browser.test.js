@@ -403,6 +403,14 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await D.pg.waitForSelector("#runManual");
   var todayIso = await D.pg.evaluate(function(){ var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); });
   ck("51. O formulário à mão traz a data de hoje (local) e não deixa escolher o futuro (max = hoje)", (await D.pg.inputValue("#runManDate")) === todayIso && (await D.pg.getAttribute("#runManDate", "max")) === todayIso);
+  var yIso0 = await D.pg.evaluate(function(){ var d = new Date(Date.now() - 86400000); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); });
+  await D.pg.fill("#runManLine", "ontem 18:30 4,74 km 26:58"); await D.pg.click("#runManFill");
+  ck("51b. «Tudo numa linha»: «ontem 18:30 4,74 km 26:58» preenche a data de ontem, a hora, a distância (4,74) e o tempo (26:58)", (await D.pg.inputValue("#runManDate")) === yIso0 && (await D.pg.inputValue("#runManTime")) === "18:30" && (await D.pg.inputValue("#runManKm")) === "4,74" && (await D.pg.inputValue("#runManDur")) === "26:58" && (await D.pg.locator("#runManErr").innerText()) === "");
+  await D.pg.fill("#runManLine", "isto não é uma corrida"); await D.pg.click("#runManFill");
+  ck("51c. Uma linha que não se percebe não muda nada e diz como escrever (em PT)", /Escreve, por exemplo/.test(await D.pg.locator("#runManErr").innerText()) && (await D.pg.inputValue("#runManKm")) === "4,74");
+  await D.pg.fill("#runManLine", ""); await D.pg.fill("#runManDate", todayIso); await D.pg.fill("#runManTime", ""); await D.pg.fill("#runManKm", ""); await D.pg.fill("#runManDur", ""); await D.pg.click("#runManFill");
+  ck("51d. Linha vazia: avisa e não preenche", /Escreve, por exemplo/.test(await D.pg.locator("#runManErr").innerText()) && (await D.pg.inputValue("#runManKm")) === "");
+
   await D.pg.fill("#runManKm", "0"); await D.pg.fill("#runManDur", "99:99"); await D.pg.click("#runManNext");
   var e1 = await D.pg.locator("#runManErr").innerText();
   ck("52. Distância e tempo inválidos mostram os avisos em português e não avançam", /Indica uma distância entre 0,1 e 300 km\./.test(e1) && /Indica o tempo, por exemplo 32:15 ou 1:05:30\./.test(e1) && (await D.pg.locator("#runSave").count()) === 0);
