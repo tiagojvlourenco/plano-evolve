@@ -65,7 +65,8 @@ var EXP5K = C.runStats([P5K], null, "import");
 var HAV = C.runHav;
 
 // ---- luz de mentira do gravador (corrida-live.js): só o contrato ----
-function liveStub(withQueue){
+function liveStub(o){
+  o = o || {};
   return [
     "window.__T = {RUN: RUN, runStats: runStats, runBuildInsert: runBuildInsert, runUuid: runUuid, runPrepareTrack: runPrepareTrack, findStudent: findStudent, state: state};",
     "RUN.liveOpen = function(s){ window.__liveOpen = (window.__liveOpen || 0) + 1; RUN.go('live'); };",
@@ -73,7 +74,15 @@ function liveStub(withQueue){
     "RUN.liveWire = function(s, el){ window.__liveWired = (window.__liveWired || 0) + 1; };",
     "RUN.liveDraftBanner = function(s){ return window.__draft ? '<div class=\"card\" id=\"fakeBanner\">rascunho por terminar</div>' : ''; };",
     "RUN.liveWireBanner = function(s, el){ window.__bannerWired = (window.__bannerWired || 0) + 1; };",
-    withQueue ? "RUN.queueAdd = function(item){ (window.__queue = window.__queue || []).push(JSON.parse(JSON.stringify(item))); return true; };" : "",
+    o.queue ? "RUN.queueAdd = function(item){ (window.__queue = window.__queue || []).push(JSON.parse(JSON.stringify(item))); return true; };" : "",
+    // contrato novo com o gravador: contagens e limpeza da fila, recibo local do consentimento, gravação em curso
+    o.queue ? "RUN.queuePending = function(){ return window.__qPending || 0; }; RUN.queueFailed = function(){ return window.__qFailed || 0; }; RUN.queueClear = function(id){ (window.__qClear = window.__qClear || []).push(id); return 0; };" : "",
+    o.cache ? "window.__cache = window.__cache || {}; window.__cacheLog = []; RUN.consentCacheGet = function(id){ var v = window.__cache[id]; return typeof v === 'number' ? v : null; };" +
+      " RUN.consentCacheSet = function(id, v){ window.__cache[id] = v; window.__cacheLog.push(['set', id, v]); };" +
+      " RUN.consentCacheClear = function(id){ delete window.__cache[id]; window.__cacheLog.push(['clear', id]); };" : "",
+    "RUN.liveBusy = function(){ return !!window.__busy; };",
+    // espião: o que corrida.js passa a runPrepareTrack (o gravador é o último ficheiro avaliado: vê as mesmas declarações)
+    "window.__prepCalls = []; var runPrepSpy = runPrepareTrack; runPrepareTrack = function(seg, opt){ window.__prepCalls.push({trimM: opt && opt.trimM, rnd: opt && opt.rnd}); return runPrepSpy(seg, opt); };",
     "RUN.reset = function(){ window.__resetCalls = (window.__resetCalls || 0) + 1; };",
     "RUN.loaded = true;"
   ].join("\n");
@@ -118,7 +127,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
     await ctx.addInitScript(GEO_SPY);
     if (o.init) await ctx.addInitScript(o.init);
     if (o.seed) await ctx.addInitScript(function(seed){ try { Object.keys(seed).forEach(function(k){ localStorage.setItem(k, seed[k]); }); } catch (e) {} }, o.seed);
-    if (!o.realLive) await ctx.route(/\/corrida-live\.js(\?|$)/, function(route){ ctl.requests.push("live"); route.fulfill({status: 200, contentType: "text/javascript", body: liveStub(o.queue !== false)}); });
+    if (!o.realLive) await ctx.route(/\/corrida-live\.js(\?|$)/, function(route){ ctl.requests.push("live"); route.fulfill({status: 200, contentType: "text/javascript", body: liveStub({queue: o.queue !== false, cache: o.cache !== false})}); });
     var pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
     var realClose = ctx.close.bind(ctx);
     ctx.close = async function(){ try { (await pg.evaluate(function(){ return window.__toasts || []; })).forEach(function(t){ allToasts.push(t); }); } catch (e) {} return realClose(); };
@@ -195,7 +204,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   AL.pg.on("dialog", function(){});
   await AL.pg.click("#runGoLive");
   await AL.pg.waitForSelector("#runConsent");
-  ck("8. «Gravar com GPS» sem consentimento mostra primeiro o aviso de privacidade (com a versão do GPS) e o gravador ainda NÃO abriu", /Corridas: antes de começares/.test(await tabText(AL.pg)) && /só é usado quando carregas em «Gravar com GPS»/.test(await tabText(AL.pg)) && !(await AL.pg.evaluate(function(){ return window.__liveOpen; })));
+  ck("8. «Gravar com GPS» sem consentimento mostra primeiro o aviso de privacidade (que diz que o GPS só liga depois de «Gravar com GPS» e «Preparar GPS») e o gravador ainda NÃO abriu", /Corridas: antes de começares/.test(await tabText(AL.pg)) && /O GPS do telemóvel só liga depois de carregares em «Gravar com GPS» e em «Preparar GPS»/.test(await tabText(AL.pg)) && !(await AL.pg.evaluate(function(){ return window.__liveOpen; })));
   await AL.pg.click("#runCsAccept");
   await AL.pg.waitForSelector("#fakeLive");
   ck("9. Depois de aceitar, o gravador abre (RUN.liveOpen chamado uma vez) e o ecrã é o do gravador; sem música (a página de primeiro plano não pode sair)", (await AL.pg.evaluate(function(){ return window.__liveOpen; })) === 1 && (await AL.pg.locator("[data-music]").count()) === 0 && (await AL.pg.evaluate(function(){ return window.__liveWired; })) >= 1);
@@ -215,7 +224,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await B.pg.click("#runGoImport");
   await B.pg.waitForSelector("#runConsent");
   var cons = await tabText(B.pg);
-  ck("12. Importar sem consentimento mostra o aviso «Corridas: antes de começares» (o que fica guardado, quem vê, apagar, retirar) com «Aceito e continuar» e «Agora não»", /Corridas: antes de começares/.test(cons) && /Fica guardado: a data, a distância, o tempo/.test(cons) && /Quem vê: tu e o teu profissional/.test(cons) && /Se retirares este consentimento, apagamos todas as tuas corridas/.test(cons) && /Aceito e continuar/i.test(cons) && /Agora não/i.test(cons) && /não ativa o GPS do telemóvel nesta versão/.test(cons));
+  ck("12. Importar sem consentimento mostra o aviso «Corridas: antes de começares» (o que fica guardado, quem vê, apagar, retirar) com «Aceito e continuar» e «Agora não», e já não diz que a EVOLVE não ativa o GPS", /Corridas: antes de começares/.test(cons) && /Fica guardado no servidor: a data e a hora de início/.test(cons) && /Quem vê: tu e os profissionais da EVOLVE/.test(cons) && /Se retirares este consentimento, apagamos todas as tuas corridas/.test(cons) && /Aceito e continuar/i.test(cons) && /Agora não/i.test(cons) && !/não ativa o GPS do telemóvel/.test(cons));
   ck("13. Enquanto não aceita, nada é escrito no servidor", (await tables(B.pg)).run_consents.length === 0 && (await writes(B.pg)).filter(function(w){ return /run/.test(w.table); }).length === 0);
   await B.pg.click("#runCsDecline");
   await B.pg.waitForSelector("#runGoImport");
@@ -911,10 +920,203 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("136. Os botões e linhas tocáveis têm pelo menos 44 px de altura (início, importar, confirmar, detalhe)", heights.length >= 3 && heights.concat([fh], sh, dh).every(function(h){ return h >= 43.5; }));
   await Y.ctx.close();
 
+  // ==================================================================================================================== O. revisão: aviso único, vista de dados, recibo do consentimento, fila, lista sem limite de idade
+  // (3/9/39) O aviso é UM só (versão 1) e diz a verdade sobre TODOS os usos: não pode afirmar que o GPS não é usado quando o profissional o pode ligar.
+  var NC1 = await student({consent: false});
+  var privImport = (await NC1.pg.evaluate(function(){ var d = document.getElementById("runPrivacy"); return d ? d.textContent : ""; }));
+  await NC1.pg.click("#runGoImport"); await NC1.pg.waitForSelector("#runConsent");
+  var noticeImport = (await NC1.pg.locator("#runConsent").innerText()).replace(/\s+/g, " ");
+  await NC1.ctx.close();
+  var NC2 = await student({mode: "live", consent: false});
+  var liveBtn = await NC2.pg.locator("#runGoLive").evaluate(function(b){ return b.textContent; });
+  await NC2.pg.click("#runGoLive"); await NC2.pg.waitForSelector("#runConsent");
+  var noticeLive = (await NC2.pg.locator("#runConsent").innerText()).replace(/\s+/g, " ");
+  var noticeParas = await NC2.pg.locator("#runConsent p:not(.run-err)").allInnerTexts();
+  await NC2.pg.click("#runCsAccept"); await NC2.pg.waitForSelector("#fakeLive");
+  var accV = (await tables(NC2.pg)).run_consents.map(function(c){ return c.version; });
+  await NC2.ctx.close();
+  ck("137. O aviso de consentimento é o MESMO nos dois modos (importar e gravar com GPS) e continua na versão 1: quem aceita no modo «importar» aceitou o que diz sobre o GPS", noticeImport === noticeLive && accV.join() === "1" && noticeParas.length >= 4);
+  var liveSrc = fs.readFileSync(path.join(root, "corrida-live.js"), "utf8"), mig = fs.readFileSync(path.join(root, "supabase/migrations/0032_corrida.sql"), "utf8");
+  var prepLabel = (/runLivePrepare[\\"']*>([^<]+)</.exec(liveSrc) || [])[1];
+  ck("138. O aviso descreve os três usos (ficheiro GPX/TCX, à mão, GPS), o que o GPS faz («" + liveBtn + "» e «" + prepLabel + "», só com a EVOLVE aberta, rascunho neste telemóvel) e que o ecrã bloqueado pode falhar", !!prepLabel && noticeLive.indexOf("«" + liveBtn + "»") >= 0 && noticeLive.indexOf("«" + prepLabel + "»") >= 0 && /ficheiro \(GPX ou TCX\)/.test(noticeLive) && /registas a corrida à mão/.test(noticeLive) && /gravas aqui com o GPS do telemóvel/.test(noticeLive) && /só enquanto a EVOLVE está aberta a gravar/.test(noticeLive) && /rascunho neste telemóvel até guardares ou descartares/.test(noticeLive) && /ecrã bloqueado ou noutra aplicação o registo pode falhar/.test(noticeLive) && /\bRUN_DRAFT_KEY\b/.test(liveSrc));
+  // cada coluna que se grava tem a sua menção: quem acrescentar uma coluna a EXPECTED_COLS (e ao insert) tem de dizer aqui, e no aviso, o que ela é
+  var COL_TERMS = {id: true, student_id: true, consent_v: /versão deste aviso/, started_at: /data e a hora de início/, source: /a origem \(ficheiro GPX ou TCX, à mão ou GPS\)/, duration_s: /tempo total/, moving_s: /tempo em movimento/,
+    distance_m: /a distância/, gaps: /lacunas sem sinal/, gap_s: /lacunas sem sinal/, hidden_s: /segundo plano/, splits_s: /tempo de cada quilómetro/, rpe: /esforço \(1 a 10\)/, notes: /as notas que escreveres/};
+  var colsMissing = EXPECTED_COLS.filter(function(c){ return !(c in COL_TERMS) || (COL_TERMS[c] !== true && !COL_TERMS[c].test(noticeLive)); });
+  ck("139. Cada coluna que a corrida grava (data, origem, tempos, parciais, lacunas, segundo plano, esforço, notas, versão do aviso) vem dita no aviso" + (colsMissing.length ? " (em falta: " + colsMissing.join(", ") + ")" : ""), colsMissing.length === 0 && EXPECTED_COLS.length === 14);
+  var proReadsAll = /create policy "professionals read runs" on runs for select\s+using \(exists \(select 1 from professionals where user_id = auth\.uid\(\)\)\)/.test(mig);
+  ck("140. «Quem vê» diz a verdade sobre a política do servidor (qualquer profissional lê as corridas): «tu e os profissionais da EVOLVE», não «o teu profissional»; e «Privacidade e dados» repete os mesmos parágrafos", proReadsAll && /Quem vê: tu e os profissionais da EVOLVE/.test(noticeLive) && !/Quem vê: tu e o teu profissional/.test(noticeLive) && noticeParas.every(function(p){ return privImport.replace(/\s+/g, " ").indexOf(p.replace(/\s+/g, " ")) >= 0; }));
+
+  // (4/10/54) Corrida desligada: o aluno vê e apaga o que já tem (nada de importar, registar à mão nem gravar), mesmo com o profissional a ver o separador
+  var OF = await student({mode: "off", consent: true, wait: "#runOffData", settle: false, runs: [runRow(0, {over: {id: uuid(91), notes: "primeira"}}), runRow(1, {over: {id: uuid(92), notes: "segunda"}})],
+    tracks: [{run_id: uuid(91), student_id: "ana", fmt: 1, trim_m: 100, points: shared}]});
+  var offCard = await tabText(OF.pg);
+  ck("141. Com a Corrida desligada o separador mostra o cartão «A Corrida ainda não está ativa para ti» (diz «profissional», nunca «treinador») e o botão «Ver ou apagar as minhas corridas»; nada foi pedido ao servidor da Corrida", /A Corrida ainda não está ativa para ti/.test(offCard) && /O teu profissional liga-a/.test(offCard) && !/treinador/i.test(offCard) && (await OF.pg.locator("#runOffData").count()) === 1 && (await OF.pg.evaluate(function(){ return window.__fake.selects.filter(function(t){ return /^run/.test(t); }).length; })) === 0);
+  await OF.pg.evaluate(function(){ window.__draft = true; window.__qPending = 1; });
+  await OF.pg.click("#runOffData");
+  await OF.pg.waitForSelector("#runOff"); await OF.pg.waitForSelector(".run-row");
+  var offTxt = await tabText(OF.pg);
+  ck("142. «Ver ou apagar as minhas corridas» abre a vista de dados: título «A Corrida está desligada», explica que só se pode ver e apagar, e mostra a lista (2 corridas) com «Voltar»", /A Corrida está desligada/.test(offTxt) && /só podes ver e apagar o que já tens guardado/.test(offTxt) && (await OF.pg.locator(".run-row").count()) === 2 && (await OF.pg.locator("#runOffBack").count()) === 1 && /primeira/.test(offTxt) && !/treinador/i.test(offTxt));
+  ck("143. A vista de dados NÃO oferece importar, registar à mão, gravar com GPS, guia de exportação nem o ecrã de consentimento; só «Apagar todas as corridas» e «Retirar consentimento» (Privacidade e dados já aberta)", (await OF.pg.locator("#runGoImport, #runGoManual, #runGoLive, #runFile, #runGuide, #runConsent").count()) === 0 && !/Importar ficheiro|Registar à mão|Como obter o ficheiro/.test((await OF.pg.locator("#alunoTabContent button, #alunoTabContent summary").allInnerTexts()).join("|")) && (await OF.pg.locator("#runDelAll").count()) === 1 && (await OF.pg.locator("#runWithdraw").count()) === 1 && (await OF.pg.locator("#runPrivacy[open]").count()) === 1);
+  ck("144. O aviso do rascunho/da fila do gravador (RUN.liveDraftBanner) aparece também na vista de dados e os seus eventos são ligados, para o aluno os poder descartar", (await OF.pg.locator("#fakeBanner").count()) === 1 && (await OF.pg.evaluate(function(){ return window.__bannerWired; })) >= 1);
+  await OF.pg.evaluate(function(){ var T = window.__T; T.RUN.go("import"); });
+  await OF.pg.waitForSelector("#runOff");
+  var forced = await OF.pg.evaluate(function(){ var T = window.__T; T.RUN.go("manual"); T.RUN.go("save", {prep: {source: "gpx", stats: {distM: 1, durationS: 1}, segments: []}}); return T.RUN.v.name; });
+  await OF.pg.waitForSelector("#runOff");
+  ck("145. Mesmo que algo peça outra vista (importar, à mão, confirmar), com a Corrida desligada fica sempre a vista de dados", forced === "home" && (await OF.pg.locator("#runFile, #runManual, #runSave").count()) === 0 && (await OF.pg.locator("#runOff").count()) === 1);
+  await OF.pg.click('.run-row[data-run="' + uuid(91) + '"]');
+  await OF.pg.waitForSelector("#runDelRun"); await OF.pg.waitForSelector(".run-svg-wrap svg");
+  ck("146. Abrir uma corrida na vista de dados mostra o detalhe com «Exportar GPX», «Apagar só o percurso» e «Apagar corrida»", (await OF.pg.locator("#runDelTrack").count()) === 1 && (await OF.pg.locator("#runExportSaved").count()) === 1);
+  await OF.pg.click("#runDelRun");
+  await OF.pg.waitForSelector("#runOff");
+  await OF.pg.waitForFunction(function(){ return document.querySelectorAll(".run-row").length === 1; });
+  var tOf = await tables(OF.pg);
+  ck("147. Apagar uma corrida na vista de dados apaga-a (e o percurso) no servidor e volta à vista de dados com a outra", tOf.runs.length === 1 && tOf.runs[0].id === uuid(92) && tOf.run_tracks.length === 0 && (await OF.pg.locator("#runOff").count()) === 1);
+  ck("148. Apagar uma só corrida NÃO esvazia a fila de envio do telemóvel (as corridas por enviar de outras não se perdem)", (await OF.pg.evaluate(function(){ return window.__qClear || []; })).length === 0);
+  OF.ctl.dialogs.length = 0;
+  await OF.pg.click("#runDelAll");
+  await OF.pg.waitForSelector("#runEmpty");
+  ck("149. «Apagar todas as corridas» (que avisa que também apaga as corridas por enviar deste telemóvel) apaga tudo, limpa a fila local do aluno (RUN.queueClear) e a vista diz «Não tens corridas guardadas.»", OF.ctl.dialogs.some(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\. Também apaga as corridas por enviar que estão neste telemóvel\.$/.test(d); }) && (await tables(OF.pg)).runs.length === 0 && (await OF.pg.evaluate(function(){ return window.__qClear; })).join() === "ana" && /Não tens corridas guardadas\./.test(await tabText(OF.pg)) && (await OF.pg.locator("#runGoImport, #runGoManual").count()) === 0);
+  await OF.pg.click("#runOffBack");
+  await OF.pg.waitForSelector("#corridaOff");
+  ck("150. «Voltar» desliga a vista de dados (RUN.dataMode = false) e volta ao cartão «A Corrida ainda não está ativa para ti»", (await OF.pg.evaluate(function(){ return window.__T.RUN.dataMode; })) === false && (await OF.pg.locator("#runOff").count()) === 0 && (await OF.pg.locator("#runOffData").count()) === 1);
+  ck("151. Em toda a vista de dados só se apagou: nenhum insert nas tabelas da Corrida e nenhuma coordenada escrita", (await writes(OF.pg)).filter(function(w){ return /run/.test(w.table) && w.op === "insert"; }).length === 0);
+  await OF.ctx.close();
+
+  var wipeSeed2 = {}; wipeSeed2["evolve_run_draft_v1"] = JSON.stringify({uid: "user-1", segs: []}); wipeSeed2["evolve_runs_outbox_v1"] = JSON.stringify([{uid: "user-1", id: "x", state: "failed"}]);
+  var OW = await student({mode: "off", consent: true, wait: "#runOffData", settle: false, seed: wipeSeed2, init: function(){ window.__cache = {ana: 1}; }, runs: [runRow(0, {over: {id: uuid(93)}})]});
+  await OW.pg.click("#runOffData"); await OW.pg.waitForSelector(".run-row");
+  await OW.pg.click("#runWithdraw");
+  await OW.pg.waitForSelector("#runEmpty");
+  var lsOW = await OW.pg.evaluate(function(){ return {d: localStorage.getItem("evolve_run_draft_v1"), o: localStorage.getItem("evolve_runs_outbox_v1"), reset: window.__resetCalls || 0, cache: window.__cache.ana}; });
+  var tOW = await tables(OW.pg);
+  ck("152. «Retirar consentimento» na vista de dados apaga o consentimento e todas as corridas, o rascunho, a fila (também as recusadas) e o recibo local, pára o gravador (RUN.reset), e fica na vista de dados", tOW.run_consents.length === 0 && tOW.runs.length === 0 && lsOW.d === null && lsOW.o === null && lsOW.reset >= 1 && lsOW.cache === undefined && (await OW.pg.locator("#runOff").count()) === 1);
+  await OW.ctx.close();
+
+  var OV = await open("professional", [row("ana", "Ana Silva", "off")], "treino.html");
+  await OV.pg.waitForSelector("#alunoStudentSwitch");
+  await seedConsent(OV.pg, "ana"); await seedRuns(OV.pg, [runRow(0, {over: {id: uuid(94)}})]);
+  await OV.pg.click('.tabbar [data-tab="corrida"]'); await OV.pg.waitForSelector("#runOffData");
+  await OV.pg.click("#runOffData"); await OV.pg.waitForSelector(".run-row");
+  ck("153. «Ver como aluno» com a Corrida desligada: a vista de dados é só de leitura (sem «Apagar todas», sem «Retirar consentimento», sem banner)", (await OV.pg.locator("#runOff").count()) === 1 && (await OV.pg.locator("#runDelAll, #runWithdraw, #fakeBanner, #runGoImport").count()) === 0 && (await writes(OV.pg)).filter(function(w){ return /run/.test(w.table); }).length === 0);
+  await OV.ctx.close();
+
+  // (33/40/10) o texto do profissional diz o que o aluno vê de facto
+  var PT = await open("professional", [row("a", "Ana Silva", "off")], "index.html");
+  await PT.pg.waitForSelector(".student-row");
+  await proCorridas(PT.pg, "a");
+  var helpOff = await PT.pg.locator("#runModeHelp").innerText();
+  await PT.pg.click('[data-run-mode="import"]'); await PT.pg.waitForSelector('.run-mode[data-run-mode="import"].on');
+  var helpImp = await PT.pg.locator("#runModeHelp").innerText();
+  await PT.pg.click('[data-run-mode="live"]'); await PT.pg.waitForSelector('.run-mode[data-run-mode="live"].on');
+  var helpLive = await PT.pg.locator("#runModeHelp").innerText();
+  ck("154. O texto do interruptor diz a verdade: desligada = o aluno continua a ver o separador (com a indicação de que não está ativa), as corridas ficam mas ele pode vê-las e apagá-las; «importar» não diz que o separador «passa a aparecer»; «GPS» diz que só liga em «Preparar GPS»; nenhum diz «treinador»", /continua a ver o separador «Corrida»/.test(helpOff) && !/não vê o separador/.test(helpOff) && /o aluno também as pode ver e apagar/.test(helpOff) && !/passa a ver/.test(helpImp) && /separador «Corrida» da app EVOLVE Treino/.test(helpImp) && /só liga depois de ele carregar em «Preparar GPS»/.test(helpLive) && !/treinador/i.test(helpOff + helpImp + helpLive));
+  await PT.ctx.close();
+
+  // (11/16/21) começar sem rede, ao ar livre: o recibo local do consentimento (só quando a leitura falha por rede); o servidor decide sempre
+  var RC1 = await student({consent: true, init: function(){ window.__cache = {ana: 1}; }});
+  await RC1.ctx.setOffline(true);
+  await RC1.pg.click("#runGoManual");
+  await RC1.pg.waitForSelector("#runManual");
+  ck("155. Sem rede, com o recibo local do consentimento da versão atual, «Registar à mão» abre (a app abriu com rede mas esta sessão ainda não tinha lido o consentimento)", (await RC1.pg.locator("#runConsent").count()) === 0 && !(await RC1.pg.evaluate(function(){ return window.__toasts.some(function(t){ return /Não consegui verificar o teu consentimento/.test(t); }); })));
+  await RC1.ctx.setOffline(false); await RC1.ctx.close();
+  var RC2 = await student({mode: "live", consent: true, init: function(){ window.__cache = {ana: 1}; }});
+  await RC2.ctx.setOffline(true);
+  await RC2.pg.click("#runGoLive");
+  await RC2.pg.waitForSelector("#fakeLive");
+  ck("156. O mesmo vale para «Gravar com GPS»: sem rede e com o recibo, o gravador abre", (await RC2.pg.evaluate(function(){ return window.__liveOpen; })) === 1);
+  await RC2.ctx.setOffline(false); await RC2.ctx.close();
+  var RC3 = await student({consent: true, init: function(){ window.__cache = {ana: 0}; }});
+  await RC3.ctx.setOffline(true);
+  await RC3.pg.click("#runGoImport");
+  await RC3.pg.waitForFunction(function(){ return (window.__toasts || []).some(function(t){ return /Sem ligação\. Não consegui verificar o teu consentimento/.test(t); }); });
+  ck("157. Um recibo de OUTRA versão não serve: sem rede avisa «Não consegui verificar o teu consentimento» e não abre nada", (await RC3.pg.locator("#runFile, #runConsent").count()) === 0);
+  await RC3.ctx.setOffline(false); await RC3.ctx.close();
+  var RC4 = await student({consent: false, init: function(){ window.__cache = {ana: 1}; }});
+  await RC4.pg.click("#runGoImport");
+  await RC4.pg.waitForSelector("#runConsent");
+  ck("158. Com rede quem decide é o servidor: sem consentimento no servidor mostra-se o aviso mesmo com um recibo local, e o recibo é apagado", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === undefined && (await RC4.pg.evaluate(function(){ return window.__cacheLog.map(function(x){ return x[0]; }).join(); })) === "clear");
+  await RC4.pg.click("#runCsAccept"); await RC4.pg.waitForSelector("#runFile", {state: "attached"});
+  ck("159. Aceitar o aviso guarda o recibo (versão 1)", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  await RC4.ctx.close();
+  var RC5 = await student({consent: true});
+  await RC5.pg.click("#runGoImport"); await RC5.pg.waitForSelector("#runFile", {state: "attached"});
+  ck("160. Ler o consentimento no servidor e ver que existe guarda o recibo (versão 1)", (await RC5.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  var lost = await RC5.pg.evaluate(async function(){
+    var T = window.__T, s = T.findStudent("ana");
+    window.__fake.tables.run_consents.length = 0;   // o consentimento foi retirado noutro aparelho
+    var row = T.runBuildInsert({id: T.runUuid(), studentId: "ana", source: "gpx", startedAtMs: Date.now() - 86400000, durationS: 1800, movingS: 1790, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 1}, Date.now());
+    var res = await T.RUN.submitRun(s, {row: row, track: null});
+    return {ok: res.ok, permanent: res.permanent, cache: window.__cache.ana};
+  });
+  ck("161. Se o servidor recusar a corrida por falta de consentimento, o recibo local é apagado (próxima vez sem rede já não deixa começar)", lost.ok === false && lost.permanent === true && lost.cache === undefined);
+  await RC5.ctx.close();
+  var RC6 = await student({consent: true, cache: false, init: function(){ window.__cache = {ana: 1}; }});
+  await RC6.ctx.setOffline(true);
+  await RC6.pg.click("#runGoImport");
+  await RC6.pg.waitForFunction(function(){ return (window.__toasts || []).some(function(t){ return /Não consegui verificar o teu consentimento/.test(t); }); });
+  ck("162. Sem as funções do recibo (gravador por carregar ou antigo) tudo fica como antes: sem rede e sem confirmação nesta sessão, não abre", (await RC6.pg.locator("#runFile, #runConsent").count()) === 0);
+  await RC6.ctx.setOffline(false); await RC6.ctx.close();
+
+  // (24) apagar todas limpa a fila local; recusado pelo servidor não limpa nada
+  var QC = await student({runs: [runRow(0, {over: {id: uuid(95)}})]});
+  await QC.pg.locator("#runPrivacy summary").click();
+  await QC.pg.evaluate(function(){ window.__fake.failNext = 1; });
+  await QC.pg.click("#runDelAll"); await QC.pg.waitForTimeout(300);
+  ck("163. Se o servidor recusar «Apagar todas», nada se apaga e a fila local fica como estava", (await tables(QC.pg)).runs.length === 1 && (await QC.pg.evaluate(function(){ return window.__qClear || []; })).length === 0);
+  await QC.pg.click("#runDelAll"); await QC.pg.waitForSelector("#runEmpty");
+  ck("164. «Apagar todas» (sem nada por enviar) pergunta só «Apagar todas as tuas corridas? Não dá para desfazer.» e limpa a fila do aluno uma vez", QC.ctl.dialogs.filter(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\.$/.test(d); }).length === 2 && (await QC.pg.evaluate(function(){ return window.__qClear; })).join() === "ana");
+  await QC.ctx.close();
+
+  // (25) a lista não corta as corridas com mais de um ano; os totais continuam às 8 semanas
+  var oldRuns = [runRow(0, {over: {id: uuid(96), distance_m: 6000}}), runRow(0, {over: {id: uuid(97), distance_m: 7000, started_at: new Date(Date.now() - 400 * 86400000).toISOString()}}), runRow(0, {over: {id: uuid(98), distance_m: 8000, started_at: new Date(Date.now() - 900 * 86400000).toISOString()}})];
+  var OL = await student({runs: oldRuns});
+  var olTxt = (await OL.pg.locator(".run-weeks").innerText()).replace(/\s+/g, " ");
+  ck("165. A lista do aluno mostra também as corridas com 400 e 900 dias (nada fica escondido sem forma de apagar) e os totais das 8 semanas só contam a recente", (await OL.pg.locator(".run-row").count()) === 3 && /CORRIDAS 1\b/i.test(olTxt) && /6,00/.test(olTxt));
+  await OL.pg.click('.run-row[data-run="' + uuid(97) + '"]'); await OL.pg.waitForSelector("#runDelRun");
+  await OL.pg.click("#runDelRun"); await OL.pg.waitForFunction(function(){ return document.querySelectorAll(".run-row").length === 2; });
+  ck("166. E a corrida antiga apaga-se uma a uma como as outras", (await tables(OL.pg)).runs.map(function(r){ return r.id; }).sort().join() === [uuid(96), uuid(98)].sort().join());
+  await OL.ctx.close();
+  var ageMany = [], ai;
+  for (ai = 0; ai < 60; ai++) ageMany.push(runRow(0, {over: {id: uuid(2000 + ai), started_at: new Date(Date.now() - (ai + 1) * 3 * 3600000).toISOString(), distance_m: 4000 + ai}}));
+  for (ai = 0; ai < 60; ai++) ageMany.push(runRow(0, {over: {id: uuid(3000 + ai), started_at: new Date(Date.now() - (400 + ai) * 86400000).toISOString(), distance_m: 3000 + ai}}));
+  var OM = await student({runs: ageMany});
+  await OM.pg.click("#runMore");
+  await OM.pg.waitForFunction(function(){ return document.querySelectorAll(".run-row").length === 120; });
+  ck("167. Com 60 corridas recentes e 60 com mais de um ano, a paginação chega às 120 (a página 2 traz as antigas)", (await OM.pg.locator("#runMore").count()) === 0);
+  await OM.ctx.close();
+  var OPro = await open("professional", [row("a", "Ana Silva", "import")], "index.html");
+  await OPro.pg.waitForSelector(".student-row");
+  await seedConsent(OPro.pg, "a"); await seedRuns(OPro.pg, [runRow(0, {sid: "a", over: {id: uuid(99), started_at: new Date(Date.now() - 500 * 86400000).toISOString()}})]);
+  await proCorridas(OPro.pg, "a"); await OPro.pg.waitForSelector(".run-row");
+  ck("168. O profissional também vê as corridas com mais de um ano do aluno", (await OPro.pg.locator(".run-row").count()) === 1);
+  await OPro.ctx.close();
+
+  // (aparo) o raio escondido leva uma folga ao acaso: corrida.js passa rnd = Math.random() ao núcleo (o gravador de mentira espia a chamada)
+  var RN = await student({init: function(){ Math.random = function(){ return 0.5; }; }});
+  await importFile(RN, "a.gpx", gpxOf(P5K));
+  await RN.pg.waitForSelector("#runSave"); await RN.pg.check("#runSvShare");
+  await RN.pg.click('label.run-opt:has(input[value="100"])');
+  await RN.pg.click("#runSvSave"); await RN.pg.waitForSelector("#runGoImport");
+  var prepCalls = await RN.pg.evaluate(function(){ return window.__prepCalls; });
+  var lastPrep = prepCalls[prepCalls.length - 1];
+  ck("169. Ao guardar com percurso partilhado, corrida.js chama runPrepareTrack com o escalão escolhido (trimM 100) e rnd = Math.random() (aqui 0,5); a pré-visualização usa trimM 0", !!lastPrep && lastPrep.trimM === 100 && lastPrep.rnd === 0.5 && prepCalls.some(function(c){ return c.trimM === 0; }) && (await tables(RN.pg)).run_tracks[0].trim_m === 100);
+  await RN.ctx.close();
+
+  // (42) uma gravação em curso não se esconde se o profissional mudar o modo: a vista «live» passa para o ecrã do gravador, que decide o que mostrar
+  var LB = await student({mode: "import"});
+  await LB.pg.evaluate(function(){ window.__busy = false; window.__T.RUN.go("live"); });
+  await LB.pg.waitForSelector("#runGoImport");
+  var idleLive = await LB.pg.locator("#fakeLive").count();
+  await LB.pg.evaluate(function(){ window.__busy = true; window.__T.RUN.go("live"); });
+  await LB.pg.waitForSelector("#fakeLive");
+  ck("170. Com o modo «importar» e sem gravação em curso a vista «live» volta ao início; com o gravador ocupado (RUN.liveBusy) o ecrã do gravador mantém-se acessível (não fica órfão atrás do início)", idleLive === 0 && (await LB.pg.locator("#fakeLive").count()) === 1 && (await LB.pg.evaluate(function(){ return window.__liveWired; })) >= 1);
+  await LB.ctx.close();
+
   // ==================================================================================================================== L. rede, consola, erros
-  ck("137. Nenhum pedido saiu do site (nem mapas, nem terceiros): só 127.0.0.1, data: e blob:", external.length === 0 || (console.log(external), false));
-  ck("138. Nenhuma coordenada foi escrita na consola, nos avisos (toasts) nem em nenhum endereço pedido (URLs e parâmetros), em toda a sessão de testes", consoleMsgs.every(function(m){ return !NOCOORD.test(m); }) && allToasts.length >= 10 && allToasts.every(function(t){ return !NOCOORD.test(t); }) && allUrls.length > 50 && allUrls.every(function(u){ return !NOCOORD.test(decodeURIComponent(u)); }));
-  ck("139. Nenhum erro de JavaScript em nenhuma página", errors.length === 0 || (console.log(errors), false));
+  ck("171. Nenhum pedido saiu do site (nem mapas, nem terceiros): só 127.0.0.1, data: e blob:", external.length === 0 || (console.log(external), false));
+  ck("172. Nenhuma coordenada foi escrita na consola, nos avisos (toasts) nem em nenhum endereço pedido (URLs e parâmetros), em toda a sessão de testes", consoleMsgs.every(function(m){ return !NOCOORD.test(m); }) && allToasts.length >= 10 && allToasts.every(function(t){ return !NOCOORD.test(t); }) && allUrls.length > 50 && allUrls.every(function(u){ return !NOCOORD.test(decodeURIComponent(u)); }));
+  ck("173. Nenhum erro de JavaScript em nenhuma página", errors.length === 0 || (console.log(errors), false));
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 5).join(" | ")); process.exit(1); });

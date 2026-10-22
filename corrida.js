@@ -11,8 +11,10 @@
      RUN.go(name, params)   muda de vista e volta a desenhar o separador (só se o separador «Corrida» estiver aberto)
      RUN.screen(sv)      HTML do separador (delega em RUN.liveScreen(sv) na vista «live»)      RUN.wire(s, el)   eventos (idem RUN.liveWire)
      RUN.proTab(s, el)   separador «Corridas» da ficha do profissional
-     RUN.consentVersion()  versão do aviso de privacidade (run_consents.version)
-     RUN.ensureConsent(s, cb)  lê o consentimento no servidor; só chama cb() se o aluno aceitou (ou aceita agora) a versão atual
+     RUN.consentVersion()  versão do aviso de privacidade (run_consents.version). Continua a 1: o texto único (RUN_UI_NOTICE) descreve TODOS os usos
+                           (importar, à mão e gravar com GPS); se um uso novo mudar o que se recolhe, o texto e a versão sobem juntos (teste 140)
+     RUN.ensureConsent(s, cb)  lê o consentimento no servidor; só chama cb() se o aluno aceitou (ou aceita agora) a versão atual. Só quando a leitura
+                           falha por rede aceita o recibo local do gravador (RUN.consentCacheGet/Set/Clear, se existirem); o servidor decide sempre ao guardar
      RUN.submitRun(s, item)    item = {row, track|null} -> Promise<{ok:true, queued:false} | {ok:true, queued:true} | {ok:false, error, permanent}>;
                                NUNCA lança. Extra (aditivo): {ok:true, queued:false, trackFailed:true, error} = a corrida entrou mas o percurso não.
      RUN.saveFlow(s, prep)     ecrã «Confirma antes de guardar»; é o ÚNICO caminho de guardar. prep = {source, stats, segments, hiddenS, warnings,
@@ -20,7 +22,9 @@
                                cancelView {name, params}, noTime (a hora foi estimada), rpe/notes iniciais.
      RUN.flush()         por omissão devolve Promise.resolve() (o gravador sobrepõe-na)
      RUN.uiReset()       esquece tudo o que este ficheiro guarda em memória (RUN.reset é do gravador; por omissão aponta para aqui)
-   Do gravador usa só com «typeof RUN.x === "function"»: liveOpen, liveScreen, liveWire, liveDraftBanner, liveWireBanner, queueAdd, reset.
+   Do gravador usa só com «typeof RUN.x === "function"»: liveOpen, liveScreen, liveWire, liveDraftBanner, liveWireBanner, liveBusy, queueAdd, queueClear,
+   consentCacheGet, consentCacheSet, consentCacheClear, reset.
+   Da app (app.js): RUN.dataMode = true com a Corrida desligada (runs_mode «off») é a vista de dados: ver, apagar e retirar o consentimento; nada de criar.
 
    Privacidade: nenhuma coordenada vai para consola, avisos, erros ou endereços; as mensagens de erro do servidor nunca são mostradas (só textos fixos);
    toda a linha lida da BD passa por runNormalizeRow e todo o percurso por runUiTrackFromDb antes de chegar ao ecrã; o SVG vem só de runTrackSvg;
@@ -55,6 +59,8 @@ var RUN_UI_MSG = {
   previewOnly: "Só o aluno pode importar ou registar corridas.",
   dupAsk: "Já tens uma corrida parecida neste momento. Guardar mesmo assim?",
   empty: "Ainda não tens corridas. Importa um ficheiro ou regista a primeira à mão.",
+  offIntro: "O teu profissional desligou a Corrida. Aqui só podes ver e apagar o que já tens guardado: não dá para importar, registar nem gravar corridas.",
+  offEmpty: "Não tens corridas guardadas.",
   sensitive: "A localização é um dado sensível: não partilhes estas corridas com terceiros."
 };
 
@@ -86,6 +92,7 @@ function runUiReset(){
   runUiConsentFor = "";
   runUiConsentBusy = false;
   RUN.v = {name: "home"};
+  RUN.dataMode = false;
 }
 
 /* ---------- servidor ---------- */
@@ -149,10 +156,10 @@ function runUiTrackFromDb(points){
 }
 
 /* ---------- ler as corridas ---------- */
+// sem limite de idade: quem pode apagar uma corrida tem de a poder ver (só os totais das 8 semanas têm janela, mais abaixo)
 function runUiFetchRuns(sid, from, count){
   return runUiCall(function(db){
-    return db.from("runs").select(RUN_UI_COLS).eq("student_id", sid).gte("started_at", new Date(Date.now() - 365 * 86400000).toISOString())
-      .order("started_at", {ascending: false}).range(from, from + count - 1);
+    return db.from("runs").select(RUN_UI_COLS).eq("student_id", sid).order("started_at", {ascending: false}).range(from, from + count - 1);
   });
 }
 function runUiNormalize(rows, sid){
@@ -344,10 +351,21 @@ function runUiGuideHtml(){
     RUN_UI_GUIDE.map(function(g){ return '<li><b>' + escapeHtml(g[0]) + ':</b> ' + escapeHtml(g[1]) + '</li>'; }).join("") +
     '</ul><p class="muted-p">Se não conseguires, usa «Registar à mão».</p></details>';
 }
-function runUiPrivacyHtml(d, preview){
-  var h = '<details class="soft-details run-privacy" id="runPrivacy"><summary>Privacidade e dados</summary>' +
-    '<p class="muted-p">Guardamos a data, a distância, o tempo, o ritmo e o tempo de cada quilómetro. O percurso só fica guardado se escolheres partilhá-lo com o teu profissional, sem os metros do início e do fim que escolheres esconder. ' +
-    'Quem vê: tu e o teu profissional. Os dados ficam no serviço de alojamento da EVOLVE (Supabase). Não usamos mapas nem serviços de terceiros e não guardamos a frequência cardíaca.</p>' +
+// O aviso de privacidade é UM só (versão 1) e descreve todos os usos da Corrida: o que se aceita é o mesmo qualquer que seja o modo que o profissional
+// ligue depois. Se um uso novo mudar o que se recolhe ou quem vê, este texto e RUN.consentVersion() sobem juntos (o teste 140 prende o texto às colunas
+// que se gravam e às funcionalidades que existem). O consentimento e «Privacidade e dados» mostram estes mesmos parágrafos.
+var RUN_UI_NOTICE = [
+  "Podes trazer uma corrida de três maneiras: escolhes um ficheiro (GPX ou TCX) do relógio ou de outra app, registas a corrida à mão ou, se o teu profissional ligar essa opção, gravas aqui com o GPS do telemóvel. A EVOLVE lê o ficheiro no teu telemóvel e não o guarda.",
+  "O GPS do telemóvel só liga depois de carregares em «Gravar com GPS» e em «Preparar GPS», e só enquanto a EVOLVE está aberta a gravar. Enquanto gravas, as posições ficam num rascunho neste telemóvel até guardares ou descartares a corrida. Com o ecrã bloqueado ou noutra aplicação o registo pode falhar e deixar lacunas.",
+  "Fica guardado no servidor: a data e a hora de início, a origem (ficheiro GPX ou TCX, à mão ou GPS), a distância, o tempo total e o tempo em movimento (o ritmo calcula-se a partir deles), o tempo de cada quilómetro, as lacunas sem sinal, o tempo com a app em segundo plano, o esforço (1 a 10), as notas que escreveres e a versão deste aviso. O percurso só fica guardado se escolheres partilhá-lo, sem, pelo menos, os metros do início e do fim que escolheres esconder.",
+  "Quem vê: tu e os profissionais da EVOLVE. As notas são texto livre: não escrevas moradas. Os dados ficam no serviço de alojamento da EVOLVE (Supabase). Não usamos mapas nem serviços de terceiros e não guardamos a frequência cardíaca.",
+  "Podes apagar uma corrida, só o percurso ou todas, quando quiseres, mesmo que o teu profissional desligue a Corrida. Se retirares este consentimento, apagamos todas as tuas corridas."
+];
+function runUiNoticeHtml(cls){
+  return RUN_UI_NOTICE.map(function(p){ return '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + escapeHtml(p) + '</p>'; }).join("");
+}
+function runUiPrivacyHtml(d, preview, open){
+  var h = '<details class="soft-details run-privacy" id="runPrivacy"' + (open ? ' open' : '') + '><summary>Privacidade e dados</summary>' + runUiNoticeHtml("muted-p") +
     '<p class="muted-p">' + escapeHtml(RUN_UI_MSG.sensitive) + '</p>';
   if (!preview){
     if (d.runs.length) h += '<button type="button" class="btn run-btn run-danger" id="runDelAll">Apagar todas as corridas</button>';
@@ -364,14 +382,37 @@ function runUiBannerHtml(sv){
     return typeof h === "string" ? h : "";
   } catch (e) { return ""; }
 }
+// a lista (ou o estado em que está: a carregar, erro, vazia). Com totais (início) ou só a lista (vista de dados)
+function runUiListHtml(d, o){
+  if (!d.runs.length && !d.loaded) return '<div class="card run-state"><p class="muted-p" id="runLoading">A carregar as tuas corridas…</p></div>';
+  if (d.err && !d.runs.length){
+    return '<div class="card run-state" id="runLoadErr"><p class="muted-p">' + escapeHtml(d.err === "net" ? RUN_UI_MSG.loadNet : RUN_UI_MSG.loadOther) + '</p><button type="button" class="btn run-btn" id="runRetry">Tentar outra vez</button></div>';
+  }
+  if (!d.runs.length) return '<div class="card run-state"><p class="muted-p" id="runEmpty">' + escapeHtml(o.empty) + '</p></div>';
+  return (o.weeks ? runUiWeeksHtml(d) : '') + '<div class="card run-list"><div class="eyebrow">As minhas corridas</div>' +
+    d.runs.map(function(r){ return runUiRowHtml(r, "data-run"); }).join("") +
+    (d.more ? '<p class="muted-p run-note">A mostrar as ' + d.runs.length + ' mais recentes.</p><button type="button" class="btn run-btn" id="runMore"' + (d.loading ? ' disabled' : '') + '>Ver mais</button>' : '') + '</div>';
+}
+function runUiMissingHtml(){
+  return '<div class="card run-state" id="runMissing"><p class="muted-p">' + escapeHtml(RUN_UI_MSG.missing) + '</p><button type="button" class="btn run-btn" id="runRetry">Tentar outra vez</button></div>';
+}
+// Corrida desligada pelo profissional: o aluno só vê e apaga o que já tem (nada de importar, registar à mão nem gravar)
+function runUiOffHtml(sv){
+  var d = runUiData, preview = authRole !== "student";
+  var h = '<div class="card run-off" id="runOff"><button type="button" class="btn btn-sm run-back" id="runOffBack">← Voltar</button>' +
+    '<h3 class="run-h">A Corrida está desligada</h3><p class="muted-p">' + escapeHtml(RUN_UI_MSG.offIntro) + '</p></div>';
+  if (d.loaded && d.err === "missing") return h + runUiMissingHtml();
+  if (!preview) h += runUiBannerHtml(sv);
+  h += runUiListHtml(d, {weeks: false, empty: RUN_UI_MSG.offEmpty});
+  return h + '<div class="card run-priv">' + runUiPrivacyHtml(d, preview, true) + '</div>';
+}
 function runUiHomeHtml(sv){
+  if (corridaModeOf(sv) === "off") return runUiOffHtml(sv);
   var d = runUiData, preview = authRole !== "student", live = sv.runsMode === "live" && typeof RUN.liveOpen === "function";
   var h = '<div class="tab-head run-head"><h2>Corrida</h2><p>' + escapeHtml(live ?
     "Grava a corrida aqui, com o GPS do telemóvel e a EVOLVE aberta, ou traz um ficheiro do relógio ou de outra app." :
     "A EVOLVE não usa o GPS do telemóvel: lê o ficheiro que trouxeres do relógio ou de outra app.") + '</p></div>';
-  if (d.loaded && d.err === "missing"){
-    return h + '<div class="card run-state" id="runMissing"><p class="muted-p">' + escapeHtml(RUN_UI_MSG.missing) + '</p><button type="button" class="btn run-btn" id="runRetry">Tentar outra vez</button></div>';
-  }
+  if (d.loaded && d.err === "missing") return h + runUiMissingHtml();
   if (!preview) h += runUiBannerHtml(sv);
   h += '<div class="card run-actions">';
   if (preview) h += '<p class="muted-p run-note" id="runPreviewNote">' + escapeHtml(RUN_UI_MSG.previewOnly) + '</p>';
@@ -383,20 +424,9 @@ function runUiHomeHtml(sv){
         '<p class="muted-p run-note" id="runLiveNote">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>';
     }
   }
-  h += '</div>';
-  if (!d.runs.length && !d.loaded){
-    h += '<div class="card run-state"><p class="muted-p" id="runLoading">A carregar as tuas corridas…</p></div>';
-  } else if (d.err && !d.runs.length){
-    h += '<div class="card run-state" id="runLoadErr"><p class="muted-p">' + escapeHtml(d.err === "net" ? RUN_UI_MSG.loadNet : RUN_UI_MSG.loadOther) + '</p><button type="button" class="btn run-btn" id="runRetry">Tentar outra vez</button></div>';
-  } else if (!d.runs.length){
-    h += '<div class="card run-state"><p class="muted-p" id="runEmpty">' + escapeHtml(RUN_UI_MSG.empty) + '</p></div>';
-  } else {
-    h += runUiWeeksHtml(d) + '<div class="card run-list"><div class="eyebrow">As minhas corridas</div>' +
-      d.runs.map(function(r){ return runUiRowHtml(r, "data-run"); }).join("") +
-      (d.more ? '<p class="muted-p run-note">A mostrar as ' + d.runs.length + ' mais recentes.</p><button type="button" class="btn run-btn" id="runMore"' + (d.loading ? ' disabled' : '') + '>Ver mais</button>' : '') + '</div>';
-  }
+  h += '</div>' + runUiListHtml(d, {weeks: true, empty: RUN_UI_MSG.empty});
   if (!preview) h += runUiGuideHtml();
-  return h + '<div class="card run-priv">' + runUiPrivacyHtml(d, preview) + '</div>';
+  return h + '<div class="card run-priv">' + runUiPrivacyHtml(d, preview, false) + '</div>';
 }
 
 function runUiOn(el, sel, fn){
@@ -405,7 +435,7 @@ function runUiOn(el, sel, fn){
   return n;
 }
 function runUiWireHome(s, el){
-  var d = runUiData, preview = authRole !== "student", redraw = function(){ runUiRedraw(s, "home"); };
+  var d = runUiData, preview = authRole !== "student", off = corridaModeOf(s) === "off", redraw = function(){ runUiRedraw(s, "home"); };
   if (!d.loading && (!d.loaded || (Date.now() - d.loadedAt > RUN_UI_STALE_MS && d.raw <= RUN_UI_PAGE))) runUiLoad(d, s.id, false, redraw);   // quem já pediu mais páginas não vê a lista encolher
   runUiOn(el, "#runRetry", function(){ runUiInvalidate(d); d.err = ""; RUN.go("home"); });
   runUiOn(el, "#runMore", function(){ runUiLoad(d, s.id, true, redraw); redraw(); });
@@ -416,14 +446,21 @@ function runUiWireHome(s, el){
       RUN.go("detail", {id: id});
     });
   });
+  runUiOn(el, "#runOffBack", function(){ RUN.dataMode = false; RUN.go("home"); });   // volta ao cartão «A Corrida ainda não está ativa para ti» (app.js)
   if (preview) return;
-  runUiOn(el, "#runGoImport", function(){ RUN.ensureConsent(s, function(){ RUN.go("import"); }); });
-  runUiOn(el, "#runGoManual", function(){ RUN.ensureConsent(s, function(){ RUN.go("manual"); }); });
-  runUiOn(el, "#runGoLive", function(){ RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); }); });
+  if (!off){   // com a Corrida desligada só se vê e apaga
+    runUiOn(el, "#runGoImport", function(){ RUN.ensureConsent(s, function(){ RUN.go("import"); }); });
+    runUiOn(el, "#runGoManual", function(){ RUN.ensureConsent(s, function(){ RUN.go("manual"); }); });
+    runUiOn(el, "#runGoLive", function(){ RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); }); });
+  }
   runUiOn(el, "#runDelAll", function(){
-    runUiDelete({ask: "Apagar todas as tuas corridas? Não dá para desfazer.", allowEmpty: true, ok: "Corridas apagadas.",
+    var extra = runUiQueueCount() > 0 ? " Também apaga as corridas por enviar que estão neste telemóvel." : "";
+    runUiDelete({ask: "Apagar todas as tuas corridas? Não dá para desfazer." + extra, allowEmpty: true, ok: "Corridas apagadas.",
       make: function(db){ return db.from("runs").delete().eq("student_id", s.id).select("id"); },
-      after: function(){ runUiData = runUiNewData(s.id, runUiUid()); RUN.go("home"); }});
+      after: function(){
+        runUiQueueClear(s.id);   // uma corrida por enviar não pode voltar ao servidor depois de o aluno ter apagado tudo
+        runUiData = runUiNewData(s.id, runUiUid()); RUN.go("home");
+      }});
   });
   runUiOn(el, "#runWithdraw", function(){
     var extra = runPendingCount() > 0 ? " Também apaga a gravação por terminar e as corridas por enviar que estão neste telemóvel." : "";
@@ -431,6 +468,7 @@ function runUiWireHome(s, el){
       make: function(db){ return db.from("run_consents").delete().eq("student_id", s.id).select("student_id"); },
       after: function(){
         runUiConsentFor = "";
+        runUiReceiptClear(s.id);
         runUiData = runUiNewData(s.id, runUiUid());
         if (typeof RUN.reset === "function"){ try { RUN.reset(); } catch (e) {} }
         runWipeLocal();
@@ -457,27 +495,43 @@ function runUiDelete(o){
 }
 
 /* ---------- consentimento ---------- */
+// O recibo local (o gravador guarda-o: RUN.consentCacheGet/Set/Clear) só serve para COMEÇAR sem rede, ao ar livre: lê-se quando a leitura no servidor
+// falha por rede. Quando o servidor responde, ele decide e o recibo acompanha (Set se aceitou, Clear se não); e o servidor continua a recusar o insert
+// de uma corrida sem consentimento válido (RLS/FK). Sem as funções (gravador por carregar) não há recibo e tudo fica como antes.
+function runUiReceiptGet(sid){
+  try { if (typeof RUN.consentCacheGet === "function"){ var v = RUN.consentCacheGet(sid); return typeof v === "number" && isFinite(v) ? v : null; } } catch (e) {}
+  return null;
+}
+function runUiReceiptSet(sid, version){ try { if (typeof RUN.consentCacheSet === "function") RUN.consentCacheSet(sid, version); } catch (e) {} }
+function runUiReceiptClear(sid){ try { if (typeof RUN.consentCacheClear === "function") RUN.consentCacheClear(sid); } catch (e) {} }
+// o servidor disse que o consentimento (ou a Corrida) já não vale: esquece-se o que se sabia
+function runUiConsentLost(sid){ runUiConsentFor = ""; runUiReceiptClear(sid); }
+// fila de envio do gravador: quantas entradas (por enviar ou recusadas) e apagá-las todas
+function runUiQueueCount(){
+  var n = 0;
+  try {
+    if (typeof RUN.queuePending === "function") n += Number(RUN.queuePending()) || 0;
+    if (typeof RUN.queueFailed === "function") n += Number(RUN.queueFailed()) || 0;
+  } catch (e) { n = 0; }
+  return n;
+}
+function runUiQueueClear(sid){ try { if (typeof RUN.queueClear === "function") RUN.queueClear(sid); } catch (e) {} }
 function runUiConsentRead(s){
   return runUiCall(function(db){ return db.from("run_consents").select("version").eq("student_id", s.id); }).then(function(res){
+    var v = RUN.consentVersion();
     if (res.error){
       var k = runUiKind(res);
-      if (k === "net" && runUiConsentFor === s.id) return {ok: true, accepted: true};
+      if (k === "net" && (runUiConsentFor === s.id || runUiReceiptGet(s.id) === v)) return {ok: true, accepted: true};
       return {ok: false, kind: k};
     }
-    var v = RUN.consentVersion(), yes = runUiRows(res).some(function(r){ return r && Number(r.version) === v; });
+    var yes = runUiRows(res).some(function(r){ return r && Number(r.version) === v; });
     runUiConsentFor = yes ? s.id : "";
+    if (yes) runUiReceiptSet(s.id, v); else runUiReceiptClear(s.id);
     return {ok: true, accepted: yes};
   });
 }
-function runUiConsentHtml(sv){
-  var live = sv.runsMode === "live" && typeof RUN.liveOpen === "function";
-  return '<div class="card run-consent" id="runConsent"><div class="eyebrow">Corrida</div><h3 class="run-h">Corridas: antes de começares</h3>' +
-    '<p>' + escapeHtml(live ?
-      "Gravas a corrida no relógio ou numa app e escolhes aqui o ficheiro (GPX ou TCX), ou gravas aqui com o GPS do telemóvel. A EVOLVE lê o ficheiro no teu telemóvel e não o guarda. O GPS do telemóvel só é usado quando carregas em «Gravar com GPS», e só enquanto a EVOLVE está aberta a gravar." :
-      "Gravas a corrida no relógio ou numa app e escolhes aqui o ficheiro (GPX ou TCX). A EVOLVE lê o ficheiro no teu telemóvel e não o guarda. A EVOLVE não ativa o GPS do telemóvel nesta versão.") + '</p>' +
-    '<p>Fica guardado: a data, a distância, o tempo, o ritmo e o tempo de cada quilómetro. O percurso só fica guardado se escolheres partilhá-lo com o teu profissional, sem os primeiros e últimos metros.</p>' +
-    '<p>Quem vê: tu e o teu profissional. Os dados ficam no serviço de alojamento da EVOLVE (Supabase). Não usamos mapas nem serviços de terceiros para mostrar o percurso e não guardamos a frequência cardíaca.</p>' +
-    '<p>Podes apagar uma corrida, só o percurso ou todas, quando quiseres. Se retirares este consentimento, apagamos todas as tuas corridas.</p>' +
+function runUiConsentHtml(){
+  return '<div class="card run-consent" id="runConsent"><div class="eyebrow">Corrida</div><h3 class="run-h">Corridas: antes de começares</h3>' + runUiNoticeHtml("") +
     '<p class="run-err" id="runCsErr" role="alert"></p>' +
     '<button type="button" class="btn primary run-btn" id="runCsAccept">Aceito e continuar</button>' +
     '<button type="button" class="btn run-btn" id="runCsDecline">Agora não</button></div>';
@@ -501,6 +555,7 @@ function runUiWireConsent(s, el){
         return;
       }
       runUiConsentFor = s.id;
+      runUiReceiptSet(s.id, RUN.consentVersion());
       var cb = v.cb, back = v.back && v.back !== "consent" ? v.back : "home", seq = runUiGoSeq;
       RUN.v = {name: back};
       try { if (typeof cb === "function") cb(); } catch (e) {}
@@ -551,10 +606,10 @@ function runUiQueueOr(item, fallback){
   try { ok = RUN.queueAdd(item) !== false; } catch (e) { ok = false; }
   return ok ? {ok: true, queued: true} : fallback;
 }
-function runUiRunMsg(kind){
+function runUiRunMsg(kind, sid){
   if (kind === "missing") return RUN_UI_MSG.missing;
-  if (kind === "rls"){ runUiConsentFor = ""; return RUN_UI_MSG.rls; }
-  if (kind === "consent"){ runUiConsentFor = ""; return RUN_UI_MSG.consent; }
+  if (kind === "rls"){ runUiConsentLost(sid); return RUN_UI_MSG.rls; }
+  if (kind === "consent"){ runUiConsentLost(sid); return RUN_UI_MSG.consent; }
   if (kind === "check") return RUN_UI_MSG.check;
   return RUN_UI_MSG.generic;
 }
@@ -566,7 +621,7 @@ RUN.submitRun = function(s, item){
     return runUiInsertRun(row).then(function(r1){
       if (!r1.ok){
         if (r1.kind === "net") return runUiQueueOr(item, {ok: false, error: RUN_UI_MSG.net, permanent: false});
-        return {ok: false, error: runUiRunMsg(r1.kind), permanent: true};
+        return {ok: false, error: runUiRunMsg(r1.kind, s.id), permanent: true};
       }
       if (!track || !Array.isArray(track.segments)) return {ok: true, queued: false};
       return runUiInsertTrack(row, track).then(function(r2){
@@ -773,7 +828,7 @@ function runUiSaveHtml(sv){
       RUN_UI_TRIMS.map(function(m){
         return '<label class="run-opt"><input type="radio" name="runSvTrim" data-f="trim" value="' + m + '"' + (trim === m ? ' checked' : '') + '><span>' + (m === 0 ? "Não esconder" : m + " m" + (m === 200 ? " (recomendado)" : "")) + '</span></label>';
       }).join("") + '</div><p class="run-warn' + (trim === 0 ? '' : ' hidden') + '" id="runSvTrim0">O profissional vai ver exatamente onde começaste e acabaste.</p>' +
-      '<p class="muted-p run-note">Os primeiros e últimos metros costumam estar perto de onde moras ou trabalhas. Isto reduz o risco, mas não o elimina. A distância e o tempo guardados são os da corrida inteira.</p></div></div>';
+      '<p class="muted-p run-note">Os primeiros e últimos metros costumam estar perto de onde moras ou trabalhas. Isto reduz o risco, mas não o elimina. O que escolhes é o mínimo: a EVOLVE esconde um pouco mais, ao acaso. A distância e o tempo guardados são os da corrida inteira.</p></div></div>';
   }
   h += '<div class="run-field"><label for="runSvRpe">Esforço (1 a 10)</label><select id="runSvRpe" data-f="rpe"><option value="">–</option>';
   for (var i = 1; i <= 10; i++) h += '<option value="' + i + '"' + (String(f.rpe) === String(i) ? ' selected' : '') + '>' + i + '</option>';
@@ -814,7 +869,7 @@ function runUiSaveClick(s){
   if (runUiDupOf(prep) && !runUiAsk(RUN_UI_MSG.dupAsk)) return;
   var item = {row: row, track: null}, shortMsg = "";
   if (f.share === true && runUiHasTrack(prep)){
-    var tr = runPrepareTrack(prep.segments, {trimM: parseInt(f.trim, 10)});
+    var tr = runPrepareTrack(prep.segments, {trimM: parseInt(f.trim, 10), rnd: Math.random()});   // o raio escondido é o escolhido mais uma folga ao acaso (até 50 %)
     if (tr) item.track = {segments: tr.segments, trimM: tr.trimM};
     else shortMsg = RUN_UI_MSG.shortTrack;   // curto demais para aparar: só os números
   }
@@ -920,17 +975,27 @@ RUN.go = function(name, params){
   renderAlunoTab(s);
   try { window.scrollTo(0, 0); } catch (e) {}
 };
+// a vista «live» só é do aluno com o gravador ligado; mas uma gravação em curso (GPS ligado) não se esconde se o profissional mudar o modo entretanto:
+// o ecrã do gravador decide o que mostrar (o aluno tem de a poder terminar ou descartar)
+function runUiLiveView(s){
+  if (authRole !== "student") return false;
+  if (s.runsMode === "live") return typeof RUN.liveScreen === "function";
+  try { return typeof RUN.liveBusy === "function" && typeof RUN.liveScreen === "function" && RUN.liveBusy() === true; } catch (e) { return false; }
+}
 RUN.screen = function(sv){
   try {
     runUiSync(sv.id);
-    var v = RUN.v || (RUN.v = {name: "home"});
+    var v = RUN.v || (RUN.v = {name: "home"}), off = corridaModeOf(sv) === "off";
+    if (!off) RUN.dataMode = false;
     if (v.name === "live"){
-      if (authRole === "student" && sv.runsMode === "live" && typeof RUN.liveScreen === "function") return RUN.liveScreen(sv);
+      if (runUiLiveView(sv)) return RUN.liveScreen(sv);
       RUN.v = v = {name: "home"};
     }
+    // com a Corrida desligada só há a vista de dados (início e detalhe: ver e apagar): importar, à mão, consentimento e confirmar não existem
+    if (off && v.name !== "detail") RUN.v = v = {name: "home"};
     if (v.name === "import" && authRole === "student") return runUiImportHtml();
     if (v.name === "manual" && authRole === "student") return runUiManualHtml();
-    if (v.name === "consent" && authRole === "student") return runUiConsentHtml(sv);
+    if (v.name === "consent" && authRole === "student") return runUiConsentHtml();
     if (v.name === "save" && authRole === "student" && (v.prep || v.saved)) return runUiSaveHtml(sv);
     if (v.name === "detail" && v.id) return runUiDetailHtml(runUiData, v.id, false, authRole !== "student", "runBack");
     if (v.name !== "home") RUN.v = {name: "home"};
@@ -942,7 +1007,7 @@ RUN.screen = function(sv){
 RUN.wire = function(s, el){
   try {
     var v = RUN.v || {name: "home"};
-    if (v.name === "live" && authRole === "student" && s.runsMode === "live" && typeof RUN.liveWire === "function"){ RUN.liveWire(s, el); return; }
+    if (v.name === "live" && runUiLiveView(s) && typeof RUN.liveWire === "function"){ RUN.liveWire(s, el); return; }
     if (v.name === "import") runUiWireImport(s, el);
     else if (v.name === "manual") runUiWireManual(s, el);
     else if (v.name === "consent") runUiWireConsent(s, el);
@@ -990,10 +1055,10 @@ function runUiProInner(s, d){
       return '<button type="button" class="chip run-mode' + (on ? ' on' : '') + '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-run-mode="' + m[0] + '"' + (d.modeBusy ? ' disabled' : '') + '>' + escapeHtml(m[1]) + '</button>';
     }).join("") + '</div>' +
     '<p class="muted-p" id="runModeHelp">' + escapeHtml(corridaModeOf(s) === "off" ?
-      "Com a Corrida desligada o aluno não vê o separador Corrida nem guarda corridas. As que já tem ficam guardadas." :
+      "Com a Corrida desligada o aluno continua a ver o separador «Corrida», mas só com a indicação de que não está ativa: não importa, não regista nem grava. As corridas que já tem continuam guardadas e continuas a vê-las aqui; o aluno também as pode ver e apagar, e retirar o consentimento (o que apaga todas)." :
       corridaModeOf(s) === "live" ?
-      "O aluno pode importar ficheiros GPX ou TCX, registar corridas à mão e gravar com o GPS do telemóvel. A gravação é experimental: só está pensada para o ecrã ligado e a EVOLVE aberta, e o ecrã bloqueado ou noutra aplicação não está verificado em iPhone nem em Android. Vês as corridas que ele guardar; o aluno pode apagá-las." :
-      "O aluno passa a ver «Corrida» na app EVOLVE Treino e pode importar ficheiros GPX ou TCX e registar corridas à mão. Vês as corridas que ele guardar; o aluno pode apagá-las.") + '</p>' +
+      "O aluno pode importar ficheiros GPX ou TCX, registar corridas à mão e gravar com o GPS do telemóvel (que só liga depois de ele carregar em «Preparar GPS»). A gravação é experimental: só está pensada para o ecrã ligado e a EVOLVE aberta, e o ecrã bloqueado ou noutra aplicação não está verificado em iPhone nem em Android. Vês as corridas que ele guardar; o aluno pode apagá-las." :
+      "O aluno pode importar ficheiros GPX ou TCX e registar corridas à mão no separador «Corrida» da app EVOLVE Treino. Vês as corridas que ele guardar; o aluno pode apagá-las.") + '</p>' +
     '<p class="run-err" id="runModeErr" role="alert">' + escapeHtml(d.modeErr || "") + '</p></div>';
   if (d.err === "missing") return h + '<p class="muted-p" id="runProMissing">' + escapeHtml(RUN_UI_MSG.missingPro) + '</p>';
   h += '<div class="card"><div class="eyebrow">Consentimento</div><p class="muted-p" id="runProConsent">' + escapeHtml(runUiProConsentLine(d)) + '</p></div>';

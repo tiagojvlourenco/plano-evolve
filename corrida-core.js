@@ -28,7 +28,7 @@
 
    Fluxos típicos
      Ao vivo   st = runFeedInit(); runFeed(st, fix) a cada posição; runPause / runResume; rascunho = JSON.stringify(st) e, ao arrancar,
-               runFeedRestore(JSON.parse(...)). No fim: stats = runStats(st.segs, null, "live"); track = runPrepareTrack(st.segs, {trimM})
+               runFeedRestore(JSON.parse(...)). No fim: stats = runStats(st.segs, null, "live"); track = runPrepareTrack(st.segs, {trimM, rnd: Math.random()})
                (null = sem percurso); row = runBuildInsert({id: runUuid(), studentId, source: "live", startedAtMs: stats.startedAtMs,
                durationS: stats.durationS, movingS: stats.movingS, distM: stats.distM, gaps: stats.gaps, gapS: stats.gapS,
                splitsS: stats.splitsS, hiddenS, rpe, notes, consentV}); run_tracks.points = track.segments, trim_m = track.trimM.
@@ -53,33 +53,55 @@
          1.º ponto aceite, ou null), lastGoodT, maxT, nPts, nFix, rej {invalid,time,acc,jump}, distM (float), movMs, gaps,
          gapMs, splitsS. NÃO mexer nestes campos por fora; usar runFeed / runPause / runResume / runLiveView.
      runFeed(state, fix, cfg) → {reason, added, good, gap}
-         fix = {lat, lon, acc, t(ms)}; t é o position.timestamp (nunca Date.now()). Ordem das regras:
+         fix = {lat, lon, acc, t(ms)}; t é o position.timestamp. Quem chama deve limitá-lo ao relógio do telemóvel (t <= Date.now());
+         o núcleo não tem relógio. Ordem das regras:
            invalid (campos em falta/fora de intervalo) → paused (ignorado) → time (t não cresce) → acc (acc em falta ou > accMaxM)
            → lacuna (passou > gapS desde o último fix bom: fecha o segmento, o próximo abre outro, gaps++, gapS += segundos)
            → jump (velocidade desde a âncora > vMaxMs) → near (a < minStepLiveM da âncora: fix bom, não é ponto) → ok (ponto novo).
          reason: "ok" | "near" | "invalid" | "paused" | "time" | "acc" | "jump". added: true só em "ok". good: true em "ok" e
          "near" (há sinal utilizável). gap: true se ESTE fix abriu um segmento por lacuna. Nunca se soma distância em linha
          reta através de uma lacuna nem de uma pausa. Distância pelo método da âncora (a âncora é o último ponto aceite).
+         Horas: o máximo (maxT) só avança com fixes ACEITES; um fix recusado por precisão ou por salto, mesmo com hora adiantada,
+         não o envenena. Se o fix que ABRIU um segmento (1.º da corrida, depois de lacuna ou de pausa) trouxe uma hora adiantada e o
+         fix seguinte, com sinal utilizável, recua mais de timeBackS em relação a ele mas cabe na linha de tempo anterior, o fix
+         adiantado é desfeito (sai do percurso e das lacunas; conta em rej.time) em vez de se recusar tudo o que vem a seguir.
+         LIMITE CONHECIDO: uma hora adiantada de um fix a meio de um segmento (dentro de gapS) faz recusar os fixes seguintes até
+         ao máximo de gapS segundos; uma hora adiantada no 1.º fix da corrida sem fixes seguintes não se deteta (sem relógio no núcleo).
      runPause(state, tMs) → state     fecha o segmento; os fixes seguintes dão reason "paused" até runResume.
      runResume(state, tMs) → state    o próximo fix aceite abre um segmento b:"pause" (não é lacuna; o tempo parado não conta).
      runFeedRestore(saved, cfg) → state | null    recria o state de um rascunho (JSON.parse do state guardado). Só usa saved.segs,
          saved.paused, saved.pauseAt, saved.pausedMs, saved.rej; valida tudo e recalcula os totais. O próximo fix aceite abre
          um segmento b:"gap" (a lacuna entre o último ponto guardado e a retoma), ou b:"pause" se estava em pausa.
      runLiveView(state, nowMs) → {distM, movingS, elapsedS, paceSPerKm|null, gaps, gapS, splitsS, points, paused, sinceGoodS|null,
-         rej}   números arredondados para o ecrã. elapsedS = (agora - início - pausas) e INCLUI as lacunas.
+         rej}   números arredondados para o ecrã. elapsedS = (agora - início - pausas) é o relógio de parede: INCLUI as lacunas e o
+         tempo desde o último fix bom até «agora» (sinceGoodS). O que se grava é o de runStats, que acaba SEMPRE no último ponto
+         (nunca soma o fim aberto); se a corrida «acordou» depois de uma lacuna enorme, ver runCutAtLastGap.
+     runCutAtLastGap(segments, minGapS) → {segments, cutS, cutPoints}   «Terminar no último ponto bom»: cópia sem o que vem a partir da
+         ÚLTIMA lacuna ao vivo (b:"gap") de pelo menos minGapS segundos (omissão gapS). Quem chama decide quando a oferece; sem essa
+         lacuna devolve tudo e cutS = 0.
      runReasonText(reason) → texto PT-PT curto para o motivo (ou "").
 
    Resultado final de qualquer fonte
      runStats(segments, cfg, mode) → {distM, durationS, movingS, gaps, gapS, splitsS, startedAtMs, endedAtMs, points, skipped}
          mode "live" (ou "native") | "import" (omissão). Inteiros arredondados. startedAtMs/endedAtMs null sem pontos.
          distM: método da âncora (minStepLiveM / minStepImportM), pontos com salto (> vMaxMs) ou tempo a recuar são ignorados (skipped).
+         Em «import», antes de contar, limpa os pontos soltos: um ponto com posição absurda (1.º, último ou do meio; ou uma série de até
+         spikeK-1 seguidos) sai SÓ ele (entra em skipped) em vez de fixar a âncora e apagar o que vem a seguir; um trecho curto (< spikeMaxS)
+         solto no início ou no fim também sai; vários pontos seguidos (>= spikeK) coerentes entre si abrem um trecho novo (como uma pausa).
+         Só salta o que passa de spikeMinM (30 m): saltos menores são ruído e contam como antes. Em «live» não há limpeza (o reducer
+         já recusa os saltos), para dar o mesmo que o acumulado.
          durationS: tempo total SEM as pausas (lacunas incluídas): soma dos intervalos de cada segmento + (só em live) o intervalo
-                    de cada lacuna entre segmentos. Em importação a quebra ENTRE segmentos é pausa do relógio: não conta.
+                    de cada lacuna entre segmentos. Em importação a quebra ENTRE segmentos é pausa do relógio: não conta, EXCETO se
+                    os segmentos seguem a menos de importJoinS e com velocidade possível (um Lap/Track por km): aí liga-se (soma o
+                    passo e o intervalo).
                     (desenho 2 dizia «último menos o primeiro»; aqui segue-se o SQL, «tempo total sem as pausas»; o relógio de
                     parede é endedAtMs - startedAtMs.)
          movingS: soma dos intervalos (âncora → ponto novo) com velocidade implícita > vMoveMin; movingS <= durationS sempre.
-         gaps/gapS: live → lacunas entre segmentos (b:"gap") e os seus segundos; import → intervalos > importGapS entre pontos
-                    seguidos do MESMO segmento. Pausas não são lacunas.
+                  LIMITE CONHECIDO: como a âncora só avança a cada minStep (15 m ao vivo, 8 m em ficheiros), uma paragem de até ~30 s
+                  seguida de arranque conta como movimento (sobrestima o «tempo em movimento» em segundos por paragem curta).
+         gaps/gapS: live → lacunas entre segmentos (b:"gap") e os seus segundos; import → intervalos > max(importGapS, 3× o intervalo
+                    mediano do segmento) entre pontos seguidos do MESMO segmento (um ficheiro gravado a 61 s por ponto não é «tudo
+                    lacunas»). Pausas não são lacunas.
          splitsS: segundos EM MOVIMENTO de cada km completo (interpolação linear no cruzamento); o último km incompleto não entra.
      runManualStats(startedAtMs, distM, durationS) → stats para registo à mão (movingS = durationS; sem lacunas nem parciais).
 
@@ -89,7 +111,13 @@
      runSimplify(points, eps) → points   Douglas-Peucker ITERATIVO (sem recursão). Mantém o 1.º e o último; nenhum ponto
          original fica a mais de eps metros do resultado. Aceita {lat,lon,...} ou [lat,lon,...]; devolve os mesmos elementos.
      runPrepareTrack(segments, cfg) → {segments, trimM, points} | null      segments = pontos {lat, lon, t(ms)} (não aceita a forma de arrays)
-         aparar (cfg.trimM) → simplificar (eps 4, 8, 15, depois ×2 até caber em maxTrackPoints e em maxTrackBytes) → fundir
+         cfg = {trimM, rnd}: trimM tem de ser um de RUN_CFG.trimChoices (0, 100, 200, 500, 1000, 2000); NaN, texto, null, negativo ou
+         outro valor NÃO desligam o aparo: usa-se o por omissão (200; falha fechado). rnd ∈ [0,1) vem de quem chama (Math.random(); sem
+         rnd, 0): o raio efetivo é trimM × (1 + trimSlack × rnd), ou seja, entre trimM e 1,5 × trimM; o que se guarda (trimM devolvido,
+         run_tracks.trim_m) é o escalão NOMINAL. O raio é só uma folga: não impede deduzir a partida a partir de VÁRIAS corridas com
+         a mesma partida (as circunferências intersetam-se); para isso só ajuda uma zona privada fixa, que o núcleo não tem.
+         limpar pontos soltos (runIClean: o aparo centra-se no 1.º e no último ponto LIMPOS, não num fix antigo/espúrio nas pontas)
+         → aparar → simplificar (eps 4, 8, 15, depois ×2 até caber em maxTrackPoints e em maxTrackBytes) → fundir
          segmentos até maxSegments → arredondar a 5 casas → t em segundos inteiros desde o 1.º ponto de `segments` (= startedAtMs
          de runStats) → descartar segmentos com < 2 pontos. null se não sobrar percurso (demasiado curto para esta privacidade,
          ou sem posições). Cabe sempre nos CHECK de run_tracks (1..200 segmentos; texto jsonb <= 200000).
@@ -103,13 +131,19 @@
 
    Leitura de ficheiros (precisam de DOMParser; recebem TEXTO; runParseFile também aceita ArrayBuffer/Uint8Array)
      runParseGpx(text, opts) / runParseTcx(text, opts) / runParseFile(name, input, opts)
-         → {ok:true, source:"gpx"|"tcx", segments, warnings:[PT-PT...], startedAtMs, endedAtMs, points}
+         → {ok:true, source:"gpx"|"tcx", segments, warnings:[PT-PT...], startedAtMs, endedAtMs, points, declaredDistM|null}
          | {ok:false, error, code}            opts = {cfg, nowMs}
+         declaredDistM: distância que a app de origem declara, só como número (TCX: soma dos Lap/DistanceMeters ou, sem eles, o maior
+         DistanceMeters dos Trackpoint; GPX: sempre null, não tem campo normalizado). Serve para avisar se difere muito da calculada.
          runParseFile detecta por conteúdo (raiz gpx / TrainingCenterDatabase), usa o nome só para recusar «.fit»; FIT binário
          (bytes 8–11 = «.FIT») é recusado com RUN_MSG.fit. Recusa: > maxFileBytes, texto com <!DOCTYPE ou <!ENTITY (antes de
          parsear), parsererror, só rte/wpt/Courses, sem horas, sem posições, ciclismo (TCX Biking), > maxFilePoints, duração >
          24 h, início antes de 2000 ou no futuro (> agora + futureSlackMs). Datas sem fuso lêem-se como UTC (com aviso).
+         Ciclismo: TCX com Sport Biking; GPX só se o ficheiro o diz em <trk><type> (bike/biking/cycling); sem tipo aceita-se.
          Pontos com hora repetida/a recuar, sem hora, fora de intervalo ou em (0,0) são descartados (com aviso, só números).
+         Um ponto (ou série curta, até orderWindow) com HORA ADIANTADA sai SÓ ele, sem apagar os que vêm depois; segmentos fora de ordem
+         ordenam-se pela hora do ponto do meio; se > 2 % saem por hora, avisa «horas fora de ordem: pode estar incompleta». Pontos com
+         posição absurda saem como em runStats (aviso «posição impossível», só números).
      runParseTime(str) → {ms, naive} | null    ISO 8601 (Z, ±hh:mm, ±hhmm, ±hh, ou sem fuso → naive:true, tratado como UTC).
 
    Linhas da tabela runs
@@ -149,6 +183,10 @@
    NÃO verificado: qualquer valor de RUN_CFG com GPS real (são HIPÓTESES do desenho, a calibrar com um percurso de distância
      conhecida e com ficheiros reais, fase F2); a conversão de coords.accuracy; o DOMParser em WebKit/Firefox/iPhone (segurança e
      velocidade); ficheiros reais de relógios; se o erro de distância fica dentro de 2 % (meta de desenho, não facto).
+   Limites conhecidos (medidos em séries sintéticas, não com GPS real): a distância importada de um GPS de telemóvel com muito ruído
+     (minStepImportM = 8 m) sobrestima de uns % a dezenas de % — por isso existe declaredDistM; uma série de >= spikeK pontos absurdos
+     seguidos conta como trecho novo e não como ruído; saltos < spikeMinM não se limpam; o aparo com folga aleatória e a partida
+     partilhada em várias corridas continuam a permitir deduzir a zona (ver runPrepareTrack).
    ===================================================================================================================== */
 
 var RUN_CFG = {
@@ -161,8 +199,17 @@ var RUN_CFG = {
                           // Só visto em séries SINTÉTICAS: com ruído branco de 3–5 m a 1 Hz este teste, medido desde a âncora (dt curto),
                           // chega a rejeitar fixes legítimos (σ 5 m: ~5 % dos fixes e distância +28 %). GPS real não medido: rever na F2.
   vMoveMin: 0.5,          // velocidade mínima (m/s) para o intervalo contar como tempo em movimento
-  importGapS: 60,         // importação: intervalo > N s entre pontos seguidos do mesmo segmento = lacuna
-  trimM: 200,             // privacidade: metros aparados à partida e à chegada (o aluno escolhe 0, 200, 500 ou 1000)
+  importGapS: 60,         // importação: intervalo > N s entre pontos seguidos do mesmo segmento = lacuna (nunca menos de 3× o intervalo
+                          // típico do ficheiro: um registo a 61 s por ponto não é «tudo lacunas»)
+  importJoinS: 10,        // importação: dois segmentos seguidos (Track/trkseg) a menos de N s e com velocidade possível ligam-se (laps)
+  spikeMinM: 30,          // pontos soltos: um salto só conta se passar de N m (abaixo disso é ruído, não se mexe)
+  spikeMaxS: 30,          // pontos soltos: um trecho com menos de N s entre dois saltos é «curto» e sai se houver um trecho maior
+  spikeK: 3,              // pontos soltos: N pontos seguidos, coerentes entre si e incoerentes com o resto, abrem um trecho novo
+  orderWindow: 50,        // importação: quantos pontos à frente se olha para apanhar uma hora adiantada (ponto isolado ou série curta)
+  timeBackS: 5,           // ao vivo: um fix que recua mais de N s em relação ao fix que abriu o segmento desfaz esse fix (hora adiantada)
+  trimM: 200,             // privacidade: metros aparados à partida e à chegada (por omissão, e valor usado se trimM for inválido)
+  trimChoices: [0, 100, 200, 500, 1000, 2000],   // valores aceites para trimM; qualquer outro (NaN, texto, negativo) cai em trimM
+  trimSlack: 0.5,         // aparo: raio efetivo = trimM × (1 + trimSlack × rnd), com rnd ∈ [0,1) dado por quem chama
   simplifyEps: [4, 8, 15], // Douglas-Peucker: eps (m) por ordem; depois dobra até caber
   maxTrackPoints: 3000,   // pontos do percurso guardado (todos os segmentos)
   maxFilePoints: 60000,   // pontos lidos de um ficheiro
@@ -198,6 +245,7 @@ var RUN_MSG = {
   long: "Esta corrida dura mais de 24 horas e não pode ser importada.",
   date: "A data desta corrida não é válida (antes de 2000 ou no futuro).",
   short: "Este ficheiro tem pontos a menos para calcular uma corrida.",
+  order: "O ficheiro tem horas fora de ordem: a corrida pode estar incompleta.",
   noparser: "Este navegador não consegue ler ficheiros GPX ou TCX."
 };
 
@@ -233,10 +281,11 @@ function runIValidPt(p){
 function runIEsc(s){
   return String(s).replace(/[&<>"']/g, function(c){ return c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;"; });
 }
-// texto curto e seguro para a BD: sem NUL/controlos (o Postgres recusa NUL), sem meio par substituto no fim
+// texto curto e seguro para a BD: sem NUL/controlos (o Postgres recusa NUL), sem meios pares substitutos em NENHUMA posição
+// (um \uD83D solto vira \ud83d no JSON e o Postgres recusa-o), sem meio par no corte por tamanho
 function runIStr(v, max){
   if (typeof v !== "string") return "";
-  var s = v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").replace(/^\s+|\s+$/g, "");
+  var s = v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g, function(m){ return m.length === 2 ? m : ""; }).replace(/^\s+|\s+$/g, "");
   if (s.length > max) {
     s = s.slice(0, max);
     var c = s.charCodeAt(s.length - 1);
@@ -277,11 +326,18 @@ function runIAccStep(acc, a, b, d, cfg){
 /* ---------- registo ao vivo ---------- */
 function runFeedInit(){
   return {
-    v: 1, segs: [], open: false, paused: false, pauseAt: null, pausedMs: 0, brk: null,
+    v: 1, segs: [], open: false, paused: false, pauseAt: null, pausedMs: 0, brk: null, sus: null,
     maxT: null, lastGoodT: null, startedAtMs: null, nPts: 0, nFix: 0,
     distM: 0, movMs: 0, nextKm: 1000, kmMovMs: 0, splitsS: [], gaps: 0, gapMs: 0,
     rej: {invalid: 0, time: 0, acc: 0, jump: 0}
   };
+}
+// desfaz o fix que abriu o último segmento (ver «sus» em runFeed): devolve o state ao que era antes dele
+function runIUndoOpen(state, sus){
+  state.segs.pop();
+  state.nPts = sus.nPts; state.gaps = sus.gaps; state.gapMs = sus.gapMs; state.open = sus.open; state.brk = sus.brk;
+  state.lastGoodT = sus.lastGoodT; state.maxT = sus.maxT; state.startedAtMs = sus.startedAtMs;
+  state.rej.time++;
 }
 function runFeed(state, fix, cfg){
   cfg = runCfg(cfg);
@@ -291,9 +347,19 @@ function runFeed(state, fix, cfg){
     state.rej.invalid++; res.reason = "invalid"; return res;
   }
   if (state.paused) { res.reason = "paused"; return res; }
-  if (state.maxT != null && fix.t <= state.maxT) { state.rej.time++; res.reason = "time"; return res; }
-  state.maxT = fix.t;
+  var sus = state.sus;
+  state.sus = null;
+  if (state.maxT != null && fix.t <= state.maxT) {
+    // maxT só avança com fixes ACEITES. Se o fix que abriu o segmento trazia uma hora adiantada (relógio errado) e este, com sinal
+    // utilizável, recua mais de timeBackS em relação a ele mas cabe no tempo anterior, desfaz-se o fix adiantado em vez de rejeitar
+    // tudo o que vem a seguir «até o relógio o apanhar».
+    var back = sus && state.segs.length && state.segs[state.segs.length - 1].length === 1 && state.maxT - fix.t > cfg.timeBackS * 1000 &&
+      (sus.maxT == null || fix.t > sus.maxT) && runIFin(fix.acc) && fix.acc >= 0 && fix.acc <= cfg.accMaxM;
+    if (back) runIUndoOpen(state, sus);
+    else { state.rej.time++; res.reason = "time"; return res; }
+  }
   if (!runIFin(fix.acc) || fix.acc < 0 || fix.acc > cfg.accMaxM) { state.rej.acc++; res.reason = "acc"; return res; }
+  var pre = {open: state.open, brk: state.brk, lastGoodT: state.lastGoodT, maxT: state.maxT, startedAtMs: state.startedAtMs, gaps: state.gaps, gapMs: state.gapMs, nPts: state.nPts};
   // lacuna: sem fix bom há mais de gapS segundos (não se aplica logo a seguir a uma pausa: aí o segmento já está fechado)
   if (state.open && state.lastGoodT != null && (fix.t - state.lastGoodT) / 1000 > cfg.gapS) { state.open = false; state.brk = "gap"; }
   var pt = {lat: fix.lat, lon: fix.lon, t: fix.t, acc: Math.round(fix.acc * 10) / 10};
@@ -309,15 +375,16 @@ function runFeed(state, fix, cfg){
       }
     }
     state.segs.push([pt]);
-    state.open = true; state.brk = null; state.lastGoodT = fix.t; state.nPts++;
+    state.open = true; state.brk = null; state.lastGoodT = fix.t; state.maxT = fix.t; state.nPts++;
     if (state.startedAtMs == null) state.startedAtMs = fix.t;
+    state.sus = pre;
     res.added = true; res.good = true;
     return res;
   }
   var seg = state.segs[state.segs.length - 1], anchor = seg[seg.length - 1];
   var d = runHav(anchor.lat, anchor.lon, fix.lat, fix.lon), dtS = (fix.t - anchor.t) / 1000;
   if (d / dtS > cfg.vMaxMs) { state.rej.jump++; res.reason = "jump"; return res; }
-  state.lastGoodT = fix.t; res.good = true;
+  state.lastGoodT = fix.t; state.maxT = fix.t; res.good = true;
   if (d < cfg.minStepLiveM) { res.reason = "near"; return res; }
   seg.push(pt); state.nPts++;
   runIAccStep(state, anchor, pt, d, cfg);
@@ -328,7 +395,7 @@ function runPause(state, tMs){
   if (state.paused) return state;
   state.paused = true;
   state.pauseAt = runIFin(tMs) ? tMs : null;
-  state.open = false; state.brk = "pause";
+  state.open = false; state.brk = "pause"; state.sus = null;
   return state;
 }
 function runResume(state, tMs){
@@ -396,33 +463,115 @@ function runReasonText(reason){
     reason === "invalid" ? "Posição inválida" : reason === "paused" ? "Em pausa" : "";
 }
 
+/* ---------- pontos soltos (saltos de posição) ---------- */
+// Um passo a→b é coerente se a velocidade implícita não passa vMaxMs (ou se o salto é curto: isso é ruído, não se mexe).
+function runIStepOk(a, b, cfg){
+  var d = runHav(a.lat, a.lon, b.lat, b.lon);
+  return d <= cfg.spikeMinM || d <= cfg.vMaxMs * (b.t - a.t) / 1000;
+}
+function runIJudgeable(p){ return !!p && p.lat !== undefined && runIValidPt(p) && runIFin(p.t); }
+function runISpan(seg){
+  var lo = Infinity, hi = -Infinity, i;
+  for (i = 0; i < seg.length; i++) if (seg[i] && runIFin(seg[i].t)) { if (seg[i].t < lo) lo = seg[i].t; if (seg[i].t > hi) hi = seg[i].t; }
+  return hi >= lo ? hi - lo : 0;
+}
+function runIEnd(seg, atEnd){
+  var i;
+  if (atEnd) { for (i = seg.length - 1; i >= 0; i--) if (runIJudgeable(seg[i])) return seg[i]; }
+  else for (i = 0; i < seg.length; i++) if (runIJudgeable(seg[i])) return seg[i];
+  return null;
+}
+// Limpa UM segmento: um ponto (ou até spikeK-1 seguidos) incoerente com o resto sai; spikeK ou mais pontos seguidos, coerentes entre si
+// e incoerentes com o que vinha atrás, abrem um trecho novo (o intervalo não soma distância). Os pontos que não se podem avaliar
+// (sem hora, hora que não cresce) passam sem mexer: quem usa trata deles (runStats conta-os em skipped).
+function runICleanSeg(seg, cfg){
+  var chains = [], cur = [], pend = [], last = null, dropped = 0, i, p, pl;
+  for (i = 0; i < seg.length; i++) {
+    p = seg[i];
+    if (!runIJudgeable(p) || (last && !(p.t > last.t))) { cur.push(p); continue; }
+    if (!last || runIStepOk(last, p, cfg)) { dropped += pend.length; pend = []; cur.push(p); last = p; continue; }
+    pl = pend.length ? pend[pend.length - 1] : null;
+    if (pl && p.t > pl.t && runIStepOk(pl, p, cfg)) pend.push(p);
+    else { dropped += pend.length; pend = [p]; }
+    if (pend.length >= cfg.spikeK) { chains.push(cur); cur = pend; pend = []; last = cur[cur.length - 1]; }
+  }
+  dropped += pend.length;   // o que ficou em espera no fim (menos de spikeK pontos) era um ponto solto
+  if (cur.length) chains.push(cur);
+  if (chains.length > 1) {
+    var minMs = cfg.spikeMaxS * 1000, anyLong = false, kept = [];
+    for (i = 0; i < chains.length; i++) if (runISpan(chains[i]) >= minMs) anyLong = true;
+    for (i = 0; i < chains.length; i++) { if (anyLong && runISpan(chains[i]) < minMs) dropped += chains[i].length; else kept.push(chains[i]); }
+    chains = kept;
+  }
+  return {chains: chains, dropped: dropped};
+}
+// Limpa todos os segmentos (cópia; não altera a entrada). → {segs, dropped}. Um segmento curto no início ou no fim do percurso, que não
+// se liga (pela velocidade possível) ao vizinho, também sai: é o fix antigo/espúrio do arranque ou do fim.
+function runIClean(segments, cfg){
+  var out = [], dropped = 0, i, j, r, anyLong = false, minMs = cfg.spikeMaxS * 1000;
+  for (i = 0; i < segments.length; i++) {
+    if (!Array.isArray(segments[i]) || !segments[i].length) continue;
+    r = runICleanSeg(segments[i], cfg);
+    dropped += r.dropped;
+    for (j = 0; j < r.chains.length; j++) if (r.chains[j].length) out.push(r.chains[j]);
+  }
+  for (i = 0; i < out.length; i++) if (runISpan(out[i]) >= minMs) anyLong = true;
+  function loose(a, b){ var x = runIEnd(a, true), y = runIEnd(b, false); return !!x && !!y && y.t > x.t && !runIStepOk(x, y, cfg); }
+  while (anyLong && out.length > 1 && runISpan(out[0]) < minMs && loose(out[0], out[1])) { dropped += out[0].length; out.shift(); }
+  while (anyLong && out.length > 1 && runISpan(out[out.length - 1]) < minMs && loose(out[out.length - 2], out[out.length - 1])) { dropped += out[out.length - 1].length; out.pop(); }
+  return {segs: out, dropped: dropped};
+}
+
 /* ---------- resultado final (qualquer fonte) ---------- */
+// mediana dos intervalos (ms) entre pontos seguidos com hora a crescer; 0 se não houver
+function runIMedDt(seg){
+  var d = [], a = null, i, p;
+  for (i = 0; i < seg.length; i++) {
+    p = seg[i];
+    if (!p || !runIFin(p.t)) continue;
+    if (a && p.t > a.t) d.push(p.t - a.t);
+    a = p;
+  }
+  if (!d.length) return 0;
+  d.sort(function(x, y){ return x - y; });
+  return d[d.length >> 1];
+}
 // Repete, sobre segmentos já feitos, as mesmas contas do reducer (em live dá o mesmo que o acumulado durante o registo).
+// Em importação limpa primeiro os pontos soltos (runIClean: um ponto inicial/final/do meio com posição absurda sai SÓ ele) e liga
+// segmentos seguidos a menos de importJoinS (um Lap/Track por km não perde um passo em cada fronteira).
 function runIReplay(segments, cfg, live){
   var minStep = live ? cfg.minStepLiveM : cfg.minStepImportM;
   var r = {acc: runIAccNew(), gaps: 0, gapMs: 0, durMs: 0, skipped: 0, nPts: 0, first: null, last: null};
-  var prevSegLast = null, s, i;
+  var prevSegLast = null, prevAnchor = null, s, i;
+  if (!live) { var cl = runIClean(segments, cfg); segments = cl.segs; r.skipped += cl.dropped; }
   for (s = 0; s < segments.length; s++) {
     var seg = segments[s];
     if (!seg || !seg.length) continue;
-    var anchor = null, prev = null, segStart = 0;
+    var anchor = null, prev = null, segStart = 0, gapLimitMs = live ? 0 : Math.max(cfg.importGapS * 1000, 3 * runIMedDt(seg));
     for (i = 0; i < seg.length; i++) {
       var p = seg[i];
       if (!p || !runIFin(p.lat) || !runIFin(p.lon) || !runIFin(p.t)) { r.skipped++; continue; }
       r.nPts++;
       if (!anchor) {
-        anchor = p; prev = p; segStart = p.t;
         if (!r.first) r.first = p;
-        if (prevSegLast && live && p.b !== "pause") {
-          // lacuna entre segmentos (só ao vivo): conta no tempo total e nas lacunas; NÃO soma distância
-          r.gaps++;
-          r.gapMs += runIFin(p.g) && p.g >= 0 ? p.g * 1000 : Math.max(0, p.t - prevSegLast.t);
-          r.durMs += Math.max(0, p.t - prevSegLast.t);
+        if (!live && prevSegLast && prevAnchor && p.t > prevSegLast.t && p.t - prevSegLast.t <= cfg.importJoinS * 1000 &&
+            runHav(prevSegLast.lat, prevSegLast.lon, p.lat, p.lon) <= cfg.vMaxMs * (p.t - prevSegLast.t) / 1000) {
+          // fronteira de Lap/Track sem pausa de verdade: continua a mesma âncora e o intervalo conta no tempo
+          r.durMs += p.t - prevSegLast.t;
+          anchor = prevAnchor; prev = prevSegLast; segStart = p.t;
+        } else {
+          anchor = p; prev = p; segStart = p.t;
+          if (prevSegLast && live && p.b !== "pause") {
+            // lacuna entre segmentos (só ao vivo): conta no tempo total e nas lacunas; NÃO soma distância
+            r.gaps++;
+            r.gapMs += runIFin(p.g) && p.g >= 0 ? p.g * 1000 : Math.max(0, p.t - prevSegLast.t);
+            r.durMs += Math.max(0, p.t - prevSegLast.t);
+          }
+          continue;
         }
-        continue;
       }
       if (!(p.t > prev.t)) { r.skipped++; continue; }   // tempo não crescente
-      if (!live && (p.t - prev.t) / 1000 > cfg.importGapS) {
+      if (!live && p.t - prev.t > gapLimitMs) {
         r.gaps++; r.gapMs += p.t - prev.t;
         anchor = p; prev = p;
         continue;
@@ -436,7 +585,7 @@ function runIReplay(segments, cfg, live){
     }
     if (anchor) {
       r.durMs += prev.t - segStart;
-      prevSegLast = prev; r.last = prev;
+      prevSegLast = prev; prevAnchor = anchor; r.last = prev;
     }
   }
   return r;
@@ -451,6 +600,24 @@ function runStats(segments, cfg, mode){
     gaps: r.gaps, gapS: Math.round(r.gapMs / 1000), splitsS: r.acc.splitsS.slice(0, cfg.maxSplits),
     startedAtMs: r.first ? r.first.t : null, endedAtMs: r.last ? r.last.t : null, points: r.nPts, skipped: r.skipped
   };
+}
+// «Terminar no último ponto bom»: tira o fim do percurso a partir da ÚLTIMA lacuna ao vivo de pelo menos minGapS segundos (b:"gap",
+// g >= minGapS). Serve quando o aluno se esquece de terminar e a corrida «acorda» horas depois com um ponto parado em casa: a lacuna e o
+// que vem depois somavam-se ao tempo (e acima de 24 h a corrida ficava inguardável). Não decide nada sozinha: quem chama escolhe
+// quando a oferece. Devolve uma CÓPIA; sem essa lacuna devolve tudo e cutS = 0. cutS = segundos entre o último ponto mantido e o último
+// ponto do percurso inteiro.
+function runCutAtLastGap(segments, minGapS){
+  var segs = Array.isArray(segments) ? segments : [], min = runIFin(minGapS) && minGapS >= 0 ? minGapS : RUN_CFG.gapS, cut = -1, i, j, pts = 0;
+  for (i = segs.length - 1; i >= 1; i--) {
+    var f = Array.isArray(segs[i]) && segs[i].length ? segs[i][0] : null;
+    if (f && f.b === "gap" && runIFin(f.g) && f.g >= min) { cut = i; break; }
+  }
+  var all = [];
+  for (i = 0; i < segs.length; i++) all.push(Array.isArray(segs[i]) ? segs[i].slice() : []);
+  if (cut < 0) return {segments: all, cutS: 0, cutPoints: 0};
+  for (j = cut; j < all.length; j++) pts += all[j].length;
+  var keepEnd = runIEnd(all[cut - 1], true), lastP = runIEnd(all[all.length - 1], true);
+  return {segments: all.slice(0, cut), cutS: keepEnd && lastP ? Math.max(0, Math.round((lastP.t - keepEnd.t) / 1000)) : 0, cutPoints: pts};
 }
 function runManualStats(startedAtMs, distM, durationS){
   var d = Math.round(distM), t = Math.round(durationS);
@@ -585,6 +752,13 @@ function runIDecimate(segs, maxPts){
   while (runICount(out) > maxPts && out.length > 1) out = out.slice(0, -1);
   return out;
 }
+// aparo nominal (o que se guarda em trim_m): trimM tem de ser um dos valores de cfg.trimChoices; NaN, texto, negativo ou outro valor
+// NÃO desligam o aparo: cai-se no valor por omissão (falha fechado)
+function runITrimNominal(cfg){
+  var n = runINum(cfg.trimM), ch = cfg.trimChoices, dflt = RUN_CFG.trimM;
+  if (n == null || !Array.isArray(ch) || ch.indexOf(n) < 0 || n < 0 || n > cfg.maxTrimM) return dflt;
+  return n;
+}
 function runPrepareTrack(segments, cfg){
   cfg = runCfg(cfg);
   if (!Array.isArray(segments)) return null;
@@ -597,8 +771,11 @@ function runPrepareTrack(segments, cfg){
   }
   if (!clean.length) return null;
   if (t0 == null) t0 = 0;
-  var R = runIInt(cfg.trimM, 0, cfg.maxTrimM, 0);
-  var trimmed = runTrim(clean, R);
+  // o aparo centra-se no 1.º e no último ponto LIMPOS (sem fixes antigos/espúrios nas pontas) e o raio efetivo leva uma folga aleatória
+  clean = runIClean(clean, cfg).segs;
+  if (!clean.length) return null;
+  var R = runITrimNominal(cfg), rnd = runIFin(cfg.rnd) ? Math.min(0.999999, Math.max(0, cfg.rnd)) : 0;
+  var trimmed = runTrim(clean, R * (1 + cfg.trimSlack * rnd));
   if (!trimmed.length) return null;
   var eps = (cfg.simplifyEps && cfg.simplifyEps.length ? cfg.simplifyEps : [4, 8, 15]).filter(function(e){ return e > 0; });
   if (!eps.length) eps = [4];
@@ -709,39 +886,60 @@ function runIReadXml(text, cfg){
   if (!root || root.localName === "parsererror" || doc.getElementsByTagNameNS("*", "parsererror").length) return runIFail("unreadable", cfg);
   return {ok: true, doc: doc, root: root};
 }
-// pontos crus [[{lat,lon,t(NaN se faltar),naive}]] -> resultado final com todas as validações
+// pontos crus [[{lat,lon,t(NaN se faltar),naive}]] -> resultado final com todas as validações.
+// Ordem: coordenadas e hora válidas → segmentos por ordem de hora (a do ponto do meio) → pontos com hora adiantada (isolados ou
+// em série curta: só eles saem, sem «envenenar» o máximo e apagar o que vem a seguir) → pontos soltos de posição (runIClean).
 function runIFinish(source, raw, o, extra){
-  var cfg = o.cfg, segs = [], lastT = -Infinity, bad = 0, noTime = 0, order = 0, naive = false, total = 0, i, j;
+  var cfg = o.cfg, items = [], bad = 0, noTime = 0, order = 0, spike = 0, naive = false, valid = 0, total = 0, i, j, k;
   for (i = 0; i < raw.length; i++) {
-    var out = [];
+    var pts = [];
     for (j = 0; j < raw[i].length; j++) {
       var p = raw[i][j];
       if (!runIValidPt(p) || (p.lat === 0 && p.lon === 0)) { bad++; continue; }
       if (!runIFin(p.t)) { noTime++; continue; }
-      if (!(p.t > lastT)) { order++; continue; }
-      lastT = p.t;
-      if (p.naive) naive = true;
-      out.push({lat: p.lat, lon: p.lon, t: p.t, acc: null});
+      pts.push(p);
     }
-    if (out.length) { segs.push(out); total += out.length; }
+    if (pts.length) { items.push({k: items.length, med: pts[pts.length >> 1].t, pts: pts}); valid += pts.length; }
   }
-  if (!total) return runIFail(noTime ? "notime" : "empty", cfg);
+  if (!valid) return runIFail(noTime ? "notime" : "empty", cfg);
+  items.sort(function(a, b){ return a.med - b.med || a.k - b.k; });
+  var flat = [], owner = [], segs = [], lastT = -Infinity;
+  for (i = 0; i < items.length; i++) { for (j = 0; j < items[i].pts.length; j++) { flat.push(items[i].pts[j]); owner.push(i); } segs.push([]); }
+  for (i = 0; i < flat.length; i++) {
+    var q = flat[i];
+    if (!(q.t > lastT)) { order++; continue; }
+    var ahead = false;   // hora adiantada: mais à frente há pontos com hora entre o último aceite e esta (seriam apagados por causa dela)
+    for (k = i + 1; k < flat.length && k <= i + cfg.orderWindow; k++) if (flat[k].t < q.t && flat[k].t > lastT) { ahead = true; break; }
+    if (ahead) { order++; continue; }
+    lastT = q.t;
+    if (q.naive) naive = true;
+    segs[owner[i]].push({lat: q.lat, lon: q.lon, t: q.t, acc: null});
+  }
+  segs = segs.filter(function(sg){ return sg.length > 0; });
+  var cl = runIClean(segs, cfg);
+  segs = cl.segs; spike = cl.dropped;
+  for (i = 0; i < segs.length; i++) total += segs[i].length;
   if (total < 2) return runIFail("short", cfg);
-  var startMs = segs[0][0].t, endMs = lastT;
+  var startMs = segs[0][0].t, endMs = segs[segs.length - 1][segs[segs.length - 1].length - 1].t;
   if (startMs < cfg.minStartedAtMs || startMs > o.nowMs + cfg.futureSlackMs) return runIFail("date", cfg);
   if (endMs - startMs > cfg.maxDurationS * 1000) return runIFail("long", cfg);
   var warnings = [];
   if (naive) warnings.push(RUN_MSG.naive);
   if (extra && extra.multi) warnings.push(RUN_MSG.multi);
   if (bad + order > 0) warnings.push("Ignorámos " + (bad + order) + (bad + order === 1 ? " ponto inválido ou com hora repetida." : " pontos inválidos ou com hora repetida."));
+  if (order >= 5 && order > 0.02 * valid) warnings.push(RUN_MSG.order);
+  if (spike > 0) warnings.push("Ignorámos " + spike + (spike === 1 ? " ponto com posição impossível (salto do GPS)." : " pontos com posição impossível (saltos do GPS)."));
   if (noTime > 0) warnings.push("Ignorámos " + noTime + (noTime === 1 ? " ponto sem hora." : " pontos sem hora."));
-  return {ok: true, source: source, segments: segs, warnings: warnings, startedAtMs: startMs, endedAtMs: endMs, points: total};
+  var declared = extra && runIFin(extra.declaredDistM) && extra.declaredDistM > 0 && extra.declaredDistM <= 1e7 ? Math.round(extra.declaredDistM) : null;
+  return {ok: true, source: source, segments: segs, warnings: warnings, startedAtMs: startMs, endedAtMs: endMs, points: total, declaredDistM: declared};
 }
 function runIGpx(root, o){
   var cfg = o.cfg;
   if (root.localName !== "gpx") return runIFail("unreadable", cfg);
   var trks = runIKids(root, "trk"), raw = [], n = 0, a, b, c;
   for (a = 0; a < trks.length; a++) {
+    var ty = runIKid(trks[a], "type");
+    if (ty && /bik|cycl/i.test(runIText(ty))) return runIFail("bike", cfg);   // só se o ficheiro o diz (<trk><type>); sem tipo, aceita-se
     var tsegs = runIKids(trks[a], "trkseg");
     for (b = 0; b < tsegs.length; b++) {
       var pts = runIKids(tsegs[b], "trkpt"), seg = [];
@@ -777,7 +975,26 @@ function runITcx(root, o){
     }
     raw.push(seg);
   }
-  return runIFinish("tcx", raw, o, {multi: acts.length > 1});
+  return runIFinish("tcx", raw, o, {multi: acts.length > 1, declaredDistM: runIDeclared(act)});
+}
+// distância que a app de origem declara (só um número, nada de texto do ficheiro): soma de Lap/DistanceMeters ou, se não houver,
+// o maior DistanceMeters acumulado dos Trackpoint; null se não houver. O GPX não tem campo normalizado para isto.
+function runIDeclared(act){
+  var laps = act.getElementsByTagNameNS("*", "Lap"), sum = 0, any = false, i, k, v, tps;
+  for (i = 0; i < laps.length; i++) {
+    k = runIKid(laps[i], "DistanceMeters");
+    v = k ? runIDec(runIText(k)) : NaN;
+    if (runIFin(v) && v >= 0) { sum += v; any = true; }
+  }
+  if (!any) {
+    tps = act.getElementsByTagNameNS("*", "Trackpoint");
+    for (i = 0; i < tps.length; i++) {
+      k = runIKid(tps[i], "DistanceMeters");
+      v = k ? runIDec(runIText(k)) : NaN;
+      if (runIFin(v) && v >= 0 && v > sum) { sum = v; any = true; }
+    }
+  }
+  return any && sum > 0 ? sum : null;
 }
 function runParseGpx(text, opts){
   var o = runIOpts(opts), rd;
