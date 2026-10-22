@@ -960,6 +960,7 @@ function runLIntroHtml(){
   return runLCard("intro", runLHead("Gravar com GPS", "runLiveBack") +
     "<div class=\"card run-live-card\"><h2 class=\"run-live-h\">Antes de começares</h2>" +
     "<p class=\"run-live-p\">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>" +
+    "<p class=\"run-live-p run-live-strong\">Testado num iPhone: ao bloquear o ecrã a gravação pára e ficam lacunas no percurso. Mantém o ecrã ligado durante toda a corrida.</p>" +
     "<p class=\"run-live-p run-live-strong\">Não garantimos que o registo continue com o ecrã bloqueado ou noutra aplicação.</p>" +
     "<p class=\"run-live-p\">" + RUN_LIVE_MUSIC + "</p>" + runLMusicRowHtml() +
     "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveGo\">Continuar</button></div></div>");
@@ -1017,7 +1018,7 @@ function runLRecHtml(){
   L.notesHtml = runLNotesHtml();
   h += "<div id=\"runLiveNotes\" aria-live=\"polite\">" + L.notesHtml + "</div>";
   h += btns;
-  h += "<p class=\"run-live-foot\">" + RUN_LIVE_MUSIC + " Se mudares de aplicação, o registo pode falhar.</p>";
+  h += "<p class=\"run-live-foot\">" + RUN_LIVE_MUSIC + " Se bloqueares o ecrã ou mudares de aplicação, o registo pára (testado no iPhone).</p>";
   if (L.locked) {
     h += "<div class=\"run-live-lock\" id=\"runLiveLock\" role=\"dialog\" aria-label=\"Toques bloqueados\"><div class=\"run-live-lock-msg\"><b>Toques bloqueados</b><span>Mantém o dedo premido cerca de 1,5 s para desbloquear.</span><i class=\"run-live-lock-bar\"></i></div></div>";
   }
