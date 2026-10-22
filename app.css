@@ -894,3 +894,11 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .run-pro .card{box-shadow:none; background:var(--surface-2); padding:16px; margin-top:12px;}
 .run-pro .card .kpi, .run-pro .run-svg-wrap{background:var(--surface-3);}
 .run-pro .run-list .run-row{padding-left:0; padding-right:0;}
+
+/* ---- Corrida: mapa de fundo opcional (OpenStreetMap, só para o aluno) ---- */
+.run-map{position:relative; width:100%; aspect-ratio:320/240; overflow:hidden; border-radius:14px; margin:10px 0 4px; background:var(--surface-3);}
+.run-map-tile{position:absolute; display:block; user-select:none; -webkit-user-select:none; pointer-events:none;}
+.run-map svg{position:absolute; left:0; top:0; width:100%; height:100%;}
+.run-map-attr{position:absolute; right:0; bottom:0; padding:2px 6px; font-size:0.66rem; background:rgba(255,255,255,0.8); color:#333; text-decoration:none; border-top-left-radius:6px;}
+.run-map-ask{margin:10px 0 4px;}
+.run-map-ask .btn{min-height:44px;}

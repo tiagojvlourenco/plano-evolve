@@ -44,8 +44,11 @@ ck("9. O núcleo, corrida.js e o gravador juntos compilam em modo estrito (é as
 // ---- privacidade e rede ----
 ck("10. Sem GPS (navigator.geolocation) — só o gravador o usa —, sem localStorage/sessionStorage/IndexedDB/cookies e sem Cache API", !/geolocation|watchPosition|getCurrentPosition|localStorage|sessionStorage|indexedDB|document\.cookie|\bcaches\b/.test(code));
 ck("11. Sem consola (nenhuma coordenada pode sair por aí), sem fetch/XHR/beacon/WebSocket/Image, sem eval nem new Function", !/\bconsole\b|\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|new\s+Image\b|importScripts|\beval\s*\(|new\s+Function/.test(code));
-ck("12. Nenhum endereço de rede nem de mapa no ficheiro (nenhum http, https, //, tile, mapbox, google, openstreetmap)", !/https?:|\/\/[a-z]|tile|mapbox|openstreetmap|googleapis|maps\.google/i.test(ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")));
-ck("13. O HTML dos ecrãs não leva eventos nem recursos externos: sem onclick=/onerror=…, sem javascript:, sem <script>, <img>, <iframe>, <link>, <object>, <embed>, <style>", !/\bon[a-z]+\s*=\s*\\?["']/i.test(ui.replace(/fr\.on(load|error)\s*=/g, "")) && !/javascript:|<\s*(script|img|iframe|link|object|embed|style|svg)\b/i.test(ui));
+var uiNoMap = (function(){ var a = ui.indexOf("function runUiMapHtml("), b = ui.indexOf("// o bloco do mapa: botão"); return a >= 0 && b > a ? ui.slice(0, a) + ui.slice(b) : ui; })();
+var uiClean = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+var hosts = (uiClean.match(/https?:\/\/[^\/"' ]+/g) || []).filter(function(h, i, a){ return a.indexOf(h) === i; });
+ck("12. O único endereço de rede é o do mapa opcional do OpenStreetMap (tile.openstreetmap.org para os quadrados e www.openstreetmap.org só na ligação da licença); nenhum outro serviço de mapas", hosts.length === 2 && hosts.indexOf("https://tile.openstreetmap.org") >= 0 && hosts.indexOf("https://www.openstreetmap.org") >= 0 && !/mapbox|googleapis|maps\.google|\/\/[a-z]/i.test(uiClean.replace(/https?:\/\/[^\/"' ]+/g, "")) && /function runUiMapBlock\(segs, pro\)\{\s*if \(pro \|\|/.test(ui) && /RUN\.uiMapOn/.test(ui));
+ck("13. O HTML dos ecrãs não leva eventos nem recursos externos: sem onclick=/onerror=…, sem javascript:, sem <script>, <img>, <iframe>, <link>, <object>, <embed>, <style> (a única exceção são os quadrados e o SVG da função do mapa opcional)", !/\bon[a-z]+\s*=\s*\\?["']/i.test(ui.replace(/fr\.on(load|error)\s*=/g, "")) && !/javascript:|<\s*(script|img|iframe|link|object|embed|style|svg)\b/i.test(uiNoMap));
 var inner = ui.split("\n").filter(function(l){ return /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write/.test(l); });
 ck("14. Só há UMA escrita de HTML no DOM (a ficha do profissional, que desenha tudo de uma vez) e nada de insertAdjacentHTML/document.write; o resto vai por RUN.screen (devolve texto para o núcleo escapar-se a si próprio)", inner.length === 1 && /el\.innerHTML = runUiProHtml\(s, d\)/.test(inner[0]));
 // o texto que vem de dados nunca entra no HTML sem escapeHtml: as linhas de construção de HTML que tocam em campos de dados usam-no
@@ -54,7 +57,7 @@ var rawLeaks = ui.split("\n").filter(function(l){
   return /<[a-z]/.test(l) && /['"]\s*\+\s*(r\.notes|r\.id|f\.notes|f\.km|f\.dur|f\.date|f\.time|d\.modeErr|prep\.warnings|prep\.source|m\[1\])\s*\+/.test(l);
 });
 ck("15. Nenhuma linha de HTML concatena notas, ids, avisos ou campos dos formulários sem escapeHtml" + (rawLeaks.length ? " (" + rawLeaks.length + ")" : ""), rawLeaks.length === 0 && (ui.match(/escapeHtml\(/g) || []).length > 30);
-ck("16. O SVG vem só de runTrackSvg (o ficheiro não escreve elementos svg à mão) e o percurso da BD passa por runUiTrackFromDb antes de ser desenhado", !/<svg|<polyline|<circle|<path/i.test(ui) && /runUiTrackFromDb\(res\.data\.points\)/.test(ui) && (ui.match(/runTrackSvg\(/g) || []).length >= 2);
+ck("16. O SVG vem só de runTrackSvg (fora do mapa opcional o ficheiro não escreve elementos svg à mão) e o percurso da BD passa por runUiTrackFromDb antes de ser desenhado", !/<svg|<polyline|<circle|<path/i.test(uiNoMap) && /runUiTrackFromDb\(res\.data\.points\)/.test(ui) && (ui.match(/runTrackSvg\(/g) || []).length >= 2);
 ck("17. Toda a linha lida da BD passa por runNormalizeRows (via runUiNormalize) antes de chegar ao DOM", (ui.match(/runNormalizeRows\(/g) || []).length === 1 && (ui.match(/runUiNormalize\(/g) || []).length >= 3);
 
 // ---- o que se pede ao servidor ----
