@@ -713,4 +713,15 @@ ck("149. Fuzz de séries hostis (300): pontos soltos, horas adiantadas, duplicad
   return ok && made > 30;
 })());
 
+// ================================================================ registo à mão numa linha ================================================================
+(function(){
+  var now = Date.UTC(2026, 9, 22, 12, 0, 0), q = function(x){ return C.runParseQuick(x, now); };
+  ck("150. runParseQuick: «5,2 km 28:30» → 5200 m em 1710 s, sem data nem hora; «5,2km 28min 30s» igual", q("5,2 km 28:30").ok && q("5,2 km 28:30").distM === 5200 && q("5,2 km 28:30").durS === 1710 && q("5,2 km 28:30").date === "" && q("5,2km 28min 30s").durS === 1710);
+  ck("151. runParseQuick: «ontem 18:30 5,23 km 27:58» e «hoje 20:17 4,74 km 26:58» (data de ontem/hoje, hora de início e tempo distintos)", q("ontem 18:30 5,23 km 27:58").date === "2026-10-21" && q("ontem 18:30 5,23 km 27:58").time === "18:30" && q("ontem 18:30 5,23 km 27:58").durS === 1678 && q("hoje 20:17 4,74 km 26:58").date === "2026-10-22" && q("hoje 20:17 4,74 km 26:58").time === "20:17");
+  ck("152. runParseQuick: «22/10 às 20:17 5 km 1h05» e «2026-10-17 18:51 4,74 km 26:58»", q("22/10 às 20:17 5 km 1h05").time === "20:17" && q("22/10 às 20:17 5 km 1h05").durS === 3900 && q("22/10 às 20:17 5 km 1h05").date === "2026-10-22" && q("2026-10-17 18:51 4,74 km 26:58").date === "2026-10-17" && q("2026-10-17 18:51 4,74 km 26:58").time === "18:51");
+  ck("153. runParseQuick: um ritmo («5:30 min/km», «5:30/km») nunca é confundido com o tempo", q("5.23 km 1:05:30 5:30 min/km").durS === 3930 && q("5 km 40:00 5:30/km").durS === 2400);
+  ck("154. runParseQuick: recusa o que não é claro (sem tempo, sem distância, duas horas ambíguas, texto livre, distância absurda) sem lançar", ["10 km", "28:30", "5,2 km 28:30 20:00", "olá", "", "50 m 1:00", "400 km 3:00", "5 km 99:99"].every(function(x){ var r = q(x); return r.ok === false && /Escreve|distância/.test(r.error); }) && q(null).ok === false && q("x".repeat(500)).ok === false);
+  ck("155. runParseQuick: uma data de dia/mês sem ano no futuro usa o ano anterior (ex.: «30/12» em outubro)", q("30/12 5 km 30:00").date === "2025-12-30");
+})();
+
 check.summarize();

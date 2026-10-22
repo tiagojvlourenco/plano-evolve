@@ -165,6 +165,7 @@
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
      runDurStr(s) → «42:10» | «1:02:10»            runDistStr(m) → «5,23 km»
      runParseKm(str) → metros inteiros | NaN       aceita «5,23», «5.23», «5,23 km» (até 3 decimais, 0 < km <= 300)
+   runParseQuick(texto, nowMs) → {ok:true, distM, durS, date, time} | {ok:false, error}   o registo à mão numa só linha («5,2 km 28:30», «ontem 18:30 5,23 km 27:58»)
      runParseDuration(str) → segundos | NaN        aceita «mm:ss» e «h:mm:ss»
 
    Desenho
@@ -1163,6 +1164,52 @@ function runParseDuration(str){
   if (s > 59 || (m[1] != null && mi > 59)) return NaN;
   var total = h * 3600 + mi * 60 + s;
   return total >= 1 && total <= RUN_CFG.maxDurationS ? total : NaN;
+}
+
+// Registo à mão numa só linha: «5,2 km 28:30», «ontem 18:30 5,23 km 27:58», «22/10 às 20:17 5 km 1h05», «5,2km 28min 30s».
+// Devolve {ok:true, distM, durS, date:"aaaa-mm-dd"|"", time:"hh:mm"|""} ou {ok:false, error}. Não adivinha: sem distância e tempo claros recusa.
+// nowMs opcional (para «hoje»/«ontem»): por omissão Date.now(). Ritmos («5:30/km») são ignorados, não confundidos com o tempo.
+function runParseQuick(text, nowMs){
+  var bad = {ok: false, error: "Escreve, por exemplo: 5,2 km 28:30  (ou: ontem 18:30 5,23 km 27:58)."};
+  var t = String(text == null ? "" : text).toLowerCase().replace(/\s+/g, " ").replace(/^ | $/g, "");
+  if (!t || t.length > 200) return bad;
+  var date = "", time = "", distM = NaN, durS = NaN, m;
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+  function iso(d){ return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  var now = new Date(typeof nowMs === "number" && isFinite(nowMs) ? nowMs : Date.now());
+  t = t.replace(/\d{1,2}:\d{2}\s*(?:min\s*)?\/\s*km/g, " ");                      // ritmo
+  if ((m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t))) { date = m[1] + "-" + m[2] + "-" + m[3]; t = t.replace(m[0], " # "); }
+  else if ((m = /\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/.exec(t))) {
+    var yy = m[3] ? (m[3].length === 2 ? 2000 + (+m[3]) : +m[3]) : now.getFullYear(), dd = +m[1], mm = +m[2];
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) { date = yy + "-" + pad(mm) + "-" + pad(dd); if (!m[3] && date > iso(now)) date = (yy - 1) + "-" + pad(mm) + "-" + pad(dd); t = t.replace(m[0], " # "); }
+  } else if (/\bontem\b/.test(t)) { date = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)); t = t.replace(/\bontem\b/, " # "); }
+  else if (/\bhoje\b/.test(t)) { date = iso(now); t = t.replace(/\bhoje\b/, " # "); }
+  var atMark = /(?:^|\s)(?:às|as|@)\s*(\d{1,2}):(\d{2})\b/.exec(t);
+  // distância
+  if ((m = /(\d+(?:[.,]\d{1,3})?)\s*(?:km|kms|quil[oó]metros?)\b/.exec(t))) { distM = runParseKm(m[1]); t = t.replace(m[0], " "); }
+  else if ((m = /\b(\d{3,6})\s*(?:m|metros)\b/.exec(t))) { distM = +m[1]; t = t.replace(m[0], " "); }
+  else if ((m = /(?:^|\s)(\d{1,3}[.,]\d{1,3})(?=\s|$)/.exec(t))) { distM = runParseKm(m[1]); t = t.replace(m[1], " "); }
+  // hora de início explícita («às 20:17») e tempo
+  if (atMark) { time = pad(+atMark[1]) + ":" + atMark[2]; t = t.replace(atMark[0], " "); }
+  var cols = [], re = /(\d{1,2}):(\d{2})(?::(\d{2}))?/g;
+  while ((m = re.exec(t))) cols.push({txt: m[0], idx: m.index, a: +m[1], b: +m[2], c: m[3] != null ? +m[3] : null});
+  var durTok = null, i;
+  if (cols.length >= 2 && !time) {                                                  // duas horas: a que vem logo a seguir à data (ou a primeira) é a hora de início
+    var startTok = cols[0]; time = pad(startTok.a) + ":" + pad(startTok.b); durTok = cols[1];
+    if (startTok.c != null || startTok.a > 23 || startTok.b > 59) return bad;
+  } else if (cols.length >= 1) durTok = cols[cols.length - 1];
+  if (durTok) {
+    var dv = runParseDuration(durTok.txt);
+    if (isNaN(dv) && durTok.c == null) dv = runParseDuration(durTok.txt.replace(/^(\d{1,2}):(\d{2})$/, "$1:$2"));
+    durS = dv;
+  } else if ((m = /(\d+)\s*h\s*(\d{1,2})?\s*(?:min|m)?/.exec(t)) && (m[1] !== undefined)) {
+    durS = (+m[1]) * 3600 + (m[2] ? (+m[2]) * 60 : 0); var ms2 = /(\d+)\s*s\b/.exec(t); if (ms2) durS += +ms2[1];
+  } else if ((m = /(\d+)\s*(?:min|mins|minutos?)\b\s*(?:(\d+)\s*(?:s|seg)\b)?/.exec(t))) {
+    durS = (+m[1]) * 60 + (m[2] ? +m[2] : 0);
+  }
+  if (!(distM > 0) || !(durS >= 1) || durS > RUN_CFG.maxDurationS) return bad;
+  if (distM < 100 || distM > RUN_CFG.maxDistM) return {ok: false, error: "A distância tem de estar entre 0,1 e 300 km."};
+  return {ok: true, distM: Math.round(distM), durS: Math.round(durS), date: date, time: time};
 }
 
 /* ---------- percurso em SVG (sem mapa de fundo, sem pedidos a terceiros) ---------- */

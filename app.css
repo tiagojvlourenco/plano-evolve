@@ -902,3 +902,7 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .run-map-attr{position:absolute; right:0; bottom:0; padding:2px 6px; font-size:0.66rem; background:rgba(255,255,255,0.8); color:#333; text-decoration:none; border-top-left-radius:6px;}
 .run-map-ask{margin:10px 0 4px;}
 .run-map-ask .btn{min-height:44px;}
+
+/* ---- Corrida: registo à mão numa linha ---- */
+.run-quick{padding-bottom:10px; margin-bottom:6px; border-bottom:1px solid var(--line, rgba(255,255,255,0.08));}
+.run-quick-btn{margin-top:8px; min-height:44px;}
