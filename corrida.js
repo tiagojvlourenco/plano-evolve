@@ -302,10 +302,10 @@ function runUiSplitsHtml(splits){
   return h + '</div>';
 }
 
-/* ---------- Mapa de fundo (opcional, só para o aluno) ----------
+/* ---------- Mapa de fundo (opcional: o aluno e o profissional, só ao tocar) ----------
    O percurso é sempre desenhado sem mapa. Só quando o aluno toca em «Mostrar mapa» (e depois de ler o que isso implica) a página pede ao
    OpenStreetMap os quadrados do mapa da zona do percurso: o OpenStreetMap passa a saber a zona e o IP. Nada mais sai do telemóvel.
-   O profissional nunca vê o mapa de fundo. Sem biblioteca: projeção Web Mercator e quadrados 256 px calculados aqui. */
+   O profissional também o pode ligar, mas só para percursos que o aluno partilhou (já aparados). Sem biblioteca: projeção Web Mercator e quadrados 256 px calculados aqui. */
 var RUN_UI_MAP_W = 320, RUN_UI_MAP_H = 240, RUN_UI_MAP_PAD = 22;
 function runUiMapPoints(segs){
   var out = [];
@@ -357,9 +357,9 @@ function runUiMapHtml(segs){
     '<svg viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + lines + '</svg>' +
     '<a class="run-map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a></div>';
 }
-// o bloco do mapa: botão (com o aviso do que implica) ou o mapa já ligado; vazio para o profissional (que nunca vê o mapa de fundo)
+// o bloco do mapa: botão (com o aviso do que implica) ou o mapa já ligado
 function runUiMapBlock(segs, pro){
-  if (pro || !runUiMapPoints(segs).length) return "";
+  if (!runUiMapPoints(segs).length) return "";
   if (RUN.uiMapOn) return runUiMapHtml(segs) + '<p class="muted-p run-note"><button type="button" class="btn btn-sm" data-run-map="off">Esconder o mapa</button></p>';
   return '<div class="run-map-ask"><button type="button" class="btn btn-sm" data-run-map="on">Mostrar mapa</button>' +
     '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
@@ -1163,6 +1163,9 @@ function runUiProSetMode(s, d, mode){
   });
 }
 function runUiProWire(s, el, d){
+  el.querySelectorAll("[data-run-map]").forEach(function(b){
+    b.addEventListener("click", function(){ RUN.uiMapOn = b.getAttribute("data-run-map") === "on"; RUN.proTab(s, document.getElementById("proTabContent") || el); });
+  });
   runUiOn(el, "#runProRetry", function(){ runUiInvalidate(d); d.err = ""; d.consent = undefined; RUN.proTab(s, document.getElementById("proTabContent") || el); });
   runUiOn(el, "#runProMore", function(){ runUiLoad(d, s.id, true, function(){ runUiRedrawPro(s); }); runUiRedrawPro(s); });
   runUiOn(el, "#runProBack", function(){ d.detailId = null; RUN.proTab(s, document.getElementById("proTabContent") || el); });

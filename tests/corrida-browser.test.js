@@ -631,7 +631,12 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await P.pg.click('.run-row[data-prun="' + uuid(21) + '"]');
   await P.pg.waitForSelector(".run-svg-wrap svg");
   ck("95. O profissional não exporta o GPX do aluno (só o aluno o faz) mas pode apagar só o percurso", (await P.pg.locator("#runExportSaved").count()) === 0 && (await P.pg.locator("#runDelTrack").count()) === 1);
-  ck("95b. O profissional nunca vê o mapa de fundo nem o botão «Mostrar mapa» (só o desenho simples do percurso partilhado)", (await P.pg.locator("[data-run-map], .run-map, .run-map-ask").count()) === 0);
+  ck("95b. O profissional vê o botão «Mostrar mapa» (com o aviso) no percurso partilhado, e NENHUM pedido a terceiros até tocar", (await P.pg.locator("#proTabContent [data-run-map=\"on\"]").count()) === 1 && /OpenStreetMap/.test(await P.pg.locator("#proTabContent .run-map-ask").innerText()) && (await P.pg.locator(".run-map").count()) === 0 && external.filter(function(u){ return /openstreetmap/.test(u); }).length === 0);
+  await P.pg.context().route(/tile\.openstreetmap\.org/, function(route){ route.fulfill({status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64")}); });
+  await P.pg.click('#proTabContent [data-run-map="on"]'); await P.pg.waitForSelector("#proTabContent .run-map svg polyline"); await P.pg.waitForTimeout(250);
+  ck("95c. Ao tocar, o profissional vê o mapa com o percurso e a atribuição; só quadrados do OpenStreetMap (URL só z/x/y)", external.filter(function(u){ return /tile\.openstreetmap\.org/.test(u); }).length >= 1 && external.filter(function(u){ return /tile\.openstreetmap\.org/.test(u); }).every(function(u){ return /^https:\/\/tile\.openstreetmap\.org\/\d{1,2}\/\d+\/\d+\.png$/.test(u); }) && /OpenStreetMap/.test(await P.pg.locator("#proTabContent .run-map-attr").innerText()));
+  external = external.filter(function(u){ return !/tile\.openstreetmap\.org/.test(u); });
+  await P.pg.evaluate(function(){ var b = document.querySelector("#proTabContent [data-run-map=\"off\"]"); if (b) b.click(); });
   ck("96. Com o percurso partilhado, o profissional vê o SVG (e a nota hostil só como texto: nada executa)", (await P.pg.evaluate(function(){ return window.__xss2; })) === undefined && (await P.pg.locator("#proTabContent script").count()) === 0 && (await P.pg.locator("#proTabContent").innerText()).indexOf("<script>window.__xss2=1</script>pro") >= 0);
   P.ctl.answer = false;
   await P.pg.click("#runDelRun"); await P.pg.waitForTimeout(150);
