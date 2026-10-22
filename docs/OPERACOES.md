@@ -296,3 +296,20 @@ No ecrã de treino do aluno há três botões: «♪ Spotify», «♪ Apple Musi
 - Não abre uma playlist específica nem sabe o que está a tocar (isso exigiria OAuth do Spotify ou a conta paga da Apple).
 - **Por validar no iPhone e no Android:** se cada botão abre a app (e não o navegador) com a EVOLVE instalada no ecrã principal, e se ao voltar à EVOLVE o treino está como ficou. Se o iPhone abrir o navegador, troca-se para os endereços próprios da app.
 - Testes: `tests/workout-music.test.js`.
+
+## 8u. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
+
+O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:
+
+| App | Página | Ícone | Para quê |
+|---|---|---|---|
+| **EVOLVE** | `index.html` | preto e branco | Alimentação, avaliações e progresso do aluno; o profissional vê aqui Alunos, Catálogo e Eu (nutrição, treino, avaliação, corridas de cada aluno) |
+| **EVOLVE Treino** | `treino.html` | verde-água | Musculação (programa, registo de cada sessão, descanso, música) e **Corrida**; para o aluno |
+| **EVOLVE Gestão** | `gestao.html` | laranja | Estúdio e Contratos; só para o profissional |
+
+- O código é o mesmo (`app.js`, `app.css`); cada página só diz de que app é com `<html data-app="…">` (`treino`, `gestao`; sem atributo = EVOLVE). `APP_MODE` em `app.js` escolhe o que se mostra.
+- **O treino saiu da app EVOLVE**: lá, «Hoje» tem só as refeições (e um atalho «Treino e corrida» para a nova app) e «Plano» só Alimentação e Compras. Os dados (`training_program`, `workout_logs`) não mudaram de sítio nem foram tocados; o profissional continua a editar o programa na ficha do aluno (grupo «Treino»). Alunos que «não fazem nutrição comigo» só veem o atalho na EVOLVE e usam a EVOLVE Treino.
+- **EVOLVE Treino**: dois separadores, «Treino» (o treino de hoje, o programa, os últimos treinos, uma ligação para a EVOLVE) e «Corrida» (ver 8v). Um profissional que abra `treino.html` vê o ecrã do aluno em pré-visualização, com o seletor de aluno.
+- **Instalar**: abrir `…/treino.html` no Safari → Partilhar → «Adicionar ao ecrã principal». **No iPhone cada ícone guarda a sua própria sessão** (afirmação já feita em 8m, não verificada de novo): o aluno inicia sessão uma vez em cada app. Se o treino já estava aberto na EVOLVE como atalho, deve instalar a nova.
+- O service worker guarda uma cópia de cada página por separado (`pageKey`) e `VERSION` subiu para `evolve-v5`; os ícones novos estão em `icon-treino-*.png`.
+- Verificado (Chromium, Supabase simulado, `tests/treino-app.test.js`): separadores de cada app, ecrãs, atalhos, pré-visualização do profissional, manifesto, service worker. **Por verificar em telemóvel real**: instalar no ecrã principal (ícone, nome «Treino», sessão própria por ícone) e o regresso do seletor de ficheiros/música.
