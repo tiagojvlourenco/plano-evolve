@@ -948,12 +948,20 @@ function runLCard(phase, inner){ return "<div class=\"run-live\" id=\"runLive\" 
 function runLHead(label, backId){
   return "<div class=\"treino-head\">" + (backId ? "<button type=\"button\" class=\"btn btn-sm\" id=\"" + backId + "\">← Corrida</button>" : "<span></span>") + "<div class=\"eyebrow\">" + label + "</div></div>";
 }
+// Música: só AQUI, antes de começar. Abrir a app de música tira a EVOLVE do primeiro plano (o GPS deixa de receber posições), por isso nunca
+// durante a gravação nem à espera de sinal: o aluno abre a música, põe a tocar, volta e continua.
+function runLMusicRowHtml(){
+  if (typeof MUSIC_APPS === "undefined") return "";
+  return "<div class=\"playlist-row\">" + MUSIC_APPS.map(function(m){
+    return "<a class=\"btn btn-sm\" data-music=\"" + m.id + "\" href=\"" + m.url + "\" target=\"_blank\" rel=\"noopener noreferrer\">♪ " + m.name + "</a>";
+  }).join("") + "</div><p class=\"muted-p\" style=\"font-size:0.78rem;\">Abre a tua app de música, põe a música a tocar e volta aqui. Não o faças depois de começar a corrida.</p>";
+}
 function runLIntroHtml(){
   return runLCard("intro", runLHead("Gravar com GPS", "runLiveBack") +
     "<div class=\"card run-live-card\"><h2 class=\"run-live-h\">Antes de começares</h2>" +
     "<p class=\"run-live-p\">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>" +
     "<p class=\"run-live-p run-live-strong\">Não garantimos que o registo continue com o ecrã bloqueado ou noutra aplicação.</p>" +
-    "<p class=\"run-live-p\">" + RUN_LIVE_MUSIC + "</p>" +
+    "<p class=\"run-live-p\">" + RUN_LIVE_MUSIC + "</p>" + runLMusicRowHtml() +
     "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveGo\">Continuar</button></div></div>");
 }
 function runLPrepHtml(){

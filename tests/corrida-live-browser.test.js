@@ -225,9 +225,9 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG; window.__
   await p.click("#fakeGoLive");
   await p.waitForSelector("#runLiveGo");
   var introTxt = await T(p, "#runLive");
-  ck("2. O aviso inicial diz o que tem de dizer (ecrã ligado, pode falhar, não testado em todos os telemóveis, música ANTES de Iniciar) e não há linha de música nem botões Spotify/Apple Music/YouTube Music",
+  ck("2. O aviso inicial diz o que tem de dizer (ecrã ligado, pode falhar, não testado em todos os telemóveis, música ANTES de Iniciar) e há a linha de música (3 botões) SÓ aqui, antes de começar (nunca na gravação): botões Spotify/Apple Music/YouTube Music",
     /Mantém a EVOLVE aberta e o ecrã ligado durante a corrida\. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso\. Ainda não testámos isto em todos os telemóveis\./.test(introTxt) &&
-    /Põe a música a tocar ANTES de carregar em Iniciar e volta aqui\./.test(introTxt) && (await p.locator("[data-music]").count()) === 0 && !/Spotify|Apple Music|YouTube Music/.test(introTxt));
+    /Põe a música a tocar ANTES de carregar em Iniciar e volta aqui\./.test(introTxt) && (await p.locator("[data-music]").count()) === 3 && /Spotify/i.test(introTxt) && /Apple Music/i.test(introTxt) && /YouTube Music/i.test(introTxt));
   ck("3. Abrir a vista não pede o consentimento nem o GPS nem o Wake Lock (só depois do toque)", await p.evaluate(function(){ return window.__consents === 1 /* o do #fakeGoLive */ && window.__fakeGps.starts === 0 && window.__wl.requests === 0; }));
   await p.click("#runLiveGo");
   await p.waitForSelector("#runLivePrepare");

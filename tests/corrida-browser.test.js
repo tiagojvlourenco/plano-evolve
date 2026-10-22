@@ -842,7 +842,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var RL = await student({realLive: true, mode: "live"});
   await RL.pg.click("#runGoLive"); await RL.pg.waitForSelector("#runLive");
   var liveTxt = await tabText(RL.pg);
-  ck("129. Com o gravador real: «Gravar com GPS» abre o ecrã de gravação, que diz «Põe a música a tocar ANTES de carregar em Iniciar e volta aqui.», avisa que o ecrã bloqueado pode falhar (não garante) e NÃO tem a linha de música; o GPS ainda não foi pedido", /Põe a música a tocar ANTES de carregar em Iniciar e volta aqui\./.test(liveTxt) && /Não garantimos que o registo continue com o ecrã bloqueado/.test(liveTxt) && (await RL.pg.locator("[data-music]").count()) === 0 && (await RL.pg.evaluate(function(){ return window.__geo; })) === 0);
+  ck("129. Com o gravador real: «Gravar com GPS» abre o ecrã de gravação, que diz «Põe a música a tocar ANTES de carregar em Iniciar e volta aqui.», avisa que o ecrã bloqueado pode falhar (não garante) e tem a linha de música (3 botões, só aqui, antes de começar); o GPS ainda não foi pedido", /Põe a música a tocar ANTES de carregar em Iniciar e volta aqui\./.test(liveTxt) && /Não garantimos que o registo continue com o ecrã bloqueado/.test(liveTxt) && (await RL.pg.locator("[data-music]").count()) === 3 && (await RL.pg.evaluate(function(){ return window.__geo; })) === 0);
   await RL.pg.click("#runLiveBack"); await RL.pg.waitForSelector("#runGoImport");
   await importFile(RL, "a.gpx", gpxOf(P5K));
   await RL.pg.waitForSelector("#runSave");
