@@ -297,7 +297,55 @@ No ecrã de treino do aluno há três botões: «♪ Spotify», «♪ Apple Musi
 - **Por validar no iPhone e no Android:** se cada botão abre a app (e não o navegador) com a EVOLVE instalada no ecrã principal, e se ao voltar à EVOLVE o treino está como ficou. Se o iPhone abrir o navegador, troca-se para os endereços próprios da app.
 - Testes: `tests/workout-music.test.js`.
 
-## 8u. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
+## 8u. Corrida (migração 0032, na app EVOLVE Treino)
+
+A Corrida vive no separador «Corrida» da app EVOLVE Treino (`treino.html`) e, para o profissional, no chip «Corridas» da ficha do aluno (grupo «Treino», app EVOLVE). O código está em três ficheiros carregados só quando se abre a Corrida: `corrida-core.js` (contas e leitura de ficheiros, sem ecrã), `corrida.js` (ecrãs do aluno e do profissional) e `corrida-live.js` (gravador GPS e fila de envio).
+
+**O que o aluno pode fazer** (só se o profissional ligar a Corrida nesse aluno):
+- **Importar** um ficheiro GPX ou TCX gravado no relógio ou noutra app (o ficheiro é lido no telemóvel e não é guardado), **registar à mão** (tapete, GPS que falhou) e ver as corridas: totais das últimas 8 semanas, lista, parciais por km e o percurso desenhado (sem mapa de terceiros).
+- **Gravar com GPS** na própria app, **com o ecrã ligado** (só no modo «também gravar com GPS»): pausa, terminar com confirmação, bloqueio de toques, rascunho que sobrevive a um recarregamento, e fila que envia depois quando não há rede. **A app não promete nada sobre o ecrã bloqueado nem sobre mudar de aplicação**: isso não está verificado (ver abaixo) e a interface avisa que pode ficar uma lacuna.
+- Escolher, em cada corrida, **partilhar o percurso** com o profissional (desmarcado por omissão) e **aparar o início e o fim** (0, 100, 200, 500 m); dar esforço e nota; exportar o GPX (só para si); apagar uma corrida, só o percurso, todas, ou retirar o consentimento (apaga tudo). Apagar exige ligação.
+- Antes da primeira corrida aceita um aviso de privacidade; o aceite fica no servidor.
+
+**O que o profissional vê**: o interruptor «Corrida neste aluno» (Desligada / Importar e registar à mão / Também gravar com GPS (experimental)), se o aluno aceitou o aviso, totais, lista, parciais e o percurso **só se o aluno o partilhou** (já aparado e simplificado, nunca o completo). Pode apagar uma corrida; não cria nem altera.
+
+### Passos para o Tiago (por esta ordem)
+1. **Aplicar `supabase/migrations/0032_corrida.sql`** no SQL Editor (cola o ficheiro inteiro; é seguro repetir). Cria `students.runs_mode` (todos os alunos ficam em «off»), `run_consents`, `runs` e `run_tracks`, com RLS e direitos explícitos. Sem esta migração a app funciona como hoje e o chip «Corridas» mostra «Falta correr a migração 0032».
+2. **Correr o bloco J de `supabase/verify_security.sql`** (precisa de duas contas reais, uma de cada aluno, como os blocos anteriores). É obrigatório antes de ligar um aluno real: os testes automáticos usam um Postgres local e um Supabase simulado, não o Supabase real.
+3. Ligar a Corrida a **uma conta de teste tua** (ficha → Treino → Corridas), primeiro em «Importar e registar à mão» e depois, se quiseres testar o GPS, em «Também gravar com GPS».
+4. Fazer os testes no telemóvel (lista abaixo) e só depois ligar a alunos.
+
+### Direitos de tabela (importante para migrações futuras)
+A 0032 faz `revoke all` a `anon` e `authenticated` e só concede `select, insert, delete` a `authenticated`; nunca `update`. Foi escrita assim porque o changelog do Supabase (45329; lido, **não testado no teu projeto**) indica que **a partir de 30/10/2026 as tabelas novas deixam de receber direitos por omissão em projetos já existentes**. Se for verdade, qualquer migração futura que crie tabelas precisa de `grant` explícito (sem ele a API devolve «permission denied» mesmo com RLS correta).
+
+### Privacidade (o que fica guardado e onde)
+- **Fica guardado** (tabela `runs`): data e hora, distância, tempo, tempo em movimento, parciais por km, lacunas, esforço e nota; origem (GPX, TCX, à mão, GPS). Sem coordenadas.
+- **Percurso** (`run_tracks`): só existe se o aluno o partilhou; sai aparado nas pontas (raio com folga aleatória) e simplificado. Uma linha aqui = percurso partilhado. O percurso completo só existe no ecrã de confirmação, antes de guardar (e o GPX que o aluno exporta).
+- **Só no telemóvel**: o rascunho da gravação em curso (pontos completos, até guardar/descartar/sair da conta) e a fila de envio (só o que seria enviado, nunca pontos completos). Ambos se apagam ao sair da conta.
+- Não há mapas nem serviços de terceiros, nem frequência cardíaca, nem cadência, nem nome/autor do ficheiro. Nenhuma coordenada vai para a consola, avisos ou URLs.
+- Retirar o consentimento apaga todas as corridas e percursos do aluno (gatilho na base de dados); apagar o aluno apaga tudo em cascata.
+- **O texto do aviso de privacidade é um rascunho, não parecer jurídico.** Fica por decidir por ti (com quem te aconselhe): base legal, prazo de retenção, responsável pelo tratamento, avaliação de impacto, região do projeto Supabase e acordo com o Supabase. O profissional (dono do projeto Supabase) consegue, tecnicamente, ler qualquer linha: a RLS esconde percursos não partilhados da app, não do administrador da base de dados.
+
+### O que está verificado e o que NÃO está
+- **Verificado automaticamente** (Chromium, Postgres 16 local, Supabase simulado): contas com séries sintéticas, leitura de GPX/TCX normais e hostis (DOCTYPE, ENTITY, «billion laughs», aninhamento, 16 MB), os limites do SQL, RLS (isolamento entre alunos, sem update, o aluno não liga a Corrida a si próprio, retirar consentimento apaga tudo, corrida de pedidos em simultâneo), consentimento antes de guardar, partilha desmarcada por omissão, aparo do percurso, XSS por notas/dados hostis, privacidade de rede (nenhum pedido fora do site), fila offline→online sem duplicar, rascunho e retoma, bloqueio de toques, sair da conta apaga o que é local. Testes: `tests/corrida-core.test.js`, `corrida-import-browser`, `corrida-browser`, `corrida-live`, `corrida-live-browser`, `corrida-split`, `corrida-seam`, `runs-db`, `corrida-migration`, `treino-app`.
+- **NÃO verificado**:
+  - **Qualquer iPhone ou Android real**: o que acontece com o ecrã **bloqueado** ou outra aplicação à frente (as fontes — norma W3C, código do WebKit — indicam que a página deixa de receber posições, mas nada foi medido por nós); se o **Wake Lock** funciona na app instalada durante 30–60 min; a precisão e a bateria do GPS; o seletor de ficheiros sem filtro; a partilha/descarga do GPX; `window.confirm` na app instalada.
+  - **Os limiares de cálculo** (`RUN_CFG`: precisão máxima 30 m, lacuna 15 s, passo mínimo, salto 12 m/s…) são hipóteses validadas só com ruído sintético; com ruído grande o teste de salto rejeita fixes legítimos. Têm de ser calibrados com um percurso de distância conhecida (pista de 400 m ou 1 km medido) em cada sistema e com ficheiros reais.
+  - **Safari/WebKit e Firefox** (leitura de XML, velocidade); **o Supabase real** (RLS com duas contas, cache de esquema depois da migração: se a app disser «Corrida indisponível» logo a seguir, espera um minuto ou recarrega o esquema); ficheiros reais de relógios.
+
+### Lista de testes no telemóvel (o que me deves enviar)
+1. EVOLVE Treino instalada no ecrã principal; iniciar sessão; separador Corrida.
+2. **Importar** um GPX/TCX real (Strava/Garmin/Suunto/COROS/Polar): confirma distância e tempo face à app de origem (meta de desenho: dentro de ~2 %, **não é facto**).
+3. **Registar à mão** e apagar; retirar o consentimento.
+4. **GPS, ecrã ligado**, 5 min a caminhar, no browser e na app instalada: distância certa? lacunas?
+5. **GPS com o ecrã bloqueado 10 min** e **com outra app à frente**: o que fica (lacunas, distância)? É esta a medição que decide se vale a pena uma app nativa. Exporta o resultado (o GPX do percurso e/ou capturas do resumo) e diz-me modelo, sistema, navegador e se a app estava instalada.
+6. Sem rede a meio e voltar: a corrida chega uma só vez?
+7. Matar a app a meio da gravação e reabri-la: aparece «Retomar / Guardar o que há / Descartar»?
+
+### Como o aluno obtém o ficheiro (resumo; menus mudam, não testámos todas as apps)
+Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect e Polar Flow: só no site (abrir a atividade → exportar GPX; Polar também TCX). Apple Fitness: não exporta um treino sozinho (há apps de terceiros, não avaliadas); evitar «Exportar todos os dados de saúde». Nike Run Club: não confirmámos exportação. Sem ficheiro: «Registar à mão».
+
+## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:
 
@@ -309,7 +357,7 @@ O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu 
 
 - O código é o mesmo (`app.js`, `app.css`); cada página só diz de que app é com `<html data-app="…">` (`treino`, `gestao`; sem atributo = EVOLVE). `APP_MODE` em `app.js` escolhe o que se mostra.
 - **O treino saiu da app EVOLVE**: lá, «Hoje» tem só as refeições (e um atalho «Treino e corrida» para a nova app) e «Plano» só Alimentação e Compras. Os dados (`training_program`, `workout_logs`) não mudaram de sítio nem foram tocados; o profissional continua a editar o programa na ficha do aluno (grupo «Treino»). Alunos que «não fazem nutrição comigo» só veem o atalho na EVOLVE e usam a EVOLVE Treino.
-- **EVOLVE Treino**: dois separadores, «Treino» (o treino de hoje, o programa, os últimos treinos, uma ligação para a EVOLVE) e «Corrida» (ver 8v). Um profissional que abra `treino.html` vê o ecrã do aluno em pré-visualização, com o seletor de aluno.
+- **EVOLVE Treino**: dois separadores, «Treino» (o treino de hoje, o programa, os últimos treinos, uma ligação para a EVOLVE) e «Corrida» (ver 8u). Um profissional que abra `treino.html` vê o ecrã do aluno em pré-visualização, com o seletor de aluno.
 - **Instalar**: abrir `…/treino.html` no Safari → Partilhar → «Adicionar ao ecrã principal». **No iPhone cada ícone guarda a sua própria sessão** (afirmação já feita em 8m, não verificada de novo): o aluno inicia sessão uma vez em cada app. Se o treino já estava aberto na EVOLVE como atalho, deve instalar a nova.
 - O service worker guarda uma cópia de cada página por separado (`pageKey`) e `VERSION` subiu para `evolve-v5`; os ícones novos estão em `icon-treino-*.png`.
 - Verificado (Chromium, Supabase simulado, `tests/treino-app.test.js`): separadores de cada app, ecrãs, atalhos, pré-visualização do profissional, manifesto, service worker. **Por verificar em telemóvel real**: instalar no ecrã principal (ícone, nome «Treino», sessão própria por ícone) e o regresso do seletor de ficheiros/música.

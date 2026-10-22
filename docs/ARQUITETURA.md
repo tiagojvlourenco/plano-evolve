@@ -1,12 +1,12 @@
 # Evolve Nutrition — resumo técnico da estrutura
 
-> Nota: **não existe `src/`**. O código está em `app.js` (~15 000 linhas, JavaScript puro dentro de uma IIFE) e `app.css`, partilhados por `index.html` e `gestao.html` (a Gestão fica em `gestao.js`), CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
+> Nota: **não existe `src/`**. O código está em `app.js` (~15 000 linhas, JavaScript puro dentro de uma IIFE) e `app.css`, partilhados por `index.html`, `treino.html` e `gestao.html` (a Gestão fica em `gestao.js`; a Corrida em `corrida-core.js`, `corrida.js` e `corrida-live.js`), CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
 
 ## 0. Visão geral
 
 | Camada | Tecnologia |
 |---|---|
-| Front-end | Duas PWAs no mesmo site: `index.html` (EVOLVE) e `gestao.html` (EVOLVE Gestão), com `app.js` + `app.css` partilhados e `gestao.js` só para a Gestão (`manifest.json`, ícones `icon-*.png`) |
+| Front-end | Três PWAs no mesmo site: `index.html` (EVOLVE: alimentação e avaliações), `treino.html` (EVOLVE Treino: musculação e Corrida) e `gestao.html` (EVOLVE Gestão), com `app.js` + `app.css` partilhados, `gestao.js` só para a Gestão e `corrida-*.js` só para a Corrida (`manifest.json`, ícones `icon-*.png`) |
 | Backend | Supabase (Auth + Postgres com RLS + Storage `progress-photos`) |
 | Dados de catálogo | SQL gerado offline em `scripts/` e corrido à mão no SQL Editor |
 | Testes | `node tests/run-all.js` (avalia a app em Node com um DOM falso, `tests/extract-app.js`) |
@@ -34,7 +34,9 @@ Não há router: o estado vive em `var state = {...}` (≈ linha 6126) e cada "e
 - **`sw.js`**: pré-cache das duas páginas, de `app.js`/`app.css`, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; `app.js`, `app.css` e `gestao.js` com rede primeiro (e `gestao.js` fora do pré-cache: os alunos não o descarregam); cada página tem a sua cópia guardada; restantes ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
 
 ### 1.2 Aluno — `renderAlunoShell()` / `renderAlunoTab()` (`state.alunoTab`)
-Barra inferior com 3 separadores:
+**App EVOLVE Treino (`treino.html`, `APP_MODE === "treino"`)**: barra com 2 separadores — **Treino** (`hoje`; `tplTreinoHome` = aviso de corrida pendente + `tplTodayWorkout` + `tplTrainingProgramCard` + últimos treinos) e **Corrida** (`corrida`; `tplCorridaTab` → `RUN.screen`, módulo carregado sob pedido por `loadCorrida()`); o ecrã cheio `treino` (`tplTreinoScreen`/`tplWorkoutLogger`) conta como «Treino». Um profissional em `treino.html` só pré-visualiza (seletor de aluno).
+
+**App EVOLVE (`index.html`)**: barra inferior com 3 separadores (o treino já não está aqui; `state.alunoTab` `treino`/`corrida` voltam a `hoje`; `tplTreinoAppLink` é o atalho para `treino.html`):
 
 | Separador | Conteúdo (templates) |
 |---|---|
@@ -204,3 +206,19 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | ~10069–10370 | Catálogo |
 | ~11797 | autenticação (`showAuthScreen`) |
 | ~12000 | `boot()` |
+
+## 5. Corrida (EVOLVE Treino) — `corrida-core.js`, `corrida.js`, `corrida-live.js`
+
+Os três ficheiros são pedidos juntos por `loadCorrida()` (só ao abrir o separador «Corrida», ou na ficha do profissional ao abrir «Corridas», ou quando há fila/rascunho pendente) e **avaliados num só `eval`** dentro do IIFE de `app.js` (modo estrito: as declarações de um eval não se veem noutro). Ordem: núcleo → ecrãs → gravador; o último acaba com `RUN.loaded = true`. Nomes de topo `run*`/`RUN_*` (corrida.js usa `runUi*`/`RUN_UI_*`); um teste vigia colisões com `app.js` e `gestao.js`.
+
+| Ficheiro | Papel |
+|---|---|
+| `corrida-core.js` | Puro: haversine, reducer ao vivo (`runFeed`, método da âncora, lacunas, pausas), `runStats` (distância, tempo em movimento, parciais), aparo e simplificação do percurso, `runPrepareTrack`, `runToGpx`, `runTrackSvg`, leitura de GPX/TCX (`runParseFile`, com DOMParser; recusa DOCTYPE/ENTITY), `runBuildInsert`/`runNormalizeRow` (espelham os CHECK do SQL), formatação PT-PT. O bloco «API» no topo do ficheiro é o contrato. |
+| `corrida.js` | Ecrãs do aluno (início, importar, à mão, confirmar e guardar, detalhe, consentimento) e do profissional (`RUN.proTab`: interruptor de modo, consentimento, lista, detalhe), `RUN.submitRun` (insere `runs` e depois `run_tracks`; tolera 23505; separa erro transitório de permanente), `RUN.saveFlow` (único caminho de guardar), `RUN.ensureConsent`. |
+| `corrida-live.js` | Gravador GPS em primeiro plano (`navigator.geolocation.watchPosition` atrás de `RUN.gps`, Wake Lock, vigia, bloqueio de toques), rascunho em `localStorage` (`RUN_DRAFT_KEY`, com `uid`), fila de envio (`RUN_OUTBOX_KEY`, só o que seria enviado) e `RUN.flush()`, chamado por `outboxFlush`. |
+
+**Costura em `app.js`** (o resto do núcleo não conhece a Corrida): `rowToStudent` lê `runsColumn`/`runsMode` (`students.runs_mode`; sem coluna = migração por aplicar = nada se mostra); `corridaModeOf`/`corridaHas`/`whenCorrida`; `runPendingCount`/`runWipeLocal` (leem só `localStorage`, sem carregar o módulo; ignoram entradas de outro `uid`); `doSignOut` pergunta antes de sair se há corrida pendente e apaga rascunho e fila; `PRO_NAV` grupo «Treino» com o chip «Corridas».
+
+**Base de dados** (`supabase/migrations/0032_corrida.sql`): `students.runs_mode` (`off`|`import`|`live`, por omissão `off`, só o profissional escreve — o gatilho da 0031 não mudou), `run_consents(student_id, version, accepted_at)`, `runs` (resumo, sem coordenadas; `consent_v` com chave estrangeira para `run_consents`), `run_tracks` (percurso partilhado: `points` = `[[[lat, lon, seg], …], …]` com forma validada, ≤ 200 segmentos e ≤ 200 000 bytes). RLS: aluno lê/cria/apaga o seu; profissional lê/apaga; ninguém faz UPDATE (nem direito); `anon` sem acesso; retirar o consentimento apaga tudo (gatilho); `grant select, insert, delete` explícito a `authenticated`. Detalhes e passos em `docs/OPERACOES.md` §8u.
+
+**Verificado vs. não verificado**: ver `docs/OPERACOES.md` §8u. Em resumo, verificado em Chromium/Postgres local/Supabase simulado; **não verificado** em iPhone/Android, Safari, Supabase real, nem com ecrã bloqueado; os limiares de `RUN_CFG` são hipóteses.
