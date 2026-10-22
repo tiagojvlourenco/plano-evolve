@@ -1,7 +1,7 @@
 {
-  "name": "EVOLVE — Treino e Alimentação",
+  "name": "EVOLVE — Alimentação e Avaliações",
   "short_name": "EVOLVE",
-  "description": "Acompanhamento de treino e alimentação do estúdio EVOLVE: plano, registo de treinos e refeições, e evolução.",
+  "description": "Acompanhamento alimentar do estúdio EVOLVE: plano, registo de refeições e evolução (peso, avaliações, fotografias). O treino e a corrida estão na app EVOLVE Treino.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

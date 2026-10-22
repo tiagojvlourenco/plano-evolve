@@ -33,7 +33,7 @@ var startStaticServer = require("./helpers/static-server");
   await ctx.addInitScript(fakeSource({role: "student", userId: "user-ana", email: "ana@x.test", rows: [row]}));
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000); pg.on("pageerror", function(e){ errors.push(e.message); });
   var reqs = []; pg.on("request", function(r){ reqs.push(r.url()); });
-  await pg.goto(srv.url);
+  await pg.goto(srv.url + "treino.html");
   await pg.waitForSelector("#startWorkout, [data-start-day]");
   await pg.locator("#startWorkout, [data-start-day]").first().click();
   await pg.waitForSelector("[data-music]");

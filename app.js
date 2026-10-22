@@ -2,7 +2,7 @@
 "use strict";
 /* Duas apps no mesmo código: index.html (Acompanhamento: alunos, catálogo, «Eu») e gestao.html (Gestão: estúdio, packs, contratos; só o profissional).
    A página diz qual é com <html data-app="gestao">; sem isso é o Acompanhamento. */
-var APP_MODE = (typeof document !== "undefined" && document.documentElement && document.documentElement.getAttribute && document.documentElement.getAttribute("data-app") === "gestao") ? "gestao" : "acomp";
+var APP_MODE = (function(){ var a = (typeof document !== "undefined" && document.documentElement && document.documentElement.getAttribute) ? document.documentElement.getAttribute("data-app") : null; return a === "gestao" ? "gestao" : a === "treino" ? "treino" : "acomp"; })();
 /* ---------- Rede de segurança contra HTML injetado ----------
    O aluno consegue escrever JSON na sua própria linha (fotos, históricos, estado das refeições...) e esse texto acaba em
    templates do ecrã do profissional. Cada sítio deve usar escapeHtml, mas como defesa em profundidade TODO o HTML que a app
@@ -5242,6 +5242,9 @@ function rowToStudent(r){
     weightLogPhotos: normalizePhotos(r.weight_log_photos),
     studioOnly: !!r.studio_only,
     noNutrition: !!r.no_nutrition,
+    // Corrida: o select("*") só devolve as colunas que existem, por isso «runs_mode» na linha é o sinal de que a migração 0032 foi aplicada
+    // (sem pedido extra). Só o profissional a altera (update direto, a partir do módulo da Corrida); nunca é gravada por studentToRow.
+    runsColumn: ("runs_mode" in r), runsMode: r.runs_mode || "off",
     nutritionPhase: r.nutrition_phase && typeof r.nutrition_phase === "object" && !Array.isArray(r.nutrition_phase) ? r.nutrition_phase : null,
     phone: r.phone || null, contactLog: Array.isArray(r.contact_log) ? r.contact_log : [], createdAt: r.created_at || null,
     trainingProgram: r.training_program || null,
@@ -5541,6 +5544,7 @@ function outboxFlush(){
   if (!sbReady) return Promise.resolve(false);
   if (outboxFlushPromise) return outboxFlushPromise;
   if (typeof navigator !== "undefined" && navigator.onLine === false){ syncPillUpdate(); return Promise.resolve(false); }
+  if (runPendingCount()) whenCorrida(function(){ if (typeof RUN.flush === "function") return RUN.flush(); }); // corridas na fila de envio (só carrega a Corrida se houver alguma; se não carregar, não acontece nada)
   persistPrepareAll();
   var ids = Object.keys(outboxRead());
   if (!ids.length){ syncPillUpdate(); return Promise.resolve(true); }
@@ -7320,7 +7324,10 @@ function previewBannerHtml(s){
 }
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
-  if (!s) return;
+  if (!s){
+    if (APP_MODE === "treino" && alunoRoot) alunoRoot.innerHTML = "<div class=\"card\" style=\"text-align:center;margin-top:24px;\"><div class=\"eyebrow\">EVOLVE Treino</div><p class=\"muted-p\" style=\"margin-top:8px;\">Ainda não há alunos para pré-visualizar.</p><a class=\"btn\" href=\"index.html\" style=\"margin-top:10px;\">Abrir a app EVOLVE</a></div>";
+    return;
+  }
   ensureSyncBaseline(s); // antes de qualquer alteração do dia
   ensureFreshDay(s);
   var showSwitcher = authRole !== "student";
@@ -7329,6 +7336,7 @@ function renderAlunoShell(){
   try { dateLine = new Date().toLocaleDateString("pt-PT", {weekday: "long", day: "numeric", month: "long"}); dateLine = dateLine.charAt(0).toUpperCase() + dateLine.slice(1); } catch (e) { dateLine = ""; }
   // o ecrã de treino é uma etapa de "Hoje": o separador Hoje fica aceso
   var activeTab = state.alunoTab === "treino" ? "hoje" : state.alunoTab;
+  var treinoApp = APP_MODE === "treino";
   var icon = function(paths){ return "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" + paths + "</svg>"; };
   alunoRoot.innerHTML =
     (showSwitcher ? previewBannerHtml(s) : "") +
@@ -7338,9 +7346,13 @@ function renderAlunoShell(){
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
     "<div class=\"tabbar\">" +
+    (treinoApp ?
+      "<button data-tab=\"hoje\" aria-label=\"Treino\">" + icon("<path d=\"M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11\"/>") + "<span>Treino</span></button>" +
+      "<button data-tab=\"corrida\" aria-label=\"Corrida\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Corrida</span></button>"
+    :
       "<button data-tab=\"hoje\" aria-label=\"Hoje\">" + icon("<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>") + "<span>Hoje</span></button>" +
-      "<button data-tab=\"plano\" aria-label=\"Plano de alimentação e treino\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
-      "<button data-tab=\"evolucao\" aria-label=\"Progresso\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Progresso</span></button>" +
+      "<button data-tab=\"plano\" aria-label=\"Plano de alimentação\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
+      "<button data-tab=\"evolucao\" aria-label=\"Progresso\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Progresso</span></button>") +
     "</div>";
   var switcherEl = document.getElementById("alunoStudentSwitch");
   if (switcherEl) switcherEl.addEventListener("change", function(e){
@@ -7388,9 +7400,17 @@ function renderAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   var keep = captureTabUi(el);
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
+  if (APP_MODE === "treino"){
+    if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
+    else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
+    else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
+    restoreTabUi(el, keep);
+    wireAlunoTab(s);
+    return;
+  }
+  if (state.alunoTab==="treino" || state.alunoTab==="corrida") state.alunoTab = "hoje"; // o treino e a corrida vivem na app «EVOLVE Treino»
   if (state.alunoTab==="hoje") el.innerHTML = tplHoje(sv);
   else if (state.alunoTab==="plano") el.innerHTML = tplPlanoTabs(sv);
-  else if (state.alunoTab==="treino") el.innerHTML = tplTreinoScreen(sv);
   else {
     el.innerHTML = tplEvolucaoAluno(sv, {editable:false}); // Progresso: a evolução (o check-in semanal foi retirado: o profissional vê o aluno 2-3 vezes por semana)
     lazyPhotos(s, function(){ if (state.alunoStudentId === s.id && state.alunoTab === "evolucao" && !modalRoot.firstChild) renderAlunoTab(s); });
@@ -7752,9 +7772,109 @@ function tplTodayMeals(s){
   return html;
 }
 
+/* ---------- App EVOLVE Treino (treino.html): treino de musculação + corrida ---------- */
+// Corrida (corrida.js): carregada à parte, só quando se abre o separador «Corrida» da app EVOLVE Treino. É avaliada aqui dentro (eval direto,
+// como a Gestão) para usar o mesmo scope; o que o núcleo precisa de chamar fica em C. Se falhar (sem rede na primeira vez), só a Corrida
+// fica indisponível: o treino e o resto da app funcionam.
+// Contrato: corrida-core.js (funções puras run*), corrida.js (ecrãs, importar, à mão, lista, profissional) e corrida-live.js (gravador GPS com o ecrã ligado)
+// são avaliados juntos, nesta ordem; o último a correr (corrida-live.js) acaba com RUN.loaded = true e definem RUN.screen(sv) (HTML do separador),
+// RUN.wire(s, el) (eventos), RUN.proTab(s, el) (separador «Corridas» na ficha do profissional) e RUN.flush() (envia a fila de corridas; devolve
+// uma Promise). Opcional: RUN.reset() — chamada ao sair da conta, antes de apagar as chaves locais: pára o GPS e esquece o estado em memória.
+// Tudo atrás de students.runs_mode ('off' | 'import' | 'live'): com 'off' (ou sem a coluna) o módulo nem é pedido.
+var RUN = {loaded: false, failed: false};
+var corridaPromise = null;
+// O que a Corrida deixa só no telemóvel: o rascunho da gravação em curso e a fila de corridas por enviar. O núcleo lê as chaves SEM carregar o
+// módulo (para avisar ao sair da conta e para saber se há algo a enviar). Formato (escrito por corrida.js): rascunho = objeto JSON com «uid»
+// (id da conta que o criou); fila = lista JSON de objetos com «uid» (também se aceita {items: [...]}). Entradas de outra conta, ou sem uid, nunca contam.
+var RUN_DRAFT_KEY = "evolve_run_draft_v1";
+var RUN_OUTBOX_KEY = "evolve_runs_outbox_v1";
+var RUN_CONSENT_KEY = "evolve_run_consent_v1"; // recibo local do consentimento já verificado (só serve para começar sem rede; o servidor decide sempre)
+function runStoredJson(key){
+  try { var raw = window.localStorage && window.localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+// nº de corridas por terminar ou enviar do utilizador atual: as da fila + 1 se houver rascunho. Só lê o localStorage; JSON mau ou armazenamento a falhar contam 0.
+function runPendingCount(){
+  var uid = currentAuthUserId;
+  if (!uid) return 0;
+  var n = 0, draft = runStoredJson(RUN_DRAFT_KEY), queue = runStoredJson(RUN_OUTBOX_KEY);
+  if (draft && typeof draft === "object" && !Array.isArray(draft) && draft.uid === uid) n++;
+  if (queue && !Array.isArray(queue) && Array.isArray(queue.items)) queue = queue.items;
+  if (Array.isArray(queue)) queue.forEach(function(e){ if (e && typeof e === "object" && e.uid === uid && e.state !== "failed") n++; }); // as já recusadas pelo servidor ficam visíveis na Corrida («Apagar»), mas não são «por enviar»
+  return n;
+}
+function runWipeLocal(){
+  [RUN_DRAFT_KEY, RUN_OUTBOX_KEY, RUN_CONSENT_KEY].forEach(function(k){ try { window.localStorage.removeItem(k); } catch (e) {} });
+}
+// modo da Corrida de um aluno: 'off' (por omissão, e sem a coluna) | 'import' | 'live'
+function corridaModeOf(s){
+  return s && s.runsColumn && (s.runsMode === "import" || s.runsMode === "live") ? s.runsMode : "off";
+}
+// módulo carregado E com esta função (um módulo a meio, sem o que o núcleo chama, nunca rebenta o núcleo)
+function corridaHas(name){ return !!(RUN.loaded && typeof RUN[name] === "function"); }
+function loadCorrida(){
+  if (RUN.loaded) return Promise.resolve(true);
+  if (corridaPromise) return corridaPromise;
+  // dois ficheiros, avaliados juntos (um eval só: num eval estrito as declarações de um não se veem no outro)
+  corridaPromise = Promise.resolve().then(function(){
+    return Promise.all(["corrida-core.js", "corrida.js", "corrida-live.js"].map(function(f){ return fetch(f, {cache: "no-cache"}); }));
+  }).then(function(rs){
+    rs.forEach(function(r){ if (!r || !r.ok) throw new Error("corrida " + (r && r.status)); });
+    return Promise.all(rs.map(function(r){ return r.text(); }));
+  }).then(function(codes){
+    eval(codes[0] + "\n//# sourceURL=corrida-core.js\n" + codes[1] + "\n//# sourceURL=corrida.js\n" + codes[2] + "\n//# sourceURL=corrida-live.js");
+    return !!RUN.loaded;
+  }).catch(function(){ corridaPromise = null; return false; });
+  return corridaPromise;
+}
+// corre fn() com a Corrida pronta: de imediato se já estiver carregada, senão depois de a carregar; se não carregar (ou fn falhar) não acontece nada
+function whenCorrida(fn){
+  var go = function(){ try { return Promise.resolve(fn()).catch(function(){ return null; }); } catch (e) { return Promise.resolve(null); } };
+  if (RUN.loaded) return go();
+  return loadCorrida().then(function(ok){ return ok ? go() : null; });
+}
+function tplCorridaTab(sv, s){
+  if (corridaModeOf(s) === "off" && !(RUN.dataMode && s.runsColumn)){ // não ligada pelo profissional (ou migração por aplicar): nada é pedido
+    return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" id=\"corridaOff\" style=\"margin-top:8px;\">A Corrida ainda não está ativa para ti. O teu profissional liga-a quando for altura.</p>" +
+      (s.runsColumn ? "<button type=\"button\" class=\"btn btn-sm\" id=\"runOffData\" style=\"margin-top:10px;\">Ver ou apagar as minhas corridas</button>" : "") + "</div>"; // desligar a Corrida não tira ao aluno o direito de ver e apagar o que já guardou
+  }
+  if (corridaHas("screen") && corridaHas("wire")) return RUN.screen(sv);
+  if (RUN.loaded) RUN.failed = true; // carregou mas não define o que este ecrã precisa: tratar como falha (nunca rebenta)
+  if (!RUN.failed){
+    loadCorrida().then(function(ok){
+      if (!ok) RUN.failed = true;
+      if (APP_MODE === "treino" && state.alunoTab === "corrida" && String(state.alunoStudentId) === String(s.id) && !modalRoot.firstChild) renderAlunoTab(s);
+    });
+    return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">A abrir a Corrida…</p></div>";
+  }
+  return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir a Corrida. Verifica a ligação e tenta outra vez.</p>" +
+    "<button type=\"button\" class=\"btn\" id=\"corridaRetry\" style=\"margin-top:10px;\">Tentar outra vez</button></div>";
+}
+// separador «Treino» da app EVOLVE Treino: o treino de hoje, o programa e os últimos treinos
+function tplTreinoHome(s){
+  var html = "";
+  if (corridaModeOf(s) !== "off" && runPendingCount() > 0){ // uma gravação interrompida ou corridas por enviar: o aluno não pode deixá-las esquecidas
+    html += "<div class=\"card\" id=\"runPendingCard\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin:6px 0 10px;\">Tens uma corrida por terminar ou por enviar neste telemóvel.</p><button type=\"button\" class=\"btn primary\" id=\"openRunsPending\">Abrir a Corrida</button></div>";
+  }
+  html += tplTodayWorkout(s);
+  if (workoutDaysWithExercises(s).length) html += tplTrainingProgramCard(s);
+  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 5);
+  if (logs.length){
+    html += "<div class=\"card\"><div class=\"eyebrow\">Últimos treinos</div>" + logs.map(function(l){
+      var sets = (l.entries || []).reduce(function(a, e){ return a + ((e && e.sets) || []).length; }, 0);
+      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(l.dayName || "Treino") + "</div>" +
+        "<div class=\"pd-meta\">" + escapeHtml(fmtDatePt(l.date)) + " · " + plural(sets, "série", "séries") + (l.rpe ? " · esforço " + l.rpe + "/10" : "") + "</div></div></div></div>";
+    }).join("") + "</div>";
+  }
+  html += "<a class=\"btn ghost help-link\" id=\"goEvolveApp\" href=\"index.html\">Alimentação e avaliações → app EVOLVE</a>";
+  return html;
+}
+// o treino e a corrida têm app própria: aqui fica só um atalho
+function tplTreinoAppLink(){
+  return "<a class=\"card treino-app-link\" href=\"treino.html\"><div><div class=\"eyebrow\">Treino e corrida</div><p class=\"muted-p\" style=\"margin:4px 0 0;\">Abre a app EVOLVE Treino: o teu programa, o registo de cada sessão e as tuas corridas.</p></div><span class=\"btn btn-sm\">Abrir</span></a>";
+}
 function tplHoje(s){
-  var html = tplTodayWorkout(s);
-  if (noNutritionOf(s)) return html;   // faz a nutrição com outra pessoa: só treino
+  var html = tplTreinoAppLink();
+  if (noNutritionOf(s)) return html;   // faz a nutrição com outra pessoa: só o atalho para o treino
   if (!s.meals.length){
     return html + `<div class="card" style="text-align:center;">` +
       `<div class="eyebrow">Alimentação</div>` +
@@ -8445,14 +8565,12 @@ function pdfDeliver(blob, name){
 }
 
 function tplPlanoTabs(s){
-  if (noNutritionOf(s)){   // só o programa de treino
-    return workoutDaysWithExercises(s).length ? tplTrainingProgramCard(s) : "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Treino</div><p class=\"muted-p\" style=\"margin-top:8px;\">O teu programa de treino ainda não foi definido.</p></div>";
-  }
-  var hasProgram = workoutDaysWithExercises(s).length > 0, hasMeals = (s.meals || []).length > 0;
-  var sec = hasProgram && state.planoSection === "treino" ? "treino" : (hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao");
+  if (noNutritionOf(s)) return tplTreinoAppLink();   // não faz nutrição com o profissional: não há plano alimentar aqui
+  var hasMeals = (s.meals || []).length > 0;
+  var sec = hasMeals && state.planoSection === "compras" ? "compras" : "alimentacao";
   function segBtn(id, label){ return "<button type=\"button\" data-plano-sec=\"" + id + "\" aria-pressed=\"" + (sec === id) + "\" class=\"" + (sec === id ? "on" : "") + "\">" + label + "</button>"; }
-  var seg = hasProgram || hasMeals ? "<div class=\"seg\">" + segBtn("alimentacao", "Alimentação") + (hasProgram ? segBtn("treino", "Treino") : "") + (hasMeals ? segBtn("compras", "Compras") : "") + "</div>" : "";
-  return seg + (sec === "treino" ? tplTrainingProgramCard(s) : sec === "compras" ? tplShoppingList(s) : tplPlano(s));
+  var seg = hasMeals ? "<div class=\"seg\">" + segBtn("alimentacao", "Alimentação") + segBtn("compras", "Compras") + "</div>" : "";
+  return seg + (sec === "compras" ? tplShoppingList(s) : tplPlano(s));
 }
 
 // Plano > Treino: o programa da semana, com um botão para iniciar qualquer dia
@@ -8471,7 +8589,7 @@ function tplTrainingProgramCard(s){
 
 // ecrã de treino: um passo de "Hoje" (volta atrás com ← Hoje), com o progresso das séries no topo
 function tplTreinoScreen(s){
-  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Hoje</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
   var day = workoutDayFor(s);
   if (!day) return head + tplWorkoutLogger(s);
   var total = workoutSetCount(day), done = workoutDraftDone(s, day);
@@ -8490,6 +8608,12 @@ function wireTrainingNav(s, el){
   }
   var start = el.querySelector("#startWorkout");
   if (start) start.addEventListener("click", function(){ go("treino", start.getAttribute("data-day")); });
+  var goEvolve = el.querySelector("#goEvolveApp");
+  if (goEvolve) goEvolve.addEventListener("click", function(e){ // sair da página pára a gravação GPS: nunca sem avisar
+    if (corridaHas("liveBusy") && RUN.liveBusy() && !window.confirm("Tens uma corrida a decorrer e ela pára se saíres desta app. Sair mesmo assim?")) e.preventDefault();
+  });
+  var openRunsPending = el.querySelector("#openRunsPending");
+  if (openRunsPending) openRunsPending.addEventListener("click", function(){ go("corrida"); });
   el.querySelectorAll("[data-start-day]").forEach(function(b){ b.addEventListener("click", function(){ go("treino", b.getAttribute("data-start-day")); }); });
   wireExerciseInfo(s, el);
   var back = el.querySelector("#backToHoje");
@@ -8808,7 +8932,7 @@ function renderRestTimer(now){
   var el = document.getElementById("restTimer");
   if (!el) return;
   var app = document.getElementById("alunoApp");
-  var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden"));
+  var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden")) && !(APP_MODE === "treino" && state.alunoTab === "corrida"); // na Corrida não tapa o ecrã de gravação
   el.classList.toggle("hidden", !visible);
   if (app) app.classList.toggle("rt-open", visible);
   if (!visible){ el.innerHTML = ""; el._rtKey = null; return; }
@@ -10634,7 +10758,7 @@ function deleteStudentCompletely(s){
 }
 function openDeleteStudentModal(s){
   var sheet = openModal("<div class=\"mtitle\">Apagar " + escapeHtml(s.name) + "?</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Vai apagar a ficha, as fotografias, os pacotes e as cobranças, e o aluno deixa de ter acesso à app. <strong>Não dá para desfazer.</strong></p>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:14px;\">Vai apagar a ficha, as fotografias, os pacotes, as cobranças, as corridas e os percursos, e o aluno deixa de ter acesso à app. <strong>Não dá para desfazer.</strong></p>" +
     "<p class=\"muted-p\" id=\"delErr\" style=\"color:var(--critical); display:none; margin-bottom:8px;\"></p>" +
     "<div style=\"display:flex; gap:10px;\"><button type=\"button\" class=\"btn\" id=\"delCancel\" style=\"flex:1;\">Cancelar</button>" +
     "<button type=\"button\" class=\"btn primary\" id=\"delGo\" style=\"flex:1; background:var(--critical); border-color:var(--critical); color:#fff;\">Apagar</button></div>");
@@ -11018,6 +11142,14 @@ function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
   wireTrainingNav(s, el);
+  if (APP_MODE === "treino" && state.alunoTab === "corrida"){
+    var retry = el.querySelector("#corridaRetry");
+    if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderAlunoTab(s); });
+    var offData = el.querySelector("#runOffData");
+    if (offData) offData.addEventListener("click", function(){ RUN.dataMode = true; RUN.failed = false; renderAlunoTab(s); });
+    if (corridaModeOf(s) === "off" && !RUN.dataMode) RUN.dataMode = false;
+    if ((corridaModeOf(s) !== "off" || RUN.dataMode) && corridaHas("screen") && corridaHas("wire")) RUN.wire(s, el); // com a Corrida desligada o separador é só um cartão: nada a ligar
+  }
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
     row.addEventListener("click", function(){
@@ -11726,6 +11858,7 @@ function openOnboardingForm(){
       fromOnboarding:true,
       inviteEmail: inviteEmail || null,
       noNutrition: !!sheet.querySelector("#obNoNutrition").checked,
+      runsColumn: STUDENTS.some(function(st){ return st.runsColumn; }), runsMode: "off", // a ficha nova ainda não veio do servidor: herda o que as outras já mostram sobre a migração 0032
       phone: normalizePhone(sheet.querySelector("#obPhone").value).ok ? sheet.querySelector("#obPhone").value.trim().slice(0, 30) : null,
       createdAt: new Date().toISOString()
     };
@@ -11758,7 +11891,7 @@ var PRO_NAV = APP_MODE === "gestao" ? [
 ] : [
   {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["pedidos", "perfil", "notas"] : ["perfil", "notas"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
-  {id: "treino", label: "Treino", tabs: ["treino"]},
+  {id: "treino", label: "Treino", tabs: ["treino", "corridas"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
 ];
 // as 4 áreas do aluno aberto (o ponto vermelho em "Resumo" avisa que há pedidos de ajuda por tratar)
@@ -11772,7 +11905,7 @@ function proStudentNavHtml(){
 }
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["corridas","Corridas"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   ensureSyncBaseline(s);
@@ -11818,6 +11951,30 @@ function wireProDetailNav(main){
   });
 }
 
+// separador «Corridas» da ficha (app EVOLVE): a migração 0032 em falta, ou o módulo (carregado sob pedido, ao molde do separador «Pacotes» da Gestão)
+function tplProCorridasMissing(){
+  return "<div class=\"eyebrow\">Corridas</div><p class=\"muted-p\" id=\"corridasMissing\" style=\"margin-top:8px;\"><strong>Falta aplicar a migração 0032 no Supabase.</strong> " +
+    "Abre o SQL Editor do projeto, cola o conteúdo de <code>supabase/migrations/0032_corrida.sql</code> e corre-o. Depois recarrega a app: este separador passa a mostrar as corridas e a Corrida de cada aluno.</p>";
+}
+function renderProCorridas(s, el){
+  if (!s.runsColumn){ el.innerHTML = tplProCorridasMissing(); return; }
+  if (corridaHas("proTab")){ RUN.proTab(s, el); return; }
+  var here = function(){ return state.proSelectedId === s.id && state.proTab === "corridas" ? document.getElementById("proTabContent") : null; };
+  if (RUN.loaded || RUN.failed){ // carregou sem o separador do profissional, ou falhou antes: mensagem e nova tentativa
+    el.innerHTML = "<div class=\"eyebrow\">Corridas</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir as Corridas. Verifica a ligação e tenta outra vez.</p><button type=\"button\" class=\"btn btn-sm\" id=\"corridasRetry\" style=\"margin-top:8px;\">Tentar outra vez</button>";
+    var retry = el.querySelector("#corridasRetry");
+    if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderProCorridas(s, document.getElementById("proTabContent") || el); });
+    return;
+  }
+  el.innerHTML = "<p class=\"muted-p\">A carregar…</p>";
+  loadCorrida().then(function(ok){
+    var now = here();
+    if (!now) return; // o profissional já mudou de separador ou de aluno
+    if (ok && corridaHas("proTab")) RUN.proTab(s, now);
+    else { RUN.failed = true; renderProCorridas(s, now); }
+  });
+}
+
 function renderProTabContent(s){
   var el = document.getElementById("proTabContent");
   if (state.proTab==="pedidos"){
@@ -11839,6 +11996,7 @@ function renderProTabContent(s){
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
   else if (state.proTab==="treino") el.innerHTML = tplProTreino(s);
+  else if (state.proTab==="corridas"){ renderProCorridas(s, el); return; } // o módulo desenha e liga o separador todo (nada de wireProTab por cima)
   else if (state.proTab==="evolucao"){
     el.innerHTML = tplEvolucaoAluno(s, {editable:true});
     lazyPhotos(s, function(){ if (state.proSelectedId === s.id && state.proTab === "evolucao" && !modalRoot.firstChild) renderProTabContent(s); });
@@ -14834,13 +14992,16 @@ function finishBoot(rows, isProfessional, offline){
         document.getElementById("modeSwitch").classList.add("hidden");
         document.getElementById("proApp").classList.remove("hidden");
         state.proView = "studio";
+      } else if (APP_MODE === "treino"){ // app EVOLVE Treino: o profissional só pré-visualiza o ecrã do aluno
+        document.getElementById("modeSwitch").classList.add("hidden");
+        document.getElementById("alunoApp").classList.remove("hidden");
       } else {
         document.getElementById("modeSwitch").classList.remove("hidden");
         document.getElementById("alunoApp").classList.remove("hidden");
         document.getElementById("proApp").classList.remove("hidden");
       }
       state.alunoStudentId = STUDENTS[0] ? STUDENTS[0].id : null;
-      setMode("pro");
+      setMode(APP_MODE === "treino" ? "aluno" : "pro");
     } else if (APP_MODE === "gestao"){ // uma conta de aluno não tem nada a fazer na Gestão
       authRole = STUDENTS.length ? "student" : null;
       hideAllScreens();
@@ -14860,6 +15021,7 @@ function finishBoot(rows, isProfessional, offline){
       state.mode = "aluno";
       document.getElementById("protoRibbon").classList.add("hidden"); // o aluno não precisa do aviso de protótipo
       renderAlunoShell();
+      if (APP_MODE === "treino" && !offline && corridaModeOf(findStudent(state.alunoStudentId)) !== "off") setTimeout(function(){ loadCorrida(); }, 2500); // com a Corrida ligada, o código fica guardado (service worker) para abrir sem rede ao ar livre
     } else {
       authRole = null;
       hideAllScreens();
@@ -14868,12 +15030,18 @@ function finishBoot(rows, isProfessional, offline){
     }
     syncPillUpdate();
     if (!offline) outboxFlush();
-    if (isProfessional && APP_MODE !== "gestao") setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
+    if (isProfessional && APP_MODE === "acomp") setTimeout(maybeOpenPhaseReviews, 500); // as revisões de plano à espera aparecem logo ao entrar
   });
 }
 
+// a sessão acabou fora desta página (outro separador, outra app, token revogado): o GPS e o que a Corrida guardou no telemóvel não podem continuar
+function runSessionEnded(){
+  if (RUN.loaded && typeof RUN.reset === "function"){ try { RUN.reset(); } catch (e) {} }
+  runWipeLocal();
+  currentAuthUserId = null;
+}
 function handleSession(session){
-  if (!session){ currentAuthUserId = null; showAuthScreen("signin"); return; }
+  if (!session){ runSessionEnded(); showAuthScreen("signin"); return; }
   currentAuthUserId = session.user.id;
   showLoading("A preparar a tua conta...");
   var email = session.user.email;
@@ -15089,7 +15257,13 @@ function openInviteLinkModal(s){
 
 function doSignOut(){
   persistPrepareAll();
-  if (outboxCount() && !window.confirm("Há alterações que ainda não foram enviadas e perder-se-iam ao sair. Sair mesmo assim?")) return;
+  var runsLeft = runPendingCount(), changesLeft = outboxCount();
+  if ((changesLeft || runsLeft) && !window.confirm(
+    !runsLeft ? "Há alterações que ainda não foram enviadas e perder-se-iam ao sair. Sair mesmo assim?" :
+    !changesLeft ? "Há uma corrida por terminar ou por enviar neste telemóvel e perder-se-ia ao sair. Sair mesmo assim?" :
+    "Há alterações e uma corrida por terminar ou por enviar neste telemóvel que ainda não foram enviadas e perder-se-iam ao sair. Sair mesmo assim?")) return;
+  if (RUN.loaded && typeof RUN.reset === "function"){ try { RUN.reset(); } catch (e) {} } // pára o GPS e esquece a gravação em memória, para não voltar a escrever o rascunho
+  runWipeLocal(); // o rascunho e a fila de corridas também são só desta sessão
   offlineDataWipe(); // a cópia da ficha e a fila ficam só enquanto a sessão estiver iniciada
   restTimerStop();
   wlDraftWipe();
@@ -15122,6 +15296,11 @@ function boot(){
       setMode("pro");
       return;
     }
+    if (APP_MODE === "treino"){ // modo local (demonstração) da app EVOLVE Treino: só o ecrã do aluno
+      document.getElementById("proApp").classList.add("hidden");
+      setMode("aluno");
+      return;
+    }
     document.getElementById("modeSwitch").classList.remove("hidden");
     setMode("aluno");
     return;
@@ -15136,7 +15315,7 @@ function boot(){
     document.getElementById("connectionErrorScreen").classList.remove("hidden");
   });
   sb.auth.onAuthStateChange(function(event){
-    if (event === "SIGNED_OUT") showAuthScreen("signin");
+    if (event === "SIGNED_OUT"){ runSessionEnded(); showAuthScreen("signin"); }
     if (event === "PASSWORD_RECOVERY"){
       hideAllScreens();
       document.getElementById("recoveryScreen").classList.remove("hidden");

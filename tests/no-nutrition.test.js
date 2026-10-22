@@ -16,7 +16,7 @@ check.check("2. A marca grava-se e lê-se (studentToRow / rowToStudent)", studen
 var hoje = tplHoje(studentView(on)), hojeOff = tplHoje(studentView(off));
 check.check("3. «Hoje» do aluno sem nutrição não mostra refeições nem ajuda de alimentação; o normal mostra", !/Alimentação|refeição|alimenta/i.test(hoje.replace(/Precisas de ajuda/g, "")) && /openAssistant/.test(hojeOff));
 var plano = tplPlanoTabs(studentView(on));
-check.check("4. «Plano» do aluno sem nutrição não tem Alimentação nem Compras (só o treino)", !/data-plano-sec/.test(plano) && !/Compras/.test(plano) && /Treino|treino/.test(plano));
+check.check("4. «Plano» do aluno sem nutrição não tem Alimentação nem Compras: só o atalho para a app EVOLVE Treino (treino.html)", !/data-plano-sec/.test(plano) && !/Compras/.test(plano) && /href="treino\.html"/.test(plano));
 check.check("5. O aluno com nutrição continua a ter Alimentação no Plano", /data-plano-sec="alimentacao"/.test(tplPlanoTabs(studentView(off))));
 
 // profissional
