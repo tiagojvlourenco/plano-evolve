@@ -16,7 +16,7 @@ check.check("1. treino.html tem o mesmo corpo que as outras duas páginas (só m
 check.check("2. treino.html identifica-se como app «treino», com o seu manifesto e ícones; o corpo continua a ter #alunoApp (o service worker só guarda páginas da app)", /<html[^>]*data-app="treino"/.test(treinoHtml) && /manifest-treino\.json/.test(treinoHtml) && /icon-treino-180\.png/.test(treinoHtml) && /icon-treino-192\.png/.test(treinoHtml) && /id="alunoApp"/.test(treinoHtml) && /apple-mobile-web-app-title" content="Treino"/.test(treinoHtml));
 check.check("3. O manifesto da app Treino é independente: start_url, id e nome próprios; ícones existentes", manifest.start_url === "./treino.html" && manifest.id === "./treino.html" && manifest.id !== JSON.parse(read("manifest.json")).id && manifest.id !== JSON.parse(read("manifest-gestao.json")).id && /Treino/.test(manifest.name) && manifest.display === "standalone" && manifest.icons.length >= 2 && manifest.icons.every(function(i){ return fs.existsSync(path.join(root, i.src)); }));
 check.check("4. Os ícones são três tamanhos PNG, diferentes dos da EVOLVE e da Gestão", ["180", "192", "512"].every(function(n){ var f = path.join(root, "icon-treino-" + n + ".png"); return fs.existsSync(f) && !fs.readFileSync(f).equals(fs.readFileSync(path.join(root, "icon-" + n + ".png"))) && !fs.readFileSync(f).equals(fs.readFileSync(path.join(root, "icon-gestao-" + n + ".png"))); }));
-check.check("5. O service worker guarda a página, o manifesto e os ícones de treino.html, e a cópia da página é por página (nunca o treino no lugar do EVOLVE)", ["treino.html", "manifest-treino.json", "icon-treino-180.png", "icon-treino-192.png", "icon-treino-512.png", "corrida.js", "corrida-core.js", "corrida-live.js"].every(function(f){ return sw.indexOf('"' + f + '"') >= 0; }) && /treino\\\.html\$\/\.test\(p\) \? "treino\.html"/.test(sw));
+check.check("5. O service worker guarda a página, o manifesto e os ícones de treino.html (e não o código da Corrida), e a cópia da página é por página (nunca o treino no lugar do EVOLVE)", ["treino.html", "manifest-treino.json", "icon-treino-180.png", "icon-treino-192.png", "icon-treino-512.png"].every(function(f){ return sw.indexOf('"' + f + '"') >= 0; }) && /treino\\\.html\$\/\.test\(p\) \? "treino\.html"/.test(sw));
 check.check("6. A app distingue os três modos pelo data-app (gestao | treino | acompanhamento)", /APP_MODE = \(function\(\)/.test(app) && /a === "treino" \? "treino"/.test(app));
 check.check("7. app.js não ficou maior que o limite (a Corrida vai noutro ficheiro, corrida.js)", Buffer.byteLength(app) < 1100000);
 
@@ -30,13 +30,15 @@ eval(appSource);
 var fakeSource = require("./helpers/fake-supabase");
 var startStaticServer = require("./helpers/static-server");
 
-function row(id, name, mut, logs){
+var corridaReqs = [];
+function row(id, name, mut, logs, runsMode){
   authRole = "professional";
   var s = buildFullDemoStudent(); s.id = id; s.name = name; s.isDemo = false; s.active = true; s.photos = [];
   s.nutritionPhase = null;
   if (mut) mut(s);
   var r = JSON.parse(JSON.stringify(studentToRow(s)));
   if (logs) r.workout_logs = logs; // studentToRow não escreve os treinos como profissional: o ecrã lê-os da coluna
+  if (runsMode) r.runs_mode = runsMode; // a coluna só existe depois da migração 0032
   return r;
 }
 
@@ -50,6 +52,7 @@ function row(id, name, mut, logs){
     var pg = await ctx.newPage(); pg.setDefaultTimeout(6000);
     pg.on("pageerror", function(e){ errors.push(e.message); });
     pg.on("dialog", function(d){ d.accept(); });
+    pg.on("request", function(r){ if (/corrida(-core|-live)?\.js/.test(r.url())) corridaReqs.push(r.url()); });
     await pg.goto(srv.url + (page || ""));
     return {ctx: ctx, pg: pg};
   }
@@ -61,6 +64,8 @@ function row(id, name, mut, logs){
   var tA = await tabs(A.pg);
   check.check("8. EVOLVE: os separadores são Hoje, Plano e Progresso (sem Treino nem Corrida)", tA.join("|") === "Hoje|Plano|Progresso");
   check.check("9. EVOLVE, Hoje: as refeições continuam, o treino saiu (sem «Iniciar treino») e há um atalho para a app Treino", (await A.pg.locator("#startWorkout").count()) === 0 && (await A.pg.locator('a[href="treino.html"]').count()) === 1 && /Treino e corrida/i.test(await A.pg.locator(".treino-app-link").innerText()));
+  var linkStyle = await A.pg.locator(".treino-app-link").evaluate(function(el){ var c = getComputedStyle(el); return {deco: c.textDecorationLine, disp: c.display, color: c.color}; });
+  check.check("9b. O atalho «Treino e corrida» tem aspeto de cartão: sem sublinhado, em linha (texto e botão lado a lado), cor do texto normal", linkStyle.deco === "none" && linkStyle.disp === "flex" && linkStyle.color !== "rgb(0, 0, 238)");
   await A.pg.click('.tabbar [data-tab="plano"]');
   await A.pg.waitForSelector(".plano-meal-card, .seg");
   var planoTxt = await A.pg.locator("#alunoTabContent").innerText();
@@ -90,8 +95,16 @@ function row(id, name, mut, logs){
   check.check("17. «← Treino» volta ao início da app", /Programa de treino/i.test(await T.pg.locator("#alunoTabContent").innerText()));
   await T.pg.click('.tabbar [data-tab="corrida"]');
   await T.pg.waitForSelector("#alunoTabContent");
-  check.check("18. O separador Corrida abre (carrega corrida.js sob pedido)", await T.pg.locator('.tabbar [data-tab="corrida"]').evaluate(function(b){ return b.classList.contains("active"); }));
+  check.check("18. Corrida desligada (sem runs_mode): o separador abre, diz que ainda não está ativa e NÃO pede o código da Corrida", await T.pg.locator('.tabbar [data-tab="corrida"]').evaluate(function(b){ return b.classList.contains("active"); }) && /ainda não está ativa/i.test(await T.pg.locator("#alunoTabContent").innerText()) && corridaReqs.length === 0);
   await T.ctx.close();
+  // Corrida ligada: o código é pedido (os três ficheiros) e o ecrã da Corrida aparece
+  var R = await open("student", [row("ana", "Ana Treina", function(s){ s.runsMode = "import"; }, null, "import")], "treino.html");
+  await R.pg.waitForSelector("#startWorkout");
+  await R.pg.click('.tabbar [data-tab="corrida"]');
+  await R.pg.waitForSelector(".run-home, #runImport, [id^=run]", {timeout: 8000}).catch(function(){});
+  var loaded = corridaReqs.filter(function(u){ return /corrida(-core|-live)?\.js/.test(u); });
+  check.check("18b. Corrida ligada ('import'): pede corrida-core.js, corrida.js e corrida-live.js e mostra o ecrã da Corrida (não o cartão «não está ativa» nem «Não foi possível abrir»)", loaded.length >= 3 && !/ainda não está ativa|Não foi possível abrir/i.test(await R.pg.locator("#alunoTabContent").innerText()));
+  await R.ctx.close();
 
   // o profissional em treino.html: só pré-visualiza o ecrã do aluno
   var P = await open("professional", [row("ana", "Ana Treina"), row("rui", "Rui Costa")], "treino.html");

@@ -15021,6 +15021,7 @@ function finishBoot(rows, isProfessional, offline){
       state.mode = "aluno";
       document.getElementById("protoRibbon").classList.add("hidden"); // o aluno não precisa do aviso de protótipo
       renderAlunoShell();
+      if (APP_MODE === "treino" && !offline && corridaModeOf(findStudent(state.alunoStudentId)) !== "off") setTimeout(function(){ loadCorrida(); }, 2500); // com a Corrida ligada, o código fica guardado (service worker) para abrir sem rede ao ar livre
     } else {
       authRole = null;
       hideAllScreens();

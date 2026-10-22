@@ -11,7 +11,7 @@
    deixava a Gestão no lugar do EVOLVE. Mudar o nome apaga essa cache e a cópia antiga de index.html (script inline). */
 var VERSION = "evolve-v5";
 var SHELL = [
-  "./", "index.html", "gestao.html", "treino.html", "app.css", "app.js", "corrida.js", "corrida-core.js", "corrida-live.js", "manifest.json", "manifest-gestao.json", "manifest-treino.json",
+  "./", "index.html", "gestao.html", "treino.html", "app.css", "app.js", "manifest.json", "manifest-gestao.json", "manifest-treino.json",
   "vendor/supabase.js",
   "fonts/manrope-latin-wght-normal.woff2", "fonts/jura-latin-400-normal.woff2", "fonts/jura-latin-500-normal.woff2",
   "fonts/jura-latin-600-normal.woff2", "fonts/jura-latin-700-normal.woff2", "fonts/jura-latin-300-normal.woff2",
@@ -88,7 +88,7 @@ function cacheFirst(event){
 }
 
 // código da app (app.js, app.css), da Gestão (gestao.js) e da Corrida (corrida.js, corrida-core.js, corrida-live.js): sempre a versão mais recente quando há ligação; sem rede usa a última guardada
-// (gestao.js não está no SHELL: os alunos nunca o descarregam; a Corrida está, para o aluno a abrir sem rede, ao ar livre)
+// (nem gestao.js nem a Corrida estão no SHELL: a Gestão só o profissional a descarrega, e a Corrida só quem a abre; a app pede-a em segundo plano ao aluno com a Corrida ligada, para a ter guardada e abrir sem rede ao ar livre)
 function networkFirstFile(event){
   var request = event.request;
   return new Promise(function(resolve){
