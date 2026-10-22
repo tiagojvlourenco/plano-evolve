@@ -184,7 +184,7 @@ ck("5. Só ES5 (sem arrow, let, const, async, await, template strings, classes)"
 ck("6. Nenhum pedido de rede próprio (fetch, XHR, sendBeacon, WebSocket, importScripts), nenhuma consola, nenhum eval", !/\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|importScripts|eval)\b|\bconsole\b/.test(noComments));
 ck("7. O localStorage só se toca num sítio (runLStore) e as chaves não se redeclaram (RUN_DRAFT_KEY e RUN_OUTBOX_KEY vêm de app.js)", (noComments.match(/localStorage/g) || []).length === 1 && !/(var|function)\s+RUN_(DRAFT|OUTBOX)_KEY/.test(noComments));
 ck("8. Define o contrato em RUN: liveOpen, liveScreen, liveWire, liveDraftBanner, liveWireBanner, queueAdd, queuePending, flush, reset, gps, live", ["liveOpen", "liveScreen", "liveWire", "liveDraftBanner", "liveWireBanner", "queueAdd", "queuePending", "flush", "reset"].every(function(k){ return new RegExp("RUN\\." + k + " = ").test(liveSrc); }) && /RUN\.gps = /.test(liveSrc) && /RUN\.live = /.test(liveSrc));
-ck("9. Sem linha de música nem os três botões (Spotify, Apple Music, YouTube Music) no gravador", !/playlistRowHtml|MUSIC_APPS|Spotify|Apple Music|YouTube Music|data-music/.test(liveSrc));
+ck("9. A linha de música (MUSIC_APPS) só é desenhada no aviso inicial (runLMusicRowHtml), nunca no resto do gravador", (liveSrc.match(/runLMusicRowHtml\(\)/g) || []).length === 2 && !/playlistRowHtml/.test(liveSrc));
 ck("10. Os textos fixos do desenho estão lá (aviso inicial, música antes de Iniciar, Terminar a corrida?, Sem posições há, página oculta, não feches a app)",
   ["Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.",
     "Põe a música a tocar ANTES de carregar em Iniciar e volta aqui.", "Terminar a corrida?", "Continuar a correr", "Sem posições há ", "A página esteve oculta ", "Não feches a app: a corrida ainda não está guardada",
@@ -303,7 +303,7 @@ var S = makeBox();
 var introHtml = S.opens();
 ck("39. Ao abrir: aviso inicial (ecrã ligado, pode falhar, não testado em todos os telemóveis), música ANTES de Iniciar, sem os botões de música e SEM pedir o GPS", /Mantém a EVOLVE aberta e o ecrã ligado durante a corrida/.test(introHtml) && /pode falhar/.test(introHtml) &&
   /Ainda não testámos isto em todos os telemóveis/.test(introHtml) && /Não garantimos que o registo continue com o ecrã bloqueado/.test(introHtml) && /Põe a música a tocar ANTES de carregar em Iniciar e volta aqui\./.test(introHtml) &&
-  !/data-music|Spotify|Apple Music|YouTube Music|playlist/.test(introHtml) && S.gps.starts === 0 && S.wl.requests === 0 && S.live.phase === "intro");
+  S.gps.starts === 0 && S.wl.requests === 0 && S.live.phase === "intro");
 S.click("runLiveGo");
 ck("40. «Continuar» pede o consentimento (RUN.ensureConsent) e só depois passa a «Preparar»; o GPS continua parado", S.consents.length === 1 && S.live.phase === "prep" && S.gps.starts === 0 && !!S.el("runLivePrepare") && /Preparar GPS/.test(S.cur.html));
 (function(){
