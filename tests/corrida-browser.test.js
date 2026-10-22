@@ -128,6 +128,8 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
     if (o.init) await ctx.addInitScript(o.init);
     if (o.seed) await ctx.addInitScript(function(seed){ try { Object.keys(seed).forEach(function(k){ localStorage.setItem(k, seed[k]); }); } catch (e) {} }, o.seed);
     if (!o.realLive) await ctx.route(/\/corrida-live\.js(\?|$)/, function(route){ ctl.requests.push("live"); route.fulfill({status: 200, contentType: "text/javascript", body: liveStub({queue: o.queue !== false, cache: o.cache !== false})}); });
+    // o gravador REAL é servido como está; só se lhe acrescenta, no fim do mesmo eval, um puxador para o teste chegar a RUN e a runUuid
+    else await ctx.route(/\/corrida-live\.js(\?|$)/, async function(route){ var resp = await route.fetch(); route.fulfill({response: resp, body: (await resp.text()) + "\n;window.__T = {RUN: RUN, runUuid: runUuid};"}); });
     var pg = await ctx.newPage(); pg.setDefaultTimeout(8000);
     var realClose = ctx.close.bind(ctx);
     ctx.close = async function(){ try { (await pg.evaluate(function(){ return window.__toasts || []; })).forEach(function(t){ allToasts.push(t); }); } catch (e) {} return realClose(); };
@@ -476,7 +478,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await F.pg.waitForSelector(".run-svg-wrap svg");
   var dt = await tabText(F.pg);
   ck("67. O detalhe mostra a nota como TEXTO (o HTML hostil não executa), o esforço e as ações (exportar, apagar só o percurso, apagar corrida)", dt.indexOf('<img src=x onerror="window.__xss=1">Nota "perigosa"') >= 0 && (await F.pg.evaluate(function(){ return window.__xss; })) === undefined && (await F.pg.locator(".run-detail img").count()) === 0 && /Exportar GPX \(percurso guardado\)/i.test(dt) && /Apagar só o percurso/i.test(dt) && /Apagar corrida/i.test(dt));
-  ck("68. O percurso partilhado é carregado só ao abrir o detalhe (maybeSingle por run_id), desenhado em SVG, com a nota de que foi aparado e simplificado", /aparado e simplificado/.test(dt) && (await F.pg.locator('.run-svg-wrap svg[role="img"]').count()) === 1 && /esconder|escondidos: 200 m/.test(dt));
+  ck("68. O percurso partilhado é carregado só ao abrir o detalhe (maybeSingle por run_id), desenhado em SVG, com a nota de que foi aparado e simplificado", /aparado e simplificado/.test(dt) && (await F.pg.locator('.run-svg-wrap svg[role="img"]').count()) === 1 && /esconder|escondidos: pelo menos 200 m/.test(dt));
   var dlP2 = F.pg.waitForEvent("download");
   await F.pg.click("#runExportSaved");
   var dl2 = await dlP2, g2 = fs.readFileSync(await dl2.path(), "utf8");
@@ -957,7 +959,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await OF.pg.waitForSelector("#runOff"); await OF.pg.waitForSelector(".run-row");
   var offTxt = await tabText(OF.pg);
   ck("142. «Ver ou apagar as minhas corridas» abre a vista de dados: título «A Corrida está desligada», explica que só se pode ver e apagar, e mostra a lista (2 corridas) com «Voltar»", /A Corrida está desligada/.test(offTxt) && /só podes ver e apagar o que já tens guardado/.test(offTxt) && (await OF.pg.locator(".run-row").count()) === 2 && (await OF.pg.locator("#runOffBack").count()) === 1 && /primeira/.test(offTxt) && !/treinador/i.test(offTxt));
-  ck("143. A vista de dados NÃO oferece importar, registar à mão, gravar com GPS, guia de exportação nem o ecrã de consentimento; só «Apagar todas as corridas» e «Retirar consentimento» (Privacidade e dados já aberta)", (await OF.pg.locator("#runGoImport, #runGoManual, #runGoLive, #runFile, #runGuide, #runConsent").count()) === 0 && !/Importar ficheiro|Registar à mão|Como obter o ficheiro/.test((await OF.pg.locator("#alunoTabContent button, #alunoTabContent summary").allInnerTexts()).join("|")) && (await OF.pg.locator("#runDelAll").count()) === 1 && (await OF.pg.locator("#runWithdraw").count()) === 1 && (await OF.pg.locator("#runPrivacy[open]").count()) === 1);
+  ck("143. A vista de dados NÃO oferece importar, registar à mão, gravar com GPS, guia de exportação nem o ecrã de consentimento; só «Apagar todas as corridas» e «Retirar consentimento», à vista (sem abrir «Privacidade e dados»)", (await OF.pg.locator("#runGoImport, #runGoManual, #runGoLive, #runFile, #runGuide, #runConsent").count()) === 0 && !/Importar ficheiro|Registar à mão|Como obter o ficheiro/.test((await OF.pg.locator("#alunoTabContent button, #alunoTabContent summary").allInnerTexts()).join("|")) && (await OF.pg.locator("#runDelAll").count()) === 1 && (await OF.pg.locator("#runWithdraw").count()) === 1 && (await OF.pg.locator("#runDelAll").isVisible()) && (await OF.pg.locator("#runWithdraw").isVisible()) && (await OF.pg.locator("#runPrivacy[open]").count()) === 0);
   ck("144. O aviso do rascunho/da fila do gravador (RUN.liveDraftBanner) aparece também na vista de dados e os seus eventos são ligados, para o aluno os poder descartar", (await OF.pg.locator("#fakeBanner").count()) === 1 && (await OF.pg.evaluate(function(){ return window.__bannerWired; })) >= 1);
   await OF.pg.evaluate(function(){ var T = window.__T; T.RUN.go("import"); });
   await OF.pg.waitForSelector("#runOff");
@@ -976,7 +978,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   OF.ctl.dialogs.length = 0;
   await OF.pg.click("#runDelAll");
   await OF.pg.waitForSelector("#runEmpty");
-  ck("149. «Apagar todas as corridas» (que avisa que também apaga as corridas por enviar deste telemóvel) apaga tudo, limpa a fila local do aluno (RUN.queueClear) e a vista diz «Não tens corridas guardadas.»", OF.ctl.dialogs.some(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\. Também apaga as corridas por enviar que estão neste telemóvel\.$/.test(d); }) && (await tables(OF.pg)).runs.length === 0 && (await OF.pg.evaluate(function(){ return window.__qClear; })).join() === "ana" && /Não tens corridas guardadas\./.test(await tabText(OF.pg)) && (await OF.pg.locator("#runGoImport, #runGoManual").count()) === 0);
+  ck("149. «Apagar todas as corridas» (que avisa que também apaga as corridas por enviar deste telemóvel) apaga tudo, limpa a fila local do aluno (RUN.queueClear) e a vista diz «Não tens corridas guardadas.»", OF.ctl.dialogs.some(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\. Também apaga as corridas por enviar que estão neste telemóvel\.$/.test(d); }) && (await tables(OF.pg)).runs.length === 0 && (await OF.pg.evaluate(function(){ return (window.__qClear || []).join(); })) === "ana" && /Não tens corridas guardadas\./.test(await tabText(OF.pg)) && (await OF.pg.locator("#runGoImport, #runGoManual").count()) === 0);
   await OF.pg.click("#runOffBack");
   await OF.pg.waitForSelector("#corridaOff");
   ck("150. «Voltar» desliga a vista de dados (RUN.dataMode = false) e volta ao cartão «A Corrida ainda não está ativa para ti»", (await OF.pg.evaluate(function(){ return window.__T.RUN.dataMode; })) === false && (await OF.pg.locator("#runOff").count()) === 0 && (await OF.pg.locator("#runOffData").count()) === 1);
@@ -988,9 +990,9 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await OW.pg.click("#runOffData"); await OW.pg.waitForSelector(".run-row");
   await OW.pg.click("#runWithdraw");
   await OW.pg.waitForSelector("#runEmpty");
-  var lsOW = await OW.pg.evaluate(function(){ return {d: localStorage.getItem("evolve_run_draft_v1"), o: localStorage.getItem("evolve_runs_outbox_v1"), reset: window.__resetCalls || 0, cache: window.__cache.ana}; });
+  var lsOW = await OW.pg.evaluate(function(){ return {d: localStorage.getItem("evolve_run_draft_v1"), o: localStorage.getItem("evolve_runs_outbox_v1"), reset: window.__resetCalls || 0, cache: window.__cache.ana, qc: (window.__qClear || []).join()}; });
   var tOW = await tables(OW.pg);
-  ck("152. «Retirar consentimento» na vista de dados apaga o consentimento e todas as corridas, o rascunho, a fila (também as recusadas) e o recibo local, pára o gravador (RUN.reset), e fica na vista de dados", tOW.run_consents.length === 0 && tOW.runs.length === 0 && lsOW.d === null && lsOW.o === null && lsOW.reset >= 1 && lsOW.cache === undefined && (await OW.pg.locator("#runOff").count()) === 1);
+  ck("152. «Retirar consentimento» na vista de dados apaga o consentimento e todas as corridas, o rascunho, a fila (também as recusadas; RUN.queueClear) e o recibo local, pára o gravador (RUN.reset), e fica na vista de dados", tOW.run_consents.length === 0 && tOW.runs.length === 0 && lsOW.d === null && lsOW.o === null && lsOW.reset >= 1 && lsOW.qc === "ana" && lsOW.cache === undefined && (await OW.pg.locator("#runOff").count()) === 1);
   await OW.ctx.close();
 
   var OV = await open("professional", [row("ana", "Ana Silva", "off")], "treino.html");
@@ -1065,7 +1067,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await QC.pg.click("#runDelAll"); await QC.pg.waitForTimeout(300);
   ck("163. Se o servidor recusar «Apagar todas», nada se apaga e a fila local fica como estava", (await tables(QC.pg)).runs.length === 1 && (await QC.pg.evaluate(function(){ return window.__qClear || []; })).length === 0);
   await QC.pg.click("#runDelAll"); await QC.pg.waitForSelector("#runEmpty");
-  ck("164. «Apagar todas» (sem nada por enviar) pergunta só «Apagar todas as tuas corridas? Não dá para desfazer.» e limpa a fila do aluno uma vez", QC.ctl.dialogs.filter(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\.$/.test(d); }).length === 2 && (await QC.pg.evaluate(function(){ return window.__qClear; })).join() === "ana");
+  ck("164. «Apagar todas» (sem nada por enviar) pergunta só «Apagar todas as tuas corridas? Não dá para desfazer.» e limpa a fila do aluno uma vez", QC.ctl.dialogs.filter(function(d){ return /^Apagar todas as tuas corridas\? Não dá para desfazer\.$/.test(d); }).length === 2 && (await QC.pg.evaluate(function(){ return (window.__qClear || []).join(); })) === "ana");
   await QC.ctx.close();
 
   // (25) a lista não corta as corridas com mais de um ano; os totais continuam às 8 semanas
@@ -1113,10 +1115,73 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("170. Com o modo «importar» e sem gravação em curso a vista «live» volta ao início; com o gravador ocupado (RUN.liveBusy) o ecrã do gravador mantém-se acessível (não fica órfão atrás do início)", idleLive === 0 && (await LB.pg.locator("#fakeLive").count()) === 1 && (await LB.pg.evaluate(function(){ return window.__liveWired; })) >= 1);
   await LB.ctx.close();
 
+  // rede fraca (pedido pendurado): com o recibo não se espera os 15 s habituais
+  var RW = await student({consent: true, init: function(){
+    window.__cache = {ana: 1};
+    var cl = window.supabase.createClient(), of = cl.from.bind(cl);
+    cl.from = function(t){
+      var b = of(t);
+      if (t === "run_consents") b.then = function(res, rej){ if (b.op === "select" && window.__hang) return new Promise(function(){}).then(res, rej); return Promise.resolve(b.run()).then(res, rej); };
+      return b;
+    };
+  }});
+  await RW.pg.evaluate(function(){ window.__hang = true; });
+  var tHang = Date.now();
+  await RW.pg.click("#runGoManual");
+  await RW.pg.waitForSelector("#runManual", {timeout: 9000});
+  ck("171. Com rede fraca (o pedido do consentimento fica pendurado) e um recibo válido, «Registar à mão» abre ao fim de uns 5 s, não dos 15 s habituais", Date.now() - tHang < 9000 && (await RW.pg.locator("#runConsent").count()) === 0);
+  await RW.ctx.close();
+
+  // ---- contrato novo com o gravador REAL: só corre se corrida-live.js já o define (RUN.consentCache*, RUN.queueClear, RUN.liveBusy); fora da numeração porque pode não existir
+  var hasNewLive = /RUN\.consentCacheGet\s*=/.test(liveSrc) && /RUN\.consentCacheSet\s*=/.test(liveSrc) && /RUN\.consentCacheClear\s*=/.test(liveSrc) && /RUN\.queueClear\s*=/.test(liveSrc) && /RUN\.liveBusy\s*=/.test(liveSrc);
+  if (!hasNewLive) console.log("(ignorados R1 a R4: corrida-live.js ainda não define RUN.consentCacheGet/Set/Clear, RUN.queueClear e RUN.liveBusy)");
+  else {
+    var RR = await student({realLive: true, mode: "live", consent: true});
+    await RR.pg.click("#runGoImport"); await RR.pg.waitForSelector("#runFile", {state: "attached"});
+    var rcpt = await RR.pg.evaluate(function(){ try { return JSON.parse(localStorage.getItem("evolve_run_consent_v1")); } catch (e) { return null; } });
+    check.check("R1. [gravador real] Ler o consentimento no servidor deixa o recibo local (evolve_run_consent_v1: conta, aluno e versão 1)", !!rcpt && rcpt.uid === "user-1" && rcpt.studentId === "ana" && rcpt.version === 1);
+    await RR.pg.click("#runBack"); await RR.pg.waitForSelector("#runGoManual");
+    await RR.pg.evaluate(function(){ window.__T.RUN.uiReset(); });   // como numa abertura nova: a memória esqueceu-se de tudo, o recibo fica no telemóvel
+    await RR.ctx.setOffline(true);
+    await RR.pg.click("#runGoManual");
+    await RR.pg.waitForSelector("#runManual");
+    check.check("R2. [gravador real] Sem rede e sem nada na memória, o recibo local deixa começar a registar à mão", (await RR.pg.locator("#runConsent").count()) === 0);
+    await RR.ctx.setOffline(false);
+    await RR.pg.click("#runBack"); await RR.pg.waitForSelector("#runGoManual");
+    await RR.pg.evaluate(function(){ window.__fake.tables.run_consents.length = 0; });   // o consentimento foi retirado noutro aparelho
+    await RR.pg.click("#runGoManual"); await RR.pg.waitForSelector("#runConsent");
+    check.check("R3. [gravador real] Com rede, se o servidor já não tem o consentimento mostra-se o aviso e o recibo local é apagado", (await RR.pg.evaluate(function(){ return localStorage.getItem("evolve_run_consent_v1"); })) === null);
+    await RR.ctx.close();
+
+    var RQ = await student({realLive: true, mode: "import", runs: [runRow(3, {over: {id: "00000000-1111-4111-8111-00000000aaaa"}})]});
+    await RQ.pg.click("#runGoImport"); await RQ.pg.waitForSelector("#runFile", {state: "attached"});   // o consentimento lê-se com rede...
+    await RQ.pg.click("#runBack"); await RQ.pg.waitForSelector("#runGoImport");
+    await RQ.pg.evaluate(function(){ window.__fake.blockHost = true; });   // ...e depois a ligação cai: a corrida vai para a fila
+    await importFile(RQ, "a.gpx", gpxOf(P5K));
+    await RQ.pg.waitForSelector("#runSave"); await RQ.pg.check("#runSvShare");
+    await RQ.pg.click("#runSvSave"); await RQ.pg.waitForSelector("#runGoImport");
+    await RQ.pg.evaluate(function(){
+      var o = JSON.parse(localStorage.getItem("evolve_runs_outbox_v1") || "[]"), c = JSON.parse(JSON.stringify(o[0])), nid = window.__T.runUuid();
+      c.uid = "outra-conta"; c.id = nid; c.item.row.id = nid;   // uma entrada válida de OUTRA conta no mesmo telemóvel: nunca é do aluno atual
+      o.push(c); localStorage.setItem("evolve_runs_outbox_v1", JSON.stringify(o));
+      window.__fake.blockHost = false;
+    });
+    var qBefore = await RQ.pg.evaluate(function(){ return JSON.parse(localStorage.getItem("evolve_runs_outbox_v1") || "[]").filter(function(e){ return e.uid === "user-1"; }).length; });
+    await RQ.pg.locator("#runPrivacy summary").click();
+    RQ.ctl.dialogs.length = 0;
+    await RQ.pg.click("#runDelAll");
+    await RQ.pg.waitForSelector("#runEmpty");
+    var qAfter = await RQ.pg.evaluate(function(){ var o = JSON.parse(localStorage.getItem("evolve_runs_outbox_v1") || "[]"); return {mine: o.filter(function(e){ return e.uid === "user-1"; }).length, other: o.filter(function(e){ return e.uid === "outra-conta"; }).length}; });
+    await RQ.pg.evaluate(function(){ window.dispatchEvent(new Event("online")); });
+    await RQ.pg.waitForTimeout(600);
+    check.check("R4. [gravador real] «Apagar todas» apaga também a fila deste telemóvel (só a do aluno atual: a de outra conta fica) e a corrida por enviar não volta ao servidor depois", qBefore >= 1 && qAfter.mine === 0 && qAfter.other === 1 && (await tables(RQ.pg)).runs.length === 0);
+    await RQ.ctx.close();
+  }
+
   // ==================================================================================================================== L. rede, consola, erros
-  ck("171. Nenhum pedido saiu do site (nem mapas, nem terceiros): só 127.0.0.1, data: e blob:", external.length === 0 || (console.log(external), false));
-  ck("172. Nenhuma coordenada foi escrita na consola, nos avisos (toasts) nem em nenhum endereço pedido (URLs e parâmetros), em toda a sessão de testes", consoleMsgs.every(function(m){ return !NOCOORD.test(m); }) && allToasts.length >= 10 && allToasts.every(function(t){ return !NOCOORD.test(t); }) && allUrls.length > 50 && allUrls.every(function(u){ return !NOCOORD.test(decodeURIComponent(u)); }));
-  ck("173. Nenhum erro de JavaScript em nenhuma página", errors.length === 0 || (console.log(errors), false));
+  ck("172. Nenhum pedido saiu do site (nem mapas, nem terceiros): só 127.0.0.1, data: e blob:", external.length === 0 || (console.log(external), false));
+  ck("173. Nenhuma coordenada foi escrita na consola, nos avisos (toasts) nem em nenhum endereço pedido (URLs e parâmetros), em toda a sessão de testes", consoleMsgs.every(function(m){ return !NOCOORD.test(m); }) && allToasts.length >= 10 && allToasts.every(function(t){ return !NOCOORD.test(t); }) && allUrls.length > 50 && allUrls.every(function(u){ return !NOCOORD.test(decodeURIComponent(u)); }));
+  ck("174. Nenhum erro de JavaScript em nenhuma página", errors.length === 0 || (console.log(errors), false));
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 5).join(" | ")); process.exit(1); });

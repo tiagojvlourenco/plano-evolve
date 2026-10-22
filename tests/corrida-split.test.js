@@ -31,7 +31,7 @@ var dupSelf = uiNames.filter(function(x, i){ return uiNames.indexOf(x) !== i; })
 ck("3. Nenhum nome é declarado duas vezes dentro do ficheiro" + (dupSelf.length ? " (" + dupSelf.join(", ") + ")" : ""), dupSelf.length === 0);
 var clash = uiNames.filter(function(x){ return coreNames.indexOf(x) >= 0 || appNames.indexOf(x) >= 0 || gestaoNames.indexOf(x) >= 0 || liveNames.indexOf(x) >= 0; });
 ck("4. Nenhum nome de topo repete um do núcleo da Corrida, da app, da Gestão ou do gravador (num eval conjunto a 2.ª declaração apagava a 1.ª em silêncio)" + (clash.length ? " (" + clash.join(", ") + ")" : ""), clash.length === 0);
-ck("5. corrida.js não declara RUN (já existe em app.js) e não toca nas chaves de armazenamento do gravador (RUN_DRAFT_KEY / RUN_OUTBOX_KEY)", !/\b(var|function|let|const)\s+RUN\b/.test(code) && !/RUN_DRAFT_KEY|RUN_OUTBOX_KEY/.test(code));
+ck("5. corrida.js não declara RUN (já existe em app.js) e não toca nas chaves de armazenamento do gravador (RUN_DRAFT_KEY / RUN_OUTBOX_KEY / RUN_CONSENT_KEY: o recibo do consentimento pede-se por RUN.consentCacheGet/Set/Clear)", !/\b(var|function|let|const)\s+RUN\b/.test(code) && !/RUN_DRAFT_KEY|RUN_OUTBOX_KEY|RUN_CONSENT_KEY/.test(code));
 ck("6. Não menciona o diagnóstico de GPS antigo", !/gps-teste/i.test(ui));
 
 // ---- ES5 do projeto ----
@@ -67,12 +67,12 @@ ck("21. Apagar só se houver ligação e com confirmação (window.confirm), e o
 var defines = ["go", "screen", "wire", "proTab", "consentVersion", "ensureConsent", "submitRun", "saveFlow", "flush", "uiReset"];
 ck("22. corrida.js define em RUN: " + defines.join(", ") + " (e RUN.v, o estado da vista)", defines.every(function(k){ return new RegExp("^RUN\\." + k + " = ", "m").test(ui); }) && /^RUN\.v = \{name: "home"\};/m.test(ui));
 ck("23. NÃO define o que é do gravador (liveOpen, liveScreen, liveWire, liveDraftBanner, liveWireBanner, queueAdd, queuePending, gps) nem RUN.loaded", !/^\s*RUN\.(liveOpen|liveScreen|liveWire|liveDraftBanner|liveWireBanner|queueAdd|queuePending|queueFailed|gps|loaded)\s*=/m.test(code));
-var unguarded = ["liveOpen", "liveScreen", "liveWire", "liveDraftBanner", "liveWireBanner", "queueAdd", "reset"].filter(function(name){
+var unguarded = ["liveOpen", "liveScreen", "liveWire", "liveDraftBanner", "liveWireBanner", "liveBusy", "queueAdd", "queueClear", "queuePending", "queueFailed", "consentCacheGet", "consentCacheSet", "consentCacheClear", "reset"].filter(function(name){
   var re = new RegExp("RUN\\." + name + "\\(", "g"), m, bad = false;
   while ((m = re.exec(code))) if (code.slice(Math.max(0, m.index - 400), m.index).indexOf("typeof RUN." + name) < 0) bad = true;
   return bad;
 });
-ck("24. Só chama as funções do gravador atrás de «typeof RUN.x === \"function\»" + (unguarded.length ? " (sem guarda: " + unguarded.join(", ") + ")" : ""), unguarded.length === 0 && /typeof RUN\.liveOpen/.test(ui) && /typeof RUN\.queueAdd/.test(ui));
+ck("24. Só chama as funções do gravador atrás de «typeof RUN.x === \"function\»" + (unguarded.length ? " (sem guarda: " + unguarded.join(", ") + ")" : ""), unguarded.length === 0 && /typeof RUN\.liveOpen/.test(ui) && /typeof RUN\.queueAdd/.test(ui) && /typeof RUN\.queueClear/.test(ui) && /typeof RUN\.consentCacheGet/.test(ui) && /typeof RUN\.liveBusy/.test(ui));
 ck("25. A linha de música não aparece (nenhum playlistRowHtml, data-music, Spotify, Apple Music ou YouTube Music)", !/playlistRow|data-music|spotify|apple music|youtube music/i.test(ui));
 ck("26. Não usa nenhum nome privado do núcleo da Corrida (runI*) e só chama funções públicas dele", !/\brunI[A-Z]\w*\(/.test(code));
 var publicCore = coreNames.filter(function(x){ return /^run[A-Z]/.test(x) && !/^runI[A-Z]/.test(x); });
@@ -80,11 +80,12 @@ var called = (code.match(/\brun[A-Z]\w*\(/g) || []).map(function(x){ return x.sl
 var unknown = called.filter(function(x, i){ return called.indexOf(x) === i && publicCore.indexOf(x) < 0 && ["runPendingCount", "runWipeLocal"].indexOf(x) < 0; });
 ck("27. Todas as funções run* que corrida.js chama existem no núcleo (ou são runPendingCount/runWipeLocal da app)" + (unknown.length ? " (desconhecidas: " + unknown.join(", ") + ")" : ""), unknown.length === 0);
 ck("28. O ficheiro tem os textos fixos do desenho (Confirma antes de guardar, indisponível por agora, migração 0032, só o aluno pode, consentimento)", ["Confirma antes de guardar", "Corrida indisponível por agora. Volta a tentar mais tarde.", "Falta correr a migração 0032 no Supabase (docs/OPERACOES.md, secção 8u).", "Só o aluno pode importar ou registar corridas.", "Corridas: antes de começares", "Partilhar o percurso com o meu profissional", "Exportar GPX (percurso completo, só para ti)", "A localização é um dado sensível"].every(function(t){ return ui.indexOf(t) >= 0; }));
-ck("29. Português de Portugal nos textos (nada de «salvar», «você», «arquivo», «tela», «celular», «usuário», «baixar») e tratamento por «tu»", !/\b(salvar|você|voce|arquivo|tela|celular|usuário|baixar|clique)\b/i.test(ui));
+ck("29. Português de Portugal nos textos (nada de «salvar», «você», «arquivo», «tela», «celular», «usuário», «baixar») e tratamento por «tu»; «profissional», nunca «treinador»", !/\b(salvar|você|voce|arquivo|tela|celular|usuário|baixar|clique|treinador)\b/i.test(ui));
 ck("30. O ficheiro não deixa a escolha de partilhar por omissão: a forma inicial é share:false e trim 200", /share: false, trim: 200/.test(ui) && !/share: true/.test(ui));
 
 // ---- carregamento, service worker, CSS ----
-ck("31. O service worker guarda corrida.js (e o serve com rede primeiro, como o resto da app)", /"corrida\.js"/.test(sw) && /\(gestao\|corrida\|corrida-core\|corrida-live\|app\)\\\.\(js\|css\)/.test(sw));
+var swShell = sw.slice(sw.indexOf("var SHELL = ["), sw.indexOf("];", sw.indexOf("var SHELL = [")));
+ck("31. O service worker serve corrida.js com rede primeiro (como o resto da app) e não o põe no SHELL: a Corrida só se guarda quando alguém a usa", swShell.length > 20 && !/corrida/.test(swShell) && /\(gestao\|corrida\|corrida-core\|corrida-live\|app\)\\\.\(js\|css\)/.test(sw));
 ck("32. app.js só pede os ficheiros da Corrida dentro de loadCorrida (a lista é fixa: corrida-core.js, corrida.js, corrida-live.js, por esta ordem)", /\["corrida-core\.js", "corrida\.js", "corrida-live\.js"\]\.map\(function\(f\)\{ return fetch\(f/.test(app) && !/fetch\(\s*["']corrida/.test(app));
 // os blocos de CSS de corrida.js (cada um começa com «/* ---- Corrida (corrida.js)...» e acaba no cabeçalho seguinte; o gravador tem o seu)
 var cssParts = css.split(/\/\* ---- /).slice(1).filter(function(b){ return /^Corrida \(corrida\.js\)/.test(b); });
@@ -97,6 +98,25 @@ while ((dm = reDef.exec(rootBlock))) defined[dm[1]] = true;
 var usedVars = [], um, reUse = /var\(--([a-z0-9-]+)/g;
 while ((um = reUse.exec(cssBlock))) usedVars.push(um[1]);
 ck("34. O CSS só usa as cores e medidas já definidas em :root (nenhuma cor nova)" + (usedVars.filter(function(v){ return !defined[v]; }).length ? " (em falta: " + usedVars.filter(function(v){ return !defined[v]; }).join(", ") + ")" : ""), usedVars.length > 20 && usedVars.every(function(v){ return defined[v]; }));
+
+// ---- revisão: aviso único, vista de dados, lista sem limite de idade, aparo com folga ----
+function fnBody(src, name){
+  var i = src.indexOf("function " + name + "("), depth = 0, j, started = false;
+  if (i < 0) return "";
+  for (j = src.indexOf("{", i); j < src.length; j++){
+    if (src[j] === "{"){ depth++; started = true; } else if (src[j] === "}"){ depth--; if (started && depth === 0) break; }
+  }
+  return src.slice(i, j + 1);
+}
+var consentFn = fnBody(ui, "runUiConsentHtml"), privFn = fnBody(ui, "runUiPrivacyHtml");
+ck("35. O aviso de privacidade é UM só (RUN_UI_NOTICE, versão 1): o ecrã de consentimento e «Privacidade e dados» mostram os mesmos parágrafos, não há texto repetido à mão nem frases falsas («não ativa o GPS», «tu e o teu profissional») e RUN.consentVersion() é 1", /runUiNoticeHtml\(/.test(consentFn) && /runUiNoticeHtml\(/.test(privFn) && !/não ativa o GPS|Quem vê: tu e o teu profissional/.test(ui) && /^RUN\.consentVersion = function\(\)\{ return 1; \};/m.test(ui) && /GPS do telemóvel só liga depois de carregares em «Gravar com GPS» e em «Preparar GPS»/.test(ui));
+var offFn = fnBody(ui, "runUiOffHtml"), homeFn = fnBody(ui, "runUiHomeHtml");
+ck("36. A vista de dados (Corrida desligada) não tem nenhum botão de criar (importar, à mão, gravar, guia); o início delega nela quando o modo é «off»; e RUN.screen só deixa o detalhe e o início nesse modo", offFn.length > 100 && !/runGoImport|runGoManual|runGoLive|runGuide|runUiGuideHtml|runFile/.test(offFn) && /runOffBack/.test(offFn) && /^\s*if \(corridaModeOf\(sv\) === "off"\) return runUiOffHtml\(sv\);/m.test(homeFn) && /if \(off && v\.name !== "detail"\) RUN\.v = v = \{name: "home"\};/.test(ui));
+ck("37. O pedido da lista de corridas não tem limite de idade (sem .gte em started_at: só os totais das 8 semanas têm janela)", !/\.gte\(/.test(fnBody(ui, "runUiFetchRuns")) && (ui.match(/\.gte\(/g) || []).length === 1 && /RUN_UI_WEEKS/.test(ui));
+var prepCalls = ui.match(/runPrepareTrack\(prep\.segments, \{[^}]*\}\)/g) || [];
+ck("38. Todo o percurso partilhado passa por runPrepareTrack com o escalão escolhido e uma folga ao acaso (rnd: Math.random()); só a pré-visualização usa trimM 0", prepCalls.length === 2 && prepCalls.filter(function(c){ return /trimM: 0\}/.test(c); }).length === 1 && prepCalls.filter(function(c){ return /rnd: Math\.random\(\)/.test(c); }).length === 1);
+ck("39. O recibo local do consentimento só se lê quando a leitura no servidor falha por rede (k === \"net\"), e é apagado quando o servidor diz que já não vale (rls/consent) ou o aluno retira o consentimento", /known = runUiConsentFor === s\.id \|\| runUiReceiptGet\(s\.id\) === v/.test(ui) && /if \(k === "net" && known\) return \{ok: true, accepted: true\};/.test(ui) && /kind === "rls"\)\{ runUiConsentLost\(sid\)/.test(ui) && /kind === "consent"\)\{ runUiConsentLost\(sid\)/.test(ui) && /runUiReceiptClear\(s\.id\);\s*runUiQueueClear\(s\.id\);\s*runUiData = runUiNewData/.test(ui) && (ui.match(/runUiReceiptGet\(/g) || []).length === 2);
+ck("40. «Apagar todas» limpa a fila local do aluno só depois de o servidor confirmar (runUiQueueClear no after); retirar o consentimento também a limpa; apagar uma só corrida não a esvazia (apagaria corridas por enviar de outras)", /after: function\(\)\{\s*runUiQueueClear\(s\.id\);/.test(ui) && /runUiReceiptClear\(s\.id\);\s*runUiQueueClear\(s\.id\);/.test(ui) && (ui.match(/runUiQueueClear\(/g) || []).length === 3);
 
 // ---- browser: os ficheiros só se pedem ao abrir a Corrida ----
 var pw = null;
@@ -133,32 +153,32 @@ function row(id, name, mode){
   }
   var S = await open("student", [row("ana", "Ana Treina", "import")], "index.html");
   await S.pg.waitForSelector(".check-circle[data-circle]"); await S.pg.waitForTimeout(500);
-  ck("35. Na app EVOLVE (index.html) o aluno nunca pede os ficheiros da Corrida", S.log.length === 0);
+  ck("41. Na app EVOLVE (index.html) o aluno nunca pede os ficheiros da Corrida", S.log.length === 0);
   await S.ctx.close();
   var T = await open("student", [row("ana", "Ana Treina", "import")], "treino.html");
   await T.pg.waitForSelector("#startWorkout"); await T.pg.waitForTimeout(500);
-  ck("36. Na app EVOLVE Treino o aluno também não os pede enquanto não abre o separador «Corrida»", T.log.length === 0);
+  ck("42. Na app EVOLVE Treino o aluno também não os pede enquanto não abre o separador «Corrida»", T.log.length === 0);
   await T.pg.click('.tabbar [data-tab="corrida"]');
   await T.pg.waitForSelector("#runGoImport");
-  ck("37. Ao abrir «Corrida» pede o núcleo, os ecrãs e o gravador, uma vez cada, por esta ordem de avaliação, e mostra o ecrã", T.log.slice().sort().join() === "corrida-core.js,corrida-live.js,corrida.js" && T.log.length === 3);
+  ck("43. Ao abrir «Corrida» pede o núcleo, os ecrãs e o gravador, uma vez cada, por esta ordem de avaliação, e mostra o ecrã", T.log.slice().sort().join() === "corrida-core.js,corrida-live.js,corrida.js" && T.log.length === 3);
   await T.pg.click('.tabbar [data-tab="hoje"]'); await T.pg.waitForSelector("#startWorkout");
   await T.pg.click('.tabbar [data-tab="corrida"]'); await T.pg.waitForSelector("#runGoImport");
-  ck("38. Voltar ao separador não volta a pedi-los", T.log.length === 3);
+  ck("44. Voltar ao separador não volta a pedi-los", T.log.length === 3);
   await T.ctx.close();
   var O = await open("student", [row("ana", "Ana Treina", "off")], "treino.html");
   await O.pg.waitForSelector("#startWorkout");
   await O.pg.click('.tabbar [data-tab="corrida"]'); await O.pg.waitForSelector("#corridaOff"); await O.pg.waitForTimeout(300);
-  ck("39. Com a Corrida desligada pelo profissional o separador é só um cartão e nada é pedido", O.log.length === 0);
+  ck("45. Com a Corrida desligada pelo profissional o separador é só um cartão e nada é pedido", O.log.length === 0);
   await O.ctx.close();
   var P = await open("professional", [row("a", "Ana Silva", "import")], "index.html");
   await P.pg.waitForSelector(".student-row"); await P.pg.waitForTimeout(300);
   await P.pg.locator('[data-open="a"]').first().click(); await P.pg.waitForSelector("#proBack");
   await P.pg.click('.pro-nav-item[data-g="treino"]'); await P.pg.waitForTimeout(200);
-  ck("40. O profissional só pede os ficheiros ao abrir o chip «Corridas» da ficha (não ao abrir a ficha nem o grupo «Treino»)", P.log.length === 0);
+  ck("46. O profissional só pede os ficheiros ao abrir o chip «Corridas» da ficha (não ao abrir a ficha nem o grupo «Treino»)", P.log.length === 0);
   await P.pg.click('[data-sub="corridas"]'); await P.pg.waitForSelector(".run-modes");
-  ck("41. Abrir «Corridas» pede-os uma vez cada e mostra o separador do profissional", P.log.length === 3);
+  ck("47. Abrir «Corridas» pede-os uma vez cada e mostra o separador do profissional", P.log.length === 3);
   await P.ctx.close();
-  ck("42. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
+  ck("48. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 4).join(" | ")); process.exit(1); });

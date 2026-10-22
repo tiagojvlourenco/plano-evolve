@@ -60,9 +60,10 @@ function fakeGps(){
 }
 var PURE = ["runLiveDraftBuild", "runLiveDraftSerialize", "runLiveDraftParse", "runLiveDraftChoices", "runLiveTrackClean", "runLiveQueueItem", "runLiveQueueParse", "runLiveQueueAdd",
   "runLiveFixFromPosition", "runLiveSignalInfo", "runLiveWarnings", "runLDurWords", "runLWhen", "runFeedInit", "runFeed", "runStats", "runBuildInsert", "runPrepareTrack", "runUuid", "runHav", "runCheckRun",
-  "runLiveFlush", "runLiveScreen", "runLiveWire", "runLiveDraftBanner", "runLiveWireBanner", "RUN_LIVE_CFG", "RUN_CFG"];
+  "runLiveFlush", "runLiveScreen", "runLiveWire", "runLiveDraftBanner", "runLiveWireBanner", "RUN_LIVE_CFG", "RUN_CFG",
+  "runLiveClampT", "runLiveDraftPeek", "runLiveDraftOwner", "runLiveCutOffer", "runCutAtLastGap", "runLInst"];
 var PARAMS = ["RUN", "currentAuthUserId", "authRole", "escapeHtml", "showToast", "openModal", "closeModal", "corridaModeOf", "sb", "sbReady", "outboxErrorIsTransient", "withTimeout", "findStudent", "state", "APP_MODE",
-  "RUN_DRAFT_KEY", "RUN_OUTBOX_KEY", "window", "document", "navigator", "Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "console"];
+  "RUN_DRAFT_KEY", "RUN_OUTBOX_KEY", "RUN_CONSENT_KEY", "window", "document", "navigator", "Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "console"];
 var BUILD = new Function(PARAMS.join(","), "\"use strict\";\n" + coreSrc + "\n" + liveSrc + "\nreturn {" + PURE.map(function(x){ return x + ": " + x; }).join(", ") +
   ", setUid: function(v){ currentAuthUserId = v; }, setMode: function(v){ authRole = v; }, setSb: function(v){ sb = v; }, setSbReady: function(v){ sbReady = v; }};");
 
@@ -134,7 +135,7 @@ function makeBox(o){
       if (!st || st >= 500 || st === 401 || st === 408 || st === 429) return true;
       return /failed to fetch|network|timeout|load failed|jwt/i.test(msg);
     }, function(p){ return Promise.resolve(p); }, function(id){ return box.student; }, {alunoStudentId: "s1", alunoTab: "corrida"}, "treino",
-    "evolve_run_draft_v1", "evolve_runs_outbox_v1", win, doc, nav, FD, fSetTimeout, fClear, fSetInterval, fClear,
+    "evolve_run_draft_v1", "evolve_runs_outbox_v1", "evolve_run_consent_v1", win, doc, nav, FD, fSetTimeout, fClear, fSetInterval, fClear,
     {log: function(){ box.consoleCalls.push([].slice.call(arguments).join(" ")); }, warn: function(){ box.consoleCalls.push([].slice.call(arguments).join(" ")); }, error: function(){ box.consoleCalls.push([].slice.call(arguments).join(" ")); }});
   box.api = api; box.doc = doc; box.nav = nav;
   box.defaultGps = RUN.gps;   // o adaptador padrão que o ficheiro cria ao carregar
@@ -356,8 +357,9 @@ ck("53. Retomar: o relógio não anda durante a pausa (30 s de pausa não contam
 // terminar
 S.click("runLiveEnd");
 ck("54. «Terminar» pede confirmação («Terminar a corrida?», «Continuar a correr» / «Terminar») e não termina sozinho", S.modals.length === 1 && /Terminar a corrida\?/.test(S.sheet.html) && !!S.sheet.els.runLiveContinue && !!S.sheet.els.runLiveEndOk && S.live.phase === "rec");
+var stopsAtAsk = S.gps.stops;
 S.sheet.els.runLiveContinue.click();
-ck("55. «Continuar a correr» fecha a pergunta e a gravação segue", S.live.phase === "rec" && S.gps.stops === 0);
+ck("55. «Continuar a correr» fecha a pergunta e a gravação segue (sem parar o GPS)", S.live.phase === "rec" && S.gps.stops === stopsAtAsk);
 S.click("runLiveEnd");
 var gpsStopsBefore = S.gps.stops;
 S.sheet.els.runLiveEndOk.click();
@@ -542,7 +544,7 @@ ck("92. Wake Lock: pedido uma vez; ao voltar visível com o pedido ainda ativo n
 K.wl.sentinels[0].release();
 K.setHidden(true); K.setHidden(false);
 await mt();
-ck("93. Se o sistema o libertou, ao voltar visível pede-se de novo (uma vez, sem duplicados)", K.wl.requests === 2);
+ck("93. Se o sistema o libertou (com a página visível) pede-se de novo logo (uma vez); ao voltar de oculta não há pedidos duplicados", K.wl.requests === 2);
 K.setHidden(true); K.setHidden(false); K.setHidden(true); K.setHidden(false);
 await mt();
 ck("94. Várias idas e voltas sem perder o bloqueio não geram pedidos novos", K.wl.requests === 2);
@@ -571,7 +573,7 @@ ck("99. Quando a escrita volta a funcionar o aviso desaparece sozinho", R1.live.
 var R2 = makeBox();
 R2.startRun(); for (fi = 2; fi <= 6; fi++) R2.emit(fi);
 var cfgR2 = R2.api.RUN_LIVE_CFG, keepMax = cfgR2.maxDraftPoints; cfgR2.maxDraftPoints = 1;
-R2.adv(11000); R2.emit(20);
+R2.adv(11000); R2.emit(20); R2.adv(11000); R2.emit(32);
 ck("100. Acima do teto de pontos do rascunho deixa de escrever e avisa (a gravação em memória continua completa)", R2.live.draftOk === false && R2.live.st.nPts > 1);
 cfgR2.maxDraftPoints = keepMax;
 
@@ -643,6 +645,7 @@ ck("113. Se a conta mudou sem sair, a gravação de outra conta que ainda está 
 var P1 = makeBox();
 P1.startRun(); for (fi = 2; fi <= 40; fi++) P1.emit(fi);
 P1.setHidden(true);      // como num telemóvel real: ao sair da página o rascunho escreve-se à força
+P1.pagehide();           // ...e ao recarregar a página despede-se (rel), para a nova poder retomá-lo logo
 var savedDraft = P1.store.getItem("evolve_run_draft_v1"), distP1 = Math.round(P1.live.st.distM);
 function reopen(o){
   var store = memStore({"evolve_run_draft_v1": savedDraft});
@@ -670,7 +673,8 @@ ck("117. O 1.º ponto a seguir à retoma abre um segmento «gap» (a lacuna entr
 var Q2 = reopen();
 bannerRoot(Q2);
 Q2.bannerClick("save");
-ck("118. «Guardar o que há» segue para RUN.saveFlow com os pontos do rascunho (source live, stats dos pontos guardados) sem arrancar o GPS", Q2.saveFlows.length === 1 && Q2.saveFlows[0].prep.source === "live" && Q2.saveFlows[0].prep.stats.distM === distP1 && Q2.gps.starts === 0 && Q2.live.phase === "end" && Q2.store.getItem("evolve_run_draft_v1") === savedDraft);
+ck("118. «Guardar o que há» segue para RUN.saveFlow com os pontos do rascunho (source live, stats dos pontos guardados) sem arrancar o GPS; o rascunho continua guardado, agora desta janela e marcado como terminado", Q2.saveFlows.length === 1 && Q2.saveFlows[0].prep.source === "live" && Q2.saveFlows[0].prep.stats.distM === distP1 && Q2.gps.starts === 0 && Q2.live.phase === "end" &&
+  draftOf(Q2).iid === Q2.api.runLInst && draftOf(Q2).ended === true && draftOf(Q2).st.nPts === JSON.parse(savedDraft).st.nPts);
 var Q3 = reopen();
 bannerRoot(Q3);
 Q3.confirmAnswer = false;
@@ -737,7 +741,7 @@ ck("135. Nenhuma coordenada no HTML dos ecrãs de gravação, resumo e banner", 
 var net = function(){ return {error: {message: "TypeError: Failed to fetch", code: ""}, status: 0}; };
 function seedBox(entries, o){
   var q = []; entries.forEach(function(e){ q = P.runLiveQueueAdd(q, e.item, e.uid || U1, e.ts || T0).list; });
-  entries.forEach(function(e, i){ if (e.state) q[i].state = e.state; });
+  entries.forEach(function(e, i){ if (e.state) { q[i].state = e.state; if (e.state === "failed") q[i].fat = e.fat != null ? e.fat : T0; } if (e.code) q[i].code = e.code; });
   return makeBox(Object.assign({store: memStore({"evolve_runs_outbox_v1": JSON.stringify(q)})}, o || {}));
 }
 function itemOf(id, withTrack){ return {row: rowOf(id), track: withTrack ? trackOf() : null}; }
@@ -819,7 +823,10 @@ function queueOf(box){ return JSON.parse(box.store.getItem("evolve_runs_outbox_v
   }
   ck("154. Cada código permanente (CHECK, chave estrangeira, tabela em falta PGRST205/42P01, desconhecido) dá a sua explicação em PT-PT e nunca o texto do servidor", okCodes);
   var fAgain = await Pm.RUN.flush();
-  ck("155. Uma corrida marcada «failed» não se volta a enviar sozinha", fAgain.sent === 0 && Pm.sbCalls.filter(function(c){ return c.row.id === RID1; }).length === 1);
+  var callsRid1 = function(b){ return b.sbCalls.filter(function(c){ return c.table === "runs" && c.row.id === RID1; }).length; };
+  var c1 = callsRid1(Pm);
+  await Pm.RUN.flush(); await Pm.RUN.flush();
+  ck("155. Uma corrida recusada por uma causa que pode passar (42501) volta a tentar-se UMA vez por sessão, sozinha (2 pedidos no total); depois não se volta a enviar sozinha", fAgain.sent === 0 && c1 === 2 && callsRid1(Pm) === 2 && queueOf(Pm).length === 1 && queueOf(Pm)[0].state === "failed");
   var Tl = seedBox([{item: itemOf(RID1, true)}]);
   Tl.sbBehavior.run_tracks = function(){ return {error: {code: "23514", message: "m"}, status: 400}; };
   var ftl = await Tl.RUN.flush();
@@ -868,6 +875,384 @@ function queueOf(box){ return JSON.parse(box.store.getItem("evolve_runs_outbox_v
   var Mw = makeBox();
   var threwWire = false; try { Mw.RUN.liveWire(Mw.student, {querySelector: function(){ return null; }}); Mw.RUN.liveWire(Mw.student, null); } catch (e) { threwWire = true; }
   ck("168. liveWire com um ecrã sem os elementos esperados (ou sem ecrã) não rebenta", !threwWire);
+
+
+  // ================================================================ revisão: relógio dos fixes (achados 7 e 19)
+  var CL = P.runLiveClampT;
+  ck("169. Hora de um fix limitada ao relógio: até 2 s à frente passa; à frente por mais (até 5 min) fica a 2 s do relógio (uma posição não é do futuro); a mais de 5 min para qualquer lado usa a hora do relógio; atrasada até 5 min mantém-se; lixo usa o relógio",
+    CL(T0 + 1000, T0) === T0 + 1000 && CL(T0 + 30000, T0) === T0 + 2000 && CL(T0 + 4 * 60000, T0) === T0 + 2000 && CL(T0 + 86400000, T0) === T0 && CL(T0 - 10 * 60000, T0) === T0 && CL(T0 - 4 * 60000, T0) === T0 - 240000 &&
+    CL(NaN, T0) === T0 && CL(null, T0) === T0 && CL(T0, NaN) === T0 && CL(NaN, NaN) === null);
+  function runWithBadFix(badT){
+    var b = makeBox();
+    b.startRun();
+    for (fi = 2; fi <= 20; fi++) b.emit(fi);
+    if (badT != null) { b.clock.now = T0 + 21000; b.gps.onFix({lat: LAT0 + 3 * 21 / M_LAT, lon: LON0, acc: 5, t: badT(b.clock.now), speed: null}); }
+    for (fi = badT != null ? 22 : 21; fi <= 60; fi++) b.emit(fi);
+    return b;
+  }
+  var clean = runWithBadFix(null), poisoned = runWithBadFix(function(now){ return now + 86400000; }), early = runWithBadFix(function(now){ return now + 3 * 60000; }), near = runWithBadFix(function(now){ return now + 12000; });
+  ck("170. UM fix com a hora adiantada (12 s, 3 min ou 1 dia) não envenena a gravação: a distância fica perto da de uma corrida sem esse fix e só se perdem 2 posições por «hora repetida» (os 12 s, dentro da lacuna de 15 s, o núcleo sozinho não os apanha: recusava-se o que vinha a seguir durante 12 s)",
+    clean.live.st.distM > 150 && poisoned.live.st.distM > 0.9 * clean.live.st.distM && early.live.st.distM > 0.9 * clean.live.st.distM && near.live.st.distM > 0.9 * clean.live.st.distM &&
+    poisoned.live.st.rej.time <= 3 && early.live.st.rej.time <= 3 && near.live.st.rej.time <= 3 && poisoned.live.badRun === 0 && near.live.badRun === 0);
+  var oldFix = makeBox();
+  oldFix.startRun(); oldFix.emit(2); oldFix.emit(3);
+  var nBeforeOld = oldFix.live.st.nPts;
+  oldFix.gps.onFix({lat: LAT0 + 0.002, lon: LON0, acc: 5, t: oldFix.clock.now - 10 * 60000, speed: null});
+  ck("171. Uma posição de cache de há 10 min (anterior ao toque) continua a não contar (não se lhe dá a hora do relógio) e fica contada como «posição que não serve»", oldFix.live.st.nPts === nBeforeOld && oldFix.live.badRun === 1);
+  var BR = makeBox();
+  BR.startRun(); for (fi = 2; fi <= 10; fi++) BR.emit(fi);
+  var lastOk = BR.live.st.maxT, brHtmlBefore = BR.el("runLiveSignal").textContent;
+  for (var bi2 = 0; bi2 < 5; bi2++) BR.gps.onFix({lat: LAT0 + 0.0003, lon: LON0, acc: 5, t: lastOk, speed: null});   // a hora não cresce: «time»
+  var brSig = BR.el("runLiveSignal").textContent, brWrapHidden = BR.el("runLiveRestartWrap").hiddenClass;
+  BR.emit(11);
+  ck("172. Cinco posições seguidas que o registo não aproveita (hora que não cresce) deixam de dizer «Sinal bom»: o ecrã avisa («A receber posições que o registo não consegue usar») e mostra «Reiniciar GPS»; uma posição boa limpa o aviso",
+    /Sinal bom/.test(brHtmlBefore) && /A receber posições que o registo não consegue usar/.test(brSig) && brWrapHidden === false && BR.live.badRun === 0 && /Sinal bom/.test(BR.el("runLiveSignal").textContent) && BR.el("runLiveRestartWrap").hiddenClass === true);
+  ck("173. runLiveSignalInfo: com badRun >= 5 diz que não consegue usar as posições (kind none); com 4 não; a pausa e a permissão recusada têm prioridade",
+    P.runLiveSignalInfo({hasCb: true, sinceCbS: 1, acc: 5, accMax: 30, badRun: 5}).kind === "none" && /não consegue usar/.test(P.runLiveSignalInfo({hasCb: true, sinceCbS: 1, acc: 5, accMax: 30, badRun: 9}).text) &&
+    P.runLiveSignalInfo({hasCb: true, sinceCbS: 1, acc: 5, accMax: 30, badRun: 4}).kind === "good" && P.runLiveSignalInfo({paused: true, badRun: 9, hasCb: true, sinceCbS: 1, accMax: 30}).kind === "paused" &&
+    P.runLiveSignalInfo({err: "denied", badRun: 9}).text === "A localização foi recusada.");
+
+  // ================================================================ revisão: recibo local do consentimento (achados 11, 16 e 21)
+  var CC = makeBox(), ccKey = "evolve_run_consent_v1";
+  ck("174. Recibo do consentimento (RUN.consentCacheSet/Get/Clear): guarda {uid, studentId, version, at} em evolve_run_consent_v1 e devolve a versão só para esse aluno e essa conta",
+    CC.RUN.consentCacheGet("s1") === null && CC.RUN.consentCacheSet("s1", 1) === true && CC.RUN.consentCacheGet("s1") === 1 && (function(){ var r = JSON.parse(CC.store.getItem(ccKey)); return r.uid === U1 && r.studentId === "s1" && r.version === 1 && typeof r.at === "number"; })() &&
+    CC.RUN.consentCacheGet("s2") === null && CC.RUN.consentCacheGet("") === null && CC.RUN.consentCacheGet(null) === null);
+  CC.api.setUid(U2);
+  ck("175. O recibo de outra conta nunca vale (nem sem sessão); com a conta de volta vale outra vez", CC.RUN.consentCacheGet("s1") === null && (CC.api.setUid(null), CC.RUN.consentCacheGet("s1") === null) && (CC.api.setUid(U1), CC.RUN.consentCacheGet("s1") === 1));
+  ck("176. Versões inválidas (0, negativa, fracionária, texto, NaN) nem se guardam; sem sessão não se guarda", CC.RUN.consentCacheSet("s1", 0) === false && CC.RUN.consentCacheSet("s1", -1) === false && CC.RUN.consentCacheSet("s1", 1.5) === false && CC.RUN.consentCacheSet("s1", "1") === false &&
+    CC.RUN.consentCacheSet("s1", NaN) === false && CC.RUN.consentCacheSet("", 1) === false && CC.RUN.consentCacheGet("s1") === 1 && (CC.api.setUid(null), CC.RUN.consentCacheSet("s1", 1) === false) && (CC.api.setUid(U1), true));
+  CC.RUN.consentCacheClear("s2");
+  var keptOther = CC.RUN.consentCacheGet("s1");
+  CC.RUN.consentCacheClear("s1");
+  ck("177. Limpar o recibo de OUTRO aluno não toca neste; limpar o deste apaga-o", keptOther === 1 && CC.RUN.consentCacheGet("s1") === null && CC.store.getItem(ccKey) === null);
+  var CJ = makeBox({store: memStore({"evolve_run_consent_v1": "{isto não é json"})}), cjThrew = false, cj = null;
+  try { cj = CJ.RUN.consentCacheGet("s1"); CJ.RUN.consentCacheClear("s1"); } catch (e) { cjThrew = true; }
+  var CK = makeBox({store: memStore({"evolve_run_consent_v1": JSON.stringify([1, 2])})}), CT = makeBox();
+  CT.store.getItem = function(){ throw new Error("SecurityError"); };
+  var ctVal = "x"; try { ctVal = CT.RUN.consentCacheGet("s1"); } catch (e) { ctVal = "lançou"; }
+  var CF = makeBox(); CF.store.failSet = true;
+  ck("178. JSON mau ou forma errada dá null (sem lançar) e o recibo estragado apaga-se ao limpar; localStorage que lança na leitura dá null; na escrita dá false", !cjThrew && cj === null && CJ.store.getItem(ccKey) === null && CK.RUN.consentCacheGet("s1") === null && ctVal === null && CF.RUN.consentCacheSet("s1", 1) === false);
+  var CR = makeBox();
+  CR.RUN.consentCacheSet("s1", 1); CR.startRun(); CR.RUN.reset();
+  ck("179. RUN.reset (sair da conta) não mexe no recibo (quem o apaga é runWipeLocal, em app.js); o recibo não leva coordenadas nem o nome do aluno", CR.RUN.consentCacheGet("s1") === 1 && !/38\.7|-9\.1|Ana/.test(CR.store.getItem(ccKey)));
+
+  // ================================================================ revisão: fila — recusadas (achados 14, 46 e 49)
+  var AR = seedBox([{item: itemOf(RID1, true), state: "failed", code: "PGRST205"}]);
+  var far = await AR.RUN.flush();
+  ck("180. Uma corrida recusada de vez por «tabela em falta» (PGRST205, logo a seguir à migração) volta a tentar-se sozinha uma vez na sessão seguinte: se a causa passou, é enviada e sai da fila", far.sent === 1 && queueOf(AR).length === 0 && AR.sbCalls.map(function(c){ return c.table; }).join() === "runs,run_tracks");
+  var A42 = seedBox([{item: itemOf(RID1, false), state: "failed", code: "42501"}]);
+  A42.sbBehavior.runs = function(){ return {error: {code: "42501", message: "rls"}, status: 403}; };
+  await A42.RUN.flush(); await A42.RUN.flush(); await A42.RUN.flush();
+  var n42 = A42.sbCalls.length;
+  var bn = bannerRoot(A42);
+  ck("181. Se continua recusada, a retentativa automática é uma só por sessão (não há ciclo); o banner passa a oferecer «Tentar outra vez» e «Apagar»", n42 === 1 && /data-act="reopen"/.test(bn) && /data-act="del"/.test(bn) && /Tentar outra vez/.test(bn) && queueOf(A42)[0].state === "failed" && queueOf(A42)[0].code === "42501");
+  A42.bannerClick("reopen", RID1);
+  await new Promise(function(r){ setTimeout(r, 20); });
+  ck("182. «Tentar outra vez» numa recusada volta a pô-la na fila e envia-a (aqui foi recusada de novo e o aluno vê-a outra vez)", A42.sbCalls.length === 2 && queueOf(A42)[0].state === "failed");
+  A42.sbBehavior.runs = null; delete A42.sbBehavior.runs;
+  A42.bannerClick("reopen", RID1);
+  await new Promise(function(r){ setTimeout(r, 20); });
+  ck("183. Com a causa resolvida, «Tentar outra vez» envia a corrida e a fila fica vazia", queueOf(A42).length === 0 && A42.sbCalls.length === 3);
+  var T23 = seedBox([{item: itemOf(RID1, false), state: "failed", code: "23514"}]);
+  T23.sbBehavior.runs = function(){ return {error: {code: "23514"}, status: 400}; };
+  await T23.RUN.flush();
+  var b23 = T23.RUN.liveDraftBanner(T23.student);
+  ck("184. Uma recusa por valores fora do permitido (23514, 22xxx) é terminal: nunca se reenvia sozinha e o banner só oferece «Apagar»; e o texto diz que fica no máximo 30 dias", T23.sbCalls.length === 0 && !/data-act="reopen"/.test(b23) && /data-act="del"/.test(b23) && /no máximo 30 dias/.test(b23));
+  var U9 = seedBox([{item: itemOf(RID1, false), state: "failed", code: "99999"}]);
+  ck("185. Um código desconhecido também deixa tentar outra vez (o aluno decide), mas não se reenvia sozinho", /data-act="reopen"/.test(U9.RUN.liveDraftBanner(U9.student)) && (await U9.RUN.flush(), U9.sbCalls.length === 0));
+  var EX = seedBox([{item: itemOf(RID1, true), state: "failed", code: "23514", fat: T0 - 31 * 86400000}, {item: itemOf(RID2, false), state: "failed", code: "23514", fat: T0 - 29 * 86400000}, {item: itemOf(RID3, false), state: "failed", code: "23514", fat: 0}]);
+  await EX.RUN.flush();
+  var qex = queueOf(EX);
+  ck("186. As recusadas expiram ao fim de 30 dias (o percurso partilhado não fica para sempre no telemóvel): a de 31 dias sai e avisa; a de 29 fica; uma antiga sem data passa a contar a partir de agora", qex.length === 2 && qex.map(function(e){ return e.id; }).join() === RID2 + "," + RID3 && qex[1].fat === T0 && EX.toasts.some(function(t){ return /Apaguei deste telemóvel uma corrida recusada há mais de 30 dias/.test(t); }));
+  var PD = seedBox([{item: itemOf(RID1, true), ts: T0}, {item: itemOf(RID2, false), ts: T0 + 1}]);
+  PD.onLine = false;
+  var pdBan = bannerRoot(PD);
+  await mt();
+  ck("187. Cada corrida por enviar tem o seu «Apagar» (o aluno pode desistir de partilhar o percurso antes de ele sair do telemóvel)", (pdBan.match(/data-act="delpend"/g) || []).length === 2 && /Tentar enviar agora/.test(pdBan));
+  PD.confirmAnswer = false; PD.bannerClick("delpend", RID1);
+  var keptPd = queueOf(PD).length;
+  PD.confirmAnswer = true; PD.bannerClick("delpend", RID1);
+  ck("188. «Apagar» uma por enviar pergunta primeiro; só com confirmação sai da fila (a outra fica); com o servidor não chegou nada", keptPd === 2 && queueOf(PD).length === 1 && queueOf(PD)[0].id === RID2 && /ainda não foi enviada/.test(PD.dialogs[1]) && PD.sbCalls.length === 0);
+  var PF = seedBox([{item: itemOf(RID1, false)}, {item: itemOf(RID2, false)}]);
+  PF.sbBehavior.runs = function(){ return new Promise(function(){}) === null ? null : {error: null, status: 201}; };
+  bannerRoot(PF);
+  var pfFlush = PF.RUN.flush();
+  PF.bannerClick("delpend", RID2);
+  ck("189. Enquanto a fila está a ser enviada não se apaga nada (aviso «A enviar neste momento»): o pedido em curso não pode ser desfeito", queueOf(PF).length >= 1 && PF.toasts.some(function(t){ return /A enviar neste momento/.test(t); }) && PF.dialogs.length === 0);
+  await pfFlush;
+  // envio da fila sem ciclo infinito se a escrita local falhar
+  var LF = seedBox([{item: itemOf(RID1, false), ts: T0}, {item: itemOf(RID2, false), ts: T0 + 1}]);
+  var lfCalls = 0;
+  LF.sbBehavior.runs = function(){ lfCalls++; if (lfCalls > 40) return {error: {message: "Failed to fetch"}, status: 0}; return {error: null, status: 201}; };
+  LF.store.failSet = true;
+  var flf = await LF.RUN.flush();
+  ck("190. Se a fila local não se deixa escrever depois de enviar, o envio pára (um pedido por corrida, sem ciclo), diz-no ao aluno e devolve reason «local» (antes: centenas de pedidos por segundo)", lfCalls === 1 && flf.reason === "local" && flf.sent === 0 && LF.toasts.some(function(t){ return /Não consegui atualizar as corridas por enviar/.test(t); }));
+  var LM = seedBox([{item: itemOf(RID1, false)}, {item: itemOf(RID2, false)}]);
+  var lmCalls = 0;
+  LM.sbBehavior.runs = function(){ lmCalls++; if (lmCalls > 40) return {error: {message: "Failed to fetch"}, status: 0}; return {error: {code: "42501"}, status: 403}; };
+  LM.store.failSet = true;
+  var flm = await LM.RUN.flush();
+  ck("191. O mesmo ao marcar uma recusada (a escrita local falha): para sem ciclo", lmCalls === 1 && flm.reason === "local");
+  var QC = seedBox([{item: itemOf(RID1, false)}, {item: itemOf(RID2, true), state: "failed"}, {item: itemOf(RID3, false), uid: U2}]);
+  var cleared = QC.RUN.queueClear("s1"), left = JSON.parse(QC.store.getItem("evolve_runs_outbox_v1"));
+  ck("192. RUN.queueClear(studentId) apaga as corridas por enviar e as recusadas desse aluno (da conta atual) e devolve quantas; as de outra conta ficam", cleared === 2 && left.length === 1 && left[0].uid === U2 && QC.RUN.queuePending() === 0 && QC.RUN.queueClear("s1") === 0 && QC.RUN.queueClear("outro") === 0);
+
+  // ================================================================ revisão: «Terminar no último ponto bom» (achado 15)
+  function forgotState(gapS){
+    var st = P.runFeedInit(), k;
+    for (k = 0; k <= 300; k++) P.runFeed(st, {lat: LAT0 + 3 * k * 6 / M_LAT, lon: LON0, acc: 5, t: T0 + k * 6000});
+    P.runFeed(st, {lat: LAT0 + 3 * 300 * 6 / M_LAT, lon: LON0, acc: 5, t: T0 + 300 * 6000 + gapS * 1000});
+    return st;
+  }
+  var fg5 = forgotState(5 * 3600), fg30 = forgotState(30 * 3600), fgShort = forgotState(120);
+  var offer5 = P.runLiveCutOffer(fg5, 0, T0 + 40 * 3600000), offer30 = P.runLiveCutOffer(fg30, 0, T0 + 40 * 3600000);
+  ck("193. runLiveCutOffer: com uma lacuna final de 5 h oferece cortar (o que fica é a corrida de ~30 min e ~5,4 km; diz quanto se perde); com 2 min não oferece; sem pontos válidos não oferece",
+    offer5 && offer5.kept.durationS >= 1790 && offer5.kept.durationS <= 1810 && offer5.kept.distM > 5000 && offer5.cutS > 17000 && offer5.cutPoints === 1 && P.runLiveCutOffer(fgShort, 0, T0 + 40 * 3600000) === null && P.runLiveCutOffer(null, 0, T0) === null && P.runLiveCutOffer(P.runFeedInit(), 0, T0) === null);
+  function draftInfoOf(st, ended){ return P.runLiveDraftParse(P.runLiveDraftSerialize(P.runLiveDraftBuild(st, {uid: U1, ended: ended === true, nowMs: T0 + 300 * 6000 + 60000, iid: "x", rel: true})).text, U1); }
+  var ch30 = P.runLiveDraftChoices(draftInfoOf(fg30, true), T0 + 31 * 3600000 + 5000000, "live", "z"), ch5 = P.runLiveDraftChoices(draftInfoOf(fg5, true), T0 + 6 * 3600000, "live", "z");
+  ck("194. Num rascunho com uma lacuna final de 30 h (inguardável acima de 24 h) «Descartar» deixa de ser a única opção: oferece «terminar no último ponto bom»; com 5 h (guardável) oferece as duas", !ch30.save && !!ch30.cut && ch30.discard && ch5.save && !!ch5.cut && ch30.cut.kept.distM > 5000);
+  ck("195. Em modo «import»/«off» (ou com outra janela a gravar) não se oferece cortar", P.runLiveDraftChoices(draftInfoOf(fg30, true), T0 + 31 * 3600000 + 5000000, "import", "z").cut === null && P.runLiveDraftChoices(draftInfoOf(fg30, true), T0 + 31 * 3600000 + 5000000, "off", "z").cut === null);
+  function forgotBox(gapS){
+    var b = makeBox();
+    b.startRun();
+    for (var k = 2; k <= 300; k++) b.emit(k * 6, 3);
+    b.setNow(T0 + 300 * 6000 + gapS * 1000);
+    b.gps.onFix({lat: LAT0 + 3 * 300 * 6 / M_LAT, lon: LON0, acc: 5, t: b.clock.now, speed: null});
+    b.click("runLiveEnd"); b.sheet.els.runLiveEndOk.click();
+    return b;
+  }
+  var FG = forgotBox(5 * 3600), fgHtml = FG.cur.html;
+  ck("196. Esqueceu-se de terminar (lacuna final de 5 h): o resumo mostra o tempo inflado, explica o que perde e o que fica («Terminar no último ponto bom») e mantém «Rever e guardar» e «Descartar»", /id="runLiveCut"/.test(fgHtml) && /id="runLiveReview"/.test(fgHtml) && /id="runLiveDiscard"/.test(fgHtml) && /Há uma lacuna grande no fim da corrida/.test(fgHtml) && /em vez de/.test(fgHtml) && /5:\d\d:\d\d/.test(fgHtml));
+  FG.click("runLiveCut");
+  var fgStats = P.runStats(FG.live.st.segs, null, "live");
+  ck("197. «Terminar no último ponto bom» corta a lacuna: o resumo passa a ~30 min e ~5,4 km, diz o que se tirou, deixa de oferecer o corte e o rascunho fica atualizado (terminado)", fgStats.durationS >= 1790 && fgStats.durationS <= 1810 && fgStats.distM > 5000 && FG.live.phase === "end" && /Terminaste no último ponto bom/.test(FG.cur.html) && !FG.el("runLiveCut") && draftOf(FG).ended === true && draftOf(FG).st.nPts === FG.live.st.nPts && !/5:\d\d:\d\d/.test(FG.cur.html));
+  FG.click("runLiveReview");
+  ck("198. Rever e guardar depois de cortar leva a corrida cortada (duração ~30 min, 1 só segmento, sem lacuna) ao ecrã de guardar", FG.saveFlows.length === 1 && FG.saveFlows[0].prep.stats.durationS >= 1790 && FG.saveFlows[0].prep.stats.durationS <= 1810 && FG.saveFlows[0].prep.stats.gaps === 0 && FG.saveFlows[0].prep.segments.length === 1);
+  var FH = forgotBox(30 * 3600), fhHtml = FH.cur.html;
+  ck("199. Lacuna de 30 h (acima das 24 h): o resumo diz que não se pode guardar mas já não deixa só «Descartar»: oferece «Terminar no último ponto bom» (e depois já se pode rever e guardar)", /Esta corrida não pode ser guardada/.test(fhHtml) && !/id="runLiveReview"/.test(fhHtml) && /id="runLiveCut"/.test(fhHtml) && /id="runLiveDiscard"/.test(fhHtml) && (FH.click("runLiveCut"), !!FH.el("runLiveReview")));
+  var FD2 = makeBox({store: memStore({"evolve_run_draft_v1": P.runLiveDraftSerialize(P.runLiveDraftBuild(fg30, {uid: U1, ended: true, nowMs: T0 + 301 * 6000, iid: "old", rel: true})).text}), now: T0 + 40 * 3600000});
+  var fdBan = bannerRoot(FD2);
+  ck("200. O banner de um rascunho inguardável oferece «Terminar no último ponto bom» (e «Descartar»); não oferece «Guardar o que há»", /data-act="savecut"/.test(fdBan) && /Terminar no último ponto bom/.test(fdBan) && !/data-act="save"/.test(fdBan) && /data-act="discard"/.test(fdBan));
+  FD2.bannerClick("savecut");
+  ck("201. Tocar nisso pede o consentimento, corta, escreve o rascunho (agora desta janela) e segue para guardar com a corrida cortada", FD2.consents.length === 1 && FD2.saveFlows.length === 1 && FD2.saveFlows[0].prep.stats.durationS < 1900 && FD2.saveFlows[0].prep.stats.durationS >= 1790 && draftOf(FD2).iid === FD2.api.runLInst && draftOf(FD2).st.segs.length === 1);
+
+  // ================================================================ revisão: duas janelas na mesma app (achado 18)
+  var dOwner = function(o, now, own){ return P.runLiveDraftOwner(o, now, own); };
+  ck("202. Quem tem o rascunho: esta janela («mine»); outra com batimento recente («busy»); outra que se despediu, com batimento antigo (> 60 s) ou de um relógio muito adiantado, ou um rascunho sem id («free»)",
+    dOwner({ok: true, iid: "a", ts: T0, rel: false}, T0 + 5000, "a") === "mine" && dOwner({ok: true, iid: "a", ts: T0, rel: false}, T0 + 5000, "b") === "busy" && dOwner({ok: true, iid: "a", ts: T0, rel: true}, T0 + 5000, "b") === "free" &&
+    dOwner({ok: true, iid: "a", ts: T0, rel: false}, T0 + 61000, "b") === "free" && dOwner({ok: true, iid: "a", ts: T0 + 3 * 3600000, rel: false}, T0, "b") === "free" && dOwner({ok: true, iid: "", ts: T0, rel: false}, T0, "b") === "free" && dOwner({ok: false}, T0, "b") === "free");
+  var pk = P.runLiveDraftPeek(P.runLiveDraftSerialize(P.runLiveDraftBuild(st30, {uid: U1, iid: "abc", rel: true, nowMs: 12345})).text);
+  ck("203. runLiveDraftPeek lê só o princípio do texto: uid, iid, rel e ts; texto sem isso dá zeros; nunca lança", pk.uid === U1 && pk.iid === "abc" && pk.rel === true && pk.ts === 12345 && P.runLiveDraftPeek(null) === null && P.runLiveDraftPeek("lixo").iid === "" && P.runLiveDraftPeek("{\"uid\":5}").uid === "");
+  var shared = memStore();
+  var JA = makeBox({store: shared});
+  JA.startRun(); for (fi = 2; fi <= 30; fi++) JA.emit(fi);
+  var jaDraft = draftOf(JA);
+  ck("204. O rascunho leva o id desta janela e o batimento (ts) e começa por não estar «despedido»", jaDraft.iid === JA.api.runInst || jaDraft.iid === JA.api.runLInst && jaDraft.rel === false && jaDraft.ts >= T0 + 20000 && /^i[a-z0-9]{8,}$/.test(jaDraft.iid));
+  var JB = makeBox({store: shared, now: JA.clock.now + 5000});
+  var jbBan = JB.RUN.liveDraftBanner(JB.student), jbScr = JB.opens();
+  ck("205. Noutra janela, com a primeira a gravar, o banner NÃO oferece Retomar, Guardar o que há nem Descartar: diz que a corrida está a ser gravada noutra janela (e deixa «Tentar outra vez»); o ecrã «Gravar com GPS» também não deixa começar outra por cima",
+    /Corrida a ser gravada/.test(jbBan) && /noutra janela ou noutro aparelho/.test(jbBan) && !/Retomar|Guardar o que há|data-act="discard"|data-act="resume"|data-act="save"/.test(jbBan) && /data-act="refresh"/.test(jbBan) && !/id="runLiveGo"/.test(jbScr) && /Corrida a ser gravada/.test(jbScr));
+  JB.RUN.liveWireBanner; bannerRoot(JB);
+  JB.bannerClick("resume");
+  ck("206. Mesmo que um toque em «Retomar» chegasse (botão escondido), nada começa: não há GPS, nem Wake Lock, nem estado", JB.gps.starts === 0 && JB.live.phase === "intro" && JB.wl.requests === 0);
+  JA.pagehide();
+  var jbBan2 = JB.RUN.liveDraftBanner(JB.student);
+  ck("207. Quando a primeira janela se despede (pagehide: fecha ou recarrega) o rascunho fica livre e a outra já pode retomar ou guardar", draftOf(JA).rel === true && /data-act="resume"/.test(jbBan2) && /data-act="save"/.test(jbBan2) && /data-act="discard"/.test(jbBan2));
+  JA.setHidden(false); (JA.winHandlers.pageshow || []).forEach(function(f){ f(); });
+  ck("208. Se a página voltar da cache (pageshow), a janela volta a ser a dona (rel limpo)", draftOf(JA).rel === false);
+  var shared2 = memStore();
+  var KA = makeBox({store: shared2});
+  KA.startRun(); for (fi = 2; fi <= 30; fi++) KA.emit(fi);
+  var tA = KA.clock.now;
+  var KB = makeBox({store: shared2, now: tA + 61000});
+  bannerRoot(KB);
+  var kbBan = KB.RUN.liveDraftBanner(KB.student);
+  ck("209. Sem batimento há mais de 60 s (a primeira janela foi suspensa ou morreu sem se despedir) a outra pode retomar", /data-act="resume"/.test(kbBan) && !/Corrida a ser gravada/.test(kbBan));
+  KB.bannerClick("resume");
+  ck("210. Retomar noutra janela toma o rascunho (passa a ter o id dela) e arranca o GPS lá", KB.live.phase === "rec" && KB.gps.starts === 1 && draftOf(KB).iid === KB.api.runLInst && draftOf(KB).iid !== draftOf(KA).iid + "x" && KB.consents.length === 1);
+  KA.setNow(tA + 62000);
+  var ka0 = KA.gps.stops, kaSets = shared2.sets;
+  KA.adv(11000); await mt();
+  ck("211. A primeira janela, ao acordar, vê que outra pegou na corrida: pára o GPS e o Wake Lock, esquece a sua cópia, avisa, e NÃO escreve por cima do rascunho da outra", KA.live.phase === "intro" && KA.live.st === null && KA.gps.stops > ka0 && KA.wl.sentinels.every(function(w){ return w.released; }) && KA.toasts.some(function(t){ return /continua noutra janela/.test(t); }) && draftOf(KB).iid === KB.api.runLInst && draftOf(KB).iid !== undefined);
+  var shared3 = memStore();
+  var MA = makeBox({store: shared3});
+  MA.startRun(); for (fi = 2; fi <= 30; fi++) MA.emit(fi);
+  var mDraft = shared3.getItem("evolve_run_draft_v1");
+  var other = JSON.parse(mDraft); other.iid = "outra-janela"; other.ts = MA.clock.now + 1000; var otherTxt = JSON.stringify(other);
+  var mSets = shared3.sets;
+  (MA.winHandlers.storage || []).forEach(function(f){ f({key: "evolve_run_draft_v1", newValue: otherTxt}); });
+  ck("212. O evento «storage» (outra janela escreveu o rascunho com o seu id) faz esta ceder já, sem esperar pela escrita seguinte; o de outra chave, ou do mesmo id, não faz nada", MA.live.phase === "intro" && MA.live.st === null && (function(){
+    var NA = makeBox({store: memStore()}); NA.startRun(); NA.emit(2);
+    (NA.winHandlers.storage || []).forEach(function(f){ f({key: "outra_chave", newValue: otherTxt}); f({key: "evolve_run_draft_v1", newValue: NA.store.getItem("evolve_run_draft_v1")}); });
+    return NA.live.phase === "rec";
+  })());
+  var shared4 = memStore();
+  var OA = makeBox({store: shared4});
+  OA.startRun(); for (fi = 2; fi <= 30; fi++) OA.emit(fi);
+  var OB = makeBox({store: shared4, now: OA.clock.now + 2000});
+  OB.opens();
+  var obHadBusy = /Corrida a ser gravada/.test(OB.cur.html);
+  OA.click("runLiveEnd"); OA.sheet.els.runLiveEndOk.click(); OA.click("runLiveDiscard");
+  (OB.winHandlers.storage || []).forEach(function(f){ f({key: "evolve_run_draft_v1", newValue: null}); });
+  ck("213. O evento «storage» põe o banner em dia: depois de a outra janela descartar a corrida, o aviso desaparece aqui", obHadBusy && shared4.getItem("evolve_run_draft_v1") === null && (function(){ var s2 = OB.RUN.liveDraftBanner(OB.student); return s2 === ""; })());
+  var EA = makeBox();
+  EA.startRun(); EA.emit(2); EA.click("runLiveEnd"); EA.sheet.els.runLiveEndOk.click();
+  var eaTs = draftOf(EA).ts;
+  EA.adv(25000);
+  ck("214. Com a corrida já terminada, à espera de guardar, o batimento continua (o rascunho é reescrito a cada ~10 s) para nenhuma outra janela lhe mexer; ao descartar pára", draftOf(EA).ts >= eaTs + 20000 && (function(){ EA.click("runLiveDiscard"); return EA.timers.list.length === 0; })());
+
+  // ================================================================ revisão: o modo deixa de ser «live» a meio (achado 42)
+  var ML = makeBox();
+  ML.startRun(); for (fi = 2; fi <= 12; fi++) ML.emit(fi);
+  ck("215. RUN.liveBusy(): falso no início; verdadeiro a preparar, a gravar e em pausa; falso no resumo e depois de RUN.reset",
+    (function(){ var Z = makeBox(); var r = [Z.RUN.liveBusy()]; Z.opens(); Z.click("runLiveGo"); r.push(Z.RUN.liveBusy()); Z.click("runLivePrepare"); r.push(Z.RUN.liveBusy()); Z.emit(0); Z.click("runLiveStart"); Z.emit(1); r.push(Z.RUN.liveBusy());
+      Z.click("runLivePause"); r.push(Z.RUN.liveBusy()); Z.click("runLivePause"); Z.click("runLiveEnd"); Z.sheet.els.runLiveEndOk.click(); r.push(Z.RUN.liveBusy()); Z.RUN.reset(); r.push(Z.RUN.liveBusy());
+      return r.join() === "false,false,true,true,true,false,false"; })() && ML.RUN.liveBusy() === true);
+  ML.student.runsMode = "import";
+  var mlStops = ML.gps.stops;
+  ML.adv(1500); await mt();
+  var mlHtml = ML.cur ? ML.cur.html : "";
+  ck("216. Se o profissional desliga a gravação com GPS a meio, a gravação não fica órfã: o GPS, o Wake Lock e o relógio param, passa ao resumo (rascunho terminado), avisa, e RUN.liveBusy() é falso",
+    ML.live.phase === "end" && ML.gps.stops === mlStops + 1 && ML.live.tickId === null && ML.wl.sentinels.every(function(w){ return w.released; }) && ML.RUN.liveBusy() === false && draftOf(ML).ended === true && ML.toasts.some(function(t){ return /desligada pelo teu profissional: a gravação parou/.test(t); }));
+  ck("217. O resumo nesse caso explica (guardada só neste telemóvel; só se guarda se o profissional voltar a ligar) e oferece «Descartar»; NÃO oferece «Rever e guardar» (o servidor recusa uma corrida «live» sem a gravação ligada)", /desligada pelo teu profissional: a gravação parou aqui/.test(mlHtml) && /id="runLiveDiscard"/.test(mlHtml) && !/id="runLiveReview"/.test(mlHtml) && /Resumo/.test(mlHtml));
+  var mlBan = ML.RUN.liveDraftBanner(ML.student);
+  ML.student.runsMode = "live";
+  ck("218. O banner em modo «import» só oferece «Descartar» (e explica); se o modo volta a «live» o resumo volta a oferecer «Rever e guardar»", /Corrida por guardar/.test(mlBan) && !/data-act="review"/.test(mlBan) && /data-act="discard"/.test(mlBan) && (ML.render(), !!ML.el("runLiveReview")));
+  var MP = makeBox();
+  MP.opens(); MP.click("runLiveGo"); MP.click("runLivePrepare");
+  MP.student.runsMode = "off";
+  MP.adv(1500); await mt();
+  ck("219. O mesmo a preparar o GPS: pára tudo e esquece o estado", MP.live.phase === "intro" && !MP.live.gpsOn && MP.gps.stops >= 1 && MP.wl.sentinels.every(function(w){ return w.released; }) && MP.RUN.liveBusy() === false);
+  var MR = makeBox();
+  MR.startRun(); for (fi = 2; fi <= 12; fi++) MR.emit(fi);
+  MR.student.runsMode = "off";
+  var mrStops = MR.gps.stops, mrHtml = MR.RUN.liveScreen(MR.sv());
+  ck("220. Também ao desenhar o ecrã (RUN.liveScreen) com o modo desligado: pára tudo em vez de mostrar «não está ligada» com o GPS a correr", MR.live.phase === "end" && MR.gps.stops === mrStops + 1 && /Resumo/.test(mrHtml) && /desligada pelo teu profissional/.test(mrHtml));
+  var MX = makeBox({role: "professional"});
+  ck("221. A pré-visualização do profissional nunca pára nada nem avisa", (MX.RUN.liveScreen(MX.student), MX.toasts.length === 0));
+
+  // ================================================================ revisão: Wake Lock libertado com a página visível (achado 43)
+  var WK = makeBox();
+  WK.startRun(); await mt();
+  var wkReq = WK.wl.requests;
+  WK.wl.sentinels[0].release();
+  await mt();
+  ck("222. O sistema libertou o Wake Lock com a página visível: pede-se de novo logo e o ecrã não fica sem aviso (nenhum aviso enquanto o novo estiver ativo)", WK.wl.requests === wkReq + 1 && WK.live.wl === "on" && !/Não consegui manter o ecrã ligado/.test(WK.el("runLiveNotes").innerHTML || "") && WK.wl.sentinels.length === 2);
+  WK.setHidden(true);
+  WK.wl.sentinels[1].release();
+  await mt();
+  var wkHidden = WK.wl.requests;
+  WK.setHidden(false); await mt();
+  ck("223. Libertado com a página oculta (o normal): não se pede nada oculta; ao voltar pede-se uma vez", wkHidden === wkReq + 1 && WK.wl.requests === wkReq + 2 && WK.live.wl === "on");
+  var WD = makeBox();
+  WD.startRun(); await mt();
+  WD.wl.deny = true;
+  WD.wl.sentinels[0].release();
+  await mt(); WD.adv(1000);
+  ck("224. Se o novo pedido falha, aparece o mesmo aviso («Não consegui manter o ecrã ligado») e a gravação continua", WD.live.wl === "denied" && /Não consegui manter o ecrã ligado/.test(WD.el("runLiveNotes").innerHTML) && WD.live.phase === "rec");
+  var WL = makeBox();
+  WL.startRun(); await mt();
+  for (var wi = 0; wi < 5; wi++) { WL.wl.sentinels[WL.wl.sentinels.length - 1].release(); await mt(); }
+  WL.adv(1000);
+  ck("225. Se o sistema o tira sempre, não há ciclo de pedidos: no máximo 3 por minuto e fica o aviso", WL.wl.requests === 1 + 3 && WL.live.wl === "off" && /Não consegui manter o ecrã ligado/.test(WL.el("runLiveNotes").innerHTML));
+
+  // ================================================================ revisão: Retomar e Guardar o que há pedem o consentimento (achado 44)
+  function reopenDraft(o){ return makeBox(Object.assign({store: memStore({"evolve_run_draft_v1": savedDraft}), now: T0 + 60000}, o || {})); }
+  var CN = reopenDraft({consentAuto: false});
+  bannerRoot(CN);
+  CN.bannerClick("resume");
+  var cnHeld = CN.live.phase === "intro" && CN.gps.starts === 0 && CN.wl.requests === 0;
+  CN.consentCb();
+  ck("226. «Retomar» passa por RUN.ensureConsent: até o servidor confirmar o consentimento o GPS não arranca; confirmado, retoma", cnHeld && CN.consents.length === 1 && CN.live.phase === "rec" && CN.gps.starts === 1);
+  var CS = reopenDraft({consentAuto: false});
+  bannerRoot(CS);
+  CS.bannerClick("save");
+  var csHeld = CS.live.phase === "intro" && CS.saveFlows.length === 0;
+  CS.consentCb();
+  ck("227. «Guardar o que há» também: sem consentimento confirmado não segue para guardar", csHeld && CS.consents.length === 1 && CS.saveFlows.length === 1 && CS.live.phase === "end");
+  var CX = reopenDraft();
+  CX.RUN.ensureConsent = undefined;
+  bannerRoot(CX);
+  CX.bannerClick("resume");
+  ck("228. Sem RUN.ensureConsent (corrida.js por carregar) não se retoma nada e o aluno é avisado", CX.live.phase === "intro" && CX.gps.starts === 0 && CX.toasts.some(function(t){ return /Não foi possível abrir a Corrida/.test(t); }));
+
+  // ================================================================ revisão: texto do erro do GPS (achado 45)
+  var GE = makeBox();
+  GE.store.failSet = true;
+  GE.startRun(); for (fi = 2; fi <= 8; fi++) GE.emit(fi);
+  GE.gps.onErr({code: 1});
+  var geTxt = textOf(GE.cur.html);
+  var GO = makeBox();
+  GO.startRun(); for (fi = 2; fi <= 8; fi++) GO.emit(fi);
+  GO.gps.onErr({code: 1});
+  var goTxt = textOf(GO.cur.html);
+  ck("229. Com o rascunho a falhar, o erro do GPS NÃO diz que o que se gravou está guardado: diz «Não feches a app»; com o rascunho escrito diz que está guardado", GE.live.draftOk === false && !/O que já foi gravado está guardado/.test(geTxt) && /Não feches a app: o que já foi gravado ainda não está guardado/.test(geTxt) && GO.live.draftOk === true && /O que já foi gravado está guardado neste telemóvel/.test(goTxt));
+
+  // ================================================================ revisão: reiniciar o GPS, preparar, pausa longa (achados 47, 48 e 50)
+  var RS = makeBox();
+  RS.startRun(); for (fi = 2; fi <= 10; fi++) RS.emit(fi);
+  RS.adv(70000);
+  var rsStarts = RS.gps.starts, rsAuto = RS.live.restarts;
+  RS.adv(60000);
+  ck("230. O vigia gasta os 3 reinícios automáticos e pára; «Reiniciar GPS» aparece quando não chegam posições", rsAuto === 3 && RS.gps.starts === rsStarts && RS.el("runLiveRestartWrap").hiddenClass === false);
+  RS.click("runLiveRestart");
+  ck("231. «Reiniciar GPS» reinicia o watch mesmo com os reinícios automáticos esgotados (conta nos reinícios do resumo, não no limite do vigia)", RS.gps.starts === rsStarts + 1 && RS.live.restarts === 4 && RS.live.restartLog.length === 3 && RS.live.watching);
+  var RP = makeBox();
+  RP.startRun(); for (fi = 2; fi <= 6; fi++) RP.emit(fi);
+  RP.click("runLivePause");
+  var rpStarts = RP.gps.starts;
+  RP.emit(7); RP.click("runLivePause");
+  var freshKept = RP.gps.starts === rpStarts;
+  RP.click("runLivePause");
+  RP.adv(30000);
+  var rpStarts2 = RP.gps.starts;
+  RP.click("runLivePause");
+  ck("232. Retomar não reinicia o GPS se ainda chegam posições (a pausa não as pára); se o watch ficou mudo (> 8 s sem posições) reinicia-o, em vez de o deixar morto", freshKept && RP.gps.starts === rpStarts2 + 1 && RP.live.watching && RP.live.phase === "rec");
+  var PP = makeBox();
+  PP.opens(); PP.click("runLiveGo"); PP.click("runLivePrepare"); await mt();
+  PP.emit(0); PP.adv(RP.api.RUN_LIVE_CFG.prepMaxMs - 20000);
+  var ppStillOn = PP.live.phase === "prep" && PP.live.gpsOn;
+  PP.adv(25000);
+  ck("233. Preparar o GPS e não começar: ao fim de 5 min cancela-se sozinho (GPS, Wake Lock e relógio parados) e avisa (poupa bateria)", ppStillOn && PP.live.phase === "intro" && !PP.live.gpsOn && PP.gps.stops >= 1 && PP.wl.sentinels.every(function(w){ return w.released; }) && PP.timers.list.length === 0 && PP.toasts.some(function(t){ return /Cancelei a preparação do GPS/.test(t); }));
+  var LP = makeBox();
+  LP.startRun(); for (fi = 2; fi <= 8; fi++) LP.emit(fi);
+  await mt();
+  LP.click("runLivePause");
+  var lpStops = LP.gps.stops;
+  LP.adv(LP.api.RUN_LIVE_CFG.pauseReleaseMs + 1000);
+  ck("234. Pausa longa (10 min): liberta o GPS e o Wake Lock (a pausa esquecida não esgota a bateria) e diz-no", LP.gps.stops === lpStops + 1 && !LP.live.watching && LP.wl.sentinels.every(function(w){ return w.released; }) && /Pausa longa/.test(LP.live.notice));
+  var lpReq = LP.wl.requests, lpStarts = LP.gps.starts;
+  LP.click("runLivePause");
+  await mt();
+  ck("235. Ao retomar volta a pedir o GPS e o Wake Lock, e o aviso de sinal não diz «Sem posições há 661 s» (conta a partir de agora)", LP.gps.starts === lpStarts + 1 && LP.wl.requests === lpReq + 1 && LP.live.wl === "on" && !/há \d{3,} s/.test(LP.el("runLiveSignal").textContent) && /A procurar sinal/.test(LP.el("runLiveSignal").textContent));
+  var IN = makeBox();
+  IN.opens(); IN.click("runLiveGo"); IN.click("runLivePrepare");
+  IN.emit(0, 3, 6);
+  var inOk = IN.el("runLiveStart").disabled === false;
+  IN.adv(9000);
+  var inDisabled = IN.el("runLiveStart").disabled === true;
+  IN.click("runLiveStart");
+  ck("236. «Iniciar» só vale com sinal bom E recente: com o último fix bom há mais de 8 s fica desligado (e um toque nele não faz nada)", inOk && inDisabled && IN.live.phase === "prep" && /Sem posições há/.test(IN.el("runLiveSignal").textContent));
+
+  // a despedida (pagehide) não se desfaz com o «oculta» que o navegador dispara logo a seguir; ao voltar a ver a página, sim
+  var PH = makeBox();
+  PH.startRun(); for (fi = 2; fi <= 12; fi++) PH.emit(fi);
+  PH.pagehide(); PH.setHidden(true);
+  var phRel = draftOf(PH).rel;
+  PH.setHidden(false);
+  ck("237. A despedida do rascunho (rel) mantém-se com o «oculta» que vem a seguir ao pagehide e só se desfaz quando a página volta a ser vista", phRel === true && draftOf(PH).rel === false && PH.live.phase === "rec");
+  // vista de dados (Corrida desligada, RUN.dataMode): o banner funciona sem Retomar nem Guardar
+  var DM = makeBox({mode: "off", store: memStore({"evolve_run_draft_v1": savedDraft}), now: T0 + 60000});
+  var dmBan = DM.RUN.liveDraftBanner(DM.student);
+  var DM2 = makeBox({mode: "off"});
+  DM2.student.runsMode = "live"; DM2.startRun(); for (fi = 2; fi <= 10; fi++) DM2.emit(fi);
+  DM2.student.runsMode = "off"; DM2.adv(1500); await mt();
+  var dm2Ban = DM2.RUN.liveDraftBanner(DM2.student);
+  ck("238. Com a Corrida desligada (vista de dados) o banner de um rascunho só oferece «Descartar» (e explica); o de uma corrida terminada em memória também, sem «Rever e guardar»; nada se apaga sozinho", /id="runLiveBanner"/.test(dmBan) && !/data-act="resume"|data-act="save"|data-act="savecut"/.test(dmBan) && /data-act="discard"/.test(dmBan) && /não está ligada/.test(dmBan) && DM.store.getItem("evolve_run_draft_v1") === savedDraft &&
+    /Corrida por guardar/.test(dm2Ban) && !/data-act="review"/.test(dm2Ban) && /data-act="discard"/.test(dm2Ban) && /não está ligada/.test(dm2Ban) && DM2.store.getItem("evolve_run_draft_v1") !== null);
+
+  // ================================================================ contrato novo e documentação
+  ck("239. O contrato novo está em RUN: liveBusy, queueClear, consentCacheGet, consentCacheSet, consentCacheClear (e RUN_CONSENT_KEY vem de app.js: não se redeclara)", ["liveBusy", "queueClear", "consentCacheGet", "consentCacheSet", "consentCacheClear"].every(function(k){ return typeof makeBox().RUN[k] === "function"; }) && !/(var|function)\s+RUN_CONSENT_KEY/.test(noComments));
 
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 5).join(" | ")); process.exit(1); });

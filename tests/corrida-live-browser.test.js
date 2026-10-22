@@ -48,12 +48,13 @@ function pageStubs(){
   window.__off = 0;
   var realNow = Date.now;
   Date.now = function(){ return realNow.call(Date) + window.__off; };
-  window.__wl = {requests: 0, released: 0, deny: false};
+  window.__wl = {requests: 0, released: 0, deny: false, list: []};
   try {
     Object.defineProperty(navigator, "wakeLock", {configurable: true, value: {request: function(){
       window.__wl.requests++;
       if (window.__wl.deny) return Promise.reject(new Error("NotAllowedError"));
       var s = {released: false, _r: null, release: function(){ if (!s.released) { s.released = true; window.__wl.released++; if (s._r) s._r(); } return Promise.resolve(); }, addEventListener: function(t, f){ s._r = f; }};
+      window.__wl.list.push(s);
       return Promise.resolve(s);
     }}});
   } catch (e) {}
@@ -61,6 +62,7 @@ function pageStubs(){
   Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){ return window.__vis; }});
   Object.defineProperty(document, "hidden", {configurable: true, get: function(){ return window.__vis === "hidden"; }});
   window.__setVis = function(v){ window.__vis = v; document.dispatchEvent(new Event("visibilitychange")); };
+  window.addEventListener("pagehide", function(){ window.__vis = "hidden"; });   // como num navegador a sério: ao descarregar a página, o documento já está oculto
   window.__fakeGps = {starts: 0, stops: 0, onFix: null, onErr: null, start: function(a, b){ this.starts++; this.onFix = a; this.onErr = b; }, stop: function(){ this.stops++; this.onFix = null; this.onErr = null; }};
   window.__y = 0;
   // avança o relógio dtMs e entrega uma posição de quem corre para norte a v m/s
@@ -140,7 +142,7 @@ function fakeUi(){
 }
 var FAKE_UI_SRC = "(" + fakeUi.toString() + ")();\n";
 // 3) o gancho de teste: corre no fim do eval do gravador e entrega à página o objeto RUN e a configuração
-var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG;\n";
+var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG; window.__inst = runLInst; window.__findStudent = findStudent; window.__state = state;\n";
 
 // ---------------------------------------------------------------- servidor, browser, utilitários
 (async function(){
@@ -153,13 +155,14 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG;\n";
   // abre treino.html como aluno com a Corrida ligada
   async function open(o){
     o = o || {};
-    var ctx = await browser.newContext({viewport: {width: 390, height: 844}, serviceWorkers: "block", permissions: o.perms || []});
+    var ctx = await browser.newContext({viewport: {width: 390, height: 844}, serviceWorkers: "block", permissions: o.perms || [], hasTouch: !!o.touch});
     ctxs.push(ctx);
     if (o.geo) await ctx.setGeolocation(o.geo);
     var rows = [row("ana", "Ana Treina", o.mode === undefined ? "live" : o.mode)];
     await ctx.addInitScript(fakeSource({role: "student", userId: "user-1", email: "ana@x.test", rows: rows, runsRls: !!o.rls}));
     await ctx.addInitScript(pageStubs);
     if (o.seed) await ctx.addInitScript(function(seed){ try { if (!sessionStorage.getItem("__seeded")) { sessionStorage.setItem("__seeded", "1"); Object.keys(seed).forEach(function(k){ localStorage.setItem(k, seed[k]); }); } } catch (e) {} }, o.seed);
+    if (o.init) await ctx.addInitScript(o.init);
     if (o.preRuns) await ctx.addInitScript(function(rs){ window.__fake.tables.runs = rs.slice(); }, o.preRuns);
     await ctx.route(/\/corrida-live\.js(\?|$)/, function(route){ route.fulfill({status: 200, contentType: "text/javascript", body: liveSrc + HOOK}); });
     if (!o.real) await ctx.route(/\/corrida\.js(\?|$)/, function(route){ route.fulfill({status: 200, contentType: "text/javascript", body: FAKE_UI_SRC}); });
@@ -714,6 +717,171 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG;\n";
   } else {
     console.log("(corrida.js real ainda não existe: parte B ignorada)");
   }
+
+
+  // ======================================================================= C. revisão: o que os testes anteriores só cobriam em caminhos simulados
+  // C1. duas janelas da mesma app (o mesmo localStorage, eventos «storage» verdadeiros): a segunda não toma nem estraga a corrida que a primeira grava
+  var W1 = await open();
+  await openCorrida(W1);
+  await startRecording(W1);
+  await W1.pg.evaluate(function(){ window.__goN(25, 1000, 3); });
+  var W2 = await W1.ctx.newPage(); W2.setDefaultTimeout(8000);
+  W2.on("pageerror", function(e){ errors.push(e.message); });
+  W2.on("dialog", function(d){ d.accept(); });
+  await W2.goto(srv.url + "treino.html");
+  await W2.waitForSelector("#startWorkout");
+  await W2.click('.tabbar [data-tab="corrida"]');
+  await W2.waitForFunction(function(){ return window.__RUN && window.__RUN.loaded; });
+  await W2.waitForSelector("#runLiveBanner");
+  var w2Txt = await T(W2, "#runLiveBanner");
+  ck("78. Duas janelas: com a primeira a gravar, a segunda (mesmo armazenamento) NÃO oferece Retomar, Guardar o que há nem Descartar: diz que a corrida está a ser gravada noutra janela",
+    /Corrida a ser gravada/i.test(w2Txt) && /noutra janela/.test(w2Txt) && (await W2.locator('#runLiveBanner [data-act="resume"], #runLiveBanner [data-act="save"], #runLiveBanner [data-act="discard"]').count()) === 0 && (await W2.locator('#runLiveBanner [data-act="refresh"]').count()) === 1);
+  await finishRun(W1);
+  await W1.pg.click("#runLiveDiscard");
+  await W2.waitForSelector("#runLiveBanner", {state: "detached"});
+  ck("79. O evento «storage» verdadeiro põe a segunda janela em dia: quando a primeira descarta a corrida, o aviso desaparece lá sem recarregar", (await ls(W2, DRAFT)) === null && (await W2.locator("#runLiveBanner").count()) === 0);
+  await startRecording(W1);
+  await W1.pg.evaluate(function(){ window.__goN(15, 1000, 3); });
+  await W2.waitForSelector("#runLiveBanner");
+  ck("80. Quando a primeira volta a gravar, o aviso «a ser gravada noutra janela» aparece na segunda sozinho", /Corrida a ser gravada/i.test(await T(W2, "#runLiveBanner")));
+  await W1.pg.goto("about:blank");
+  await W2.waitForSelector('#runLiveBanner [data-act="resume"]');
+  ck("81. Quando a primeira janela fecha (pagehide despede-se do rascunho) a segunda já pode retomar, guardar ou descartar", (await W2.locator('#runLiveBanner [data-act="save"]').count()) === 1 && (await W2.locator('#runLiveBanner [data-act="discard"]').count()) === 1 && JSON.parse(await ls(W2, DRAFT)).rel === true);
+  await W1.ctx.close();
+  // a primeira janela fica mudo (sem batimento) e a segunda toma a corrida: a primeira cede ao evento «storage»
+  var Y1 = await open();
+  await openCorrida(Y1);
+  await startRecording(Y1);
+  await Y1.pg.evaluate(function(){ window.__goN(25, 1000, 3); window.__runLiveCfg.hbStaleMs = 1500; window.__runLiveCfg.draftEveryMs = 3600000; });
+  var Y2 = await Y1.ctx.newPage(); Y2.setDefaultTimeout(8000);
+  Y2.on("pageerror", function(e){ errors.push(e.message); });
+  await Y2.goto(srv.url + "treino.html");
+  await Y2.waitForSelector("#startWorkout");
+  await Y2.click('.tabbar [data-tab="corrida"]');
+  await Y2.waitForFunction(function(){ return window.__RUN && window.__RUN.loaded; });
+  var y1Off = await Y1.pg.evaluate(function(){ return window.__off; });     // as duas janelas são do mesmo telemóvel: têm o mesmo relógio
+  await Y2.evaluate(function(off){ window.__off = off; window.__runLiveCfg.hbStaleMs = 1500; window.__runLiveCfg.tickMs = 150; window.__RUN.gps = window.__fakeGps; }, y1Off);
+  await Y2.waitForTimeout(1900);
+  await Y2.waitForSelector("#runLiveBanner");
+  await Y2.click('#runLiveBanner [data-act="refresh"]').catch(function(){});
+  await Y2.waitForSelector('#runLiveBanner [data-act="resume"]');
+  var y1Stops = await Y1.pg.evaluate(function(){ return window.__fakeGps.stops; });
+  await Y2.click('#runLiveBanner [data-act="resume"]');
+  await Y2.waitForSelector("#runLivePause");
+  await Y1.pg.waitForFunction(function(){ return window.__RUN.live.phase === "intro"; });
+  var y1 = await Y1.pg.evaluate(function(){ return {stops: window.__fakeGps.stops, st: window.__RUN.live.st, wl: window.__wl.list.every(function(w){ return w.released; }), inst: window.__inst, toast: Array.prototype.map.call(document.querySelectorAll(".toast"), function(t){ return t.textContent; }).join("|")}; });
+  var y2inst = await Y2.evaluate(function(){ return window.__inst; });
+  ck("82. Se a segunda janela toma a corrida (a primeira estava sem batimento), a primeira cede sozinha pelo evento «storage»: pára o GPS e o Wake Lock, esquece a cópia, avisa, e o rascunho fica com o id da segunda",
+    y1.stops === y1Stops + 1 && y1.st === null && y1.wl === true && /noutra janela/.test(y1.toast) && JSON.parse(await ls(Y2, DRAFT)).iid === y2inst && y1.inst !== y2inst && (await live(Y2)).phase === "rec");
+  await Y1.ctx.close();
+
+  // C2. relógio: um fix com hora absurda não envenena o resto da gravação; o relógio que recua mostra o aviso (limite conhecido)
+  var Ck = await open();
+  await openCorrida(Ck);
+  await startRecording(Ck);
+  await Ck.pg.evaluate(function(){ window.__goN(20, 1000, 3); });
+  await Ck.pg.evaluate(function(){ window.__off += 1000; window.__y += 3; window.__fakeGps.onFix({lat: 38.7 + window.__y / 111194.93, lon: -9.1, acc: 5, t: Date.now() + 12000, speed: null}); });
+  await Ck.pg.evaluate(function(){ window.__goN(40, 1000, 3); });
+  var ckSt = await Ck.pg.evaluate(function(){ var st = window.__RUN.live.st; return {n: st.nPts, dist: st.distM, rejTime: st.rej.time}; });
+  ck("83. Um fix com a hora 12 s à frente a meio da corrida (dentro da lacuna de 15 s: o núcleo sozinho recusava os 12 s seguintes) não a envenena: ~60 s a 3 m/s dão ~180 m e só se perdem 2 posições por «hora repetida»; o ecrã continua a dizer «Sinal bom»", ckSt.dist > 150 && ckSt.rejTime <= 3 && /Sinal bom/.test(await T(Ck.pg, "#runLiveSignal")));
+  await Ck.pg.evaluate(function(){ window.__off -= 5 * 60000; });
+  await Ck.pg.evaluate(function(){ for (var i = 0; i < 8; i++) { window.__off += 1000; window.__y += 3; window.__fakeGps.onFix({lat: 38.7 + window.__y / 111194.93, lon: -9.1, acc: 5, t: Date.now(), speed: null}); } });
+  await Ck.pg.waitForFunction(function(){ return /A receber posições que o registo não consegue usar/.test(document.getElementById("runLiveSignal").textContent); });
+  ck("84. LIMITE CONHECIDO, agora visível: se o relógio do telemóvel recuar minutos a meio da corrida, as posições seguintes são recusadas até o relógio apanhar o registo, mas o ecrã já não diz «Sinal bom»: avisa e mostra «Reiniciar GPS»; o aluno pode terminar e guardar o que há", (await Ck.pg.locator("#runLiveRestartWrap").isVisible()) && (await live(Ck.pg)).phase === "rec");
+  await Ck.pg.click("#runLiveEnd"); await Ck.pg.click("#runLiveEndOk"); await Ck.pg.waitForSelector("#runLiveReview");
+  ck("85. Mesmo assim o resumo guarda o que ficou registado antes", await Ck.pg.evaluate(function(){ return window.__RUN.live.st.nPts > 10; }) && /rever e guardar/i.test(await T(Ck.pg, "#runLive")));
+  await Ck.ctx.close();
+
+  // C3. Wake Lock libertado pelo sistema com a página visível
+  var Wk = await open();
+  await openCorrida(Wk);
+  await startRecording(Wk);
+  var wk0 = await Wk.pg.evaluate(function(){ return window.__wl.requests; });
+  await Wk.pg.evaluate(function(){ window.__wl.list[window.__wl.list.length - 1].release(); });
+  await Wk.pg.waitForFunction(function(n){ return window.__wl.requests === n + 1; }, wk0);
+  ck("86. O sistema libertou o Wake Lock com a página visível: a gravação pede-o outra vez (uma vez) e o ecrã não fica sem aviso nem com aviso falso", (await live(Wk.pg)).wl === "on" && !/Não consegui manter o ecrã ligado/.test(await T(Wk.pg, "#runLiveNotes")));
+  await Wk.pg.evaluate(function(){ window.__wl.deny = true; window.__wl.list[window.__wl.list.length - 1].release(); });
+  await Wk.pg.waitForFunction(function(){ return /Não consegui manter o ecrã ligado/.test(document.getElementById("runLiveNotes").textContent); });
+  ck("87. Se o novo pedido falha aparece «Não consegui manter o ecrã ligado» e a gravação continua", (await live(Wk.pg)).wl === "denied" && (await live(Wk.pg)).phase === "rec");
+  await Wk.ctx.close();
+
+  // C4. a fila local deixa de se poder escrever a meio do envio: sem ciclo de pedidos
+  var ob2 = function(id){ return {id: id, uid: "user-1", ts: 1, state: "pending", err: "", item: {row: Object.assign({}, preRow, {id: id}), track: null}}; };
+  var seedF = {}; seedF[OUTBOX] = JSON.stringify([ob2(RID1), ob2(RID2)]);
+  var Fl = await open({seed: seedF, init: function(){ var orig = Storage.prototype.setItem; window.__failOutbox = true; Storage.prototype.setItem = function(k, v){ if (k === "evolve_runs_outbox_v1" && window.__failOutbox) throw new Error("QuotaExceededError"); return orig.call(this, k, v); }; }});
+  await openCorrida(Fl);
+  await Fl.pg.waitForSelector(".toast.show");
+  await Fl.pg.waitForTimeout(1500);
+  var flW = await Fl.pg.evaluate(function(){ return window.__fake.writes.filter(function(w){ return w.table === "runs" && w.op === "insert"; }).length; });
+  ck("88. Se a fila local não se deixa escrever depois de enviar, o envio pára: 1 pedido (e não centenas), a fila fica como estava e o aluno é avisado", flW === 1 && JSON.parse(await ls(Fl.pg, OUTBOX)).length === 2 && /Não consegui atualizar as corridas por enviar/.test(await Fl.pg.locator(".toast").first().innerText()));
+  await Fl.ctx.close();
+
+  // C5. o evento SIGNED_OUT (sessão que acaba fora desta página) pára tudo e apaga o que a Corrida deixou no telemóvel
+  var capAuth = function(){ var fake = window.supabase, oc = fake.createClient; fake.createClient = function(){ var c = oc.apply(this, arguments), oa = c.auth.onAuthStateChange; c.auth.onAuthStateChange = function(cb){ window.__authCb = cb; return oa.apply(this, arguments); }; return c; }; };
+  var So = await open({init: capAuth});
+  await openCorrida(So);
+  await startRecording(So);
+  await So.pg.evaluate(function(){ window.__goN(30, 1000, 3); localStorage.setItem("evolve_run_consent_v1", JSON.stringify({uid: "user-1", studentId: "ana", version: 1, at: 1})); });
+  var haveCb = await So.pg.evaluate(function(){ return typeof window.__authCb === "function"; });
+  var soStops = await So.pg.evaluate(function(){ return window.__fakeGps.stops; });
+  await So.pg.evaluate(function(seed){ localStorage.setItem("evolve_runs_outbox_v1", seed); }, JSON.stringify([ob2(RID2)]));
+  await So.pg.evaluate(function(){ window.__authCb("SIGNED_OUT", null); });
+  await So.pg.waitForTimeout(300);
+  var soOut = await So.pg.evaluate(function(){ return {stops: window.__fakeGps.stops, phase: window.__RUN.live.phase, st: window.__RUN.live.st, tick: window.__RUN.live.tickId, wl: window.__wl.list.every(function(w){ return w.released; }), draft: localStorage.getItem("evolve_run_draft_v1"), box: localStorage.getItem("evolve_runs_outbox_v1"), rec: localStorage.getItem("evolve_run_consent_v1")}; });
+  ck("89. O evento SIGNED_OUT (e não só o botão «Sair») pára o GPS, o relógio e o Wake Lock, esquece a gravação e apaga o rascunho, a fila e o recibo do consentimento", haveCb && soOut.stops === soStops + 1 && soOut.phase === "intro" && soOut.st === null && soOut.tick === null && soOut.wl && soOut.draft === null && soOut.box === null && soOut.rec === null);
+  await So.pg.waitForTimeout(600);
+  ck("90. E nada volta a escrever o rascunho depois disso", (await ls(So.pg, DRAFT)) === null);
+  await So.ctx.close();
+
+  // C6. toque verdadeiro (ecrã tátil, via CDP): a pressão longa desbloqueia, a curta não, e largar não acerta nos botões de baixo
+  var Tc = await open({touch: true});
+  await openCorrida(Tc);
+  await startRecording(Tc);
+  await Tc.pg.evaluate(function(){ window.__goN(5, 1000, 3); window.__runLiveCfg.lockHoldMs = 1500; });
+  await Tc.pg.tap("#runLiveLockBtn");
+  await Tc.pg.waitForSelector("#runLiveLock");
+  var cdp = await Tc.ctx.newCDPSession(Tc.pg);
+  var pbT = await Tc.pg.locator("#runLivePause").boundingBox(), tx = Math.round(pbT.x + pbT.width / 2), ty = Math.round(pbT.y + pbT.height / 2);
+  await cdp.send("Input.dispatchTouchEvent", {type: "touchStart", touchPoints: [{x: tx, y: ty}]});
+  await Tc.pg.waitForTimeout(600);
+  await cdp.send("Input.dispatchTouchEvent", {type: "touchEnd", touchPoints: []});
+  await Tc.pg.waitForTimeout(150);
+  var shortHold = await live(Tc.pg);
+  ck("91. Com toque verdadeiro (não rato): uma pressão curta em cima do botão Pausa não faz nada (nem desbloqueia)", shortHold.locked === true && shortHold.paused === false && (await Tc.pg.locator("#runLiveLock").count()) === 1);
+  await cdp.send("Input.dispatchTouchEvent", {type: "touchStart", touchPoints: [{x: tx, y: ty}]});
+  await Tc.pg.waitForTimeout(1750);
+  var covering = await Tc.pg.locator("#runLiveLock").count();
+  await cdp.send("Input.dispatchTouchEvent", {type: "touchEnd", touchPoints: []});
+  await Tc.pg.waitForSelector("#runLiveLock", {state: "detached"});
+  var longHold = await live(Tc.pg);
+  ck("92. Com toque verdadeiro, a pressão longa (~1,5 s) desbloqueia ao largar e o toque de largar não chega ao botão Pausa que está por baixo", covering === 1 && longHold.locked === false && longHold.paused === false);
+  await Tc.ctx.close();
+
+  // C7. o profissional desliga a gravação com GPS a meio
+  var Ml = await open();
+  await openCorrida(Ml);
+  await startRecording(Ml);
+  await Ml.pg.evaluate(function(){ window.__goN(15, 1000, 3); });
+  var mlStops = await Ml.pg.evaluate(function(){ return window.__fakeGps.stops; });
+  await Ml.pg.evaluate(function(){ window.__findStudent(window.__state.alunoStudentId).runsMode = "import"; });
+  await Ml.pg.waitForSelector("#runLive[data-phase='end']");
+  var mlTxt = await T(Ml.pg, "#runLive");
+  var mlO = await Ml.pg.evaluate(function(){ return {stops: window.__fakeGps.stops, busy: window.__RUN.liveBusy(), tick: window.__RUN.live.tickId, wl: window.__wl.list.every(function(w){ return w.released; })}; });
+  ck("93. Se o modo da Corrida deixa de ser «live» a meio, a gravação não fica órfã: o GPS, o Wake Lock e o relógio param, RUN.liveBusy() é falso e o resumo explica e só oferece «Descartar»", mlO.stops === mlStops + 1 && mlO.busy === false && mlO.tick === null && mlO.wl && /desligada pelo teu profissional/.test(mlTxt) && (await Ml.pg.locator("#runLiveReview").count()) === 0 && (await Ml.pg.locator("#runLiveDiscard").count()) === 1 && JSON.parse(await ls(Ml.pg, DRAFT)).ended === true);
+  await Ml.ctx.close();
+
+  // C8. «Reiniciar GPS» (o botão só aparece quando as posições deixam de chegar) e o limite de reinícios automáticos
+  var Rg = await open();
+  await openCorrida(Rg);
+  await startRecording(Rg);
+  await Rg.pg.evaluate(function(){ window.__goN(8, 1000, 3); });
+  var hiddenAtFirst = !(await Rg.pg.locator("#runLiveRestartWrap").isVisible());
+  await Rg.pg.evaluate(function(){ window.__off += 12000; });
+  await Rg.pg.waitForFunction(function(){ return document.getElementById("runLiveRestartWrap") && !document.getElementById("runLiveRestartWrap").classList.contains("hidden"); });
+  var rgStarts = await Rg.pg.evaluate(function(){ return window.__fakeGps.starts; });
+  await Rg.pg.click("#runLiveRestart");
+  ck("94. «Reiniciar GPS» só aparece com «Sem posições há N s» (escondido enquanto chegam posições); o toque reinicia o watch", hiddenAtFirst && (await Rg.pg.evaluate(function(){ return window.__fakeGps.starts; })) === rgStarts + 1 && (await live(Rg.pg)).watching);
+  await Rg.ctx.close();
 
   // ======================================================================= no fim
   ck((n + 1) + ". Nenhum erro de JavaScript em nenhuma página e nenhum pedido a terceiros em todo o teste", errors.length === 0 && allExternal.length === 0 || (console.log(errors, allExternal), false));

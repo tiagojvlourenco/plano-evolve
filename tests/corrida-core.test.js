@@ -195,7 +195,7 @@ ck("42. Importação: parado a meio (ruído < 8 m) não conta como movimento, ma
 ck("43. Importação: intervalo > 60 s dentro do segmento é lacuna (conta no tempo, não na distância)", (function(){
   var seg = [], i;
   for (i = 0; i <= 60; i++) seg.push(northPt(i * 3, i));
-  for (i = 0; i <= 60; i++) seg.push(northPt(180 + 5000 + i * 3, 160 + i));   // 100 s depois e 5 km à frente
+  for (i = 0; i <= 60; i++) seg.push(northPt(180 + 250 + i * 3, 160 + i));   // 100 s depois e 250 m à frente (2,5 m/s: possível)
   var s = C.runStats([seg], null, "import");
   return s.gaps === 1 && s.gapS === 100 && s.durationS === 220 && Math.abs(s.distM - 360) <= 20 && s.movingS <= 125;
 })());
@@ -286,7 +286,7 @@ ck("58. runSimplify: 0, 1, 2 pontos, eps inválido e laço fechado (1.º = últi
 ck("59. runSimplify: dados patológicos (dentes de serra de km, 60 000 pontos) acabam em segundos e mantêm a garantia de eps", (function(){
   var a = [], i, t = Date.now(); for (i = 0; i < 60000; i++) a.push({lat: LAT0 + 0.02 * (1 - i / 60000) * (i % 2), lon: LON0 + i * 1e-5, t: T0 + i * 1000});
   var s = C.runSimplify(a, 4), spent = Date.now() - t;
-  return spent < 4000 && s.length > 1000 && s[0] === a[0] && s[s.length - 1] === a[a.length - 1];
+  return spent < 4000 && s.length > 1000 && s[0] === a[0] && s[s.length - 1] === a[a.length - 1] && maxDevFromPolyline(a, s) <= 4.05;
 })());
 // prepare
 var hour = (function(){ var r = rng(50), seg = [], i; for (i = 0; i < 3600; i++) seg.push(pt(LAT0 + (i * 2.8 + gauss(r) * 2) / M_LAT, LON0 + (400 * Math.sin(i / 400) + gauss(r) * 2) / M_LON, T0 + i * 1000)); return [seg]; })();
@@ -301,9 +301,9 @@ ck("62. runPrepareTrack: nenhum ponto a menos de 200 m da partida nem da chegada
   var f = hour[0][0], l = hour[0][hour[0].length - 1];
   return prep.segments.every(function(s){ return s.every(function(p){ return C.runHav(p[0], p[1], f.lat, f.lon) >= 199 && C.runHav(p[0], p[1], l.lat, l.lon) >= 199; }); });
 })());
-ck("63. runPrepareTrack: cfg.trimM muda o aparo (0, 500, 1000) e fica limitado a 2000 (CHECK de trim_m)", (function(){
-  var p0 = C.runPrepareTrack(hour, {trimM: 0}), p5 = C.runPrepareTrack(hour, {trimM: 500}), big = C.runPrepareTrack(lineTrack(9000, 3), {trimM: 99999});
-  return p0.trimM === 0 && p5.trimM === 500 && big && big.trimM === 2000 && p0.segments[0][0][2] === 0 && p5.segments[0][0][2] > prep.segments[0][0][2];
+ck("63. runPrepareTrack: cfg.trimM muda o aparo (0, 500, 1000, 2000) e nunca passa de 2000 (CHECK de trim_m); um valor fora do conjunto cai nos 200 por omissão", (function(){
+  var p0 = C.runPrepareTrack(hour, {trimM: 0}), p5 = C.runPrepareTrack(hour, {trimM: 500}), big = C.runPrepareTrack(lineTrack(9000, 3), {trimM: 2000}), huge = C.runPrepareTrack(lineTrack(9000, 3), {trimM: 99999});
+  return p0.trimM === 0 && p5.trimM === 500 && big && big.trimM === 2000 && huge && huge.trimM === 200 && p0.segments[0][0][2] === 0 && p5.segments[0][0][2] > prep.segments[0][0][2];
 })());
 ck("64. runPrepareTrack: 60 000 pontos acabam com ≤ 3000 pontos, ≤ 200 segmentos e texto jsonb ≤ 200 000", (function(){
   var r = rng(51), seg = [], i, la = LAT0, lo = LON0;
@@ -525,5 +525,192 @@ var corridaFile = path.join(root, "corrida.js");
 var uiNames = fs.existsSync(corridaFile) ? (function(){ var out = [], mm2, re2 = /^(?:function\s+(\w+)|var\s+(\w+))/gm, src = fs.readFileSync(corridaFile, "utf8"); while ((mm2 = re2.exec(src))) out.push(mm2[1] || mm2[2]); return out; })() : [];
 var twice = uiNames.filter(function(x){ return topNames.indexOf(x) >= 0; });
 ck("118. corrida.js (se já existir) não redeclara nenhum nome do núcleo: no eval conjunto a 2.ª declaração apagava a 1.ª em silêncio" + (twice.length ? " (repetidos: " + twice.join(", ") + ")" : "") + (fs.existsSync(corridaFile) ? "" : " [corrida.js ainda não existe]"), twice.length === 0);
+
+// ================================================================ revisão adversarial: dados hostis, privacidade, horas ================================================================
+function runSeg(n, dt, v, t0){ var a = [], i; for (i = 0; i < n; i++) a.push(northPt(v * i * dt, (t0 || 0) + i * dt)); return a; }
+function minDistTo(tr, la, lo){ var best = Infinity; tr.segments.forEach(function(sg){ sg.forEach(function(q){ var d = C.runHav(q[0], q[1], la, lo); if (d < best) best = d; }); }); return best; }
+function coords(tr){ return JSON.stringify(tr.segments.map(function(sg){ return sg.map(function(q){ return [q[0], q[1]]; }); })); }
+var base3600 = runSeg(1201, 1, 3), homeLat = LAT0, endLat = LAT0 + 3600 / M_LAT;
+var cleanTr = C.runPrepareTrack([base3600], {trimM: 200});
+var staleHead = [northPt(-1500, -1)].concat(base3600), staleBoth = staleHead.concat([northPt(3600 + 4000, 1201)]);
+var trHead = C.runPrepareTrack([staleHead], {trimM: 200}), trBoth = C.runPrepareTrack([staleBoth], {trimM: 200});
+ck("119. Aparo com o 1.º ponto espúrio (fix antigo a 1,5 km): centra-se na partida REAL; nada fica a menos de 200 m dela e o percurso partilhado é o mesmo que sem o ponto", trHead && minDistTo(trHead, homeLat, LON0) >= 199.9 && coords(trHead) === coords(cleanTr) && trHead.trimM === 200);
+ck("120. O mesmo com o último ponto também espúrio (4 km para lá da chegada real): a chegada real fica a ≥ 200 m e nada do ponto espúrio entra no percurso", trBoth && minDistTo(trBoth, endLat, LON0) >= 199.9 && minDistTo(trBoth, homeLat, LON0) >= 199.9 && coords(trBoth) === coords(cleanTr) && minDistTo(trBoth, endLat + 4000 / M_LAT, LON0) > 3000);
+var stHead = C.runStats([staleHead], null, "import"), stClean = C.runStats([base3600], null, "import");
+ck("121. runStats em importação com o 1.º ponto espúrio: distância, tempo e parciais iguais ao percurso limpo (o ponto sai SÓ ele, entra em skipped) — antes somava ~1,5 km fantasma", stHead.distM === stClean.distM && stHead.durationS === stClean.durationS && stHead.movingS === stClean.movingS && stHead.splitsS.join() === stClean.splitsS.join() && stHead.skipped === 1 && stHead.startedAtMs === T0 && stClean.distM > 3500);
+ck("122. Trecho espúrio no início (5 fixes parados a 1,5 km) e outliers do meio e do fim (1, 2 seguidos): saem só eles; distância e parciais não mudam", (function(){
+  var head5 = [], i; for (i = 5; i >= 1; i--) head5.push(northPt(-1500, -i));
+  var mid = base3600.slice(); mid[300] = northPt(5000 + 900, 300); mid[301] = northPt(5000 + 903, 301);
+  var tail = base3600.concat([northPt(7600, 1201), northPt(7603, 1202)]);
+  return [head5.concat(base3600), mid, tail].every(function(segA){ var s = C.runStats([segA], null, "import"); return Math.abs(s.distM - stClean.distM) <= 12 && s.splitsS.join() === stClean.splitsS.join() && s.skipped >= 1 && s.endedAtMs <= T0 + 1200000 + 1000; });
+})());
+ck("123. Um ponto do meio com posição absurda não entra no percurso partilhado nem no SVG (a polilinha não vai até lá)", (function(){
+  var a = base3600.slice(); a[600] = pt(LAT0 + 1800 / M_LAT, LON0 + 5000 / M_LON, T0 + 600000);
+  var tr = C.runPrepareTrack([a], {trimM: 0}), svg2 = C.runTrackSvg(C.runPrepareTrack([a], {trimM: 0}).segments);
+  var far = false; tr.segments.forEach(function(sg){ sg.forEach(function(q){ if (Math.abs(q[1] - LON0) * M_LON > 100) far = true; }); });
+  return tr && !far && coords(tr) === coords(C.runPrepareTrack([base3600], {trimM: 0})) && svg2 !== "";
+})());
+ck("124. runIClean não altera a entrada e é idempotente (limpar o já limpo não muda nada)", (function(){
+  var segsA = [staleBoth.slice(), runSeg(100, 1, 3, 5000)], before = JSON.stringify(segsA), c1 = C.runIClean(segsA, C.RUN_CFG), c2 = C.runIClean(c1.segs, C.RUN_CFG);
+  return JSON.stringify(segsA) === before && c1.dropped >= 2 && c2.dropped === 0 && JSON.stringify(c2.segs) === JSON.stringify(c1.segs);
+})());
+ck("125. Ruído normal de GPS (σ 3 m a 1 Hz, saltos < 30 m) não é «limpo»: a limpeza só mexe em saltos > spikeMinM", (function(){
+  var r = rng(61), a = [], i; for (i = 0; i < 1800; i++) a.push(pt(LAT0 + (3 * i + gauss(r) * 3) / M_LAT, LON0 + gauss(r) * 3 / M_LON, T0 + i * 1000));
+  var c = C.runIClean([a], C.RUN_CFG); return c.dropped === 0 && c.segs.length === 1 && c.segs[0].length === 1800;
+})());
+
+// ---- aparo: raio efetivo com folga aleatória, falha fechado
+function firstSharedDist(tr){ return C.runHav(tr.segments[0][0][0], tr.segments[0][0][1], homeLat, LON0); }
+var line9 = runSeg(3001, 1, 3);
+var tr0 = C.runPrepareTrack([line9], {trimM: 200, rnd: 0}), trHi = C.runPrepareTrack([line9], {trimM: 200, rnd: 0.999}), trMid = C.runPrepareTrack([line9], {trimM: 200, rnd: 0.5});
+ck("126. Folga aleatória: com rnd 0 o raio efetivo é 200 m, com rnd 0,5 é 250 m e com rnd ≈ 1 é ≈ 300 m (trimM × (1 + 0,5 × rnd)); o trimM guardado é sempre o NOMINAL (200)", firstSharedDist(tr0) >= 199.9 && firstSharedDist(tr0) < 215 && firstSharedDist(trMid) >= 249.9 && firstSharedDist(trMid) < 265 && firstSharedDist(trHi) >= 299 && firstSharedDist(trHi) < 315 && tr0.trimM === 200 && trMid.trimM === 200 && trHi.trimM === 200);
+ck("127. rnd fora de [0,1) ou inválido: sem rnd (ou NaN, texto, negativo) usa 0; rnd ≥ 1 fica no máximo (nunca sai do intervalo, nunca aparta menos que trimM)", [undefined, NaN, "x", null, -3].every(function(r2){ var t = C.runPrepareTrack([line9], {trimM: 200, rnd: r2}); return coords(t) === coords(tr0); }) && (function(){ var big2 = C.runPrepareTrack([line9], {trimM: 200, rnd: 7}); return firstSharedDist(big2) >= 299 && firstSharedDist(big2) < 315; })());
+ck("128. Raio efetivo com folga também vale para a chegada, e uma corrida que cabia nos 200 m mas não nos ≈300 m dá null (demasiado curta)", (function(){
+  var endD = C.runHav(trHi.segments[trHi.segments.length - 1][trHi.segments[trHi.segments.length - 1].length - 1][0], LON0 * 0 + trHi.segments[trHi.segments.length - 1][trHi.segments[trHi.segments.length - 1].length - 1][1], LAT0 + 9000 / M_LAT, LON0);
+  return endD >= 299 && C.runPrepareTrack([runSeg(161, 1, 3)], {trimM: 200, rnd: 0}) !== null && C.runPrepareTrack([runSeg(161, 1, 3)], {trimM: 200, rnd: 0.999}) === null;
+})());
+ck("129. trimM inválido NÃO desliga o aparo (falha fechado): NaN, null, texto, vazio, objeto, negativo, fora do conjunto e infinito dão trimM 200 e nada a menos de 200 m", [NaN, null, "abc", "", {}, [], -5, 300, 99999, Infinity, true].every(function(v){ var t = C.runPrepareTrack([line9], {trimM: v}); return t && t.trimM === 200 && minDistTo(t, homeLat, LON0) >= 199.9; }) && C.runPrepareTrack([line9], {trimM: 0}).trimM === 0 && C.runPrepareTrack([line9], {trimM: "500"}).trimM === 500 && C.runPrepareTrack([line9], {trimM: undefined}).trimM === 200 && C.runPrepareTrack([line9]).trimM === 200 && C.runPrepareTrack([line9], {trimM: 100}).trimM === 100);
+
+// ---- horas adiantadas e segmentos fora de ordem na importação (runIFinish é o que os leitores de GPX/TCX chamam no fim)
+function rawOf(pts){ return pts.map(function(sg){ return sg.map(function(p){ return {lat: p.lat, lon: p.lon, t: p.t, naive: false}; }); }); }
+function finish(raw2){ return C.runIFinish("gpx", raw2, {cfg: C.RUN_CFG, nowMs: NOW}, null); }
+var r0 = finish(rawOf([base3600])), st0 = C.runStats(r0.segments, null, "import");
+ck("130. Base sem problemas: nenhum aviso, nada descartado, 1201 pontos", r0.ok && r0.warnings.length === 0 && r0.points === 1201 && r0.declaredDistM === null && st0.skipped === 0);
+ck("131. UM ponto com a hora +10 min (e +1 ano, e o 1.º ponto adiantado): sai SÓ esse ponto, o resto fica e as contas são as mesmas (antes apagava 600 pontos e dava o ritmo a 2:46/km)", [600000, 365 * 86400000].every(function(adv){
+  var a = base3600.slice(); a[100] = pt(a[100].lat, a[100].lon, a[100].t + adv);
+  var r = finish(rawOf([a])), s2 = C.runStats(r.segments, null, "import");
+  return r.ok && r.points === 1200 && r.warnings.join("|") === "Ignorámos 1 ponto inválido ou com hora repetida." && s2.distM === st0.distM && s2.durationS >= st0.durationS - 2 && s2.movingS >= st0.movingS - 3 && s2.splitsS.join() === st0.splitsS.join();
+}) && (function(){ var a = base3600.slice(); a[0] = pt(a[0].lat, a[0].lon, T0 + 3600000); var r = finish(rawOf([a])); return r.ok && r.points === 1200 && r.startedAtMs === T0 + 1000; })());
+ck("132. Série curta de pontos adiantados (2 seguidos) também sai só ela, sem apagar o resto", (function(){
+  var a = base3600.slice(); a[100] = pt(a[100].lat, a[100].lon, a[100].t + 600000); a[101] = pt(a[101].lat, a[101].lon, a[101].t + 600000);
+  var r = finish(rawOf([a])); return r.ok && r.points === 1199 && C.runStats(r.segments, null, "import").distM === st0.distM;
+})());
+ck("133. Segmentos em ordem cronológica invertida (ficheiro fundido): ordenam-se e nada se perde (antes metade do percurso desaparecia)", (function(){
+  var s1 = runSeg(600, 1, 3, 0), s2 = runSeg(600, 1, 3, 600).map(function(p, i){ return northPt(1800 + 3 * i, 600 + i); });
+  var r = finish(rawOf([s2, s1])), s = C.runStats(r.segments, null, "import");
+  return r.ok && r.points === 1200 && r.segments.length === 2 && r.startedAtMs === T0 && r.segments[0][0].t === T0 && s.distM > 3500 && r.warnings.length === 0;
+})());
+ck("134. Se mais de 2 % dos pontos saem por hora fora de ordem, o aviso diz que a corrida pode estar incompleta (texto fixo); com poucos não aparece", (function(){
+  var a = base3600.slice(), i; for (i = 0; i < 40; i++) a[200 + i] = pt(a[200 + i].lat, a[200 + i].lon, T0 + (600 + i) * 1000 * 0 + 1000);   // 40 pontos com hora 1 s (a recuar)
+  var r = finish(rawOf([a])), few = finish(rawOf([base3600.slice(0, 100).concat([pt(1, 1, T0 + 5)]).concat(base3600.slice(100))]));
+  return r.ok && r.warnings.indexOf("O ficheiro tem horas fora de ordem: a corrida pode estar incompleta.") >= 0 && few.ok && few.warnings.indexOf("O ficheiro tem horas fora de ordem: a corrida pode estar incompleta.") < 0;
+})());
+ck("135. Posição e hora absurdas no mesmo ficheiro, mais pontos sem hora: o resultado é o do percurso limpo e os avisos só levam números", (function(){
+  var a = base3600.slice(); a[10] = pt(a[10].lat + 0.5, a[10].lon, a[10].t); a[500] = pt(a[500].lat, a[500].lon, a[500].t + 900000);
+  var raw3 = rawOf([a]); raw3[0].push({lat: LAT0, lon: LON0, t: NaN, naive: false});
+  var r = finish(raw3), s = C.runStats(r.segments, null, "import");
+  return r.ok && r.points === 1199 && s.distM === st0.distM && r.warnings.every(function(w){ return /^[^<>&]*$/.test(w); }) && /posição impossível/.test(r.warnings.join("|")) && /sem hora/.test(r.warnings.join("|"));
+})());
+
+// ---- reducer ao vivo: hora adiantada
+function F(meters, tSec, acc, t0){ return {lat: LAT0 + meters / M_LAT, lon: LON0, acc: acc == null ? 5 : acc, t: (t0 == null ? T0 : t0) + tSec * 1000}; }
+ck("136. Ao vivo: um fix que ABRE uma lacuna com +1 dia desfaz-se quando o seguinte recua; o resto da gravação não é recusado (antes: distância 291 m em vez de ~1797)", (function(){
+  var st = C.runFeedInit(), i, reasons = {};
+  for (i = 0; i < 600; i++) { var f = F(3 * i, i); if (i === 100) f.t = T0 + 86400000; var rr = C.runFeed(st, f); reasons[rr.reason] = (reasons[rr.reason] || 0) + 1; }
+  return Math.abs(st.distM / (3 * 599) - 1) < 0.01 && st.segs.length === 1 && st.gaps === 0 && st.gapMs === 0 && st.rej.time === 1 && (reasons.time || 0) === 0 && st.maxT === T0 + 599000;
+})());
+ck("137. Ao vivo: o 1.º fix da corrida com a hora +1 h também se desfaz (início = o 2.º fix) e fixes recusados por precisão ou por salto NÃO avançam o máximo", (function(){
+  var st = C.runFeedInit(), i;
+  C.runFeed(st, F(0, 3600));
+  for (i = 1; i <= 300; i++) C.runFeed(st, F(3 * i, i));
+  var ok1 = st.startedAtMs === T0 + 1000 && st.segs.length === 1 && Math.abs(st.distM / (3 * 299) - 1) < 0.01;
+  var st2 = C.runFeedInit(); for (i = 0; i < 300; i++) { var f2 = F(3 * i, i); if (i === 50) { f2 = F(3 * i, i + 7200, 90); } C.runFeed(st2, f2); }
+  var st3 = C.runFeedInit(); for (i = 0; i < 300; i++) { var f3 = F(3 * i, i); if (i === 50) f3 = F(3 * i + 4000, i); C.runFeed(st3, f3); }
+  return ok1 && st2.rej.acc === 1 && st2.rej.time === 0 && Math.abs(st2.distM / (3 * 299) - 1) < 0.01 && st3.rej.jump === 1 && st3.rej.time === 0 && st3.maxT === T0 + 299000;
+})());
+ck("138. Ao vivo: o fix adiantado também se desfaz se o que vem a seguir traz primeiro fixes de sinal fraco (recusados por precisão) e só depois um bom", (function(){
+  var st = C.runFeedInit(), i;
+  for (i = 0; i < 100; i++) C.runFeed(st, F(3 * i, i));
+  C.runFeed(st, F(300, 100 + 3600));
+  C.runFeed(st, F(303, 101, 80)); C.runFeed(st, F(306, 102, 80));
+  for (i = 103; i < 300; i++) C.runFeed(st, F(3 * i, i));
+  return st.segs.length === 1 && st.gaps === 0 && st.rej.time === 3 && st.rej.acc === 0 && Math.abs(st.distM / (3 * 297) - 1) < 0.03 && st.maxT === T0 + 299000;
+})());
+ck("139. Ao vivo: uma lacuna a sério (5 min sem posições) continua a abrir segmento e a contar (o desfazer só vale quando o fixe seguinte recua)", (function(){
+  var st = C.runFeedInit(), i; for (i = 0; i < 60; i++) C.runFeed(st, F(3 * i, i)); for (i = 360; i < 420; i++) C.runFeed(st, F(3 * i, i));
+  return st.segs.length === 2 && st.gaps === 1 && Math.abs(st.gapMs / 1000 - 301) <= 2 && st.rej.time === 0 && st.segs[1].length > 1;
+})());
+ck("140. Ao vivo: depois de desfazer, o estado continua válido: JSON, runFeedRestore e runStats(live) dão os mesmos totais", (function(){
+  var st = C.runFeedInit(), i; for (i = 0; i < 100; i++) C.runFeed(st, F(3 * i, i)); C.runFeed(st, F(300, 100 + 7200)); for (i = 101; i < 400; i++) C.runFeed(st, F(3 * i, i));
+  var back = C.runFeedRestore(JSON.parse(JSON.stringify(st))), s = C.runStats(st.segs, null, "live");
+  return s.distM === Math.round(st.distM) && s.gaps === 0 && s.durationS >= 390 && s.durationS <= 399 && back && Math.round(back.distM) === Math.round(st.distM) && JSON.stringify(st).indexOf("undefined") < 0;
+})());
+
+// ---- «terminar no último ponto bom»
+var forgot = (function(){ var run = C.runFeedInit(), i; for (i = 0; i <= 1800; i++) C.runFeed(run, F(3 * i, i)); C.runFeed(run, F(5400, 1800 + 5 * 3600)); C.runFeed(run, F(5400, 1800 + 5 * 3600 + 1)); return run; })();
+var forgotAll = C.runStats(forgot.segs, null, "live"), forgotCut = C.runCutAtLastGap(forgot.segs, 600), forgotCutStats = C.runStats(forgotCut.segments, null, "live");
+ck("141. Esqueceu-se de terminar: a lacuna de 5 h soma-se ao tempo (5:30:00); runCutAtLastGap tira-a e fica 30 min com a mesma distância; devolve cutS e cutPoints", forgotAll.durationS > 19000 && forgotCutStats.durationS >= 1790 && forgotCutStats.durationS <= 1800 && forgotCutStats.endedAtMs <= T0 + 1800000 && forgotCutStats.distM === C.runStats(forgot.segs.slice(0, 1), null, "live").distM && forgotCutStats.gaps === 0 && forgotCut.cutS > 17000 && forgotCut.cutPoints >= 1 && forgotCut.segments.length === 1);
+ck("142. runCutAtLastGap: sem lacuna (ou menor que minGapS) devolve tudo numa cópia; não altera a entrada; abaixo de 24 h passa a ser guardável", (function(){
+  var before = JSON.stringify(forgot.segs), none = C.runCutAtLastGap(forgot.segs, 99999), few = C.runCutAtLastGap([lineTrack(300, 3)[0]], 10), run30 = C.runFeedInit(), i;
+  for (i = 0; i <= 600; i++) C.runFeed(run30, F(3 * i, i)); C.runFeed(run30, F(1800, 600 + 30 * 3600));
+  var s30 = C.runStats(run30.segs, null, "live"), c30 = C.runStats(C.runCutAtLastGap(run30.segs, 600).segments, null, "live");
+  function chk(sx){ return C.runCheckRun({id: ID, studentId: "ana", source: "live", startedAtMs: sx.startedAtMs, durationS: sx.durationS, movingS: sx.movingS, distM: sx.distM, gaps: sx.gaps, gapS: sx.gapS, consentV: 1}, NOW + 40 * 3600000); }
+  return JSON.stringify(forgot.segs) === before && C.runCutAtLastGap(forgot.segs).cutPoints === 0 && C.runCutAtLastGap(forgot.segs, NaN).segments.length === forgot.segs.length && none.cutS === 0 && none.segments.length === forgot.segs.length && none.segments[0] !== forgot.segs[0] && few.cutPoints === 0 && C.runCutAtLastGap(null).segments.length === 0 && chk(s30).ok === false && chk(c30).ok === true;
+})());
+ck("143. runStats acaba sempre no último ponto (nunca soma o fim aberto até «agora»): o mesmo resultado se o segmento está aberto ou fechado, e runLiveView.elapsedS segue o relógio de parede", (function(){
+  var st = C.runFeedInit(), i; for (i = 0; i < 120; i++) C.runFeed(st, F(3 * i, i));
+  var open = C.runStats(st.segs, null, "live"), view = C.runLiveView(st, T0 + 7200000);
+  st.open = false; var closed = C.runStats(st.segs, null, "live");
+  var lastPt = st.segs[0][st.segs[0].length - 1];
+  return st.segs.length === 1 && open.endedAtMs === lastPt.t && open.durationS === Math.round((lastPt.t - T0) / 1000) && open.durationS >= 110 && JSON.stringify(open) === JSON.stringify(closed) && view.elapsedS === 7200 && view.sinceGoodS === Math.round((T0 + 7200000 - st.lastGoodT) / 1000);
+})());
+
+// ---- fronteiras de Lap/Track, amostragem esparsa
+function lapped(dt, laps, v){ var all = [], t = 0, m = 0; while (m < 10000) { all.push(northPt(m, t)); t += dt; m += (v || 3) * dt; } var per = Math.ceil(all.length / laps), out = [], i; for (i = 0; i < all.length; i += per) out.push(all.slice(i, i + per)); return out; }
+ck("144. Importação: 10 Laps (um Track por km) dão a mesma distância e tempo que 1 só segmento (amostragem 1, 5 e 10 s); antes perdiam até -2,7 % e -90 s", [1, 5, 10].every(function(dt){
+  var one = C.runStats(lapped(dt, 1), null, "import"), ten = C.runStats(lapped(dt, 10), null, "import");
+  return ten.distM === one.distM && ten.durationS === one.durationS && ten.movingS === one.movingS && ten.gaps === 0 && ten.splitsS.join() === one.splitsS.join();
+}) && C.runStats(lapped(1, 10), {importJoinS: 0}, "import").durationS < C.runStats(lapped(1, 1), null, "import").durationS);
+ck("145. Importação: uma pausa a sério entre segmentos (340 s) continua a não contar, mesmo ligando os que seguem juntos; um intervalo > 10 s não se liga; velocidade impossível também não", (function(){
+  var a = runSeg(61, 1, 3, 0), b = runSeg(61, 1, 3, 400).map(function(p, i){ return northPt(180 + 40 + 3 * i, 400 + i); });
+  var s = C.runStats([a, b], null, "import");
+  var c = runSeg(61, 1, 3, 0), d = runSeg(61, 1, 3, 65).map(function(p, i){ return northPt(180 + 3 + 3 * i, 65 + i); });   // 5 s depois do fim do 1.º
+  var s2 = C.runStats([c, d], null, "import");
+  var e = runSeg(61, 1, 3, 0), f = runSeg(61, 1, 3, 65).map(function(p, i){ return northPt(180 + 900 + 3 * i, 65 + i); });   // salta 900 m em 5 s
+  return s.durationS === 120 && s2.durationS === 125 && Math.abs(s2.distM - 366) <= 12 && C.runStats([e, f], null, "import").durationS === 120;
+})());
+function sparse(dt, n){ var a = [], i; for (i = 0; i < n; i++) a.push(northPt(3 * dt * i, dt * i)); return [a]; }
+ck("146. Importação com amostragem esparsa: a 60 s e a 61 s por ponto a distância é a mesma (≈ verdade) e não há lacunas — antes a 61 s dava 0 m; um buraco real de 100 s num ficheiro a 1 Hz continua a ser lacuna", (function(){
+  var s60 = C.runStats(sparse(60, 100), null, "import"), s61 = C.runStats(sparse(61, 100), null, "import"), s120 = C.runStats(sparse(120, 60), null, "import");
+  var hole = C.runStats([runSeg(61, 1, 3, 0).concat(runSeg(61, 1, 3, 160).map(function(p, i){ return northPt(180 + 250 + 3 * i, 160 + i); }))], null, "import");
+  return Math.abs(s60.distM - 3 * 60 * 99) <= 20 && Math.abs(s61.distM - 3 * 61 * 99) <= 20 && s61.gaps === 0 && s60.gaps === 0 && Math.abs(s120.distM - 3 * 120 * 59) <= 20 && s120.gaps === 0 && hole.gaps === 1 && hole.gapS === 100;
+})());
+
+// ---- texto das notas
+ck("147. Notas com substituto UTF-16 solto (no início, no meio, no fim ou sozinho) saem limpas e o JSON enviado nunca leva \\ud8xx solto; um par válido (emoji) fica", (function(){
+  var cases = ["\uD83D", "ok \uD83D", "\uD83D ok", "a\uD83Db", "a\uDE00b", "\uDE00\uD83D", "ok 😀 fim\uD83D", "😀😀"];
+  var rows = cases.map(function(nt){ return C.runBuildInsert(goodRun({notes: nt}), NOW); });
+  return rows.every(function(r){ return r && !/\\u[dD][89a-fA-F]/.test(JSON.stringify(r)) && (r.notes === null || !/[\uD800-\uDFFF]/.test(r.notes.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, ""))); }) && rows[0].notes === null && rows[1].notes === "ok" && rows[2].notes === "ok" && rows[3].notes === "ab" && rows[6].notes === "ok 😀 fim" && rows[7].notes === "😀😀" && C.runNormalizeRow(Object.assign({}, dbRow, {notes: "x\uD83Dy"})).notes === "xy";
+})());
+ck("148. Fuzz de notas com substitutos soltos misturados (2000 textos): tudo o que runBuildInsert devolve cumpre os CHECK do SQL e não leva escapes de substituto solto", (function(){
+  var r = rng(91), pool = ["a", "é", " ", "\uD83D", "\uDE00", "😀", "x", "\u0000", "\n"], ok = true, i, j;
+  for (i = 0; i < 2000; i++) { var nt = ""; var len = Math.floor(r() * 620); for (j = 0; j < len; j++) nt += pool[Math.floor(r() * pool.length)]; var row = C.runBuildInsert(goodRun({notes: nt}), NOW); if (!row || !dbAccepts(row, NOW) || /\\u[dD][89a-fA-F]/.test(JSON.stringify(row))) ok = false; }
+  return ok;
+})());
+
+// ---- fuzz de dados hostis (nunca lança; o que sai cumpre o SQL)
+ck("149. Fuzz de séries hostis (300): pontos soltos, horas adiantadas, duplicadas, NaN e laps aleatórios nunca lançam; runStats fica coerente (movingS ≤ durationS, tudo ≥ 0) e runPrepareTrack cumpre a validação do SQL", (function(){
+  var r = rng(404), ok = true, made = 0, i, j, k;
+  for (i = 0; i < 300; i++) {
+    var segsH = [], ns = 1 + Math.floor(r() * 4), t = 0, m = 0;
+    for (j = 0; j < ns; j++) {
+      var sg = [], len = 1 + Math.floor(r() * 120);
+      for (k = 0; k < len; k++) {
+        t += 1 + Math.floor(r() * 3); m += 2 + r() * 2;
+        var q = northPt(m, t), dice = r();
+        if (dice < 0.04) q = northPt(m + (r() - 0.5) * 20000, t); else if (dice < 0.07) q = northPt(m, t + (r() < 0.5 ? 1 : -1) * Math.floor(r() * 1e6)); else if (dice < 0.09) q = {lat: NaN, lon: LON0, t: T0 + t * 1000, acc: null}; else if (dice < 0.1) q = null;
+        sg.push(q);
+      }
+      segsH.push(sg); t += Math.floor(r() * 90);
+    }
+    try {
+      var s = C.runStats(segsH, null, "import");
+      if (!(s.movingS <= s.durationS && s.distM >= 0 && s.durationS >= 0 && s.skipped >= 0 && s.points >= 0)) ok = false;
+      var tp = C.runPrepareTrack(segsH.map(function(sx){ return sx.filter(function(p){ return p; }); }), {trimM: [0, 100, 200][i % 3], rnd: r()});
+      if (tp) { made++; if (!dbAcceptsTrack(tp.segments)) ok = false; }
+    } catch (e) { ok = false; }
+  }
+  return ok && made > 30;
+})());
 
 check.summarize();

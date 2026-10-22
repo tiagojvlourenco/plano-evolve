@@ -35,7 +35,7 @@ function gpxText(segs, o){
   return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="' + CRE + '" xmlns="http://www.topografix.com/GPX/1/1" xmlns:ns3="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">' +
     "<metadata><name>" + NAME + "</name><author><name>" + AUTH + "</name><email id=\"joana\" domain=\"example.com\"/></author></metadata>" +
     (o.rte ? "<rte><name>ROTAMARK</name><rtept lat=\"38.7\" lon=\"-9.1\"/><rtept lat=\"38.71\" lon=\"-9.1\"/></rte>" : "") + (o.wpt ? "<wpt lat=\"38.7\" lon=\"-9.1\"><name>x</name></wpt>" : "") +
-    (segs.length ? "<trk><name>" + NAME + "</name><desc>" + AUTH + "</desc>" + body + "</trk>" : "") + "</gpx>";
+    (segs.length ? "<trk><name>" + NAME + "</name><desc>" + AUTH + "</desc>" + (o.type ? "<type>" + o.type + "</type>" : "") + body + "</trk>" : "") + "</gpx>";
 }
 function straight(n, step, dt, t0, tz){   // n pontos para norte, step metros, dt segundos; tz = sufixo de fuso («Z» por omissão, «» = sem fuso)
   var a = [], i, base = t0 == null ? T0 : t0;
@@ -50,9 +50,9 @@ function tcxText(acts, o){
   function e(name, inner, attrs){ return "<" + ns + name + (attrs || "") + ">" + inner + "</" + ns + name + ">"; }
   var a = acts.map(function(act){
     return e("Activity", e("Id", act.id || "2026-10-01T07:00:00Z") + act.laps.map(function(lap){
-      return e("Lap", lap.map(function(track){
+      return e("Lap", (lap.dist != null ? e("DistanceMeters", String(lap.dist)) : "") + lap.map(function(track){
         return e("Track", track.map(function(tp){
-          return e("Trackpoint", (tp.time ? e("Time", tp.time) : "") + (tp.pos ? e("Position", e("LatitudeDegrees", tp.pos[0]) + e("LongitudeDegrees", tp.pos[1])) : "") + e("HeartRateBpm", e("Value", HR)) + (tp.pos ? e("DistanceMeters", "12") : ""));
+          return e("Trackpoint", (tp.time ? e("Time", tp.time) : "") + (tp.pos ? e("Position", e("LatitudeDegrees", tp.pos[0]) + e("LongitudeDegrees", tp.pos[1])) : "") + e("HeartRateBpm", e("Value", HR)) + (tp.dist != null ? e("DistanceMeters", String(tp.dist)) : ""));
         }).join(""));
       }).join(""), ' StartTime="2026-10-01T07:00:00Z"');
     }).join("") + e("Creator", e("Name", AUTH), ' xsi:type="Device_t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'), act.sport === undefined ? "" : ' Sport="' + act.sport + '"');
@@ -60,6 +60,7 @@ function tcxText(acts, o){
   return '<?xml version="1.0" encoding="UTF-8"?>\n' + open + (o.courses ? e("Courses", e("Course", e("Name", "ROTAMARK"))) : e("Activities", a)) + close;
 }
 function tcxPts(n, step, dt, t0, tz){ var a = [], i; for (i = 0; i < n; i++) a.push({time: new Date((t0 == null ? T0 : t0) + i * dt * 1000).toISOString().slice(0, 19) + (tz == null ? "Z" : tz), pos: [(LAT0 + i * step / M_LAT).toFixed(6), LON0.toFixed(6)]}); return a; }
+function withDist(pts, step){ pts.forEach(function(p, i){ p.dist = i * step; }); return pts; }   // DistanceMeters acumulada em cada Trackpoint
 
 var evilHits = 0;
 var evil = http.createServer(function(req, res){ evilHits++; res.writeHead(200, {"Content-Type": "text/plain"}); res.end("x"); });
@@ -264,7 +265,57 @@ var evil = http.createServer(function(req, res){ evilHits++; res.writeHead(200, 
   }, {text: fullText, now: NOW});
   ck("53. Fluxo completo no browser (ler → runStats → runPrepareTrack → runBuildInsert → SVG → duplicado): tudo coerente e o SVG é aceite pelo parser de HTML", !flow.error && flow.st.distM > 4000 && flow.prep && flow.prep.points > 10 && flow.row && flow.row.distance_m === flow.st.distM && flow.row.source === "gpx" && flow.svgOk && /^\d+:\d\d$/.test(flow.pace) && /^\d+,\d\d km$/.test(flow.dist) && /^\d+:\d\d$/.test(flow.dur) && !!flow.dup);
 
-  ck("54. Nenhum erro de JavaScript na página e nenhum pedido de rede em todo o teste", errors.length === 0 && evilHits === 0 && requests.every(function(u){ return /^(about:|data:)/.test(u); }));
+
+  // ======================= dados hostis (revisão): horas adiantadas, pontos soltos, laps, tipo de atividade, distância declarada =======================
+  var N600 = straight(600, 3, 1);
+  function statsOf(r){ return pg.evaluate(function(a){ return window.RC.runStats(a.segs, null, "import"); }, {segs: r.segments}); }
+  var gBase = await gpx(gpxText([N600]), NOWO), sBase = await statsOf(gBase);
+  var advMid = N600.slice(), advYear = N600.slice(), advFirst = N600.slice();
+  advMid[100] = [N600[100][0], N600[100][1], iso(T0 + 100000 + 600000)];
+  advYear[100] = [N600[100][0], N600[100][1], iso(T0 + 100000 + 365 * 86400000)];
+  advFirst[0] = [N600[0][0], N600[0][1], iso(T0 + 3600000)];
+  var gMid = await gpx(gpxText([advMid]), NOWO), gYear = await gpx(gpxText([advYear]), NOWO), gFirst = await gpx(gpxText([advFirst]), NOWO);
+  var sMid = gMid.ok ? await statsOf(gMid) : null, sYear = gYear.ok ? await statsOf(gYear) : null;
+  ck("54. Um ponto com a hora adiantada (+10 min, +1 ano, ou o 1.º ponto +1 h) é descartado SÓ ele: o resto do ficheiro fica e as contas são as do ficheiro limpo (antes: 600 pontos apagados em silêncio, ou erro «mais de 24 horas»)", gBase.ok && gBase.warnings.length === 0 && gMid.ok && gMid.points === 599 && gYear.ok && gYear.points === 599 && gFirst.ok && gFirst.points === 599 && gFirst.startedAtMs === T0 + 1000 &&
+    gMid.warnings.join("|") === "Ignorámos 1 ponto inválido ou com hora repetida." && sMid.distM === sBase.distM && sYear.distM === sBase.distM && sMid.durationS >= sBase.durationS - 2 && sMid.splitsS.join() === sBase.splitsS.join());
+  var segA = straight(300, 3, 1, T0), segB = straight(300, 3, 1, T0 + 300000).map(function(p, i){ return [(LAT0 + (900 + 3 * i) / M_LAT).toFixed(6), p[1], p[2]]; });
+  var gRev = await gpx(gpxText([segB, segA]), NOWO), sRev = gRev.ok ? await statsOf(gRev) : null;
+  ck("55. Dois trkseg em ordem cronológica invertida: ordenam-se pela hora, nenhum ponto se perde e não há aviso (antes: metade do ficheiro desaparecia)", gRev.ok && gRev.points === 600 && gRev.segments.length === 2 && gRev.startedAtMs === T0 && gRev.segments[0][0].t === T0 && gRev.warnings.length === 0 && sRev.distM > 1700);
+  var staleF = N600.slice(); staleF.unshift([(LAT0 - 1500 / M_LAT).toFixed(6), LON0.toFixed(6), iso(T0 - 1000)]);
+  var staleL = N600.concat([[(LAT0 + 6000 / M_LAT).toFixed(6), LON0.toFixed(6), iso(T0 + 600000)]]);
+  var gSF = await gpx(gpxText([staleF]), NOWO), gSL = await gpx(gpxText([staleL]), NOWO), sSF = await statsOf(gSF), sSL = await statsOf(gSL);
+  ck("56. Fix antigo a 1,5 km como 1.º ponto (ou um ponto espúrio a 4 km no fim): sai só ele, com um aviso só de números; distância, tempo e parciais iguais ao ficheiro limpo (antes: +1,5 km fantasma e 1.º km a «1:23/km»)", gSF.ok && gSF.points === 600 && gSL.ok && gSL.points === 600 && /^Ignorámos 1 ponto com posição impossível \(salto do GPS\)\.$/.test(gSF.warnings.join("|")) && sSF.distM === sBase.distM && sSF.durationS === sBase.durationS && sSF.splitsS.join() === sBase.splitsS.join() && sSL.distM === sBase.distM && sSL.durationS === sBase.durationS && gSF.startedAtMs === T0);
+  var privF = await pg.evaluate(function(a){ var C = window.RC, pr = C.runPrepareTrack(a.segs, {trimM: 200, rnd: 0}), best = Infinity; if (!pr) return null; pr.segments.forEach(function(s){ s.forEach(function(q){ var d = C.runHav(q[0], q[1], a.lat, a.lon); if (d < best) best = d; }); }); return best; }, {segs: gSF.segments, lat: LAT0, lon: LON0});
+  var privRaw = await pg.evaluate(function(a){ var C = window.RC, pts = a.segs[0].map(function(p){ return p; }), pr = C.runPrepareTrack([[{lat: a.lat - 1500 / a.m, lon: a.lon, t: a.t0 - 1000, acc: null}].concat(pts)], {trimM: 200, rnd: 0}), best = Infinity; pr.segments.forEach(function(s){ s.forEach(function(q){ var d = C.runHav(q[0], q[1], a.lat, a.lon); if (d < best) best = d; }); }); return best; }, {segs: gBase.segments, lat: LAT0, lon: LON0, m: M_LAT, t0: T0});
+  ck("57. Privacidade no browser: com o fix antigo no início do ficheiro, o aparo centra-se na partida real (nada a menos de 200 m dela), tanto no resultado da leitura como se o ponto espúrio vier de fora", privF !== null && privF >= 199.9 && privRaw >= 199.9);
+  var bikeT = {a: "cycling", b: "road_biking", c: "Mountain_Biking", d: "e-bike"};
+  var gBikes = []; for (var bk in bikeT) gBikes.push(await gpx(gpxText([straight(3, 10, 5)], {type: bikeT[bk]}), NOWO));
+  var gRun = await gpx(gpxText([straight(3, 10, 5)], {type: "running"}), NOWO), gWalk = await gpx(gpxText([straight(3, 10, 5)], {type: "walking"}), NOWO), gNum = await gpx(gpxText([straight(3, 10, 5)], {type: "9"}), NOWO), gNoType = await gpx(gpxText([straight(3, 10, 5)]), NOWO);
+  var gBike2 = await gpx(gpxText([straight(3, 10, 5)], {type: "cycling"}).replace("</gpx>", "<trk><type>running</type></trk></gpx>"), NOWO);
+  var gBikeFile = await file("percurso.gpx", gpxText([straight(3, 10, 5)], {type: "cycling"}), NOWO);
+  ck("58. GPX de ciclismo: recusado só quando o ficheiro o diz em <trk><type> (cycling, road_biking, Mountain_Biking, e-bike) com a mesma mensagem do TCX; running, walking, tipo numérico ou sem tipo aceitam-se (não se adivinha)", gBikes.every(function(r){ return r.ok === false && r.code === "bike" && /ciclismo/.test(r.error); }) && gRun.ok && gWalk.ok && gNum.ok && gNoType.ok && gBikeFile.code === "bike" && !leaks(gBikes[0]));
+  var lapA = [withDist(tcxPts(5, 10, 5), 10)], lapB = [withDist(tcxPts(5, 10, 5, T0 + 100000), 10)];
+  lapA.dist = 1000; lapB.dist = 1500;
+  var tDecl = await tcx([{sport: "Running", laps: [lapA, lapB]}]);
+  var tDeclPts = await tcx([{sport: "Running", laps: [[withDist(tcxPts(5, 10, 5), 10)]]}]), tDeclNone = await tcx([{sport: "Running", laps: [[tcxPts(5, 10, 5)]]}]);
+  var tDeclBad = await tcx([{sport: "Running", laps: [[withDist(tcxPts(5, 10, 5), "<script>")]]}]), tDeclNeg = await tcx([{sport: "Running", laps: [[withDist(tcxPts(5, 10, 5), -10)]]}]);
+  var tDeclTxt = tcxText([{sport: "Running", laps: [[tcxPts(5, 10, 5)]]}]).replace("<Track>", "<DistanceMeters>abc</DistanceMeters><Track>");
+  var tDeclTxtR = await pg.evaluate(function(a){ return window.RC.runParseTcx(a.text, a.opts); }, {text: tDeclTxt, opts: NOWO});
+  ck("59. declaredDistM (só número): TCX com Lap/DistanceMeters soma os laps (1000 + 1500); sem laps usa o maior DistanceMeters dos pontos (40); sem nada, texto ou negativo → null; GPX → null; nada de texto do ficheiro no resultado", tDecl.ok && tDecl.declaredDistM === 2500 && tDeclPts.ok && tDeclPts.declaredDistM === 40 && tDeclNone.declaredDistM === null && tDeclBad.ok && tDeclBad.declaredDistM === null && tDeclNeg.ok && tDeclNeg.declaredDistM === null && tDeclTxtR.ok && tDeclTxtR.declaredDistM === null && gBase.declaredDistM === null && !leaks(tDecl) && !/script/.test(JSON.stringify(tDeclBad)));
+  var one600 = tcxPts(600, 3, 1), tOne = await tcx([{sport: "Running", laps: [[one600]]}]);
+  var lapsTcx = []; for (var lp = 0; lp < 6; lp++) lapsTcx.push([one600.slice(lp * 100, lp * 100 + 100)]);
+  var tLaps = await tcx([{sport: "Running", laps: lapsTcx}]), sOne = await statsOf(tOne), sLaps = await statsOf(tLaps);
+  ck("60. TCX com 6 Lap/Track seguidos (a 1 s uns dos outros) dá a mesma distância, tempo e parciais que um só Track (cada fronteira já não perde um passo)", tLaps.ok && tLaps.segments.length === 6 && sLaps.distM === sOne.distM && sLaps.durationS === sOne.durationS && sLaps.movingS === sOne.movingS && sLaps.gaps === 0);
+  var sp61 = await gpx(gpxText([straight(120, 183, 61)]), NOWO), sp60 = await gpx(gpxText([straight(120, 180, 60)]), NOWO), sSp61 = sp61.ok ? await statsOf(sp61) : null, sSp60 = sp60.ok ? await statsOf(sp60) : null;
+  ck("61. Ficheiro gravado a 61 s por ponto: a distância é a verdadeira (≈ 21,8 km) e não há lacunas — igual à de 60 s; antes dava 0 m e «Quase não há deslocação»", sp61.ok && sSp61.distM > 21500 && sSp61.distM < 22200 && sSp61.gaps === 0 && sSp60.gaps === 0 && Math.abs(sSp60.distM - 119 * 180) < 400);
+  var hostileFlow = await pg.evaluate(function(a){
+    var C = window.RC, out = [], i;
+    for (i = 0; i < a.texts.length; i++) { var r = C.runParseGpx(a.texts[i], {nowMs: a.now}); out.push(r.ok ? [r.points, C.runStats(r.segments, null, "import").distM, r.warnings.length] : r.code); }
+    return out;
+  }, {texts: [gpxText([advMid]), gpxText([staleF]), gpxText([segB, segA])], now: NOW});
+  ck("62. O fluxo completo com ficheiros hostis (hora adiantada, ponto antigo, segmentos invertidos) nunca falha e dá valores coerentes", hostileFlow.every(function(r){ return Array.isArray(r) && r[1] > 1700 && r[1] < 1900; }));
+
+  ck("63. Nenhum erro de JavaScript na página e nenhum pedido de rede em todo o teste", errors.length === 0 && evilHits === 0 && requests.every(function(u){ return /^(about:|data:)/.test(u); }));
   await browser.close(); evil.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", (e && e.stack || String(e)).split("\n").slice(0, 4).join(" | ")); process.exit(1); });

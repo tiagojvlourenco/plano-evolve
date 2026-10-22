@@ -5,7 +5,7 @@
    Por isso: ES5 no estilo do projeto (var/function; sem arrow, let, const, async, template strings); só declarações de topo com prefixo
    run / RUN_ (os nomes runL... são INTERNOS deste ficheiro; os runLive... são puros e testados em Node); a comunicação com corrida.js é por RUN.*.
    Este ficheiro é o ÚLTIMO e acaba com RUN.loaded = true. Não faz pedidos de rede (a fila fala com o Supabase do núcleo, tal como RUN.submitRun),
-   nunca escreve coordenadas em consola, avisos ou erros, e só usa o localStorage nas duas chaves que o núcleo já declara (RUN_DRAFT_KEY, RUN_OUTBOX_KEY).
+   nunca escreve coordenadas em consola, avisos ou erros, e só usa o localStorage nas chaves que app.js declara (RUN_DRAFT_KEY, RUN_OUTBOX_KEY e RUN_CONSENT_KEY).
 
    ---------------------------------------------------------------------------------------------------------------------
    API (contrato com corrida.js; o que este ficheiro DEFINE em RUN)
@@ -17,7 +17,15 @@
      RUN.liveWireBanner(s, el)   liga os botões desse HTML e tenta enviar a fila (uma vez por abertura).
      RUN.queueAdd(item)          guarda na fila local {row, track}: SÓ o que seria enviado (nunca os pontos brutos). true se ficou guardado.
      RUN.queuePending()          nº de corridas da fila (do utilizador atual) à espera de envio.   RUN.queueFailed() → nº das recusadas.
-     RUN.flush()                 envia a fila em série (runs e depois run_tracks); 23505 = já chegou; erro transitório mantém; recusa permanente marca.
+     RUN.queueClear(studentId)   apaga da fila local as entradas desse aluno (da conta atual; por enviar e recusadas) e devolve quantas.
+     RUN.flush()                 envia a fila em série (runs e depois run_tracks); 23505 = já chegou; erro transitório mantém; recusa permanente marca
+                                 («failed», com o código). PGRST205/42P01/42501/23503 voltam a tentar-se UMA vez por sessão (e o aluno pode sempre «Tentar
+                                 outra vez»); 23514/22xxx são terminais. As recusadas expiram ao fim de 30 dias. Cada corrida tenta-se no máximo uma vez por passagem
+                                 e, se a fila não se deixa escrever, pára (reason «local»): nunca há um ciclo de pedidos.
+     RUN.liveBusy()              true se há uma gravação a preparar (GPS ligado), a gravar ou em pausa (sair da app ou mudar de conta mata-a).
+     RUN.consentCacheGet(studentId) → versão (número) com recibo local válido (conta atual, esse aluno) ou null.   RUN.consentCacheSet(studentId, version) → bool.
+     RUN.consentCacheClear(studentId)   recibo do consentimento em RUN_CONSENT_KEY: {uid, studentId, version, at}. Só serve a corrida.js para COMEÇAR sem rede
+                                 (quando a leitura no servidor falha por rede); o servidor decide sempre (RLS / chave estrangeira ao guardar). Tolera JSON mau e armazenamento que lança.
      RUN.reset()                 pára o GPS, os relógios e o Wake Lock e esquece o estado em memória (sair da conta). Não toca no armazenamento.
      RUN.gps                     adaptador injetável {start(onFix, onErr), stop()}; fix = {lat, lon, acc, t(ms), speed|null}; onErr({code}).
      RUN.live                    o estado em memória (fases «intro», «prep», «rec», «end»).
@@ -26,8 +34,22 @@
    startedAtMs, cancelView:{name:"live"}, onSaved(res)}: o rascunho só se apaga depois de a corrida ficar guardada ou na fila (RUN.submitRun é embrulhado aqui
    para o saber; se corrida.js chamar prep.onSaved(res) também serve, e é indiferente quem chega primeiro). «Cancelar» no ecrã de guardar volta ao resumo (cancelView).
 
-   Pontos puros (testados em Node, exportados por nome): runLiveDraftBuild/Serialize/Parse/Choices, runLiveQueueItem/Parse/Add, runLiveFixFromPosition,
-   runLiveSignalInfo, runLiveWarnings.
+   Pontos puros (testados em Node, exportados por nome): runLiveDraftBuild/Serialize/Parse/Peek/Owner/Choices, runLiveCutOffer, runLiveQueueItem/Parse/Add,
+   runLiveFixFromPosition, runLiveClampT, runLiveSignalInfo, runLiveWarnings.
+
+   Decisões da revisão (cada uma tem teste):
+     Relógio     a hora de um fix limita-se ao relógio do telemóvel (runLiveClampT): nunca mais de 2 s à frente, e a mais de 5 min usa o relógio. Uma posição de cache
+                 (antes do toque em Iniciar e atrasada em relação ao relógio) não conta. Cinco posições seguidas que o registo recusa (hora fora de ordem, saltos)
+                 aparecem no ecrã («A receber posições que o registo não consegue usar») com «Reiniciar GPS». LIMITE CONHECIDO: se o relógio do telemóvel recuar
+                 minutos a meio da corrida, as posições seguintes são recusadas até o relógio apanhar o registo (o aviso aparece; o aluno pode terminar e guardar).
+     Duas janelas  o rascunho leva o id da janela (iid) e o batimento (ts, de ~10 s); outra janela só lhe pega se o batimento tiver mais de 60 s ou se a primeira se
+                 despediu (pagehide: rel). Com a outra a gravar não se oferece Retomar, Guardar nem Descartar. O evento «storage» põe o aviso em dia e faz a janela
+                 que perdeu o rascunho ceder (pára o GPS e esquece a sua cópia, sem escrever nada).
+     Modo        se o profissional deixa de ter a gravação com GPS ligada para o aluno a meio (tique de 1 s, ou ao desenhar o ecrã), o GPS e o Wake Lock param e passa
+                 ao resumo; só se pode guardar se a gravação voltar a ser ligada (o servidor recusa uma corrida «live» sem ela), por isso nesse caso só há «Descartar».
+     Esquecimento  «Terminar no último ponto bom» (runCutAtLastGap do núcleo): oferece-se com uma lacuna final de pelo menos 10 min, mostrando o que fica e o que se perde.
+     Bateria     a preparar o GPS há 5 min sem Iniciar cancela; uma pausa de 10 min liberta o GPS e o Wake Lock; um Wake Lock libertado com a página visível pede-se de novo
+                 (no máximo 3 vezes por minuto; depois fica o aviso).
 
    ---------------------------------------------------------------------------------------------------------------------
    O que está verificado e o que NÃO está
@@ -36,7 +58,11 @@
    sintéticas e um Supabase simulado: a máquina de estados, o rascunho (formato, validação, teto), a fila (ordem, limites, deduplicação, 23505,
    offline→online), o vigia, o Wake Lock simulado, a lacuna por ecrã oculto simulada, o bloqueio de toques, o adaptador padrão com a geolocalização
    do Playwright, e que nada vai a terceiros nem coordenadas à consola.
-   NÃO verificado: nenhum telemóvel real. Não se sabe se, com o ecrã bloqueado ou noutra aplicação, o iPhone ou o Android continuam a entregar posições
+   Também verificado no Chromium: duas janelas na mesma app com eventos «storage» verdadeiros (uma cede à outra), o evento SIGNED_OUT, o toque emulado por CDP no
+   bloqueio de toques, o Wake Lock libertado com a página visível (simulado) e a fila local que deixa de se poder escrever a meio do envio.
+   NÃO verificado: nenhum telemóvel real. Em particular o pagehide e o evento «storage» no Safari/iOS (um PWA arrancado do zero pode nem os receber, e
+   então a outra janela só pega no rascunho ao fim de 60 s), a hora (timestamp) que cada navegador dá às posições face ao relógio do telemóvel (o limite de 5 min e
+   o de 2 s à frente são do desenho, não foram medidos) e o que o Android/iOS fazem ao Wake Lock com a poupança de bateria. Não se sabe se, com o ecrã bloqueado ou noutra aplicação, o iPhone ou o Android continuam a entregar posições
    (por isso a app diz que pode falhar), nem se o Wake Lock funciona em todos os iPhones, nem a precisão do GPS, nem o consumo de bateria, nem o texto
    de ajuda de permissões do iOS (vem de relatos, está escrito com reservas).
    ===================================================================================================================== */
@@ -59,7 +85,17 @@ var RUN_LIVE_CFG = {
   maxDraftChars: 2500000,    // teto do texto do rascunho (o localStorage é pequeno e partilhado com o resto da app)
   outboxMax: 20,             // corridas na fila, por utilizador
   outboxMaxChars: 1500000,   // texto máximo da fila inteira
-  sendTimeoutMs: 20000       // espera máxima por cada pedido ao enviar a fila
+  sendTimeoutMs: 20000,      // espera máxima por cada pedido ao enviar a fila
+  clockSlackMs: 300000,      // um fix com hora a mais de 5 min do relógio do telemóvel usa a hora do relógio (nunca envenena a gravação)
+  futureSlackMs: 2000,       // e nunca fica à frente do relógio mais do que isto: uma posição não pode ser do futuro, e uma hora adiantada
+                             // faria recusar tudo o que vem a seguir até o relógio a apanhar
+  badRunWarn: 5,             // N posições seguidas que o registo não aproveita (hora fora de ordem, saltos, antigas): o ecrã avisa
+  cutGapMinS: 600,           // «Terminar no último ponto bom»: só se oferece com uma lacuna final de pelo menos N s
+  hbStaleMs: 60000,          // o rascunho cujo batimento (ts) tem mais de N ms já não está a ser gravado por mais nenhuma janela
+  prepMaxMs: 300000,         // a preparar o GPS há mais de N ms sem Iniciar: cancela (GPS e ecrã ligados gastam bateria)
+  failedKeepMs: 2592000000,  // uma corrida recusada pelo servidor fica no telemóvel (com o percurso, se partilhado) no máximo 30 dias
+  wlRetryMax: 3,             // o sistema libertou o Wake Lock com a página visível: pede-se de novo no máximo N vezes por minuto
+  wlRetryWindowMs: 60000
 };
 var RUN_LIVE_GEO = {enableHighAccuracy: true, maximumAge: 0, timeout: 30000};
 var RUN_LIVE_ROW_KEYS = ["id", "student_id", "started_at", "source", "duration_s", "moving_s", "distance_m", "gaps", "gap_s", "hidden_s", "splits_s", "rpe", "notes", "consent_v"];
@@ -105,13 +141,25 @@ function runLiveFixFromPosition(pos){
   return {lat: c.latitude, lon: c.longitude, acc: runLFin(c.accuracy) ? c.accuracy : null, t: t, speed: runLFin(c.speed) ? c.speed : null};
 }
 
+// Hora a usar para um fix: a do fix, limitada ao relógio do telemóvel. Uma hora a mais de clockSlackMs do relógio (para um lado ou para o outro) usa a
+// hora do relógio; e nunca fica à frente do relógio mais de futureSlackMs (a hora é limitada, não trocada: assim não há um salto para trás quando a
+// diferença cruza o limiar). Sem isto, UM fix com hora adiantada fixava o máximo do registo e todas as posições seguintes eram recusadas como «time».
+function runLiveClampT(t, nowMs){
+  var cfg = RUN_LIVE_CFG;
+  if (!runLFin(nowMs)) return runLFin(t) ? t : null;
+  if (!runLFin(t)) return nowMs;
+  if (Math.abs(t - nowMs) > cfg.clockSlackMs) return nowMs;
+  return t > nowMs + cfg.futureSlackMs ? nowMs + cfg.futureSlackMs : t;
+}
+
 /* ---------- aviso de sinal (texto e estado) ---------- */
-// o = {err, paused, hasCb, sinceCbS, waitedS, acc, accMax}
+// o = {err, paused, hasCb, sinceCbS, waitedS, acc, accMax, badRun}   badRun = posições seguidas que o registo recusou (hora fora de ordem, saltos)
 function runLiveSignalInfo(o){
   var warn = RUN_LIVE_CFG.noFixWarnS, n;
   if (o.err === "denied") return {kind: "none", text: "A localização foi recusada."};
   if (o.err === "unsupported") return {kind: "none", text: "Este navegador não consegue dar a localização."};
   if (o.paused) return {kind: "paused", text: "Em pausa."};
+  if (runLFin(o.badRun) && o.badRun >= RUN_LIVE_CFG.badRunWarn) return {kind: "none", text: "A receber posições que o registo não consegue usar. Se continuar, termina e guarda o que há."};
   if (!o.hasCb) {
     n = Math.max(0, Math.floor(o.waitedS || 0));
     return n >= warn ? {kind: "none", text: "Sem posições há " + n + " s. Mantém o ecrã ligado."} : {kind: "wait", text: "A procurar sinal…"};
@@ -132,11 +180,13 @@ function runLiveWarnings(stats, hiddenS, restarts){
 }
 
 /* ---------- rascunho: formato, validação, teto ---------- */
-// st = estado do reducer (JSON simples). o = {uid, hiddenS, ended, restarts, nowMs}
+// st = estado do reducer (JSON simples). o = {uid, hiddenS, ended, restarts, nowMs, iid, rel}
+// iid = id desta janela da app (instância); ts = batimento (hora da última escrita); rel = true quando a janela se despediu (pagehide): outra pode pegar nele.
 function runLiveDraftBuild(st, o){
   o = o || {};
   return {
-    v: 1, uid: o.uid, ts: runLFin(o.nowMs) ? o.nowMs : Date.now(), view: "live", ended: o.ended === true,
+    v: 1, uid: o.uid, iid: typeof o.iid === "string" ? o.iid.slice(0, 64) : "", rel: o.rel === true,
+    ts: runLFin(o.nowMs) ? o.nowMs : Date.now(), view: "live", ended: o.ended === true,
     hiddenS: runLInt(o.hiddenS, 0, 86400), restarts: runLInt(o.restarts, 0, 1000), st: st
   };
 }
@@ -150,8 +200,14 @@ function runLiveDraftSerialize(draft){
   if (text.length > RUN_LIVE_CFG.maxDraftChars) return {ok: false, reason: "size"};
   return {ok: true, text: text};
 }
+// Olha só para o princípio do texto do rascunho (uid, iid, rel, ts), sem o interpretar todo (pode ter MBs): {uid, iid, rel, ts} ou null.
+function runLiveDraftPeek(raw){
+  if (typeof raw !== "string" || !raw) return null;
+  var head = raw.slice(0, 400), u = /"uid":"([^"\\]{1,100})"/.exec(head), i = /"iid":"([^"\\]{1,64})"/.exec(head), t = /"ts":(\d{1,16})/.exec(head);
+  return {uid: u ? u[1] : "", iid: i ? i[1] : "", rel: /"rel":true/.test(head), ts: t ? +t[1] : 0};
+}
 // raw = texto guardado; uid = conta atual. Devolve
-//   {ok:true, st, ended, hiddenS, restarts, ts, points, stats, lastT, startedAtMs}  rascunho do utilizador atual com posições
+//   {ok:true, st, ended, hiddenS, restarts, ts, iid, rel, points, stats, lastT, startedAtMs}  rascunho do utilizador atual com posições
 //   {ok:false, reason:"none"}      nada guardado
 //   {ok:false, reason:"corrupt"}   texto que não é um rascunho (não se sabe de quem é: ignora-se)
 //   {ok:false, reason:"other"}     de outra conta (ignora-se, nunca se mostra nem se usa)
@@ -168,23 +224,58 @@ function runLiveDraftParse(raw, uid){
   stats = runStats(st.segs, null, "live");
   return {
     ok: true, st: st, ended: d.ended === true, hiddenS: runLInt(d.hiddenS, 0, 86400), restarts: runLInt(d.restarts, 0, 1000),
-    ts: runLFin(d.ts) ? d.ts : null, points: st.nPts, stats: stats, lastT: st.lastGoodT, startedAtMs: st.startedAtMs
+    ts: runLFin(d.ts) ? d.ts : null, iid: typeof d.iid === "string" ? d.iid.slice(0, 64) : "", rel: d.rel === true,
+    points: st.nPts, stats: stats, lastT: st.lastGoodT, startedAtMs: st.startedAtMs
   };
 }
-// O que o aluno pode fazer com um rascunho: retomar (só se não terminou, a Corrida ao vivo está ligada e passaram <= 6 h) ou guardar o que há
-// (só se dá uma corrida válida). Descartar pode sempre. why = explicação em PT-PT quando falta uma opção.
-function runLiveDraftChoices(info, nowMs, mode){
-  var out = {resume: false, save: false, discard: true, why: "", saveError: ""}, chk, age;
+// Quem tem o rascunho: «mine» (esta janela), «busy» (outra janela ou aparelho está a gravá-lo: o batimento é recente e não se despediu) ou «free»
+// (sem id, despedido, ou batimento antigo: uma janela que morreu ou foi suspensa). ownIid = id desta janela.
+function runLiveDraftOwner(info, nowMs, ownIid){
+  if (!info || info.ok === false || !info.iid) return "free";
+  if (ownIid && info.iid === ownIid) return "mine";
+  if (info.rel === true) return "free";
+  if (!runLFin(info.ts) || !runLFin(nowMs)) return "free";
+  if (Math.abs(nowMs - info.ts) > RUN_LIVE_CFG.hbStaleMs) return "free";   // batimento antigo, ou de um relógio que estava muito adiantado: nunca fica «ocupado» para sempre
+  return "busy";
+}
+// «Terminar no último ponto bom»: o que se perde (e o que fica) se se cortar a corrida na última lacuna grande, ou null se não há nada a oferecer
+// (sem lacuna final de pelo menos cutGapMinS, ou o que fica não se pode guardar). Não decide nada: quem chama mostra os números ao aluno.
+function runLiveCutOffer(st, hiddenS, nowMs){
+  var cut, kept, whole, chk;
+  if (!st || !Array.isArray(st.segs) || typeof runCutAtLastGap !== "function") return null;
+  cut = runCutAtLastGap(st.segs, RUN_LIVE_CFG.cutGapMinS);
+  if (!cut || !(cut.cutPoints > 0) || !Array.isArray(cut.segments) || !cut.segments.length) return null;
+  kept = runStats(cut.segments, null, "live");
+  if (kept.points < 2) return null;
+  whole = runStats(st.segs, null, "live");
+  chk = runLCheckStats(kept, Math.max(0, runLInt(hiddenS, 0, 86400) - cut.cutS), nowMs);
+  if (!chk.ok) return null;
+  return {cutS: cut.cutS, cutPoints: cut.cutPoints, kept: kept, lostDistM: Math.max(0, whole.distM - kept.distM), segments: cut.segments, hiddenS: Math.max(0, runLInt(hiddenS, 0, 86400) - cut.cutS)};
+}
+function runLCheckStats(stats, hiddenS, nowMs){
+  return runCheckRun({id: "00000000-0000-4000-8000-000000000000", studentId: "x", source: "live", startedAtMs: stats.startedAtMs, durationS: stats.durationS,
+    movingS: stats.movingS, distM: stats.distM, gaps: stats.gaps, gapS: stats.gapS, hiddenS: hiddenS, consentV: 1}, nowMs);
+}
+// O que o aluno pode fazer com um rascunho: retomar (só se não terminou, a Corrida ao vivo está ligada e passaram <= 6 h), guardar o que há (só se dá uma
+// corrida válida), terminar no último ponto bom (só com uma lacuna final grande e o que fica válido) ou descartar. Quando outra janela está a gravar o
+// rascunho (busy) não se pode fazer nada daqui: mexer-lhe estragaria a gravação dessa janela. why = explicação em PT-PT quando falta uma opção.
+function runLiveDraftChoices(info, nowMs, mode, ownIid){
+  var out = {resume: false, save: false, cut: null, discard: true, busy: false, why: "", saveError: ""}, chk, age;
   if (!info || !info.ok) return out;
+  if (runLiveDraftOwner(info, nowMs, ownIid) === "busy") {
+    out.discard = false; out.busy = true;
+    out.why = "Esta corrida está a ser gravada noutra janela ou noutro aparelho (ainda há pouco). Termina-a lá. Se já não estiver, tenta outra vez daqui a pouco.";
+    return out;
+  }
   if (mode !== "live") { out.why = "A gravação com GPS não está ligada para ti neste momento, por isso não dá para retomar nem guardar esta corrida. Podes descartá-la."; return out; }
-  chk = runCheckRun({id: "00000000-0000-4000-8000-000000000000", studentId: "x", source: "live", startedAtMs: info.stats.startedAtMs, durationS: info.stats.durationS,
-    movingS: info.stats.movingS, distM: info.stats.distM, gaps: info.stats.gaps, gapS: info.stats.gapS, hiddenS: info.hiddenS, consentV: 1}, nowMs);
+  chk = runLCheckStats(info.stats, info.hiddenS, nowMs);
   out.save = info.stats.points >= 2 && chk.ok;
   if (!chk.ok) out.saveError = chk.error;
+  out.cut = runLiveCutOffer(info.st, info.hiddenS, nowMs);
   age = nowMs - info.lastT;
   if (!info.ended) {
     if (age <= RUN_LIVE_CFG.resumeMaxMs) out.resume = true;
-    else out.why = "Passaram mais de 6 horas desde a última posição: já não dá para retomar" + (out.save ? ", mas podes guardar o que há." : ".");
+    else out.why = "Passaram mais de 6 horas desde a última posição: já não dá para retomar" + (out.save || out.cut ? ", mas podes guardar o que há." : ".");
   }
   return out;
 }
@@ -237,6 +328,7 @@ function runLiveQueueItem(item){
   return {row: row, track: track};
 }
 // raw = texto da fila (lista, ou {items: [...]}). Devolve {list, dropped}: só entradas válidas (de qualquer conta), já normalizadas.
+// Cada entrada: {id, uid, ts, state «pending»|«failed», err (texto fixo PT-PT), code (código do servidor, só para decidir se vale a pena tentar outra vez), fat (quando foi recusada), item}.
 function runLiveQueueParse(raw){
   var data, arr, list = [], dropped = 0, i, e, item;
   if (raw == null || raw === "") return {list: [], dropped: 0};
@@ -251,7 +343,8 @@ function runLiveQueueParse(raw){
     if (!item || item.row.id !== e.id) { dropped++; continue; }
     list.push({
       id: e.id, uid: e.uid, ts: runLFin(e.ts) ? e.ts : 0, state: e.state === "failed" ? "failed" : "pending",
-      err: typeof e.err === "string" ? e.err.slice(0, 200) : "", item: item
+      err: typeof e.err === "string" ? e.err.slice(0, 200) : "", code: typeof e.code === "string" ? e.code.slice(0, 20) : "",
+      fat: e.state === "failed" && runLFin(e.fat) ? e.fat : 0, item: item
     });
   }
   return {list: list, dropped: dropped};
@@ -267,7 +360,7 @@ function runLiveQueueAdd(list, item, uid, nowMs){
     }
   }
   if (own >= RUN_LIVE_CFG.outboxMax) return {ok: false, reason: "full"};
-  out.push({id: clean.row.id, uid: uid, ts: runLFin(nowMs) ? nowMs : Date.now(), state: "pending", err: "", item: clean});
+  out.push({id: clean.row.id, uid: uid, ts: runLFin(nowMs) ? nowMs : Date.now(), state: "pending", err: "", code: "", fat: 0, item: clean});
   try { text = JSON.stringify(out); } catch (e) { return {ok: false, reason: "json"}; }
   if (text.length > RUN_LIVE_CFG.outboxMaxChars) return {ok: false, reason: "size"};
   return {ok: true, dup: false, list: out, text: text};
@@ -279,19 +372,24 @@ function runLNew(){
     sid: 0, phase: "intro", uid: null, stu: null,
     st: null, ended: false, hiddenS: 0, hiddenAt: null, notice: "", restarts: 0, restartLog: [],
     gpsOn: false, watching: false, err: null, prepGood: false, prepStartMs: null, watchStartMs: null, lastCbMs: null, lastAcc: null, seq3: 0, tapMs: null, visibleAt: 0,
-    wlWanted: false, wlSentinel: null, wlPending: false, wl: "",
-    tickId: null, pauseTimer: null, lockTimer: null, locked: false, unlockPending: false,
-    lastDraftMs: 0, dirty: false, draftOk: null,
+    wlWanted: false, wlSentinel: null, wlPending: false, wl: "", wlLog: [],
+    tickId: null, hbId: null, pauseTimer: null, lockTimer: null, locked: false, unlockPending: false,
+    lastDraftMs: 0, dirty: false, draftOk: null, released: false, badRun: 0, modeLost: false, cutNote: "",
     consentAt: 0, saving: false, pendStart: null, flushP: null, lastOpenFlush: 0, notesHtml: ""
   };
 }
 RUN.live = runLNew();
+// Esta janela da app: o rascunho leva este id e o batimento (ts); outra janela só o toma se o batimento for antigo ou se esta se despediu (pagehide).
+var runLInst = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+// recusadas por causas que podem passar (cache do esquema, modo desligado e ligado outra vez, consentimento dado entretanto): reenvia-se UMA vez por sessão
+var runLRetried = {};
+var runLBusyTimer = null;
 
 /* ---------- armazenamento local (nunca lança) ---------- */
 function runLStore(){ try { return window.localStorage || null; } catch (e) { return null; } }
 function runLGet(key){ try { var s = runLStore(); return s ? s.getItem(key) : null; } catch (e) { return null; } }
 function runLSet(key, text){ try { var s = runLStore(); if (!s) return false; s.setItem(key, text); return true; } catch (e) { return false; } }
-function runLDel(key){ try { var s = runLStore(); if (s) s.removeItem(key); } catch (e) {} }
+function runLDel(key){ try { var s = runLStore(); if (s) s.removeItem(key); return true; } catch (e) { return false; } }
 function runLUid(){ return typeof currentAuthUserId === "string" && currentAuthUserId ? currentAuthUserId : null; }
 function runLHidden(){
   try { return typeof document !== "undefined" && (document.visibilityState === "hidden" || (document.visibilityState === undefined && document.hidden === true)); } catch (e) { return false; }
@@ -313,19 +411,40 @@ function runLMode(s){ return typeof corridaModeOf === "function" ? corridaModeOf
 /* ---------- rascunho: ler, escrever, apagar ---------- */
 function runLDraftInfo(){ return runLiveDraftParse(runLGet(RUN_DRAFT_KEY), runLUid()); }
 function runLDraftClear(){ runLDel(RUN_DRAFT_KEY); }
-// Escreve o rascunho (no máximo de 10 em 10 s, ou já com force). Sem posições aceites não há rascunho: a chave apaga-se.
-function runLDraftWrite(force){
-  var L = RUN.live, now = Date.now(), uid = runLUid(), res;
+// Escreve o rascunho (no máximo de 10 em 10 s, ou já com force). Sem posições aceites não há rascunho: a chave apaga-se. É também o batimento desta janela
+// (ts): outra janela só pega num rascunho cujo batimento seja antigo. release = true (pagehide): esta janela despede-se, outra pode pegar logo nele.
+// Se OUTRA janela tem o rascunho (batimento recente, não se despediu), ela é que grava agora: esta cede e nunca escreve por cima dele.
+function runLDraftWrite(force, release){
+  var L = RUN.live, now = Date.now(), uid = runLUid(), res, peek, hid;
   if (!L.st || L.uid !== uid || !uid) return false;
   if (L.phase !== "rec" && L.phase !== "end") return false;
   if (!force && now - L.lastDraftMs < RUN_LIVE_CFG.draftEveryMs) return false;
+  peek = runLiveDraftPeek(runLGet(RUN_DRAFT_KEY));
+  if (peek && peek.uid === uid && runLiveDraftOwner(peek, now, runLInst) === "busy") { runLYield(); return false; }
   L.lastDraftMs = now;
   if (L.st.nPts < 1) { runLDraftClear(); L.draftOk = null; L.dirty = false; return true; }
-  var hid = L.hiddenS + (L.hiddenAt != null ? Math.max(0, (now - L.hiddenAt) / 1000) : 0);
-  res = runLiveDraftSerialize(runLiveDraftBuild(L.st, {uid: uid, hiddenS: hid, ended: L.ended, restarts: L.restarts, nowMs: now}));
+  hid = L.hiddenS + (L.hiddenAt != null ? Math.max(0, (now - L.hiddenAt) / 1000) : 0);
+  if (release === true) L.released = true;     // despedida: as escritas seguintes (o «oculta» que vem depois do pagehide) mantêm-na até a página voltar
+  res = runLiveDraftSerialize(runLiveDraftBuild(L.st, {uid: uid, hiddenS: hid, ended: L.ended, restarts: L.restarts, nowMs: now, iid: runLInst, rel: L.released === true}));
   L.draftOk = res.ok && runLSet(RUN_DRAFT_KEY, res.text);
   if (L.draftOk) L.dirty = false;
   return L.draftOk;
+}
+// outra janela da app tem agora esta corrida: esta pára (GPS, ecrã ligado) e esquece a sua cópia, sem escrever nada
+function runLYield(){
+  runLHardStop(); runLResetState();
+  runLToast("Esta corrida continua noutra janela da app. Aqui a gravação parou.");
+  runLRender();
+}
+// a corrida terminada espera pelo aluno (resumo): o batimento continua, para nenhuma outra janela lhe mexer
+function runLHbStart(){
+  var L = RUN.live;
+  if (L.hbId != null) return;
+  L.hbId = setInterval(function(){ if (RUN.live.phase === "end" && RUN.live.st) runLDraftWrite(true); }, RUN_LIVE_CFG.draftEveryMs);
+}
+function runLHbStop(){
+  var L = RUN.live;
+  if (L.hbId != null) { clearInterval(L.hbId); L.hbId = null; }
 }
 
 /* ---------- Wake Lock ---------- */
@@ -342,12 +461,27 @@ function runLWakeAcquire(){
     if (!sent) { L.wl = "denied"; return; }
     if (sid !== L.sid || !L.wlWanted) { try { sent.release(); } catch (e) {} return; }
     L.wlSentinel = sent; L.wl = "on";
-    try { sent.addEventListener("release", function(){ if (L.wlSentinel === sent) { L.wlSentinel = null; L.wl = "off"; } }); } catch (e) {}
+    try {
+      sent.addEventListener("release", function(){
+        if (L.wlSentinel !== sent) return;
+        L.wlSentinel = null; L.wl = "off";
+        if (L.wlWanted && !runLHidden()) runLWakeRetry();    // o sistema libertou-o com a página visível (poupança de bateria): sem ele o ecrã apaga-se sem aviso
+      });
+    } catch (e) {}
   }, function(){ L.wlPending = false; L.wl = "denied"; });
+}
+// pede o Wake Lock de novo, no máximo wlRetryMax vezes por minuto (se o sistema o tira sempre, fica o aviso em vez de um ciclo de pedidos)
+function runLWakeRetry(){
+  var L = RUN.live, now = Date.now(), keep = [], i;
+  for (i = 0; i < L.wlLog.length; i++) if (now - L.wlLog[i] < RUN_LIVE_CFG.wlRetryWindowMs) keep.push(L.wlLog[i]);
+  L.wlLog = keep;
+  if (keep.length >= RUN_LIVE_CFG.wlRetryMax) return;
+  L.wlLog.push(now);
+  runLWakeAcquire();
 }
 function runLWakeRelease(){
   var L = RUN.live, sent = L.wlSentinel;
-  L.wlWanted = false; L.wlSentinel = null; L.wlPending = false;
+  L.wlWanted = false; L.wlSentinel = null; L.wlPending = false; L.wl = "";
   if (sent) { try { sent.release(); } catch (e) {} }
 }
 
@@ -390,13 +524,17 @@ function runLGpsStop(){
   L.watching = false;
   try { if (RUN.gps && typeof RUN.gps.stop === "function") RUN.gps.stop(); } catch (e) {}
 }
-// reinicia o watch (vigia e erros de timeout); no máximo watchdogMax por janela de 10 min
-function runLRestartWatch(){
+// reinicia o watch (vigia e erros de timeout); no máximo watchdogMax por janela de 10 min. manual = true (toque do aluno em «Reiniciar GPS»): sem esse
+// limite (o aluno vê que não chegam posições e decide), mas conta nos «reinícios» que o resumo mostra.
+function runLRestartWatch(manual){
   var L = RUN.live, now = Date.now(), keep = [], i;
   for (i = 0; i < L.restartLog.length; i++) if (now - L.restartLog[i] < RUN_LIVE_CFG.watchdogWindowMs) keep.push(L.restartLog[i]);
   L.restartLog = keep;
-  if (keep.length >= RUN_LIVE_CFG.watchdogMax) { L.watchStartMs = now; return false; }
-  L.restartLog.push(now); L.restarts++;
+  if (manual !== true) {
+    if (keep.length >= RUN_LIVE_CFG.watchdogMax) { L.watchStartMs = now; return false; }
+    L.restartLog.push(now);
+  }
+  L.restarts++;
   runLGpsStop();
   runLGpsStart();
   L.dirty = true;
@@ -416,13 +554,48 @@ function runLTickStop(){
 function runLTick(){
   var L = RUN.live, now = Date.now();
   if (L.phase !== "rec" && !(L.phase === "prep" && L.gpsOn)) { runLTickStop(); return; }
+  // a preparar há muito tempo sem Iniciar: o GPS e o ecrã ligados gastam bateria à toa
+  if (L.phase === "prep" && L.prepStartMs != null && now - L.prepStartMs >= RUN_LIVE_CFG.prepMaxMs) { runLPrepTimeout(); return; }
+  if (runLCheckMode()) return;
   // vigia: com a página visível, a gravar e sem posições há watchdogS s, reinicia o watch
   if (L.watching && !L.err && !runLHidden() && !(L.phase === "rec" && L.st && L.st.paused)) {
     var ref = Math.max(L.lastCbMs || 0, L.watchStartMs || 0, L.visibleAt || 0);
     if (now - ref >= RUN_LIVE_CFG.watchdogS * 1000) runLRestartWatch();
   }
-  if (L.phase === "rec" && L.dirty) runLDraftWrite(false);
+  if (L.phase === "rec") runLDraftWrite(false);   // também é o batimento: a cada draftEveryMs, mesmo sem posições novas
   runLPaint(now);
+}
+function runLPrepTimeout(){
+  runLHardStop(); runLResetState();
+  runLToast("Cancelei a preparação do GPS porque não começaste a correr (poupa bateria). Volta a preparar quando fores correr.");
+  runLRender();
+}
+// o profissional desligou a gravação com GPS a meio: o GPS e o ecrã ligados não podem ficar a correr sem o aluno os poder parar (devolve true se agiu)
+function runLCheckMode(){
+  var L = RUN.live, s, active = L.phase === "rec" || (L.phase === "prep" && L.gpsOn);
+  if (!active || (typeof authRole !== "undefined" && authRole !== "student")) return false;
+  s = runLCurStudent();
+  if (!s || runLMode(s) === "live") return false;
+  runLModeLost();
+  return true;
+}
+function runLCurStudent(){
+  var L = RUN.live;
+  try { if (typeof findStudent === "function" && typeof state !== "undefined" && state && state.alunoStudentId != null) return findStudent(state.alunoStudentId) || L.stu; } catch (e) {}
+  return L.stu;
+}
+// pára o GPS, o ecrã ligado e o relógio; o que já se gravou fica no resumo (e no rascunho). Só se guarda se a gravação voltar a ser ligada para o aluno.
+function runLModeLost(inRender){
+  var L = RUN.live;
+  if (L.phase === "rec" && L.st) {
+    runLEndNow();
+    L.modeLost = true;
+    runLToast("A gravação com GPS foi desligada pelo teu profissional: a gravação parou.");
+  } else {
+    runLHardStop(); runLResetState();
+    runLToast("A gravação com GPS foi desligada pelo teu profissional.");
+  }
+  if (inRender !== true) runLRender();      // (dentro de um desenho já está a ser desenhado: não se desenha por cima)
 }
 function runLSetText(id, text){
   var e = document.getElementById(id);
@@ -436,9 +609,14 @@ function runLNotesHtml(){
   var L = RUN.live, h = "";
   if (L.notice) h += "<div class=\"run-live-note\" role=\"status\"><span>" + escapeHtml(L.notice) + "</span><button type=\"button\" class=\"btn btn-sm\" data-act=\"dismiss\">Fechar</button></div>";
   if (L.draftOk === false) h += "<div class=\"run-live-note warn\" role=\"alert\"><span>Não feches a app: a corrida ainda não está guardada neste telemóvel.</span></div>";
-  if (L.wl === "unsupported" || L.wl === "denied") h += "<div class=\"run-live-note warn\" role=\"status\"><span>Não consegui manter o ecrã ligado. Não deixes o ecrã bloquear e, se for preciso, aumenta o tempo de bloqueio automático do telemóvel.</span></div>";
+  if (L.wl === "unsupported" || L.wl === "denied" || (L.wl === "off" && !L.wlPending && !runLHidden())) h += "<div class=\"run-live-note warn\" role=\"status\"><span>Não consegui manter o ecrã ligado. Não deixes o ecrã bloquear e, se for preciso, aumenta o tempo de bloqueio automático do telemóvel.</span></div>";
   if (L.restarts > 0) h += "<div class=\"run-live-note\" role=\"status\"><span>O GPS foi reiniciado " + escapeHtml(runLPlural(L.restarts, "vez", "vezes")) + ".</span></div>";
   return h;
+}
+// o Iniciar só vale com um sinal bom E recente: com «Sem posições há N s» o último fix bom já não diz nada sobre onde o aluno está
+function runLPrepReady(now){
+  var L = RUN.live;
+  return !!(L.prepGood && L.watching && !L.err && L.lastCbMs != null && (now - L.lastCbMs) / 1000 < RUN_LIVE_CFG.noFixWarnS);
 }
 function runLPaint(now){
   var L = RUN.live, view, sig, hasCb = L.lastCbMs != null, vis = L.visibleAt || 0, waitFrom;
@@ -447,14 +625,16 @@ function runLPaint(now){
   waitFrom = Math.max(vis, L.prepStartMs != null ? L.prepStartMs : (L.watchStartMs || 0));
   sig = runLiveSignalInfo({
     err: L.err, paused: !!(L.st && L.st.paused), hasCb: hasCb, sinceCbS: hasCb ? (now - Math.max(L.lastCbMs, vis)) / 1000 : 0,
-    waitedS: L.watchStartMs != null ? (now - waitFrom) / 1000 : 0, acc: L.lastAcc, accMax: RUN_CFG.accMaxM
+    waitedS: L.watchStartMs != null ? (now - waitFrom) / 1000 : 0, acc: L.lastAcc, accMax: RUN_CFG.accMaxM, badRun: L.phase === "rec" ? L.badRun : 0
   });
   runLSetText("runLiveSignal", sig.text);
   runLSetClass("runLiveSignal", "run-live-signal " + sig.kind);
+  var rw = document.getElementById("runLiveRestartWrap");    // «Reiniciar GPS»: só aparece quando as posições deixaram de chegar (ou chegam e não servem)
+  if (rw) rw.classList.toggle("hidden", !(sig.kind === "none" && !L.err && !(L.st && L.st.paused)));
   if (L.phase === "prep") {
     runLSetText("runLiveAcc", L.lastAcc != null && hasCb ? "Precisão: ±" + Math.round(L.lastAcc) + " m" : "Precisão: –");
     var btn = document.getElementById("runLiveStart");
-    if (btn) btn.disabled = !(L.prepGood && L.watching && !L.err);
+    if (btn) btn.disabled = !runLPrepReady(now);
     var help = document.getElementById("runLiveHelp");
     if (help) {
       var showHelp = !!L.err || (!hasCb && L.prepStartMs != null && (now - waitFrom) / 1000 > RUN_LIVE_CFG.firstFixHelpS);
@@ -477,7 +657,7 @@ function runLPaint(now){
 
 /* ---------- posições e erros do GPS ---------- */
 function runLOnFix(sid, fix){
-  var L = RUN.live, now = Date.now(), info, before;
+  var L = RUN.live, now = Date.now(), info, before, t;
   if (sid !== L.sid || !fix || typeof fix !== "object") return;
   if (L.phase !== "prep" && L.phase !== "rec") return;
   L.lastCbMs = now; L.seq3 = 0;
@@ -489,9 +669,15 @@ function runLOnFix(sid, fix){
     return;
   }
   if (!L.st) return;
-  if (L.tapMs != null && runLFin(fix.t) && fix.t < L.tapMs - RUN_LIVE_CFG.staleFixMs) return;   // posição antiga (cache), anterior ao toque
+  // posição antiga (cache), anterior ao toque em Iniciar: não conta. Só se também é antiga em relação ao RELÓGIO (se o relógio recuou, a hora do fix
+  // é a certa e a do toque é que ficou para trás)
+  if (L.tapMs != null && runLFin(fix.t) && fix.t < L.tapMs - RUN_LIVE_CFG.staleFixMs && now - fix.t > RUN_LIVE_CFG.staleFixMs) { L.badRun++; runLPaint(now); return; }
+  t = runLiveClampT(fix.t, now);
+  if (t !== fix.t) fix = {lat: fix.lat, lon: fix.lon, acc: fix.acc, t: t, speed: fix.speed};
   before = L.st.nPts;
   info = runFeed(L.st, fix);
+  if (info.good || info.added) L.badRun = 0;
+  else if (info.reason === "time" || info.reason === "jump" || info.reason === "invalid") L.badRun++;
   if (info.added || info.gap) L.dirty = true;
   if (before < 1 && L.st.nPts >= 1) runLDraftWrite(true);      // primeira posição aceite: já há corrida para perder
   else if (info.gap) runLDraftWrite(true);                      // mudança de estado
@@ -523,7 +709,11 @@ function runLDenied(){ runLFatal("denied"); }
 /* ---------- visibilidade, fecho da página, ligação ---------- */
 function runLOnVisibility(){
   var L = RUN.live, now = Date.now();
-  if (L.phase !== "rec" && !(L.phase === "prep" && L.gpsOn)) return;
+  if (!runLHidden()) L.released = false;        // a página voltou: esta janela é outra vez a dona do rascunho
+  if (L.phase !== "rec" && !(L.phase === "prep" && L.gpsOn)) {
+    if (L.phase === "end" && L.st && !runLHidden()) runLDraftWrite(true);     // voltou a ver o resumo: o batimento do rascunho põe-se em dia
+    return;
+  }
   if (runLHidden()) {
     if (L.phase === "rec" && L.st && !L.st.paused && L.hiddenAt == null) L.hiddenAt = now;
     if (L.phase === "rec") runLDraftWrite(true);
@@ -537,26 +727,45 @@ function runLOnVisibility(){
     if (secs >= RUN_LIVE_CFG.hiddenNoticeMinS) L.notice = "A página esteve oculta " + runLDurWords(secs) + ": o percurso pode ter lacuna.";
     L.dirty = true;
   }
+  if (runLCheckMode()) return;
   runLWakeAcquire();
+  if (L.phase === "rec") runLDraftWrite(true);
   runLPaint(now);
 }
+// a página vai fechar (ou ficar em cache): o rascunho escreve-se à força e despede-se, para que outra janela (ou esta, depois de recarregar) o possa retomar já
 function runLOnPageHide(){
   var L = RUN.live;
-  if (L.phase === "rec") runLDraftWrite(true);
+  if (L.phase === "rec" || (L.phase === "end" && L.st)) runLDraftWrite(true, true);
+}
+// voltou da cache da página (bfcache): ainda é esta janela que grava
+function runLOnPageShow(){
+  var L = RUN.live;
+  L.released = false;
+  if (L.phase === "rec" || (L.phase === "end" && L.st)) runLDraftWrite(true);
 }
 function runLOnOnline(){
   if (runLOwnCount(true) > 0) RUN.flush();
 }
+// outra janela da app escreveu no armazenamento (os eventos só chegam das OUTRAS janelas): se pegou no rascunho desta corrida, esta cede; e o aviso põe-se em dia
+function runLOnStorage(e){
+  var L = RUN.live, key = e ? e.key : null, pk;
+  if (key != null && key !== RUN_DRAFT_KEY && key !== RUN_OUTBOX_KEY) return;
+  if ((key == null || key === RUN_DRAFT_KEY) && (L.phase === "rec" || L.phase === "end") && L.st && typeof e.newValue === "string") {
+    pk = runLiveDraftPeek(e.newValue);
+    if (pk && pk.uid === L.uid && runLiveDraftOwner(pk, Date.now(), runLInst) === "busy") { runLYield(); return; }
+  }
+  runLRefreshBanner();
+}
 function runLInstallListeners(){
   try { if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("visibilitychange", runLOnVisibility); } catch (e) {}
-  try { if (typeof window !== "undefined" && window.addEventListener) { window.addEventListener("pagehide", runLOnPageHide); window.addEventListener("online", runLOnOnline); } } catch (e) {}
+  try { if (typeof window !== "undefined" && window.addEventListener) { window.addEventListener("pagehide", runLOnPageHide); window.addEventListener("pageshow", runLOnPageShow); window.addEventListener("online", runLOnOnline); window.addEventListener("storage", runLOnStorage); } } catch (e) {}
 }
 
 /* ---------- ciclo da gravação ---------- */
 // pára tudo o que corre (GPS, relógios, Wake Lock) sem mexer no armazenamento
 function runLHardStop(){
   var L = RUN.live;
-  runLGpsStop(); runLTickStop(); runLWakeRelease();
+  runLGpsStop(); runLTickStop(); runLHbStop(); runLWakeRelease();
   if (L.pauseTimer != null) { clearTimeout(L.pauseTimer); L.pauseTimer = null; }
   if (L.lockTimer != null) { clearTimeout(L.lockTimer); L.lockTimer = null; }
 }
@@ -587,7 +796,7 @@ function runLStartPrepare(){
 function runLStartRecording(){
   var L = RUN.live;
   L.st = runFeedInit(); L.phase = "rec"; L.ended = false; L.hiddenS = 0; L.hiddenAt = null; L.notice = ""; L.restarts = 0; L.restartLog = [];
-  L.tapMs = Date.now(); L.dirty = false; L.draftOk = null; L.lastDraftMs = 0; L.notesHtml = "";
+  L.tapMs = Date.now(); L.dirty = false; L.draftOk = null; L.lastDraftMs = 0; L.notesHtml = ""; L.badRun = 0; L.modeLost = false; L.cutNote = "";
   L.wlWanted = true;
   runLWakeAcquire();
   runLTickStart();
@@ -602,7 +811,11 @@ function runLPause(){
   if (L.pauseTimer != null) clearTimeout(L.pauseTimer);
   L.pauseTimer = setTimeout(function(){
     L.pauseTimer = null;
-    if (L.st && L.st.paused && L.phase === "rec") runLGpsStop();     // parado há muito tempo: liberta o GPS (retomar volta a pedi-lo)
+    if (L.st && L.st.paused && L.phase === "rec") {
+      runLGpsStop();       // parado há muito tempo: liberta o GPS e o ecrã ligado (retomar volta a pedi-los); senão uma pausa esquecida esgota a bateria
+      runLWakeRelease();
+      L.notice = "Pausa longa: libertei o GPS e o ecrã para poupar bateria. Ao retomar, voltam a ligar-se.";
+    }
   }, RUN_LIVE_CFG.pauseReleaseMs);
   runLPaint(now);
 }
@@ -612,8 +825,13 @@ function runLResume(){
   if (L.pauseTimer != null) { clearTimeout(L.pauseTimer); L.pauseTimer = null; }
   runResume(L.st, now);
   L.dirty = true;
-  L.tapMs = now;
-  if (!L.watching && !L.err) runLGpsStart();
+  L.tapMs = now; L.badRun = 0;
+  if (!L.err) {
+    // sem GPS (libertado na pausa longa) liga-se; com o GPS «vivo» mas mudo (o watch pode ter morrido) reinicia-se. O que já tinha posições recentes não se toca.
+    if (!L.watching) { L.lastCbMs = null; L.prepStartMs = now; runLGpsStart(); }
+    else if (L.lastCbMs == null || now - L.lastCbMs >= RUN_LIVE_CFG.noFixWarnS * 1000) { L.lastCbMs = null; L.prepStartMs = now; runLGpsStop(); runLGpsStart(); }
+  }
+  L.wlWanted = true;
   runLWakeAcquire();
   runLTickStart();
   runLDraftWrite(true);
@@ -627,6 +845,7 @@ function runLEndNow(){
   if (L.pauseTimer != null) { clearTimeout(L.pauseTimer); L.pauseTimer = null; }
   L.ended = true; L.phase = "end"; L.locked = false; L.err = null;
   runLDraftWrite(true);
+  runLHbStart();
 }
 // descarta a gravação (rascunho incluído)
 function runLDiscardAll(){
@@ -646,7 +865,7 @@ function runLAfterSaved(){
 function runLResumeDraft(s){
   var info = runLDraftInfo(), L = RUN.live, now = Date.now();
   if (!info.ok) return false;
-  if (!runLiveDraftChoices(info, now, runLMode(s)).resume) return false;
+  if (!runLiveDraftChoices(info, now, runLMode(s), runLInst).resume) return false;
   runLHardStop(); runLResetState();
   L = RUN.live;
   L.uid = runLUid(); L.stu = s;
@@ -659,16 +878,43 @@ function runLResumeDraft(s){
   runLDraftWrite(true);
   return true;
 }
-// termina o que há num rascunho e segue para guardar
-function runLDraftToEnd(s){
-  var info = runLDraftInfo(), L = RUN.live;
+// corta a corrida na última lacuna grande: devolve o estado novo (só o que vem antes) ou null. Os segundos ocultos que cabiam no que se tirou saem também.
+function runLCutState(st, hiddenS, nowMs){
+  var offer = runLiveCutOffer(st, hiddenS, nowMs), ns;
+  if (!offer) return null;
+  ns = runFeedRestore({segs: offer.segments, paused: false, pauseAt: null, pausedMs: st.pausedMs, rej: st.rej});
+  if (!ns || ns.nPts < 2) return null;
+  return {st: ns, hiddenS: offer.hiddenS, offer: offer};
+}
+// termina o que há num rascunho e segue para guardar (cut = true: só até ao último ponto bom). Ao pegar nele esta janela passa a ser a dona.
+function runLDraftToEnd(s, cut){
+  var info = runLDraftInfo(), L = RUN.live, ch, now = Date.now(), c = null;
   if (!info.ok) return false;
-  if (!runLiveDraftChoices(info, Date.now(), runLMode(s)).save) return false;
+  ch = runLiveDraftChoices(info, now, runLMode(s), runLInst);
+  if (cut === true ? !ch.cut : !ch.save) return false;
+  if (cut === true) { c = runLCutState(info.st, info.hiddenS, now); if (!c) return false; }
   runLHardStop(); runLResetState();
   L = RUN.live;
   L.uid = runLUid(); L.stu = s;
-  L.st = info.st; L.hiddenS = info.hiddenS; L.restarts = info.restarts; L.ended = true; L.phase = "end";
+  L.st = c ? c.st : info.st; L.hiddenS = c ? c.hiddenS : info.hiddenS; L.restarts = info.restarts; L.ended = true; L.phase = "end";
+  if (c) L.cutNote = runLCutNote(c.offer);
+  L.dirty = true;
+  runLDraftWrite(true);
+  runLHbStart();
   return true;
+}
+// «Terminar no último ponto bom» no resumo da corrida que acabou de terminar
+function runLCutNow(){
+  var L = RUN.live, c;
+  if (L.phase !== "end" || !L.st) return false;
+  c = runLCutState(L.st, L.hiddenS, Date.now());
+  if (!c) return false;
+  L.st = c.st; L.hiddenS = c.hiddenS; L.cutNote = runLCutNote(c.offer); L.dirty = true;
+  runLDraftWrite(true);
+  return true;
+}
+function runLCutNote(offer){
+  return "Terminaste no último ponto bom: tirei o fim da corrida (" + runLDurWords(offer.cutS) + ", " + runLPlural(offer.cutPoints, "posição", "posições") + ").";
 }
 function runLRunFromState(studentId, consentV){
   var L = RUN.live, stats = runStats(L.st.segs, null, "live");
@@ -729,6 +975,7 @@ function runLPrepHtml(){
     "<p class=\"run-live-p\">" + RUN_LIVE_MUSIC + "</p>" +
     "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveStart\" disabled>Iniciar</button>" +
     "<button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveCancel\">Cancelar</button></div>" +
+    "<div class=\"run-live-btns hidden\" id=\"runLiveRestartWrap\"><button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveRestart\">Reiniciar GPS</button></div>" +
     (L.err ? "<div class=\"run-live-note warn\" role=\"alert\"><span>" + (L.err === "denied" ? "A localização foi recusada. Ativa-a nas definições e tenta outra vez." : "Não consegui ligar o GPS.") + "</span></div>" +
       "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveRetry\">Tentar outra vez</button></div>" : "") +
     "</div>";
@@ -738,15 +985,18 @@ function runLRecHtml(){
   var L = RUN.live, now = Date.now(), v = runLiveView(L.st, now), paused = v.paused, h = "", btns = "";
   if (L.err) {
     var canSave = L.st.nPts >= 2;
+    // só se diz «guardado neste telemóvel» quando a escrita do rascunho correu bem; se falhou (o aviso «Não feches a app» está no mesmo ecrã) diz-se o contrário
+    var savedNote = L.draftOk === true ? " O que já foi gravado está guardado neste telemóvel." : L.draftOk === false ? " Não feches a app: o que já foi gravado ainda não está guardado neste telemóvel." : "";
     btns = "<div class=\"run-live-note warn\" role=\"alert\"><span>" + (L.err === "denied" ?
-        "A localização foi recusada e a gravação parou. O que já foi gravado está guardado neste telemóvel. Ativa a localização nas definições e tenta outra vez." :
-        "O GPS deixou de funcionar. O que já foi gravado está guardado neste telemóvel.") + "</span></div>" +
+        "A localização foi recusada e a gravação parou." + savedNote + " Ativa a localização nas definições e tenta outra vez." :
+        "O GPS deixou de funcionar." + savedNote) + "</span></div>" +
       "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveRetry\">Tentar outra vez</button>" +
       (canSave ? "<button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveEnd\">Terminar e guardar o que há</button>" : "") +
       "<button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveDiscard\">Descartar</button></div>";
   } else {
     btns = "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLivePause\">" + (paused ? "Retomar" : "Pausa") + "</button>" +
       "<button type=\"button\" class=\"btn run-live-btn run-live-end\" id=\"runLiveEnd\">Terminar</button></div>" +
+      "<div class=\"run-live-btns hidden\" id=\"runLiveRestartWrap\"><button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveRestart\">Reiniciar GPS</button></div>" +
       "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveLockBtn\">Bloquear toques</button></div>";
   }
   h += runLHead("A gravar" + (paused ? " · em pausa" : ""), "");
@@ -765,32 +1015,46 @@ function runLRecHtml(){
   }
   return runLCard("rec", h);
 }
-function runLEndHtml(){
-  var L = RUN.live, built = runLRunFromState(L.stu ? L.stu.id : "x", 1), stats = built.stats, chk = runCheckRun(built.run, Date.now()), h = "", warns;
+// sv = a ficha do aluno (o modo da Corrida decide se há «Rever e guardar»: o servidor só aceita uma corrida «live» com a gravação ligada)
+function runLEndHtml(sv){
+  var L = RUN.live, built = runLRunFromState(L.stu ? L.stu.id : "x", 1), stats = built.stats, chk = runCheckRun(built.run, Date.now()), h = "", warns, offer, live = runLMode(sv || L.stu) === "live";
   h += runLHead("Corrida terminada", "");
   h += "<div class=\"card run-live-card\"><h2 class=\"run-live-h\">Resumo</h2><div class=\"run-live-big\">" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Distância</div><div class=\"run-live-num num\">" + escapeHtml(runDistStr(stats.distM)) + "</div></div>" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Tempo</div><div class=\"run-live-num num\">" + escapeHtml(runDurStr(stats.durationS)) + "</div></div>" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Ritmo médio (min/km)</div><div class=\"run-live-num num\">" + escapeHtml(runPaceStr(runPaceOf(stats.distM, stats.movingS))) + "</div></div></div>";
+  if (L.modeLost || !live) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">A gravação com GPS foi desligada pelo teu profissional" + (L.modeLost ? ": a gravação parou aqui" : "") + ". Esta corrida ficou guardada neste telemóvel, mas só dá para a guardar se o teu profissional voltar a ligar a gravação com GPS. Se não precisares dela, podes descartá-la.</p>";
+  if (L.cutNote) h += "<p class=\"run-live-p\">" + escapeHtml(L.cutNote) + "</p>";
   warns = runLiveWarnings(stats, Math.round(L.hiddenS), L.restarts);
   warns.forEach(function(w){ h += "<p class=\"run-live-p run-live-warn\">" + escapeHtml(w) + "</p>"; });
+  offer = live ? runLiveCutOffer(L.st, L.hiddenS, Date.now()) : null;
+  if (offer) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">" + escapeHtml(runLCutAsk(offer, stats)) + "</p>";
   if (stats.points < 2) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">Não houve posições suficientes para guardar esta corrida.</p>";
-  else if (!chk.ok) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">Esta corrida não pode ser guardada: " + escapeHtml(chk.error) + "</p>";
-  h += "<div class=\"run-live-btns\">" + (chk.ok && stats.points >= 2 ? "<button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveReview\">Rever e guardar</button>" : "") +
+  else if (!chk.ok && live) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">Esta corrida não pode ser guardada: " + escapeHtml(chk.error) + "</p>";
+  h += "<div class=\"run-live-btns\">" + (live && chk.ok && stats.points >= 2 ? "<button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveReview\">Rever e guardar</button>" : "") +
+    (offer ? "<button type=\"button\" class=\"btn" + (chk.ok && stats.points >= 2 ? "" : " primary") + " run-live-btn\" id=\"runLiveCut\">Terminar no último ponto bom</button>" : "") +
     "<button type=\"button\" class=\"btn run-live-btn\" id=\"runLiveDiscard\">Descartar</button></div></div>";
   return runLCard("end", h);
+}
+// o que o aluno perde e o que fica se cortar na última lacuna grande (números reais, nunca uma promessa)
+function runLCutAsk(offer, stats){
+  return "Há uma lacuna grande no fim da corrida: " + runLDurWords(offer.cutS) + " até à última posição (" + runLPlural(offer.cutPoints, "posição", "posições") + " depois dela). Se te esqueceste de terminar, «Terminar no último ponto bom» fica só com o que veio antes: " +
+    runDistStr(offer.kept.distM) + " em " + runDurStr(offer.kept.durationS) + " (em vez de " + runDistStr(stats.distM) + " em " + runDurStr(stats.durationS) + "). Isto apaga o que veio depois da lacuna.";
 }
 function runLiveScreen(sv){
   var L = RUN.live, info;
   if (typeof authRole !== "undefined" && authRole === "professional") {
     return runLCard("preview", "<div class=\"card run-live-card\"><div class=\"eyebrow\">Gravar com GPS</div><p class=\"muted-p\">Pré-visualização: só o aluno pode gravar corridas.</p></div>");
   }
+  runLCheckUser();
   if (runLMode(sv) !== "live") {
+    // o profissional desligou a gravação a meio: o GPS e o ecrã ligados param já, e o que se gravou fica no resumo (nunca fica uma gravação órfã)
+    if (L.phase === "rec" || (L.phase === "prep" && L.gpsOn)) runLModeLost(true);
+    if (L.phase === "end" && L.st) return runLEndHtml(sv);
     return runLCard("off", runLHead("Gravar com GPS", "runLiveBack") + "<div class=\"card run-live-card\"><p class=\"muted-p\">A gravação com GPS não está ligada para ti. O teu profissional liga-a quando for altura.</p></div>");
   }
-  runLCheckUser();
   if (L.phase === "rec" && L.st) return runLRecHtml();
-  if (L.phase === "end" && L.st) return runLEndHtml();
+  if (L.phase === "end" && L.st) return runLEndHtml(sv);
   if (L.phase === "prep") return runLPrepHtml();
   info = runLDraftInfo();   // há uma corrida por terminar neste telemóvel: não se começa outra por cima (nunca se apaga em silêncio)
   if (info.ok || info.reason === "unusable") {
@@ -875,10 +1139,11 @@ function runLiveWire(s, el){
     runLGpsStart(); runLTickStart(); runLRenderForce();
   });
   runLOn(el, "runLiveStart", function(){
-    if (!(L.prepGood && L.watching && !L.err)) return;
+    if (!runLPrepReady(Date.now())) return;
     runLStartRecording();
     runLRenderForce();
   });
+  runLOn(el, "runLiveRestart", function(){ runLRestartWatch(true); runLPaint(Date.now()); });
   runLOn(el, "runLivePause", function(){
     if (L.st && L.st.paused) runLResume(); else runLPause();
     runLRenderForce();
@@ -886,6 +1151,7 @@ function runLiveWire(s, el){
   runLOn(el, "runLiveEnd", function(){ runLAskEnd(s); });
   runLOn(el, "runLiveLockBtn", function(){ L.locked = true; runLRenderForce(); });
   runLOn(el, "runLiveReview", function(){ runLReview(s); });
+  runLOn(el, "runLiveCut", function(){ if (runLCutNow()) runLRenderForce(); else runLToast("Não foi possível terminar no último ponto bom."); });
   runLOn(el, "runLiveDiscard", function(){ if (runLAskDiscard()) RUN.go("home"); });
   notes = el.querySelector ? el.querySelector("#runLiveNotes") : null;
   if (notes) notes.addEventListener("click", function(e){
@@ -900,10 +1166,11 @@ function runLiveWire(s, el){
 
 /* ---------- fila de envio (armazenamento, envio, aviso) ---------- */
 function runLQueueRead(){ return runLiveQueueParse(runLGet(RUN_OUTBOX_KEY)).list; }
+// true só se a escrita correu bem (uma fila vazia apaga a chave)
 function runLQueueWrite(list){
   var text;
   try { text = JSON.stringify(list); } catch (e) { return false; }
-  if (!list.length) { runLDel(RUN_OUTBOX_KEY); return true; }
+  if (!list.length) return runLDel(RUN_OUTBOX_KEY);
   return runLSet(RUN_OUTBOX_KEY, text);
 }
 // entradas do utilizador atual; onlyPending = true deixa de fora as recusadas (state «failed»)
@@ -922,19 +1189,28 @@ function runLQueueHas(id){
 function runLQueueRemove(id){
   var uid = runLUid(), list = runLQueueRead(), out = [], i;
   for (i = 0; i < list.length; i++) if (!(list[i].id === id && list[i].uid === uid)) out.push(list[i]);
-  runLQueueWrite(out);
+  return runLQueueWrite(out);
 }
-function runLQueueMark(id, state, err){
+// state «failed» (com o texto e o código da recusa, e a data) ou «pending» (volta a ser enviada). Devolve true se ficou escrito.
+function runLQueueMark(id, state, err, code){
   var uid = runLUid(), list = runLQueueRead(), i;
-  for (i = 0; i < list.length; i++) if (list[i].id === id && list[i].uid === uid) { list[i].state = state; list[i].err = err || ""; }
-  runLQueueWrite(list);
+  for (i = 0; i < list.length; i++) if (list[i].id === id && list[i].uid === uid) {
+    list[i].state = state === "failed" ? "failed" : "pending";
+    list[i].err = state === "failed" ? (err || "") : ""; list[i].code = state === "failed" ? (code || "") : "";
+    list[i].fat = state === "failed" ? Date.now() : 0;
+  }
+  return runLQueueWrite(list);
 }
+// o servidor recusou com um destes códigos por uma causa que pode passar (cache do esquema logo depois de aplicar a migração, Corrida desligada e ligada outra
+// vez, consentimento dado entretanto): reenvia-se sozinho UMA vez por sessão e o aluno pode sempre tentar outra vez. Nunca: valores fora do permitido.
+function runLCodeRetryable(code){ return code === "PGRST205" || code === "42P01" || code === "42501" || code === "23503"; }
+function runLCodeTerminal(code){ return code === "23514" || (typeof code === "string" && code.indexOf("22") === 0); }
 function runLErrText(e){
   var code = e && e.code ? String(e.code) : "";
   if (code === "42501") return "A Corrida pode ter sido desativada para ti ou falta o consentimento. Fala com o teu profissional.";
   if (code === "23503") return "Falta o consentimento da Corrida.";
   if (code === "PGRST205" || code === "42P01") return "Corrida indisponível por agora. Volta a tentar mais tarde.";
-  if (code === "23514" || code === "22001" || code === "22003" || code === "22P02") return "O servidor recusou esta corrida (valores fora do permitido).";
+  if (runLCodeTerminal(code)) return "O servidor recusou esta corrida (valores fora do permitido).";
   return "O servidor recusou esta corrida.";
 }
 // «ok» | «dup» (23505: já chegou) | «transient» | «permanent»
@@ -943,21 +1219,21 @@ function runLClassify(res){
   if (!e) return {kind: "ok"};
   if (e.code === "23505") return {kind: "dup"};
   tr = typeof outboxErrorIsTransient === "function" ? outboxErrorIsTransient(res) : (!res.status || res.status >= 500 || res.status === 401 || res.status === 408 || res.status === 429);
-  return tr ? {kind: "transient"} : {kind: "permanent", text: runLErrText(e)};
+  return tr ? {kind: "transient"} : {kind: "permanent", text: runLErrText(e), code: e.code ? String(e.code).slice(0, 20) : ""};
 }
 function runLCall(builder){
   var p;
   try { p = typeof withTimeout === "function" ? withTimeout(builder, RUN_LIVE_CFG.sendTimeoutMs) : Promise.resolve(builder); } catch (e) { return Promise.resolve({error: {message: "failed", code: ""}, status: 0}); }
   return p.then(function(r){ return r || {error: {message: "sem resposta", code: ""}, status: 0}; }, function(){ return {error: {message: "timeout", code: ""}, status: 0}; });
 }
-// {ok:true} | {ok:false, transient:true} | {ok:false, transient:false, error}
+// {ok:true} | {ok:false, transient:true} | {ok:false, transient:false, error, code}
 function runLSendEntry(entry){
   var row = entry.item.row, tr = entry.item.track, first;
   try { first = runLCall(sb.from("runs").insert(row)); } catch (e) { return Promise.resolve({ok: false, transient: true}); }
   return first.then(function(r1){
     var c1 = runLClassify(r1);
     if (c1.kind === "transient") return {ok: false, transient: true};
-    if (c1.kind === "permanent") return {ok: false, transient: false, error: c1.text};
+    if (c1.kind === "permanent") return {ok: false, transient: false, error: c1.text, code: c1.code};
     if (!tr) return {ok: true};
     var second;
     try { second = runLCall(sb.from("run_tracks").insert({run_id: row.id, student_id: row.student_id, fmt: 1, trim_m: tr.trimM, points: tr.segments})); } catch (e) { return {ok: false, transient: true}; }
@@ -968,32 +1244,67 @@ function runLSendEntry(entry){
     });
   });
 }
-// entradas da fila que não se poderiam enviar nunca (lixo): tiram-se, para o aviso do núcleo («corrida por enviar») não ficar a contá-las
+// entradas da fila que não se poderiam enviar nunca (lixo): tiram-se, para o aviso do núcleo («corrida por enviar») não ficar a contá-las.
+// As recusadas pelo servidor guardam as coordenadas partilhadas: ficam no máximo failedKeepMs (30 dias) a contar da recusa. Devolve quantas expiraram.
 function runLQueueRepair(){
-  var raw = runLGet(RUN_OUTBOX_KEY), parsed;
-  if (raw == null || raw === "") return;
+  var raw = runLGet(RUN_OUTBOX_KEY), parsed, list, out = [], now = Date.now(), i, e, changed = false, expired = 0;
+  if (raw == null || raw === "") return 0;
   parsed = runLiveQueueParse(raw);
-  if (!parsed.bad && parsed.dropped > 0) runLQueueWrite(parsed.list);
+  if (parsed.bad) return 0;
+  list = parsed.list;
+  if (parsed.dropped > 0) changed = true;
+  for (i = 0; i < list.length; i++) {
+    e = list[i];
+    if (e.state === "failed") {
+      if (!(e.fat > 0)) { e.fat = now; changed = true; }          // recusada antes de se contar o prazo: conta a partir de agora
+      else if (now - e.fat > RUN_LIVE_CFG.failedKeepMs) { expired++; changed = true; continue; }
+    }
+    out.push(e);
+  }
+  if (changed) runLQueueWrite(out);
+  return expired;
+}
+// volta a pendentes, uma só vez por sessão, as recusadas por causas que podem passar
+function runLQueueRevive(){
+  var uid = runLUid(), list = runLQueueRead(), changed = false, i, e;
+  for (i = 0; i < list.length; i++) {
+    e = list[i];
+    if (e.uid === uid && e.state === "failed" && runLCodeRetryable(e.code) && !runLRetried[e.id]) {
+      runLRetried[e.id] = true; e.state = "pending"; e.err = ""; e.code = ""; e.fat = 0; changed = true;
+    }
+  }
+  if (changed) runLQueueWrite(list);
 }
 function runLFlushRun(){
-  var uid = runLUid(), sent = 0, failed = 0, lost = 0;
-  runLQueueRepair();
+  var uid = runLUid(), sent = 0, failed = 0, lost = 0, expired, tried = {}, localFail = false;
+  expired = runLQueueRepair();
+  if (expired) runLToast(expired === 1 ? "Apaguei deste telemóvel uma corrida recusada há mais de 30 dias." : "Apaguei deste telemóvel " + expired + " corridas recusadas há mais de 30 dias.");
   if (!uid || typeof sb === "undefined" || !sb || typeof sbReady === "undefined" || !sbReady) return Promise.resolve({sent: 0, failed: 0, left: runLOwnCount(true), reason: "nosb"});
   if (typeof navigator !== "undefined" && navigator.onLine === false) return Promise.resolve({sent: 0, failed: 0, left: runLOwnCount(true), reason: "offline"});
+  runLQueueRevive();
+  // Cada corrida tenta-se no máximo uma vez por passagem, e se a fila não se deixa escrever (quota, armazenamento só de leitura) pára-se: sem isto a mesma
+  // entrada, que não sai da fila, seria enviada outra vez e outra vez sem pausa (cada volta é um pedido ao servidor).
   function next(){
-    var own = runLOwn(true), entry = own.length ? own[0] : null;
+    var own = runLOwn(true).filter(function(e){ return !tried[e.id]; }), entry = own.length ? own[0] : null;
     if (!entry) return Promise.resolve();
+    tried[entry.id] = true;
     return runLSendEntry(entry).then(function(r){
-      if (r.ok) { runLQueueRemove(entry.id); sent++; if (r.trackLost) lost++; return next(); }
+      if (r.ok) {
+        if (!runLQueueRemove(entry.id)) { localFail = true; return null; }
+        sent++; if (r.trackLost) lost++;
+        return next();
+      }
       if (r.transient) return null;     // sem ligação ou servidor ocupado: mantém e pára
-      runLQueueMark(entry.id, "failed", r.error); failed++;
+      if (!runLQueueMark(entry.id, "failed", r.error, r.code)) { localFail = true; return null; }
+      failed++;
       return next();
     });
   }
   return next().then(function(){
-    if (lost) runLToast("A corrida foi enviada, mas o percurso não.");
+    if (localFail) runLToast("Não consegui atualizar as corridas por enviar neste telemóvel. Liberta espaço e tenta outra vez.");
+    else if (lost) runLToast("A corrida foi enviada, mas o percurso não.");
     else if (sent) runLToast(sent === 1 ? "Corrida enviada." : sent + " corridas enviadas.");
-    return {sent: sent, failed: failed, left: runLOwnCount(true)};
+    return {sent: sent, failed: failed, left: runLOwnCount(true), reason: localFail ? "local" : undefined};
   });
 }
 function runLiveFlush(){
@@ -1013,13 +1324,50 @@ function runLiveQueueAddPublic(item){
   ok = runLQueueWrite(res.list);
   return ok && runLQueueHas(res.list[res.list.length - 1].id);
 }
+// apaga da fila local as corridas deste aluno (as por enviar e as recusadas): chamado ao apagar todas as corridas e ao retirar o consentimento. Devolve quantas.
+function runLQueueClear(studentId){
+  var uid = runLUid(), list = runLQueueRead(), out = [], n = 0, i, e;
+  if (!uid) return 0;
+  for (i = 0; i < list.length; i++) {
+    e = list[i];
+    if (e.uid === uid && (studentId == null || e.item.row.student_id === studentId)) n++; else out.push(e);
+  }
+  if (n && !runLQueueWrite(out)) return 0;
+  return n;
+}
+// recibo local do consentimento: {uid, studentId, version, at}. Só serve para COMEÇAR sem rede (corrida.js lê-o quando a leitura no servidor falha por rede);
+// o servidor decide sempre (RLS / chave estrangeira ao guardar) e quando responde, corrida.js põe o recibo em dia.
+function runLConsentKey(){ return typeof RUN_CONSENT_KEY === "string" && RUN_CONSENT_KEY ? RUN_CONSENT_KEY : "evolve_run_consent_v1"; }
+function runLConsentRead(){
+  var raw = runLGet(runLConsentKey()), r;
+  if (typeof raw !== "string" || !raw) return null;
+  try { r = JSON.parse(raw); } catch (e) { return null; }
+  return r && typeof r === "object" && !Array.isArray(r) ? r : null;
+}
+function runLVersionOk(v){ return runLFin(v) && v >= 1 && v <= 32767 && Math.floor(v) === v; }
+function runLiveConsentGet(studentId){
+  var r = runLConsentRead(), uid = runLUid();
+  if (!r || !uid || typeof studentId !== "string" || !studentId || r.uid !== uid || r.studentId !== studentId || !runLVersionOk(r.version)) return null;
+  return r.version;
+}
+function runLiveConsentSet(studentId, version){
+  var uid = runLUid();
+  if (!uid || typeof studentId !== "string" || !studentId || !runLVersionOk(version)) return false;
+  return runLSet(runLConsentKey(), JSON.stringify({uid: uid, studentId: studentId, version: version, at: Date.now()}));
+}
+// apaga o recibo deste aluno (sem aluno, apaga-o sempre; um recibo ilegível também se apaga)
+function runLiveConsentClear(studentId){
+  var r = runLConsentRead();
+  if (r && studentId != null && r.studentId !== studentId) return false;
+  return runLDel(runLConsentKey());
+}
 
 /* ---------- aviso no topo da vista «home» ---------- */
 function runLRunSummary(stats){
   return "<b>" + escapeHtml(runDistStr(stats.distM)) + "</b> em <b>" + escapeHtml(runDurStr(stats.durationS)) + "</b>";
 }
 function runLBannerSession(s){
-  var L = RUN.live, now = Date.now(), v, built, h = "";
+  var L = RUN.live, now = Date.now(), v, built, h = "", live = runLMode(s) === "live";
   if (L.phase === "rec" && L.st) {
     v = runLiveView(L.st, now);
     h = "<div class=\"card run-live-banner\" data-kind=\"active\"><div class=\"eyebrow\">Corrida a decorrer</div>" +
@@ -1029,7 +1377,8 @@ function runLBannerSession(s){
     built = runLRunFromState(s ? s.id : "x", 1);
     h = "<div class=\"card run-live-banner\" data-kind=\"ended\"><div class=\"eyebrow\">Corrida por guardar</div>" +
       "<p class=\"muted-p\">Terminaste uma corrida que ainda não foi guardada: " + runLRunSummary(built.stats) + ".</p>" +
-      "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" data-act=\"review\">Rever e guardar</button>" +
+      (live ? "" : "<p class=\"muted-p\">A gravação com GPS não está ligada para ti: só dá para guardar esta corrida se o teu profissional a voltar a ligar. Podes descartá-la.</p>") +
+      "<div class=\"run-live-btns\">" + (live ? "<button type=\"button\" class=\"btn primary run-live-btn\" data-act=\"review\">Rever e guardar</button>" : "") +
       "<button type=\"button\" class=\"btn run-live-btn\" data-act=\"discard\">Descartar</button></div></div>";
   } else if (L.phase === "prep" && L.gpsOn) {
     h = "<div class=\"card run-live-banner\" data-kind=\"prep\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\">O GPS está a ser preparado para uma corrida.</p>" +
@@ -1038,17 +1387,26 @@ function runLBannerSession(s){
   return h;
 }
 function runLBannerDraft(s){
-  var info = runLDraftInfo(), ch, h;
+  var info = runLDraftInfo(), ch, h, now = Date.now(), delay;
   if (info.ok) {
-    ch = runLiveDraftChoices(info, Date.now(), runLMode(s));
+    ch = runLiveDraftChoices(info, now, runLMode(s), runLInst);
+    if (ch.busy) {
+      // outra janela (ou aparelho) está a gravar esta corrida: aqui não se mexe-lhe. O aviso põe-se em dia sozinho quando o batimento expirar.
+      delay = Math.min(RUN_LIVE_CFG.hbStaleMs + 1000, Math.max(1000, (info.ts || now) + RUN_LIVE_CFG.hbStaleMs - now + 500));
+      if (runLBusyTimer == null) runLBusyTimer = setTimeout(function(){ runLBusyTimer = null; runLRefreshBanner(); }, delay);
+      return "<div class=\"card run-live-banner\" data-kind=\"busy\"><div class=\"eyebrow\">Corrida a ser gravada</div><p class=\"muted-p\">" + escapeHtml(ch.why) + "</p>" +
+        "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" data-act=\"refresh\">Tentar outra vez</button></div></div>";
+    }
     h = "<div class=\"card run-live-banner\" data-kind=\"draft\"><div class=\"eyebrow\">Há uma corrida por terminar</div>" +
       "<p class=\"muted-p\">" + (info.ended ? "Terminaste uma corrida" : "Ficou uma corrida a meio") + " neste telemóvel que ainda não foi guardada: " + runLRunSummary(info.stats) +
       (info.startedAtMs != null ? ", começada a " + escapeHtml(runLWhen(info.startedAtMs)) : "") + ".</p>" +
       (ch.why ? "<p class=\"muted-p\">" + escapeHtml(ch.why) + "</p>" : "") +
       (!ch.save && ch.saveError && runLMode(s) === "live" ? "<p class=\"muted-p\">Não dá para guardar o que há: " + escapeHtml(ch.saveError) + "</p>" : "") +
+      (ch.cut ? "<p class=\"muted-p\">" + escapeHtml(runLCutAsk(ch.cut, info.stats)) + "</p>" : "") +
       "<div class=\"run-live-btns\">" +
       (ch.resume ? "<button type=\"button\" class=\"btn primary run-live-btn\" data-act=\"resume\">Retomar</button>" : "") +
       (ch.save ? "<button type=\"button\" class=\"btn" + (ch.resume ? "" : " primary") + " run-live-btn\" data-act=\"save\">Guardar o que há</button>" : "") +
+      (ch.cut ? "<button type=\"button\" class=\"btn" + (ch.resume || ch.save ? "" : " primary") + " run-live-btn\" data-act=\"savecut\">Terminar no último ponto bom</button>" : "") +
       "<button type=\"button\" class=\"btn run-live-btn\" data-act=\"discard\">Descartar</button></div></div>";
     return h;
   }
@@ -1059,22 +1417,30 @@ function runLBannerDraft(s){
   }
   return "";
 }
+function runLQueueRowText(e){
+  var row = e.item.row;
+  return escapeHtml(runLWhen(Date.parse(row.started_at))) + " (" + escapeHtml(runDistStr(row.distance_m)) + ", " + escapeHtml(runDurStr(row.duration_s)) + ")";
+}
 function runLBannerQueue(){
-  var own = runLOwn(false), pending = 0, h = "", i, e, row;
-  for (i = 0; i < own.length; i++) if (own[i].state !== "failed") pending++;
-  if (pending) {
+  var own = runLOwn(false), pend = [], h = "", i, e;
+  for (i = 0; i < own.length; i++) if (own[i].state !== "failed") pend.push(own[i]);
+  if (pend.length) {
     h += "<div class=\"card run-live-banner\" data-kind=\"queue\"><div class=\"eyebrow\">Corridas por enviar</div>" +
-      "<p class=\"muted-p\">" + escapeHtml(runLPlural(pending, "corrida está", "corridas estão")) + " guardada" + (pending === 1 ? "" : "s") + " neste telemóvel à espera de ligação para ser" + (pending === 1 ? "" : "em") + " enviada" + (pending === 1 ? "" : "s") + ".</p>" +
-      "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" data-act=\"retry\">Tentar enviar agora</button></div></div>";
+      "<p class=\"muted-p\">" + escapeHtml(runLPlural(pend.length, "corrida está", "corridas estão")) + " guardada" + (pend.length === 1 ? "" : "s") + " neste telemóvel à espera de ligação para ser" + (pend.length === 1 ? "" : "em") + " enviada" + (pend.length === 1 ? "" : "s") + ".</p>";
+    for (i = 0; i < pend.length; i++) {
+      h += "<div class=\"run-live-note\" data-id=\"" + escapeHtml(pend[i].id) + "\"><span>" + runLQueueRowText(pend[i]) + "</span>" +
+        "<button type=\"button\" class=\"btn btn-sm\" data-act=\"delpend\" data-id=\"" + escapeHtml(pend[i].id) + "\">Apagar</button></div>";
+    }
+    h += "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" data-act=\"retry\">Tentar enviar agora</button></div></div>";
   }
   for (i = 0; i < own.length; i++) {
     e = own[i];
     if (e.state !== "failed") continue;
-    row = e.item.row;
     h += "<div class=\"card run-live-banner\" data-kind=\"failed\" data-id=\"" + escapeHtml(e.id) + "\"><div class=\"eyebrow\">Não foi possível guardar</div>" +
-      "<p class=\"muted-p\">Uma corrida de " + escapeHtml(runLWhen(Date.parse(row.started_at))) + " (" + escapeHtml(runDistStr(row.distance_m)) + ", " + escapeHtml(runDurStr(row.duration_s)) + ") não foi aceite." +
-      (e.err ? " " + escapeHtml(e.err) : "") + "</p>" +
-      "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn run-live-btn\" data-act=\"del\" data-id=\"" + escapeHtml(e.id) + "\">Apagar</button></div></div>";
+      "<p class=\"muted-p\">Uma corrida de " + runLQueueRowText(e) + " não foi aceite." + (e.err ? " " + escapeHtml(e.err) : "") + "</p>" +
+      "<p class=\"muted-p\">Fica guardada neste telemóvel (com o percurso, se o partilhaste) no máximo 30 dias; depois é apagada.</p>" +
+      "<div class=\"run-live-btns\">" + (runLCodeTerminal(e.code) ? "" : "<button type=\"button\" class=\"btn primary run-live-btn\" data-act=\"reopen\" data-id=\"" + escapeHtml(e.id) + "\">Tentar outra vez</button>") +
+      "<button type=\"button\" class=\"btn run-live-btn\" data-act=\"del\" data-id=\"" + escapeHtml(e.id) + "\">Apagar</button></div></div>";
   }
   return h;
 }
@@ -1102,6 +1468,11 @@ function runLRefreshBanner(){
     }
   } catch (e) {}
 }
+// o consentimento no servidor antes de recolher localização outra vez (retomar) ou de seguir para guardar: como «Gravar com GPS». Sem corrida.js não se avança.
+function runLWithConsent(s, fn){
+  if (typeof RUN.ensureConsent !== "function") { runLToast("Não foi possível abrir a Corrida. Tenta outra vez."); return; }
+  try { RUN.ensureConsent(s, function(){ if (RUN.live.phase === "intro") fn(); }); } catch (e) { runLToast("Não foi possível abrir a Corrida. Tenta outra vez."); }
+}
 function runLiveWireBanner(s, el){
   var root = el && el.querySelector ? el.querySelector("#runLiveBanner") : null, L = RUN.live, now = Date.now();
   if (root) root.addEventListener("click", function(e){
@@ -1109,9 +1480,13 @@ function runLiveWireBanner(s, el){
     if (!act) return;
     if (act === "back") { RUN.go("live"); return; }
     if (act === "review") { runLReview(s); return; }
-    if (act === "resume") { if (runLResumeDraft(s)) RUN.go("live"); else { runLToast("Não foi possível retomar esta corrida."); runLRefreshBanner(); } return; }
-    if (act === "save") {
-      if (runLDraftToEnd(s)) runLReview(s); else { runLToast("Não foi possível guardar o que há."); runLRefreshBanner(); }
+    if (act === "refresh") { runLRefreshBanner(); return; }
+    if (act === "resume") {
+      runLWithConsent(s, function(){ if (runLResumeDraft(s)) RUN.go("live"); else { runLToast("Não foi possível retomar esta corrida."); runLRefreshBanner(); } });
+      return;
+    }
+    if (act === "save" || act === "savecut") {
+      runLWithConsent(s, function(){ if (runLDraftToEnd(s, act === "savecut")) runLReview(s); else { runLToast("Não foi possível guardar o que há."); runLRefreshBanner(); } });
       return;
     }
     if (act === "discard") {
@@ -1120,10 +1495,17 @@ function runLiveWireBanner(s, el){
       RUN.go(RUN.v && RUN.v.name ? RUN.v.name : "home");
       return;
     }
-    if (act === "del") {
-      if (!window.confirm("Apagar esta corrida que não foi possível guardar? Não dá para desfazer.")) return;
-      runLQueueRemove(t.getAttribute("data-id"));
+    if (act === "del" || act === "delpend") {
+      if (act === "delpend" && RUN.live.flushP) { runLToast("A enviar neste momento. Tenta outra vez daqui a pouco."); return; }
+      if (!window.confirm(act === "del" ? "Apagar esta corrida que não foi possível guardar? Não dá para desfazer." : "Apagar esta corrida que ainda não foi enviada? Não dá para desfazer.")) return;
+      if (!runLQueueRemove(t.getAttribute("data-id"))) runLToast("Não foi possível apagar esta corrida deste telemóvel. Tenta outra vez.");
       runLRefreshBanner();
+      return;
+    }
+    if (act === "reopen") {
+      runLQueueMark(t.getAttribute("data-id"), "pending");
+      runLRefreshBanner();
+      RUN.flush();
       return;
     }
     if (act === "retry") { RUN.flush(); return; }
@@ -1173,10 +1555,18 @@ RUN.liveWireBanner = runLiveWireBanner;
 RUN.queueAdd = runLiveQueueAddPublic;
 RUN.queuePending = function(){ return runLOwnCount(true); };
 RUN.queueFailed = function(){ return runLOwnCount(false) - runLOwnCount(true); };
+RUN.queueClear = runLQueueClear;
+RUN.consentCacheGet = runLiveConsentGet;
+RUN.consentCacheSet = runLiveConsentSet;
+RUN.consentCacheClear = runLiveConsentClear;
+// a preparar, a gravar ou em pausa (o GPS e o ecrã ligados, ou a gravação em memória): sair da app ou mudar de conta mata-a
+RUN.liveBusy = function(){ var L = RUN.live; return (L.phase === "prep" && L.gpsOn === true) || (L.phase === "rec" && !!L.st); };
 RUN.flush = runLiveFlush;
 RUN.reset = function(){
   runLHardStop();
   runLResetState();
+  runLRetried = {};
+  if (runLBusyTimer != null) { clearTimeout(runLBusyTimer); runLBusyTimer = null; }
   try { if (typeof RUN.uiReset === "function") RUN.uiReset(); } catch (e) {}      // o que corrida.js guarda em memória também se esquece (por omissão RUN.reset era isto)
   try { if (RUN.v && RUN.v.name === "live") RUN.v = {name: "home"}; } catch (e) {}
 };

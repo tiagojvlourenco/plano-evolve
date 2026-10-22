@@ -77,8 +77,8 @@
          tempo desde o último fix bom até «agora» (sinceGoodS). O que se grava é o de runStats, que acaba SEMPRE no último ponto
          (nunca soma o fim aberto); se a corrida «acordou» depois de uma lacuna enorme, ver runCutAtLastGap.
      runCutAtLastGap(segments, minGapS) → {segments, cutS, cutPoints}   «Terminar no último ponto bom»: cópia sem o que vem a partir da
-         ÚLTIMA lacuna ao vivo (b:"gap") de pelo menos minGapS segundos (omissão gapS). Quem chama decide quando a oferece; sem essa
-         lacuna devolve tudo e cutS = 0.
+         ÚLTIMA lacuna ao vivo (b:"gap") de pelo menos minGapS segundos (obrigatório; se faltar ou for inválido não corta nada). Quem
+         chama decide quando a oferece; sem essa lacuna devolve tudo e cutS = 0.
      runReasonText(reason) → texto PT-PT curto para o motivo (ou "").
 
    Resultado final de qualquer fonte
@@ -347,15 +347,14 @@ function runFeed(state, fix, cfg){
     state.rej.invalid++; res.reason = "invalid"; return res;
   }
   if (state.paused) { res.reason = "paused"; return res; }
-  var sus = state.sus;
-  state.sus = null;
+  var sus = state.sus;   // fica até haver outro fix ACEITE (um fix recusado por precisão não o esquece)
   if (state.maxT != null && fix.t <= state.maxT) {
     // maxT só avança com fixes ACEITES. Se o fix que abriu o segmento trazia uma hora adiantada (relógio errado) e este, com sinal
     // utilizável, recua mais de timeBackS em relação a ele mas cabe no tempo anterior, desfaz-se o fix adiantado em vez de rejeitar
     // tudo o que vem a seguir «até o relógio o apanhar».
     var back = sus && state.segs.length && state.segs[state.segs.length - 1].length === 1 && state.maxT - fix.t > cfg.timeBackS * 1000 &&
       (sus.maxT == null || fix.t > sus.maxT) && runIFin(fix.acc) && fix.acc >= 0 && fix.acc <= cfg.accMaxM;
-    if (back) runIUndoOpen(state, sus);
+    if (back) { runIUndoOpen(state, sus); state.sus = null; }
     else { state.rej.time++; res.reason = "time"; return res; }
   }
   if (!runIFin(fix.acc) || fix.acc < 0 || fix.acc > cfg.accMaxM) { state.rej.acc++; res.reason = "acc"; return res; }
@@ -384,7 +383,7 @@ function runFeed(state, fix, cfg){
   var seg = state.segs[state.segs.length - 1], anchor = seg[seg.length - 1];
   var d = runHav(anchor.lat, anchor.lon, fix.lat, fix.lon), dtS = (fix.t - anchor.t) / 1000;
   if (d / dtS > cfg.vMaxMs) { state.rej.jump++; res.reason = "jump"; return res; }
-  state.lastGoodT = fix.t; state.maxT = fix.t; res.good = true;
+  state.lastGoodT = fix.t; state.maxT = fix.t; state.sus = null; res.good = true;
   if (d < cfg.minStepLiveM) { res.reason = "near"; return res; }
   seg.push(pt); state.nPts++;
   runIAccStep(state, anchor, pt, d, cfg);
@@ -607,7 +606,7 @@ function runStats(segments, cfg, mode){
 // quando a oferece. Devolve uma CÓPIA; sem essa lacuna devolve tudo e cutS = 0. cutS = segundos entre o último ponto mantido e o último
 // ponto do percurso inteiro.
 function runCutAtLastGap(segments, minGapS){
-  var segs = Array.isArray(segments) ? segments : [], min = runIFin(minGapS) && minGapS >= 0 ? minGapS : RUN_CFG.gapS, cut = -1, i, j, pts = 0;
+  var segs = Array.isArray(segments) ? segments : [], min = runIFin(minGapS) && minGapS >= 0 ? minGapS : Infinity, cut = -1, i, j, pts = 0;
   for (i = segs.length - 1; i >= 1; i--) {
     var f = Array.isArray(segs[i]) && segs[i].length ? segs[i][0] : null;
     if (f && f.b === "gap" && runIFin(f.g) && f.g >= min) { cut = i; break; }
@@ -908,9 +907,9 @@ function runIFinish(source, raw, o, extra){
   for (i = 0; i < flat.length; i++) {
     var q = flat[i];
     if (!(q.t > lastT)) { order++; continue; }
-    var ahead = false;   // hora adiantada: mais à frente há pontos com hora entre o último aceite e esta (seriam apagados por causa dela)
-    for (k = i + 1; k < flat.length && k <= i + cfg.orderWindow; k++) if (flat[k].t < q.t && flat[k].t > lastT) { ahead = true; break; }
-    if (ahead) { order++; continue; }
+    var below = 0;   // hora adiantada: mais à frente há 2 ou mais pontos com hora entre o último aceite e esta (seriam apagados por causa dela)
+    for (k = i + 1; k < flat.length && k <= i + cfg.orderWindow && below < 2; k++) if (flat[k].t < q.t && flat[k].t > lastT) below++;
+    if (below >= 2) { order++; continue; }
     lastT = q.t;
     if (q.naive) naive = true;
     segs[owner[i]].push({lat: q.lat, lon: q.lon, t: q.t, acc: null});

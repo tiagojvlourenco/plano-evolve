@@ -12,7 +12,7 @@
      RUN.screen(sv)      HTML do separador (delega em RUN.liveScreen(sv) na vista «live»)      RUN.wire(s, el)   eventos (idem RUN.liveWire)
      RUN.proTab(s, el)   separador «Corridas» da ficha do profissional
      RUN.consentVersion()  versão do aviso de privacidade (run_consents.version). Continua a 1: o texto único (RUN_UI_NOTICE) descreve TODOS os usos
-                           (importar, à mão e gravar com GPS); se um uso novo mudar o que se recolhe, o texto e a versão sobem juntos (teste 140)
+                           (importar, à mão e gravar com GPS); se um uso novo mudar o que se recolhe, o texto e a versão sobem juntos (testes 137 a 140 do corrida-browser)
      RUN.ensureConsent(s, cb)  lê o consentimento no servidor; só chama cb() se o aluno aceitou (ou aceita agora) a versão atual. Só quando a leitura
                            falha por rede aceita o recibo local do gravador (RUN.consentCacheGet/Set/Clear, se existirem); o servidor decide sempre ao guardar
      RUN.submitRun(s, item)    item = {row, track|null} -> Promise<{ok:true, queued:false} | {ok:true, queued:true} | {ok:false, error, permanent}>;
@@ -37,6 +37,7 @@ var RUN_UI_PAGE = 100;             // corridas por pedido
 var RUN_UI_WEEKS = 8;              // semanas nos totais
 var RUN_UI_STALE_MS = 60000;       // a lista em memória é lida outra vez ao voltar ao ecrã passado este tempo
 var RUN_UI_TIMEOUT_MS = 15000;
+var RUN_UI_QUICK_MS = 5000;        // a leitura do consentimento espera menos quando já há um recibo (ao ar livre, com rede fraca, ninguém espera 15 s)
 var RUN_UI_TRIMS = [0, 100, 200, 500];   // metros escondidos no início e no fim do percurso partilhado
 var RUN_UI_SRC = {live: "GPS no telemóvel", gpx: "Ficheiro GPX", tcx: "Ficheiro TCX", fit: "Ficheiro FIT", manual: "À mão", native: "App nativa"};
 var RUN_UI_MODES = [["off", "Desligada"], ["import", "Importar e registar à mão"], ["live", "Também gravar com GPS (experimental)"]];
@@ -97,11 +98,11 @@ function runUiReset(){
 
 /* ---------- servidor ---------- */
 function runUiDb(){ return typeof sb !== "undefined" && sb ? sb : null; }
-// um pedido com tempo limite que nunca rejeita: {data, error, status}
-function runUiCall(make){
+// um pedido com tempo limite (ms, por omissão 15 s) que nunca rejeita: {data, error, status}
+function runUiCall(make, ms){
   var db = runUiDb(), p;
   if (!db) return Promise.resolve({data: null, error: {message: "sem ligação", code: ""}, status: 0});
-  try { p = withTimeout(make(db), RUN_UI_TIMEOUT_MS); } catch (e) { return Promise.resolve({data: null, error: {message: "falhou", code: ""}, status: 0}); }
+  try { p = withTimeout(make(db), ms || RUN_UI_TIMEOUT_MS); } catch (e) { return Promise.resolve({data: null, error: {message: "falhou", code: ""}, status: 0}); }
   return p.then(function(res){
     return res && typeof res === "object" ? res : {data: null, error: {message: "vazio", code: ""}, status: 0};
   }, function(){ return {data: null, error: {message: "tempo esgotado", code: ""}, status: 0}; });
@@ -308,7 +309,7 @@ function runUiTrackBlock(r, track, pro){
   var svg = runTrackSvg(track.segs, {width: 320, height: 220});
   if (!svg) return h + '<p class="muted-p">O percurso é curto demais para desenhar.</p></div>';
   return h + '<div class="run-svg-wrap">' + svg + '</div><p class="muted-p run-note">Este percurso foi aparado e simplificado antes de ser guardado' +
-    (track.trimM ? ' (início e fim escondidos: ' + track.trimM + ' m)' : '') + '.</p></div>';
+    (track.trimM ? ' (início e fim escondidos: pelo menos ' + track.trimM + ' m)' : '') + '.</p></div>';
 }
 function runUiDetailHtml(d, id, pro, preview, backId){
   var r = runUiFindRun(d, id);
@@ -352,7 +353,7 @@ function runUiGuideHtml(){
     '</ul><p class="muted-p">Se não conseguires, usa «Registar à mão».</p></details>';
 }
 // O aviso de privacidade é UM só (versão 1) e descreve todos os usos da Corrida: o que se aceita é o mesmo qualquer que seja o modo que o profissional
-// ligue depois. Se um uso novo mudar o que se recolhe ou quem vê, este texto e RUN.consentVersion() sobem juntos (o teste 140 prende o texto às colunas
+// ligue depois. Se um uso novo mudar o que se recolhe ou quem vê, este texto e RUN.consentVersion() sobem juntos (os testes 137 a 140 do corrida-browser prendem o texto às colunas
 // que se gravam e às funcionalidades que existem). O consentimento e «Privacidade e dados» mostram estes mesmos parágrafos.
 var RUN_UI_NOTICE = [
   "Podes trazer uma corrida de três maneiras: escolhes um ficheiro (GPX ou TCX) do relógio ou de outra app, registas a corrida à mão ou, se o teu profissional ligar essa opção, gravas aqui com o GPS do telemóvel. A EVOLVE lê o ficheiro no teu telemóvel e não o guarda.",
@@ -364,14 +365,15 @@ var RUN_UI_NOTICE = [
 function runUiNoticeHtml(cls){
   return RUN_UI_NOTICE.map(function(p){ return '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + escapeHtml(p) + '</p>'; }).join("");
 }
-function runUiPrivacyHtml(d, preview, open){
-  var h = '<details class="soft-details run-privacy" id="runPrivacy"' + (open ? ' open' : '') + '><summary>Privacidade e dados</summary>' + runUiNoticeHtml("muted-p") +
-    '<p class="muted-p">' + escapeHtml(RUN_UI_MSG.sensitive) + '</p>';
+// outside: na vista de dados (Corrida desligada) os botões de apagar ficam à vista, fora do texto recolhido
+function runUiPrivacyHtml(d, preview, outside){
+  var btns = '';
   if (!preview){
-    if (d.runs.length) h += '<button type="button" class="btn run-btn run-danger" id="runDelAll">Apagar todas as corridas</button>';
-    h += '<button type="button" class="btn run-btn run-danger" id="runWithdraw">Retirar consentimento</button>';
+    if (d.runs.length) btns += '<button type="button" class="btn run-btn run-danger" id="runDelAll">Apagar todas as corridas</button>';
+    btns += '<button type="button" class="btn run-btn run-danger" id="runWithdraw">Retirar consentimento</button>';
   }
-  return h + '</details>';
+  return '<details class="soft-details run-privacy" id="runPrivacy"><summary>Privacidade e dados</summary>' + runUiNoticeHtml("muted-p") +
+    '<p class="muted-p">' + escapeHtml(RUN_UI_MSG.sensitive) + '</p>' + (outside ? '' : btns) + '</details>' + (outside ? btns : '');
 }
 
 /* ---------- vista «home» ---------- */
@@ -469,6 +471,7 @@ function runUiWireHome(s, el){
       after: function(){
         runUiConsentFor = "";
         runUiReceiptClear(s.id);
+        runUiQueueClear(s.id);
         runUiData = runUiNewData(s.id, runUiUid());
         if (typeof RUN.reset === "function"){ try { RUN.reset(); } catch (e) {} }
         runWipeLocal();
@@ -517,11 +520,11 @@ function runUiQueueCount(){
 }
 function runUiQueueClear(sid){ try { if (typeof RUN.queueClear === "function") RUN.queueClear(sid); } catch (e) {} }
 function runUiConsentRead(s){
-  return runUiCall(function(db){ return db.from("run_consents").select("version").eq("student_id", s.id); }).then(function(res){
-    var v = RUN.consentVersion();
+  var v = RUN.consentVersion(), known = runUiConsentFor === s.id || runUiReceiptGet(s.id) === v;
+  return runUiCall(function(db){ return db.from("run_consents").select("version").eq("student_id", s.id); }, known ? RUN_UI_QUICK_MS : 0).then(function(res){
     if (res.error){
       var k = runUiKind(res);
-      if (k === "net" && (runUiConsentFor === s.id || runUiReceiptGet(s.id) === v)) return {ok: true, accepted: true};
+      if (k === "net" && known) return {ok: true, accepted: true};
       return {ok: false, kind: k};
     }
     var yes = runUiRows(res).some(function(r){ return r && Number(r.version) === v; });
@@ -703,7 +706,7 @@ function runUiImportFile(s, file, input){
     if (!stats || stats.startedAtMs == null || stats.distM < 100 || stats.durationS < 30){ runUiSetMsg("runImpMsg", "Quase não há deslocação neste ficheiro (menos de 100 m ou 30 s).", "run-err"); return; }
     if (stats.distM > RUN_CFG.maxDistM){ runUiSetMsg("runImpMsg", "Esta corrida passa dos 300 km e não pode ser guardada.", "run-err"); return; }
     if (stats.distM > RUN_CFG.maxAvgSpeedMs * stats.durationS){ runUiSetMsg("runImpMsg", "A velocidade média é impossível para corrida. Confirma o ficheiro.", "run-err"); return; }
-    RUN.saveFlow(s, {source: r.source, stats: stats, segments: r.segments, hiddenS: 0, warnings: r.warnings || [], fileDistM: null, startedAtMs: stats.startedAtMs, cancelView: {name: "import"}});
+    RUN.saveFlow(s, {source: r.source, stats: stats, segments: r.segments, hiddenS: 0, warnings: r.warnings || [], fileDistM: (typeof r.declaredDistM === "number" && isFinite(r.declaredDistM) ? r.declaredDistM : null), startedAtMs: stats.startedAtMs, cancelView: {name: "import"}});
   }, function(){ fail(RUN_MSG.unreadable); });
 }
 function runUiWireImport(s, el){
