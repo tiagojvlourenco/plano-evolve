@@ -79,8 +79,8 @@ check.check("20. runWipeLocal tolera o localStorage inacessível", !threw);
 var fetches = [];
 global.fetch = function(u){ fetches.push(String(u)); return Promise.reject(new Error("sem rede nos testes")); };
 var cardOff = tplCorridaTab(studentView(noCol), noCol), cardOff2 = tplCorridaTab(studentView(rowToStudent({id: "d", name: "Dani", runs_mode: "off"})), rowToStudent({id: "d", name: "Dani", runs_mode: "off"}));
-check.check("21. Corrida desligada ou sem coluna: cartão «A Corrida ainda não está ativa para ti. O teu treinador liga-a quando for altura.», sem botões e sem pedir os ficheiros",
-  [cardOff, cardOff2].every(function(h){ return h.indexOf("A Corrida ainda não está ativa para ti. O teu treinador liga-a quando for altura.") >= 0 && h.indexOf("<button") < 0; }) && fetches.length === 0);
+check.check("21. Corrida desligada ou sem coluna: cartão «A Corrida ainda não está ativa para ti. O teu profissional liga-a quando for altura.», sem «Tentar outra vez» e sem pedir os ficheiros",
+  [cardOff, cardOff2].every(function(h){ return h.indexOf("A Corrida ainda não está ativa para ti. O teu profissional liga-a quando for altura.") >= 0 && h.indexOf("<button") < 0 || /id="runOffData"/.test(h); }) && fetches.length === 0);
 
 // 4. aviso ao sair da conta (mensagens e o que se apaga), com o resto da saída de conta simulado
 var asked = [], answer = false;
@@ -190,8 +190,8 @@ function row(id, name, runsMode){
     await goCorrida(A.pg);
     await A.pg.waitForSelector("#corridaOff");
     await A.pg.waitForTimeout(500);
-    check.check((34 + v) + ". " + (v === 0 ? "Sem a coluna runs_mode" : "Com runs_mode «off»") + ": o separador Corrida mostra que ainda não está ativa, sem botões nem «Tentar outra vez», e não pede corrida.js nem corrida-core.js",
-      /A Corrida ainda não está ativa para ti\. O teu treinador liga-a quando for altura\./.test(await tabText(A.pg)) && (await A.pg.locator("#alunoTabContent button").count()) === 0 && A.ctl.core === 0 && A.ctl.module === 0);
+    check.check((34 + v) + ". " + (v === 0 ? "Sem a coluna runs_mode" : "Com runs_mode «off»") + ": o separador Corrida mostra que ainda não está ativa, sem «Tentar outra vez» (só, com a coluna, «Ver ou apagar as minhas corridas»), e não pede corrida.js nem corrida-core.js",
+      /A Corrida ainda não está ativa para ti\. O teu profissional liga-a quando for altura\./.test(await tabText(A.pg)) && (await A.pg.locator("#alunoTabContent button").count()) === (v === 0 ? 0 : 1) && (await A.pg.locator("#runOffData").count()) === (v === 0 ? 0 : 1) && A.ctl.core === 0 && A.ctl.module === 0);
     await A.ctx.close();
   }
 

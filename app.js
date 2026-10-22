@@ -7324,7 +7324,10 @@ function previewBannerHtml(s){
 }
 function renderAlunoShell(){
   var s = findStudent(state.alunoStudentId);
-  if (!s) return;
+  if (!s){
+    if (APP_MODE === "treino" && alunoRoot) alunoRoot.innerHTML = "<div class=\"card\" style=\"text-align:center;margin-top:24px;\"><div class=\"eyebrow\">EVOLVE Treino</div><p class=\"muted-p\" style=\"margin-top:8px;\">Ainda não há alunos para pré-visualizar.</p><a class=\"btn\" href=\"index.html\" style=\"margin-top:10px;\">Abrir a app EVOLVE</a></div>";
+    return;
+  }
   ensureSyncBaseline(s); // antes de qualquer alteração do dia
   ensureFreshDay(s);
   var showSwitcher = authRole !== "student";
@@ -7785,6 +7788,7 @@ var corridaPromise = null;
 // (id da conta que o criou); fila = lista JSON de objetos com «uid» (também se aceita {items: [...]}). Entradas de outra conta, ou sem uid, nunca contam.
 var RUN_DRAFT_KEY = "evolve_run_draft_v1";
 var RUN_OUTBOX_KEY = "evolve_runs_outbox_v1";
+var RUN_CONSENT_KEY = "evolve_run_consent_v1"; // recibo local do consentimento já verificado (só serve para começar sem rede; o servidor decide sempre)
 function runStoredJson(key){
   try { var raw = window.localStorage && window.localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
 }
@@ -7795,11 +7799,11 @@ function runPendingCount(){
   var n = 0, draft = runStoredJson(RUN_DRAFT_KEY), queue = runStoredJson(RUN_OUTBOX_KEY);
   if (draft && typeof draft === "object" && !Array.isArray(draft) && draft.uid === uid) n++;
   if (queue && !Array.isArray(queue) && Array.isArray(queue.items)) queue = queue.items;
-  if (Array.isArray(queue)) queue.forEach(function(e){ if (e && typeof e === "object" && e.uid === uid) n++; });
+  if (Array.isArray(queue)) queue.forEach(function(e){ if (e && typeof e === "object" && e.uid === uid && e.state !== "failed") n++; }); // as já recusadas pelo servidor ficam visíveis na Corrida («Apagar»), mas não são «por enviar»
   return n;
 }
 function runWipeLocal(){
-  [RUN_DRAFT_KEY, RUN_OUTBOX_KEY].forEach(function(k){ try { window.localStorage.removeItem(k); } catch (e) {} });
+  [RUN_DRAFT_KEY, RUN_OUTBOX_KEY, RUN_CONSENT_KEY].forEach(function(k){ try { window.localStorage.removeItem(k); } catch (e) {} });
 }
 // modo da Corrida de um aluno: 'off' (por omissão, e sem a coluna) | 'import' | 'live'
 function corridaModeOf(s){
@@ -7829,8 +7833,9 @@ function whenCorrida(fn){
   return loadCorrida().then(function(ok){ return ok ? go() : null; });
 }
 function tplCorridaTab(sv, s){
-  if (corridaModeOf(s) === "off"){ // não ligada pelo profissional (ou migração por aplicar): nada é pedido
-    return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" id=\"corridaOff\" style=\"margin-top:8px;\">A Corrida ainda não está ativa para ti. O teu treinador liga-a quando for altura.</p></div>";
+  if (corridaModeOf(s) === "off" && !(RUN.dataMode && s.runsColumn)){ // não ligada pelo profissional (ou migração por aplicar): nada é pedido
+    return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" id=\"corridaOff\" style=\"margin-top:8px;\">A Corrida ainda não está ativa para ti. O teu profissional liga-a quando for altura.</p>" +
+      (s.runsColumn ? "<button type=\"button\" class=\"btn btn-sm\" id=\"runOffData\" style=\"margin-top:10px;\">Ver ou apagar as minhas corridas</button>" : "") + "</div>"; // desligar a Corrida não tira ao aluno o direito de ver e apagar o que já guardou
   }
   if (corridaHas("screen") && corridaHas("wire")) return RUN.screen(sv);
   if (RUN.loaded) RUN.failed = true; // carregou mas não define o que este ecrã precisa: tratar como falha (nunca rebenta)
@@ -7860,7 +7865,7 @@ function tplTreinoHome(s){
         "<div class=\"pd-meta\">" + escapeHtml(fmtDatePt(l.date)) + " · " + plural(sets, "série", "séries") + (l.rpe ? " · esforço " + l.rpe + "/10" : "") + "</div></div></div></div>";
     }).join("") + "</div>";
   }
-  html += "<a class=\"btn ghost help-link\" href=\"index.html\">Alimentação e avaliações → app EVOLVE</a>";
+  html += "<a class=\"btn ghost help-link\" id=\"goEvolveApp\" href=\"index.html\">Alimentação e avaliações → app EVOLVE</a>";
   return html;
 }
 // o treino e a corrida têm app própria: aqui fica só um atalho
@@ -8603,6 +8608,10 @@ function wireTrainingNav(s, el){
   }
   var start = el.querySelector("#startWorkout");
   if (start) start.addEventListener("click", function(){ go("treino", start.getAttribute("data-day")); });
+  var goEvolve = el.querySelector("#goEvolveApp");
+  if (goEvolve) goEvolve.addEventListener("click", function(e){ // sair da página pára a gravação GPS: nunca sem avisar
+    if (corridaHas("liveBusy") && RUN.liveBusy() && !window.confirm("Tens uma corrida a decorrer e ela pára se saíres desta app. Sair mesmo assim?")) e.preventDefault();
+  });
   var openRunsPending = el.querySelector("#openRunsPending");
   if (openRunsPending) openRunsPending.addEventListener("click", function(){ go("corrida"); });
   el.querySelectorAll("[data-start-day]").forEach(function(b){ b.addEventListener("click", function(){ go("treino", b.getAttribute("data-start-day")); }); });
@@ -8923,7 +8932,7 @@ function renderRestTimer(now){
   var el = document.getElementById("restTimer");
   if (!el) return;
   var app = document.getElementById("alunoApp");
-  var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden"));
+  var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden")) && !(APP_MODE === "treino" && state.alunoTab === "corrida"); // na Corrida não tapa o ecrã de gravação
   el.classList.toggle("hidden", !visible);
   if (app) app.classList.toggle("rt-open", visible);
   if (!visible){ el.innerHTML = ""; el._rtKey = null; return; }
@@ -11136,7 +11145,10 @@ function wireAlunoTab(s){
   if (APP_MODE === "treino" && state.alunoTab === "corrida"){
     var retry = el.querySelector("#corridaRetry");
     if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderAlunoTab(s); });
-    if (corridaModeOf(s) !== "off" && corridaHas("screen") && corridaHas("wire")) RUN.wire(s, el); // com a Corrida desligada o separador é só um cartão: nada a ligar
+    var offData = el.querySelector("#runOffData");
+    if (offData) offData.addEventListener("click", function(){ RUN.dataMode = true; RUN.failed = false; renderAlunoTab(s); });
+    if (corridaModeOf(s) === "off" && !RUN.dataMode) RUN.dataMode = false;
+    if ((corridaModeOf(s) !== "off" || RUN.dataMode) && corridaHas("screen") && corridaHas("wire")) RUN.wire(s, el); // com a Corrida desligada o separador é só um cartão: nada a ligar
   }
 
   el.querySelectorAll(".meal-row[data-midx]").forEach(function(row){
@@ -15021,8 +15033,14 @@ function finishBoot(rows, isProfessional, offline){
   });
 }
 
+// a sessão acabou fora desta página (outro separador, outra app, token revogado): o GPS e o que a Corrida guardou no telemóvel não podem continuar
+function runSessionEnded(){
+  if (RUN.loaded && typeof RUN.reset === "function"){ try { RUN.reset(); } catch (e) {} }
+  runWipeLocal();
+  currentAuthUserId = null;
+}
 function handleSession(session){
-  if (!session){ currentAuthUserId = null; showAuthScreen("signin"); return; }
+  if (!session){ runSessionEnded(); showAuthScreen("signin"); return; }
   currentAuthUserId = session.user.id;
   showLoading("A preparar a tua conta...");
   var email = session.user.email;
@@ -15296,7 +15314,7 @@ function boot(){
     document.getElementById("connectionErrorScreen").classList.remove("hidden");
   });
   sb.auth.onAuthStateChange(function(event){
-    if (event === "SIGNED_OUT") showAuthScreen("signin");
+    if (event === "SIGNED_OUT"){ runSessionEnded(); showAuthScreen("signin"); }
     if (event === "PASSWORD_RECOVERY"){
       hideAllScreens();
       document.getElementById("recoveryScreen").classList.remove("hidden");
