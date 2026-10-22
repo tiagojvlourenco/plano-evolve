@@ -479,6 +479,20 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var dt = await tabText(F.pg);
   ck("67. O detalhe mostra a nota como TEXTO (o HTML hostil não executa), o esforço e as ações (exportar, apagar só o percurso, apagar corrida)", dt.indexOf('<img src=x onerror="window.__xss=1">Nota "perigosa"') >= 0 && (await F.pg.evaluate(function(){ return window.__xss; })) === undefined && (await F.pg.locator(".run-detail img").count()) === 0 && /Exportar GPX \(percurso guardado\)/i.test(dt) && /Apagar só o percurso/i.test(dt) && /Apagar corrida/i.test(dt));
   ck("68. O percurso partilhado é carregado só ao abrir o detalhe (maybeSingle por run_id), desenhado em SVG, com a nota de que foi aparado e simplificado", /aparado e simplificado/.test(dt) && (await F.pg.locator('.run-svg-wrap svg[role="img"]').count()) === 1 && /esconder|escondidos: pelo menos 200 m/.test(dt));
+  // mapa de fundo opcional (OpenStreetMap): desligado por omissão, nenhum pedido a terceiros até o aluno tocar em «Mostrar mapa»
+  var tileReqsBefore = external.filter(function(u){ return /openstreetmap/.test(u); }).length;
+  var askTxt = (await F.pg.locator(".run-map-ask").innerText()).replace(/\s+/g, " ");
+  ck("68b. O detalhe do aluno oferece «Mostrar mapa» com o aviso do que implica (o OpenStreetMap fica a saber a zona e o IP), e até lá NÃO pede nenhum quadrado nem mostra mapa", /Mostrar mapa/i.test(askTxt) && /OpenStreetMap/.test(askTxt) && /endereço IP/.test(askTxt) && tileReqsBefore === 0 && (await F.pg.locator(".run-map").count()) === 0);
+  await F.pg.context().route(/tile\.openstreetmap\.org/, function(route){ route.fulfill({status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64")}); });
+  await F.pg.click('[data-run-map="on"]');
+  await F.pg.waitForSelector(".run-map svg polyline");
+  await F.pg.waitForTimeout(300);
+  var tileUrls = external.filter(function(u){ return /tile\.openstreetmap\.org/.test(u); });
+  var mapInfo = await F.pg.evaluate(function(){ var m = document.querySelector(".run-map"); return {tiles: m.querySelectorAll("img.run-map-tile").length, attr: (m.querySelector("a.run-map-attr") || {}).textContent, href: (m.querySelector("a.run-map-attr") || {}).href, lines: m.querySelectorAll("svg polyline").length, circles: m.querySelectorAll("svg circle").length}; });
+  ck("68c. Depois de «Mostrar mapa»: pede só quadrados de tile.openstreetmap.org (1 a 9, URL só com z/x/y, sem coordenadas nem identificadores), desenha o percurso por cima, com início e fim, e a atribuição «© OpenStreetMap» com ligação à licença", tileUrls.length >= 1 && tileUrls.length <= 9 && tileUrls.every(function(u){ return /^https:\/\/tile\.openstreetmap\.org\/\d{1,2}\/\d+\/\d+\.png$/.test(u); }) && mapInfo.tiles === tileUrls.length && mapInfo.lines >= 1 && mapInfo.circles === 2 && /OpenStreetMap/.test(mapInfo.attr) && /openstreetmap\.org\/copyright/.test(mapInfo.href));
+  external = external.filter(function(u){ return !/tile\.openstreetmap\.org/.test(u); }); // pedidos esperados e já verificados; o teste final continua a exigir que não saiu mais nada
+  await F.pg.click('[data-run-map="off"]');
+  ck("68d. «Esconder o mapa» volta ao desenho simples", (await F.pg.locator(".run-map").count()) === 0 && (await F.pg.locator(".run-map-ask").count()) === 1);
   var dlP2 = F.pg.waitForEvent("download");
   await F.pg.click("#runExportSaved");
   var dl2 = await dlP2, g2 = fs.readFileSync(await dl2.path(), "utf8");
@@ -617,6 +631,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await P.pg.click('.run-row[data-prun="' + uuid(21) + '"]');
   await P.pg.waitForSelector(".run-svg-wrap svg");
   ck("95. O profissional não exporta o GPX do aluno (só o aluno o faz) mas pode apagar só o percurso", (await P.pg.locator("#runExportSaved").count()) === 0 && (await P.pg.locator("#runDelTrack").count()) === 1);
+  ck("95b. O profissional nunca vê o mapa de fundo nem o botão «Mostrar mapa» (só o desenho simples do percurso partilhado)", (await P.pg.locator("[data-run-map], .run-map, .run-map-ask").count()) === 0);
   ck("96. Com o percurso partilhado, o profissional vê o SVG (e a nota hostil só como texto: nada executa)", (await P.pg.evaluate(function(){ return window.__xss2; })) === undefined && (await P.pg.locator("#proTabContent script").count()) === 0 && (await P.pg.locator("#proTabContent").innerText()).indexOf("<script>window.__xss2=1</script>pro") >= 0);
   P.ctl.answer = false;
   await P.pg.click("#runDelRun"); await P.pg.waitForTimeout(150);

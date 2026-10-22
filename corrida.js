@@ -92,6 +92,7 @@ function runUiReset(){
   runUiProData = runUiNewData("", "");
   runUiConsentFor = "";
   runUiConsentBusy = false;
+  RUN.uiMapOn = false;
   RUN.v = {name: "home"};
   RUN.dataMode = false;
 }
@@ -300,6 +301,70 @@ function runUiSplitsHtml(splits){
   });
   return h + '</div>';
 }
+
+/* ---------- Mapa de fundo (opcional, só para o aluno) ----------
+   O percurso é sempre desenhado sem mapa. Só quando o aluno toca em «Mostrar mapa» (e depois de ler o que isso implica) a página pede ao
+   OpenStreetMap os quadrados do mapa da zona do percurso: o OpenStreetMap passa a saber a zona e o IP. Nada mais sai do telemóvel.
+   O profissional nunca vê o mapa de fundo. Sem biblioteca: projeção Web Mercator e quadrados 256 px calculados aqui. */
+var RUN_UI_MAP_W = 320, RUN_UI_MAP_H = 240, RUN_UI_MAP_PAD = 22;
+function runUiMapPoints(segs){
+  var out = [];
+  if (!Array.isArray(segs)) return out;
+  segs.forEach(function(seg){
+    var o = [];
+    (Array.isArray(seg) ? seg : []).forEach(function(p){
+      var lat = p && (typeof p.lat === "number" ? p.lat : (Array.isArray(p) ? p[0] : NaN)), lon = p && (typeof p.lon === "number" ? p.lon : (Array.isArray(p) ? p[1] : NaN));
+      if (typeof lat === "number" && typeof lon === "number" && isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180) o.push([lat, lon]);
+    });
+    if (o.length) out.push(o);
+  });
+  return out;
+}
+function runUiMerc(lat, lon, z){
+  var n = 256 * Math.pow(2, z), r = lat * Math.PI / 180;
+  return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n];
+}
+function runUiMapHtml(segs){
+  var pts = runUiMapPoints(segs);
+  var all = [].concat.apply([], pts);
+  if (all.length < 2) return "";
+  var minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+  all.forEach(function(p){ minLat = Math.min(minLat, p[0]); maxLat = Math.max(maxLat, p[0]); minLon = Math.min(minLon, p[1]); maxLon = Math.max(maxLon, p[1]); });
+  var z = 17, W = RUN_UI_MAP_W, H = RUN_UI_MAP_H, pad = RUN_UI_MAP_PAD, a, b;
+  for (; z > 3; z--){
+    a = runUiMerc(maxLat, minLon, z); b = runUiMerc(minLat, maxLon, z);
+    if (b[0] - a[0] <= W - 2 * pad && b[1] - a[1] <= H - 2 * pad) break;
+  }
+  a = runUiMerc(maxLat, minLon, z); b = runUiMerc(minLat, maxLon, z);
+  var ox = (a[0] + b[0]) / 2 - W / 2, oy = (a[1] + b[1]) / 2 - H / 2, n = Math.pow(2, z);
+  var tiles = "", tx, ty;
+  for (ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++){
+    if (ty < 0 || ty >= n) continue;
+    for (tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++){
+      var wx = ((tx % n) + n) % n;
+      tiles += '<img class="run-map-tile" alt="" width="256" height="256" draggable="false" src="https://tile.openstreetmap.org/' + z + '/' + wx + '/' + ty + '.png" style="left:' + ((tx * 256 - ox) / W * 100).toFixed(3) + '%;top:' + ((ty * 256 - oy) / H * 100).toFixed(3) + '%;width:' + (256 / W * 100).toFixed(3) + '%;height:' + (256 / H * 100).toFixed(3) + '%;">';
+    }
+  }
+  var lines = "";
+  pts.forEach(function(seg){
+    var d = seg.map(function(p){ var m = runUiMerc(p[0], p[1], z); return (m[0] - ox).toFixed(1) + "," + (m[1] - oy).toFixed(1); }).join(" ");
+    lines += '<polyline points="' + d + '" fill="none" stroke="#e8602c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
+  });
+  var f = pts[0][0], l = pts[pts.length - 1][pts[pts.length - 1].length - 1], mf = runUiMerc(f[0], f[1], z), ml = runUiMerc(l[0], l[1], z);
+  lines += '<circle cx="' + (mf[0] - ox).toFixed(1) + '" cy="' + (mf[1] - oy).toFixed(1) + '" r="5.5" fill="#e8602c" stroke="#fff" stroke-width="2"/>' +
+    '<circle cx="' + (ml[0] - ox).toFixed(1) + '" cy="' + (ml[1] - oy).toFixed(1) + '" r="5.5" fill="#fff" stroke="#e8602c" stroke-width="3"/>';
+  return '<div class="run-map" role="img" aria-label="Percurso sobre o mapa">' + tiles +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + lines + '</svg>' +
+    '<a class="run-map-attr" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a></div>';
+}
+// o bloco do mapa: botão (com o aviso do que implica) ou o mapa já ligado; vazio para o profissional (que nunca vê o mapa de fundo)
+function runUiMapBlock(segs, pro){
+  if (pro || !runUiMapPoints(segs).length) return "";
+  if (RUN.uiMapOn) return runUiMapHtml(segs) + '<p class="muted-p run-note"><button type="button" class="btn btn-sm" data-run-map="off">Esconder o mapa</button></p>';
+  return '<div class="run-map-ask"><button type="button" class="btn btn-sm" data-run-map="on">Mostrar mapa</button>' +
+    '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
+}
+
 function runUiTrackBlock(r, track, pro){
   if (r.source === "manual") return "";
   var h = '<div class="card run-track"><div class="eyebrow">Percurso</div>';
@@ -308,7 +373,7 @@ function runUiTrackBlock(r, track, pro){
   if (track.state === "none") return h + '<p class="muted-p run-no-track">' + escapeHtml(pro ? "O aluno não partilhou o percurso." : "Não partilhaste o percurso: ficaram só os números.") + '</p></div>';
   var svg = runTrackSvg(track.segs, {width: 320, height: 220});
   if (!svg) return h + '<p class="muted-p">O percurso é curto demais para desenhar.</p></div>';
-  return h + '<div class="run-svg-wrap">' + svg + '</div><p class="muted-p run-note">Este percurso foi aparado e simplificado antes de ser guardado' +
+  return h + '<div class="run-svg-wrap">' + svg + '</div>' + runUiMapBlock(track.segs, pro) + '<p class="muted-p run-note">Este percurso foi aparado e simplificado antes de ser guardado' +
     (track.trimM ? ' (início e fim escondidos: pelo menos ' + track.trimM + ' m)' : '') + '.</p></div>';
 }
 function runUiDetailHtml(d, id, pro, preview, backId){
@@ -816,8 +881,9 @@ function runUiSaveHtml(sv){
     if (v.svg === undefined){   // pré-visualização simplificada (um ficheiro grande teria dezenas de milhares de pontos para desenhar)
       var pv = runPrepareTrack(prep.segments, {trimM: 0});
       v.svg = pv ? runTrackSvg(pv.segments, {width: 320, height: 220}) : "";
+      v.mapSegs = pv ? pv.segments : null;
     }
-    if (v.svg) h += '<div class="run-svg-wrap">' + v.svg + '</div>';
+    if (v.svg) h += '<div class="run-svg-wrap">' + v.svg + '</div>' + runUiMapBlock(v.mapSegs, false);
   }
   var warns = runUiPrepWarnings(prep);
   h += '<ul class="run-warns" id="runSvWarns">' + warns.map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join("") + '</ul>';
@@ -1009,6 +1075,9 @@ RUN.screen = function(sv){
 };
 RUN.wire = function(s, el){
   try {
+    el.querySelectorAll("[data-run-map]").forEach(function(b){
+      b.addEventListener("click", function(){ RUN.uiMapOn = b.getAttribute("data-run-map") === "on"; renderAlunoTab(s); });
+    });
     var v = RUN.v || {name: "home"};
     if (v.name === "live" && runUiLiveView(s) && typeof RUN.liveWire === "function"){ RUN.liveWire(s, el); return; }
     if (v.name === "import") runUiWireImport(s, el);
