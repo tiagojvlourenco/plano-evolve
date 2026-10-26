@@ -371,6 +371,12 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - **Importante**: são regras gerais de treino (progressão gradual, recuperação, afinação), não um plano individualizado, e nenhum dos valores foi validado com alunos reais nem por um estudo desta app. Servem de ponto de partida para o profissional ajustar. Avisos honestos aparecem quando o objetivo não cabe nas semanas ou a base é baixa.
 - Não verificado: aspeto no iPhone, e como os alunos reais respondem às semanas de RIR alto no início do bloco.
 
+## 8z. Imagens do livro de exercícios
+- 545 dos 554 exercícios do livro do estúdio têm agora imagem (a biblioteca mostra-a como a dos exercícios da base): vêm do Excel «Livro de Exercícios», por baixo de cada nome, e foram convertidas para WebP de 360 px (cerca de 5 MB no total) com `python3 scripts/build-book-media.py LIVRO.xlsx`. Um exercício com duas imagens fica com uma animação de 2 fotogramas; com uma, imagem fixa.
+- Os 9 sem imagem (3 em formato WMF que não consegui ler, e alguns nomes repetidos) continuam a ligar à pesquisa de vídeo.
+- **Direitos**: o estúdio confirmou ter autorização para publicar as imagens, mas várias trazem a marca de água «WorkoutLabs.com»: convém confirmar a licença com a origem. Se for preciso retirar, apagar as imagens de `exercises/` que não são do Free Exercise DB e os `|1` de `EXERCISE_BOOK`.
+- Não são vídeos: são fotografias/ilustrações. Vídeos de verdade (MP4) pesariam demasiado para a app offline e não há uma fonte livre; a opção seria ligações do estúdio a vídeos próprios no campo «GIF / vídeo demonstrativo» de cada exercício.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:
