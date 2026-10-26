@@ -139,19 +139,19 @@
   select.student-switch{border:1px solid var(--line-strong); background:var(--surface); border-radius:9px; padding:6px 10px; font-size:0.75rem; font-weight:600;}
 
   .aluno-tabs{display:flex; flex-direction:column; gap:14px; padding-bottom:78px;}
-  #alunoApp.rt-open .aluno-tabs{padding-bottom:230px;}
-  #restTimer{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(92px + env(safe-area-inset-bottom, 0px)); width:min(398px, calc(100% - 32px)); z-index:25; background:var(--surface-2); border:1px solid var(--accent); border-radius:18px; padding:12px 14px 14px; box-shadow:0 14px 34px -10px rgba(0,0,0,0.7);}
+  #alunoApp.rt-open .aluno-tabs{padding-top:230px;}
+  #restTimer{position:fixed; left:50%; transform:translateX(-50%); top:calc(8px + env(safe-area-inset-top, 0px)); width:min(398px, calc(100% - 32px)); z-index:25; background:var(--surface-2); border:1px solid var(--accent); border-radius:18px; padding:12px 14px 14px; box-shadow:0 14px 34px -10px rgba(0,0,0,0.7);}
   #restTimer.hidden{display:none;}
   #restTimer.done{border-color:var(--critical); animation:rtPulse 1s ease-in-out 8;}
   @keyframes rtPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,0.0), 0 14px 34px -10px rgba(0,0,0,0.7);} 50%{box-shadow:0 0 0 6px rgba(255,80,80,0.35), 0 14px 34px -10px rgba(0,0,0,0.7);}}
   @media (prefers-reduced-motion:reduce){ #restTimer.done{animation:none;} }
   @media (min-width:760px){ #restTimer{width:min(560px, calc(100% - 32px));} }
   @media (max-height:560px){
-    #restTimer{bottom:calc(76px + env(safe-area-inset-bottom, 0px)); padding:8px 12px 10px;}
+    #restTimer{top:calc(6px + env(safe-area-inset-top, 0px)); padding:8px 12px 10px;}
     #restTimer .rt-time{font-size:1.9rem; margin:0 0 4px;}
     #restTimer .rt-status{display:none;}
     #restTimer .rt-actions{margin-top:6px;}
-    #alunoApp.rt-open .aluno-tabs{padding-bottom:170px;}
+    #alunoApp.rt-open .aluno-tabs{padding-top:170px;}
   }
   #restTimer .rt-head{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);}
   #restTimer .rt-label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
@@ -909,3 +909,7 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 
 .ct-totals{display:flex; flex-wrap:wrap; gap:6px 22px; margin:0 0 12px; font-size:0.8rem; font-weight:300; color:var(--muted);}
 .ct-totals strong{font-size:1.15rem; font-weight:400; color:var(--ink); margin-right:4px;}
+
+#restTimer .rt-sound{display:block; width:100%; margin-top:6px; min-height:40px; border:1px solid var(--line-strong); background:transparent; color:var(--muted); border-radius:12px; font-size:0.74rem; font-weight:700; cursor:pointer; touch-action:manipulation;}
+.reps-chips{display:flex; gap:6px; margin-top:6px;}
+.reps-chips button{min-height:36px; padding:0 12px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:999px; font-size:0.76rem; font-weight:700; cursor:pointer;}

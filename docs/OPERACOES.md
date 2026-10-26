@@ -349,6 +349,12 @@ A 0032 faz `revoke all` a `anon` e `authenticated` e só concede `select, insert
 ### Como o aluno obtém o ficheiro (resumo; menus mudam, não testámos todas as apps)
 Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect e Polar Flow: só no site (abrir a atividade → exportar GPX; Polar também TCX). Apple Fitness: não exporta um treino sozinho (há apps de terceiros, não avaliadas); evitar «Exportar todos os dados de saúde». Nike Run Club: não confirmámos exportação. Sem ficheiro: «Registar à mão».
 
+## 8w. Ecrã de treino: descanso e séries
+- O cronómetro de descanso fica **no topo** do ecrã, com botão «Som ao acabar» (ligado/desligado, guardado no telemóvel). Reiniciar volta ao descanso pré-definido, mesmo depois de −15/+15 s. Tocar na última série do treino pára o descanso.
+- Enquanto o descanso corre pede-se ao telemóvel para não apagar o ecrã (Wake Lock; sem suporte, nada acontece). **Não verificado no iPhone**; com o ecrã bloqueado a página fica suspensa e não há som nem painel (limite do iPhone para apps web).
+- Ao fazer uma série, a carga e o RIR passam para a série seguinte do mesmo exercício (se o aluno ainda não escreveu nada nela). O esforço da sessão sugere-se como 10 − média do RIR, até o aluno mexer no seletor.
+- No programa, as repetições aceitam «Falha» e «Dropset» (atalhos ao adicionar); não geram sugestão de sobrecarga.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:

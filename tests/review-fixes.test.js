@@ -170,7 +170,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 // ---- 10. Ecrãs baixos ----
 (function(){
   var html = require("./helpers/app-text")();
-  check.check("10. Em ecrãs baixos (paisagem/teclado) o painel do cronómetro encolhe", /@media \(max-height:560px\)\{\s*#restTimer\{bottom:calc\(76px/.test(html));
+  check.check("10. Em ecrãs baixos (paisagem/teclado) o painel do cronómetro encolhe", /@media \(max-height:560px\)\{\s*#restTimer\{top:calc\(6px/.test(html));
   check.check("10. A animação de alerta pisca poucas vezes (não para sempre)", /animation:rtPulse 1s ease-in-out 8;/.test(html));
 })();
 // ---- 11. Achados de menor gravidade ----

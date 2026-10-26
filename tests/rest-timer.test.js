@@ -71,6 +71,24 @@ check.check("8. É parado ao terminar sessão e escondido fora do modo aluno", /
 function fsHas(x){ return require("./helpers/app-text")().indexOf(x) >= 0; }
 check.check("8. Respeita 'reduzir animação' e tem alvos de toque ≥ 44 px", fsHas("prefers-reduced-motion:reduce){ #restTimer.done{animation:none;}") && /\.rt-presets button, \.wl-rest\{min-height:44px; min-width:44px/.test(require("./helpers/app-text")()));
 
+
+// ---- reiniciar volta ao descanso pré-definido; som opcional; ecrã ligado ----
+restTimerStart(60, "B", t0);
+restTimerAdjust(15, t0 + 1000); restTimerAdjust(15, t0 + 1000);
+check.check("9. Depois de +15 s duas vezes, Reiniciar volta aos 60 s pré-definidos (não aos 90)", restTimer.total === 90 && (restTimerRestart(t0 + 2000), restTimer.total === 60 && restTimerLeftMs(restTimer, t0 + 2000) === 60000));
+restTimerAdjust(-15, t0 + 2000); restTimerRestart(t0 + 3000);
+check.check("10. Idem depois de −15 s", restTimer.total === 60 && restTimer.base === 60);
+var fakeLS = {}; window.localStorage = {getItem: function(k){ return k in fakeLS ? fakeLS[k] : null; }, setItem: function(k, v){ fakeLS[k] = String(v); }};
+check.check("11. Som ao acabar: ligado por omissão e a escolha fica guardada", restSoundOn() === true && (restSoundSet(false), restSoundOn() === false) && (restSoundSet(true), restSoundOn() === true));
+var audioCalls = 0, savedCtx = restAudioCtx;
+restAudioCtx = {currentTime: 0, destination: {}, createOscillator: function(){ audioCalls++; return {frequency: {}, connect: function(){}, start: function(){}, stop: function(){}}; }, createGain: function(){ return {gain: {setValueAtTime: function(){}, exponentialRampToValueAtTime: function(){}}, connect: function(){}}; }};
+restTimerAlert = realAlert; restSoundSet(false); restTimerAlert();
+check.check("12. Com o som desligado o fim do descanso não apita", audioCalls === 0);
+restSoundSet(true); restTimerAlert();
+check.check("13. Com o som ligado apita (3 toques)", audioCalls === 3);
+restAudioCtx = savedCtx;
+check.check("14. O painel tem o botão do som e o descanso fica no topo do ecrã", /data-rt="sound"/.test(restTimerHtml(t0)) && /#restTimer\{position:fixed;[^}]*top:calc\(8px/.test(require("./helpers/app-text")()));
+restTimerStop();
 restTimerAlert = realAlert;
 restTimerStop();
 check.summarize();
