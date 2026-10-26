@@ -388,6 +388,11 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - **Não verificado**: o guia num iPhone com o ecrã ligado durante uma volta (som, vibração e a contagem por distância com GPS real); a precisão da contagem de 400 m depende do GPS (o mesmo erro da distância da corrida). Se a gravação for retomada depois de uma falha (rascunho), o guia não continua: perde-se o treino estruturado e fica só a gravação normal.
 - Não há «feito/por fazer» automático por treino: o aluno vê todos os prescritos até passarem 14 dias da data.
 
+## 8ac. «Melhorar tempo»
+- No cartão **Treinos** do Cardio há «Melhorar tempo»: o aluno escolhe uma **corrida anterior** (da mesma atividade, com pelo menos 1 km e 5 min; as 8 mais recentes) e tenta fazer a mesma distância mais depressa. Com a gravação por GPS ligada, o gravador mostra «Adiantado 0:10 · previsão 29:50 · faltam 3,5 km» (ou «Atrasado…»), comparando o tempo da gravação com o que a corrida anterior levou até à mesma distância (usa as **parciais por km** dela quando as tem, senão um ritmo constante). Ao chegar à distância mostra o resultado, fixo e com um sinal sonoro («Meta atingida! 0:30 mais rápido…» ou «Não deu desta vez…»). As notas da corrida guardada ficam «Melhorar tempo: data · distância · tempo».
+- O profissional também pode prescrever **«Contra o relógio»** (distância e tempo a bater, por exemplo 5 km em 25:00) em Treinos de cardio prescritos: o gravador compara com ritmo constante. Recusa-se um tempo impossível (mais de 43 km/h de média a correr, 90 km/h de bicicleta).
+- **Diferença para a app Fitness**: a Fitness compara com a **mesma rota**; aqui só se compara o tempo com a **distância** (o percurso pode ser outro), porque o percurso do aluno só fica no servidor se ele o partilhar (e aparado). O erro do GPS na distância entra na comparação. **Não verificado** numa corrida real.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:

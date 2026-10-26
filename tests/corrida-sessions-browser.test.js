@@ -254,6 +254,36 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("10. Sem a gravação por GPS o aluno vê os treinos mas sem botão «Começar», com a nota a explicar", (await S5.pg.locator("[data-sess-start]").count()) === 0 && /ligar a gravação por GPS/.test(await S5.pg.locator("#runSessions").innerText()));
   await S5.ctx.close();
 
+
+  // ---- Melhorar tempo ----
+  var Bt = await open("student", [withSessions("ana", "live", [])], "treino.html");
+  await Bt.pg.waitForSelector("#startWorkout"); await seedConsent(Bt.pg, "ana");
+  await seedRuns(Bt.pg, [runRow(0), runRow(1, {over: {distance_m: 800, duration_s: 200, moving_s: 200}}), runRow(2, {over: {activity: "bike", distance_m: 20000, duration_s: 3000, moving_s: 3000}})]);
+  await Bt.pg.click('.tabbar [data-tab="corrida"]'); await Bt.pg.waitForSelector("#runSessions");
+  await Bt.pg.locator("#runBeat summary").click();
+  var bl = await Bt.pg.locator("#runBeat").innerText();
+  ck("14. «Melhorar tempo» lista só corridas de ≥ 1 km e 5 min da atividade escolhida (1 corrida; a de 800 m e a de bicicleta ficam de fora) e diz que há parciais", (await Bt.pg.locator("[data-beat-start]").count()) === 1 && /5,00 km/.test(bl) && /com parciais por km/.test(bl) && /o percurso pode ser outro/.test(bl));
+  await Bt.pg.click("[data-beat-start]"); await Bt.pg.waitForSelector("#fakeLive");
+  var beat = await Bt.pg.evaluate(function(){ var b = window.__T.RUN.beat; return b && {d: b.distM, t: b.durationS, sp: b.splitsS.length, label: b.label, act: window.__T.RUN.activity, sess: window.__T.RUN.session}; });
+  ck("15. «Melhorar» entrega a marca ao gravador (5 km em 30:00, 5 parciais, com o texto da corrida) e abre o ecrã de gravação", beat && beat.d === 5000 && beat.t === 1800 && beat.sp === 5 && /5,00 km · 30:00/.test(beat.label) && beat.act === "run" && beat.sess === null);
+  await Bt.ctx.close();
+  var Bb = await open("student", [withSessions("ana", "live", [])], "treino.html");
+  await Bb.pg.waitForSelector("#startWorkout"); await seedConsent(Bb.pg, "ana");
+  await seedRuns(Bb.pg, [runRow(2, {over: {activity: "bike", distance_m: 20000, duration_s: 3000, moving_s: 3000}})]);
+  await Bb.pg.click('.tabbar [data-tab="corrida"]'); await Bb.pg.waitForSelector("#runSessions");
+  await Bb.pg.locator("#runBeat summary").click();
+  ck("16. Na atividade Corrida sem corridas elegíveis diz o que falta; a volta de bicicleta só aparece escolhendo Bicicleta", /Precisas de uma corrida guardada/.test(await Bb.pg.locator("#runBeat").innerText()));
+  await Bb.pg.click("#runActBike"); await Bb.pg.waitForSelector("#runBeat [data-beat-start]", {state: "attached"});
+  ck("17. Com Bicicleta escolhida aparece a volta de 20 km (com km/h)", (await Bb.pg.locator("[data-beat-start]").count()) === 1 && /km\/h/i.test(await Bb.pg.locator("#runBeat").textContent()));
+  await Bb.ctx.close();
+  var Bs = await open("student", [withSessions("ana", "live", [{id: "c9", name: "5 km em 25:00", activity: "run", kind: "beat", beat: {km: 5, timeS: 1500}}])], "treino.html");
+  await Bs.pg.waitForSelector("#startWorkout"); await seedConsent(Bs.pg, "ana");
+  await Bs.pg.click('.tabbar [data-tab="corrida"]'); await Bs.pg.waitForSelector("#runSessions");
+  ck("18. Um treino «contra o relógio» prescrito aparece com «Contra o relógio: 5 km em 25:00»", /Contra o relógio: 5 km em 25:00/.test(await Bs.pg.locator("#runSessions").innerText()));
+  await Bs.pg.click('[data-sess-start="p:0"]'); await Bs.pg.waitForSelector("#fakeLive");
+  ck("19. Começa-o como treino (RUN.session com kind «beat») para o gravador comparar com a marca", (await Bs.pg.evaluate(function(){ var r = window.__T.RUN.session; return r && r.kind === "beat" && r.beat.timeS === 1500; })) === true);
+  await Bs.ctx.close();
+
   var P = await open("professional", [row("a", "Ana Silva", "live")], "index.html");
   await P.pg.waitForSelector(".student-row");
   await P.pg.locator('[data-open="a"]').first().click(); await P.pg.waitForSelector("#proBack");
@@ -268,13 +298,22 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var wr = (await writes(P.pg)).filter(function(x){ return x.table === "students" && x.payload && "training_program" in x.payload; }).slice(-1)[0];
   var saved = wr && wr.payload.training_program.cardioSessions;
   ck("11. O profissional prescreve «8 × 400 m» e fica gravado na ficha (cardioSessions) com a data e os valores", saved && saved.length === 1 && saved[0].name === "Repetições 8 × 400 m" && saved[0].date === localToday() && saved[0].intervals.reps === 8 && saved[0].intervals.work.value === 400 && /^c/.test(saved[0].id));
+  await P.pg.selectOption("#psKind", "beat");
+  ck("12b. Em «Contra o relógio» aparecem a distância e o tempo a bater, e escondem-se as repetições", (await P.pg.locator("#psBkm").isVisible()) && (await P.pg.locator("#psBtime").isVisible()) && !(await P.pg.locator("#psReps").isVisible()));
+  await P.pg.fill("#psName", "5 km em 25:00"); await P.pg.fill("#psBkm", "5"); await P.pg.fill("#psBtime", "25:00"); await P.pg.fill("#psDate", "");
+  await P.pg.click("#psAdd"); await P.pg.waitForTimeout(500);
+  await P.pg.waitForFunction(function(){ return document.querySelectorAll("[data-sess-del]").length === 2; });
+  await P.pg.waitForTimeout(2200);
+  var wrB = (await writes(P.pg)).filter(function(x){ return x.table === "students" && x.payload && "training_program" in x.payload; }).slice(-1)[0];
+  var sb = wrB && wrB.payload.training_program.cardioSessions.filter(function(x){ return x.kind === "beat"; })[0];
+  ck("12c. O profissional prescreve «5 km em 25:00» e fica gravado com beat.km 5 e beat.timeS 1500", sb && sb.beat.km === 5 && sb.beat.timeS === 1500 && /^c/.test(sb.id));
   await P.pg.click('[data-sess-del]');
-  await P.pg.waitForFunction(function(){ return !document.querySelector("[data-sess-del]"); });
+  await P.pg.waitForFunction(function(){ return document.querySelectorAll("[data-sess-del]").length === 1; });
   await P.pg.waitForTimeout(2200);
   var wr2 = (await writes(P.pg)).filter(function(x){ return x.table === "students" && x.payload && "training_program" in x.payload; }).slice(-1)[0];
-  ck("12. Remover tira-o da ficha", wr2 && (wr2.payload.training_program.cardioSessions || []).length === 0);
+  ck("12. Remover tira só esse treino da ficha (fica o «contra o relógio»)", wr2 && (wr2.payload.training_program.cardioSessions || []).length === 1 && wr2.payload.training_program.cardioSessions[0].kind === "beat");
   await P.ctx.close();
-  ck("13. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
+  ck("20. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 5).join(" | ")); process.exit(1); });

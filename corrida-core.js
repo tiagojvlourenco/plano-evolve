@@ -165,7 +165,8 @@
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
      runActivityCfg(activity) → cfg   «bike» sobe os limites de velocidade (vMaxMs e maxAvgSpeedMs 25 m/s) e aceita ficheiros de ciclismo; qualquer outro valor = RUN_CFG
      runSpeedKmh(distM, movingS) → km/h | null     as linhas normalizadas trazem activity ("run"|"bike") e speedKmh
-     Treinos estruturados: runSessionNormalize(raw) → sessão | null; runSessionSteps(sessão) → passos; runSessionSummary(sessão) → texto PT-PT; runSessionCursor() e
+     Melhorar tempo: runBeatRef(corrida) → {distM, durationS, splitsS} | null; runBeatExpected(ref, distM) → s; runBeatStatus(ref, elapsedS, distM) → {state, deltaS, expectedS, projectedS, remainingM}
+     Treinos estruturados (também kind «beat»: {beat: {km, timeS}}): runSessionNormalize(raw) → sessão | null; runSessionSteps(sessão) → passos; runSessionSummary(sessão) → texto PT-PT; runSessionCursor() e
      runSessionAdvance(cursor, passos, elapsedS, distM) → {cursor, changed, finished, step, remaining}; modelos em RUN_SESSION_TEMPLATES (ver o bloco «treinos estruturados de cardio»)
      runPlanAddDays(dataISO, n) → dataISO     runPlanGoalOf(params) → perfil do objetivo {label, raceKm, peakKm, longCap, weeks, taper}
      runPlanBuild({goal, sessions, weeks, baseKm, startDate}) → plano semana a semana (objetivo 5k/10k/21k/42k/livre, 2 a 5 sessões, 6 a 20 semanas) | null; runPlanNormalize, runPlanCurrent(built, dataISO)
@@ -1291,9 +1292,15 @@ function runSessionNormalize(raw){
   if (!raw || typeof raw !== "object") return null;
   var L = RUN_SESSION_LIMITS, name = String(raw.name == null ? "" : raw.name).replace(/\s+/g, " ").replace(/^ | $/g, "").slice(0, L.nameMax);
   if (!name) return null;
-  var out = {id: typeof raw.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(raw.id) ? raw.id : "", name: name, activity: raw.activity === "bike" ? "bike" : "run", kind: raw.kind === "goal" ? "goal" : raw.kind === "intervals" ? "intervals" : ""};
+  var out = {id: typeof raw.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(raw.id) ? raw.id : "", name: name, activity: raw.activity === "bike" ? "bike" : "run", kind: raw.kind === "goal" ? "goal" : raw.kind === "beat" ? "beat" : raw.kind === "intervals" ? "intervals" : ""};
   if (!out.kind) return null;
   if (typeof raw.date === "string" && raw.date) { if (!/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) return null; out.date = raw.date; }
+  if (out.kind === "beat") {
+    var b = raw.beat || {}, bk = runISesNum(b.km, L.goalKm[0], L.goalKm[1]), bt = runISesNum(b.timeS, 60, 86400);
+    if (bk == null || bt == null || bk * 1000 > (out.activity === "bike" ? 25 : 12) * bt) return null;
+    out.beat = {km: Math.round(bk * 10) / 10, timeS: Math.round(bt)};
+    return out;
+  }
   if (out.kind === "goal") {
     var g = raw.goal || {}, gu = g.unit === "min" ? "min" : g.unit === "km" ? "km" : "", gv = gu === "min" ? runISesNum(g.value, L.goalMin[0], L.goalMin[1]) : gu === "km" ? runISesNum(g.value, L.goalKm[0], L.goalKm[1]) : null;
     if (gv == null) return null;
@@ -1312,6 +1319,7 @@ function runSessionNormalize(raw){
 function runSessionSteps(session){
   var ses = runSessionNormalize(session), steps = [], i;
   if (!ses) return [];
+  if (ses.kind === "beat") return [];   // contra o relógio: sem passos, o gravador compara com a marca (runBeatRef)
   if (ses.kind === "goal") return [ses.goal.unit === "km" ? {kind: "goal", unit: "m", value: Math.round(ses.goal.value * 1000)} : {kind: "goal", unit: "s", value: Math.round(ses.goal.value * 60)}];
   var iv = ses.intervals;
   if (iv.warmupMin) steps.push({kind: "warmup", unit: "s", value: iv.warmupMin * 60});
@@ -1329,6 +1337,7 @@ function runISesAmount(unit, value){
 function runSessionSummary(session){
   var ses = runSessionNormalize(session);
   if (!ses) return "";
+  if (ses.kind === "beat") return "Contra o relógio: " + String(ses.beat.km).replace(".", ",") + " km em " + runDurStr(ses.beat.timeS);
   if (ses.kind === "goal") return "Meta: " + (ses.goal.unit === "km" ? String(ses.goal.value).replace(".", ",") + " km" : ses.goal.value + " min");
   var iv = ses.intervals, parts = [];
   if (iv.warmupMin) parts.push("Aquecimento " + iv.warmupMin + " min");
@@ -1359,6 +1368,47 @@ function runSessionAdvance(cursor, steps, elapsedS, distM){
   if (cur.i >= steps.length) return {cursor: cur, changed: changed, finished: true, step: null, remaining: null};
   var s2 = steps[cur.i];
   return {cursor: cur, changed: changed, finished: false, step: s2, remaining: {unit: s2.unit, value: Math.max(0, s2.unit === "m" ? Math.round(s2.value - (dm - cur.startM)) : Math.round(s2.value - (es - cur.startS)))}};
+}
+
+
+/* ---------- «Melhorar tempo»: correr contra uma marca (uma corrida anterior ou um tempo alvo) ----------
+   Referência: {distM, durationS, splitsS[]}: a distância e o tempo a bater; com as parciais por km da corrida anterior o ritmo esperado em cada ponto é o dela,
+   senão é um ritmo constante. runBeatRef(corrida) → referência | null; runBeatExpected(ref, distM) → segundos que a referência levou até essa distância;
+   runBeatStatus(ref, elapsedS, distM) → {state: "start"|"ahead"|"behind"|"even"|"done", deltaS (+ = adiantado), expectedS, projectedS, remainingM, finalDeltaS?}.
+   Só compara o tempo com a distância da gravação (o mesmo GPS que mede a corrida): o percurso pode ser outro, e o erro do GPS passa para a comparação. */
+function runBeatRef(run){
+  if (!run || typeof run !== "object") return null;
+  var d = runINum(run.distM != null ? run.distM : run.distance_m), t = runINum(run.durationS != null ? run.durationS : run.duration_s);
+  if (d == null || t == null || d < 500 || d > RUN_CFG.maxDistM || t < 60 || t > RUN_CFG.maxDurationS) return null;
+  var sp = [], arr = Array.isArray(run.splitsS) ? run.splitsS : Array.isArray(run.splits_s) ? run.splits_s : [], i;
+  for (i = 0; i < arr.length && sp.length < RUN_CFG.maxSplits; i++) { var v = runINum(arr[i]); if (v == null || v <= 0) { sp = []; break; } sp.push(v); }
+  var sum = sp.reduce(function(a, b){ return a + b; }, 0);
+  if (sp.length * 1000 > d + 1 || sum > t + 1) sp = [];   // parciais que não batem com a corrida (ou que a ultrapassam): ritmo constante
+  return {distM: Math.round(d), durationS: Math.round(t), splitsS: sp};
+}
+function runBeatExpected(ref, distM){
+  if (!ref || !runIFin(distM) || distM <= 0) return 0;
+  if (distM >= ref.distM) return ref.durationS;
+  var km = Math.floor(distM / 1000), t0 = 0, d0 = 0, i;
+  if (ref.splitsS.length && km <= ref.splitsS.length) {
+    for (i = 0; i < km; i++) t0 += ref.splitsS[i];
+    d0 = km * 1000;
+    var segS = km < ref.splitsS.length ? ref.splitsS[km] : (ref.durationS - t0), segM = km < ref.splitsS.length ? 1000 : (ref.distM - d0);
+    if (segM <= 0) return ref.durationS;
+    return t0 + segS * (distM - d0) / segM;
+  }
+  return ref.durationS * distM / ref.distM;
+}
+function runBeatStatus(ref, elapsedS, distM){
+  if (!ref || !runIFin(elapsedS) || !runIFin(distM)) return null;
+  var out = {expectedS: 0, deltaS: 0, projectedS: ref.durationS, remainingM: Math.max(0, ref.distM - distM)};
+  if (distM >= ref.distM) { out.state = "done"; out.deltaS = ref.durationS - elapsedS; out.finalDeltaS = out.deltaS; out.expectedS = ref.durationS; out.projectedS = elapsedS; return out; }
+  if (distM < 100) { out.state = "start"; return out; }
+  out.expectedS = runBeatExpected(ref, distM);
+  out.deltaS = out.expectedS - elapsedS;
+  out.projectedS = ref.durationS - out.deltaS;
+  out.state = Math.abs(out.deltaS) < 2 ? "even" : out.deltaS > 0 ? "ahead" : "behind";
+  return out;
 }
 
 /* ---------- formatação PT-PT e entradas do registo à mão ---------- */

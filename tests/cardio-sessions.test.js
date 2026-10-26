@@ -47,4 +47,29 @@ var p1 = pings; G.tick(L, {elapsedS: 1e9, distM: 1e9});
 ck("No fim (passo a passo) diz «Treino concluído», e depois de concluído não volta a tocar", /Treino concluído/.test(el.textContent) && el.attrs["data-kind"] === "done" && L.guideDone === true && pings === p1 && p1 >= 16);
 ck("Sem treino estruturado o guia não faz nada", (function(){ var before = el.textContent; G.tick({sess: null}, {elapsedS: 5, distM: 5}); return el.textContent === before; })());
 ck("O gravador só guia (não altera estatísticas): o código do guia não escreve em L.st nem chama runFeed", !/L\.st\s*=/.test(grab("runLGuideTick")) && !/runFeed\(/.test(grab("runLGuideTick")));
+
+// ---- Melhorar tempo ----
+var REF = C.runBeatRef({distM: 5000, durationS: 1800, splitsS: [370, 360, 350, 360, 360]});
+ck("runBeatRef normaliza a corrida anterior (distância, tempo, parciais) e recusa as muito curtas, sem tempo ou com lixo; parciais incoerentes viram ritmo constante", REF.distM === 5000 && REF.durationS === 1800 && REF.splitsS.length === 5 && C.runBeatRef({distM: 300, durationS: 600}) === null && C.runBeatRef({distM: 5000, durationS: 10}) === null && C.runBeatRef(null) === null && C.runBeatRef({distM: 5000, durationS: 1800, splitsS: [2000]}).splitsS.length === 0 && C.runBeatRef({distance_m: 5000, duration_s: 1800, splits_s: [360, 360]}).splitsS.length === 2);
+ck("O tempo esperado segue as parciais da corrida anterior (1 km = 370 s, 1,5 km = 550 s) e, sem parciais, é constante (2,5 km em 1800 s/5 km = 900 s)", Math.abs(C.runBeatExpected(REF, 1000) - 370) < 1e-9 && Math.abs(C.runBeatExpected(REF, 1500) - 550) < 1e-9 && Math.abs(C.runBeatExpected(REF, 5000) - 1800) < 1e-9 && C.runBeatExpected(REF, 9000) === 1800 && Math.abs(C.runBeatExpected({distM: 5000, durationS: 1800, splitsS: []}, 2500) - 900) < 1e-9 && C.runBeatExpected(REF, 0) === 0);
+var b1 = C.runBeatStatus(REF, 540, 1500), b2 = C.runBeatStatus(REF, 600, 1500), b3 = C.runBeatStatus(REF, 549, 1500);
+ck("Estado: 540 s aos 1,5 km (esperado 550) = adiantado 10 s, previsão 1790 s; 600 s = atrasado 50 s; 549 s = no ritmo; antes dos 100 m = início", b1.state === "ahead" && Math.round(b1.deltaS) === 10 && Math.round(b1.projectedS) === 1790 && b1.remainingM === 3500 && b2.state === "behind" && Math.round(b2.deltaS) === -50 && b3.state === "even" && C.runBeatStatus(REF, 20, 50).state === "start");
+var d1 = C.runBeatStatus(REF, 1770, 5000), d2 = C.runBeatStatus(REF, 1830, 5100);
+ck("Ao chegar à distância: meta atingida (1770 s contra 1800 = 30 s melhor) ou não (1830 s = 30 s a mais); entradas estranhas devolvem null", d1.state === "done" && d1.deltaS === 30 && d1.projectedS === 1770 && d2.state === "done" && d2.deltaS === -30 && C.runBeatStatus(null, 1, 1) === null && C.runBeatStatus(REF, NaN, 1) === null);
+var BS = C.runSessionNormalize({name: "5 km em 25:00", activity: "run", kind: "beat", beat: {km: "5", timeS: 1500}});
+ck("Treino «contra o relógio» (5 km em 25:00): válido, sem passos, com resumo; recusa distância 0,1, tempo 10 s, ritmo impossível (5 km em 5 min a pé) e bicicleta rápida demais", BS && BS.beat.km === 5 && C.runSessionSteps(BS).length === 0 && C.runSessionSummary(BS) === "Contra o relógio: 5 km em 25:00" && C.runSessionNormalize({name: "a", kind: "beat", beat: {km: 0.1, timeS: 600}}) === null && C.runSessionNormalize({name: "a", kind: "beat", beat: {km: 5, timeS: 10}}) === null && C.runSessionNormalize({name: "a", kind: "beat", beat: {km: 5, timeS: 300}}) === null && C.runSessionNormalize({name: "a", activity: "bike", kind: "beat", beat: {km: 5, timeS: 300}}) !== null && C.runSessionNormalize({name: "a", activity: "bike", kind: "beat", beat: {km: 50, timeS: 300}}) === null);
+// texto do gravador
+var G2 = (function(){
+  var RUN_L_STEP_NAMES = {}, runDurStr = C.runDurStr, runBeatStatus = C.runBeatStatus, restTimerAlert = function(){ pings++; };
+  var elB = {textContent: "", attrs: {}, setAttribute: function(k, v){ this.attrs[k] = v; }}, document = {getElementById: function(id){ return id === "runLiveBeat" ? elB : null; }};
+  eval(grab("runLBeatKm") + grab("runLBeatText") + grab("runLBeatTick"));
+  return {tick: runLBeatTick, text: runLBeatText, el: elB};
+})();
+var LB = {beat: REF, beatDone: false, beatLabel: "x", beatText: ""}; pings = 0;
+G2.tick(LB, {elapsedS: 540, distM: 1500});
+ck("O gravador mostra «Adiantado 0:10 · previsão 29:50 · faltam 3,5 km» sem tocar sinal", G2.el.textContent === "Adiantado 0:10 · previsão 29:50 · faltam 3,5 km" && G2.el.attrs["data-state"] === "ahead" && pings === 0);
+G2.tick(LB, {elapsedS: 600, distM: 1500});
+ck("Atrasado: «Atrasado 0:50 · previsão 30:50 · faltam 3,5 km»", G2.el.textContent === "Atrasado 0:50 · previsão 30:50 · faltam 3,5 km" && G2.el.attrs["data-state"] === "behind");
+G2.tick(LB, {elapsedS: 1770, distM: 5000}); var pb = pings; G2.tick(LB, {elapsedS: 1780, distM: 5050});
+ck("Ao chegar: «Meta atingida! 0:30 mais rápido (29:30 contra 30:00). Podes terminar.» e toca uma só vez; o resultado fica fixo mesmo que se continue a correr", /^Meta atingida! 0:30 mais rápido \(29:30 contra 30:00\)\. Podes terminar\.$/.test(G2.el.textContent) && pb === 1 && pings === 1 && LB.beatDone === true);
 check.summarize();
