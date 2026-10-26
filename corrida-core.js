@@ -171,7 +171,7 @@
          RUN_CFG.askPaceSPerKm, a partir de askMinDistM. Só avisa; quem chama pergunta «foi mesmo uma corrida?» (hipótese de desenho, não medida).
      runDurStr(s) → «42:10» | «1:02:10»            runDistStr(m) → «5,23 km»
      runParseKm(str) → metros inteiros | NaN       aceita «5,23», «5.23», «5,23 km» (até 3 decimais, 0 < km <= 300)
-   runParseQuick(texto, nowMs) → {ok:true, distM, durS, date, time} | {ok:false, error}   o registo à mão numa só linha («5,2 km 28:30», «ontem 18:30 5,23 km 27:58»)
+   runParseQuick(texto, nowMs) → {ok:true, distM, durS, date, time} | {ok:false, error}   o registo à mão numa só linha («5,2 km 28:30», «ontem 18:30 5,23 km 27:58») ou o texto copiado do resumo da app Fitness da Apple (PT/EN; devolve também source:"fitness")
      runParseDuration(str) → segundos | NaN        aceita «mm:ss» e «h:mm:ss»
 
    Desenho
@@ -1319,7 +1319,37 @@ function runParseDuration(str){
 // Registo à mão numa só linha: «5,2 km 28:30», «ontem 18:30 5,23 km 27:58», «22/10 às 20:17 5 km 1h05», «5,2km 28min 30s».
 // Devolve {ok:true, distM, durS, date:"aaaa-mm-dd"|"", time:"hh:mm"|""} ou {ok:false, error}. Não adivinha: sem distância e tempo claros recusa.
 // nowMs opcional (para «hoje»/«ontem»): por omissão Date.now(). Ritmos («5:30/km») são ignorados, não confundidos com o tempo.
+// Texto copiado do resumo de um treino da app Fitness da Apple (Texto em Direto de uma captura, ou copiado do ecrã), em português ou inglês. Só se reconhece se tiver
+// uma distância em km e os tempos no formato h:mm:ss; devolve null se não parecer um resumo da Fitness (e então vale o resto de runParseQuick).
+// Hora de início = a primeira hora de um intervalo «18:51–19:23»; tempo = «Tempo de treino» (sem pausas), ou o menor dos dois primeiros h:mm:ss (o decorrido é sempre maior).
+var RUN_I_MONTHS = {janeiro: 1, fevereiro: 2, "março": 3, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12};
+function runIFitness(text){
+  var t = String(text).toLowerCase().replace(/[–—−]/g, "-").replace(/\s+/g, " ").replace(/^ | $/g, ""), m, i;
+  var hms = [], re = /\b(\d{1,2}):(\d{2}):(\d{2})\b/g;
+  while ((m = re.exec(t))) { if (+m[2] > 59 || +m[3] > 59) return null; hms.push({txt: m[0], s: (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]), idx: m.index}); }
+  if (!hms.length || !/(?:tempo de treino|tempo decorrido|workout time|elapsed time|dist[aâ]ncia|distance)/.test(t)) return null;
+  var dist = NaN;
+  if ((m = /(?:dist[aâ]ncia|distance)\s*(\d+(?:[.,]\d{1,3})?)\s*km\b/.exec(t))) dist = runParseKm(m[1]);
+  if (isNaN(dist) && (m = /(\d+[.,]\d{1,3})\s*km\b/.exec(t))) dist = runParseKm(m[1]);
+  if (isNaN(dist)) return null;
+  var dur = NaN;
+  if ((m = /(?:tempo de treino|workout time)\s*(\d{1,2}:\d{2}:\d{2})/.exec(t))) dur = runParseDuration(m[1]);
+  if (isNaN(dur)) dur = hms.length >= 2 ? Math.min(hms[0].s, hms[1].s) : hms[0].s;
+  var date = "", time = "";
+  if ((m = /\b(\d{1,2}) de ([a-zç]+) de (\d{4})\b/.exec(t)) && RUN_I_MONTHS[m[2]]) date = m[3] + "-" + ("0" + RUN_I_MONTHS[m[2]]).slice(-2) + "-" + ("0" + (+m[1])).slice(-2);
+  else if ((m = /\b([a-z]+) (\d{1,2}), (\d{4})\b/.exec(t)) && RUN_I_MONTHS[m[1]]) date = m[3] + "-" + ("0" + RUN_I_MONTHS[m[1]]).slice(-2) + "-" + ("0" + (+m[2])).slice(-2);
+  else if ((m = /\b(\d{1,2}) ([a-z]+) (\d{4})\b/.exec(t)) && RUN_I_MONTHS[m[2]]) date = m[3] + "-" + ("0" + RUN_I_MONTHS[m[2]]).slice(-2) + "-" + ("0" + (+m[1])).slice(-2);
+  if ((m = /\b(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)?/.exec(t)) && +m[1] <= 23 && +m[2] <= 59) {
+    var hh = +m[1];
+    if (m[5] === "pm" && hh < 12) hh += 12;   // «6:51-7:23 PM» (inglês): a hora de início é a da tarde
+    time = ("0" + hh).slice(-2) + ":" + m[2];
+  }
+  if (!(dist >= 100) || dist > RUN_CFG.maxDistM || !(dur >= 1) || dur > RUN_CFG.maxDurationS) return null;
+  return {ok: true, distM: Math.round(dist), durS: Math.round(dur), date: date, time: time, source: "fitness"};
+}
 function runParseQuick(text, nowMs){
+  if (text != null && String(text).length > 40 && String(text).length <= 4000) { var fr = runIFitness(text); if (fr) return fr; }
   var bad = {ok: false, error: "Escreve, por exemplo: 5,2 km 28:30  (ou: ontem 18:30 5,23 km 27:58)."};
   var t = String(text == null ? "" : text).toLowerCase().replace(/\s+/g, " ").replace(/^ | $/g, "");
   if (!t || t.length > 200) return bad;

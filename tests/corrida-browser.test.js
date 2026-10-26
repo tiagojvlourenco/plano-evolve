@@ -410,6 +410,8 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("51c. Uma linha que não se percebe não muda nada e diz como escrever (em PT)", /Escreve, por exemplo/.test(await D.pg.locator("#runManErr").innerText()) && (await D.pg.inputValue("#runManKm")) === "4,74");
   await D.pg.fill("#runManLine", ""); await D.pg.fill("#runManDate", todayIso); await D.pg.fill("#runManTime", ""); await D.pg.fill("#runManKm", ""); await D.pg.fill("#runManDur", ""); await D.pg.click("#runManFill");
   ck("51d. Linha vazia: avisa e não preenche", /Escreve, por exemplo/.test(await D.pg.locator("#runManErr").innerText()) && (await D.pg.inputValue("#runManKm")) === "");
+  await D.pg.fill("#runManLine", "Corrida (ar livre)\n4,74 KM\n17 de outubro de 2026, 18:51–19:23 Apple Watch\nDetalhes de treino\nTempo de treino 0:26:58 Tempo decorrido 0:32:41\nDistância 4,74KM Calorias ativas 282CAL\nRitmo médio 5'41''/KM"); await D.pg.click("#runManFill");
+  ck("51e. Texto colado do resumo da app Fitness (várias linhas): preenche 17/10/2026, 18:51, 4,74 km e 26:58 (o tempo de treino, não o decorrido), e a nota explica como copiar", (await D.pg.inputValue("#runManDate")) === "2026-10-17" && (await D.pg.inputValue("#runManTime")) === "18:51" && (await D.pg.inputValue("#runManKm")) === "4,74" && (await D.pg.inputValue("#runManDur")) === "26:58" && /Texto em Direto/.test(await D.pg.locator("#runManFitHint").innerText()) && (await D.pg.locator("#runManErr").innerText()) === "");
 
   await D.pg.fill("#runManKm", "0"); await D.pg.fill("#runManDur", "99:99"); await D.pg.click("#runManNext");
   var e1 = await D.pg.locator("#runManErr").innerText();
