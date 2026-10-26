@@ -1952,31 +1952,24 @@ function contractDetailHtml(key, today){
   var html = "<button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\" style=\"margin-bottom:10px; min-height:44px;\">← Voltar aos contratos</button>" +
     "<h2 class=\"ct-title\" style=\"margin-bottom:4px;\">" + escapeHtml(x.meta.agenda || "PT " + x.meta.minutos + " - " + x.name) + "</h2>" +
     "<div class=\"card\" style=\"margin-bottom:10px;\"><p style=\"margin:0 0 10px;\"><span class=\"ct-st " + tone + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " · desde " + escapeHtml(fmtDateFullPt(since)) : "") + (ptName ? " · PT: " + escapeHtml(ptName) : "") + "</p>" +
-    (x.cur ? "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\">Ver ficha atual <span style=\"opacity:.7; margin-left:6px;\">" + ctSheetCode(x.cur.id) + "</span></button>" +
-      "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\" data-ct-print=\"1\" title=\"Guardar em PDF\" aria-label=\"Descarregar a ficha\">⬇</button></div>" : "") + "</div>";
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Termos</div><div class=\"assess-form-grid\">" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\">" + (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\">Ver ficha atual <span style=\"opacity:.7; margin-left:6px;\">" + ctSheetCode(x.cur.id) + "</span></button>" +
+      "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\" data-ct-print=\"1\" title=\"Guardar em PDF\" aria-label=\"Descarregar a ficha\">⬇</button>" : "") +
+      x.members.map(function(m){ return "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-open-student=\"" + escapeHtml(m.id) + "\" title=\"Pacotes, partilha e cobranças do aluno\">Pacotes" + (x.members.length > 1 ? " · " + escapeHtml(String(m.name).split(" ")[0]) : "") + "</button>"; }).join("") +
+      "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctMore\" title=\"Dados pessoais, outro contrato, associar\" aria-label=\"Mais opções\">⋯</button></div></div>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Condições</div><div class=\"assess-form-grid\">" +
     "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + contractFormatLabel(x) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Modalidade</div><div class=\"hlabel\">" + escapeHtml(CONTRACT_MODALIDADES[x.meta.modalidade].label) + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Plano</div><div class=\"hlabel\">" + (x.weekly ? x.weekly + "× por semana" : "—") + " · " + x.meta.minutos + " min</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Horas por mês</div><div class=\"hlabel\">" + (x.hours ? escapeHtml(fmtHours(x.hours)) : "—") + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Valor do ciclo</div><div class=\"hlabel\">" + (x.price != null ? escapeHtml(eur(x.price)) : "—") + "</div></div>" +
     "<div class=\"f\"><div class=\"muted-p\">Valor por mês</div><div class=\"hlabel\">" + (x.perMonth != null ? escapeHtml(eur(x.perMonth)) : "—") + (x.perSession != null && x.perMonthSessions ? " <span class=\"muted-p\" style=\"font-size:0.72rem;\">× " + fmtNum2(x.perMonthSessions) + " ÷ " + x.total + "</span>" : "") + "</div></div></div>" +
-    (x.u ? "<p class=\"muted-p\" style=\"margin-top:10px;\">Sessões: <strong>" + escapeHtml(x.packLabel) + "</strong>" + (x.packs.length > 1 ? " · " + allUsed + " de " + allTotal + " sessões gastas" : " · " + x.u.used + " de " + x.u.total + " gastas") + "</p>" : "") +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctEdit\" style=\"min-height:44px;\">Editar condições</button>" +
     (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" data-renew-pack=\"" + escapeHtml(x.cur.id) + "\" style=\"min-height:44px;\">Renovar</button>" : "") + "</div></div>";
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Dados pessoais</div>" + x.members.map(function(m){
-    return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0; flex:1 1 200px;\"><button type=\"button\" class=\"wl-info\" data-open-student=\"" + escapeHtml(m.id) + "\">" + escapeHtml(m.name) + "</button> <span class=\"muted-p\">" + (isStudentActive(m) ? "ativo" : "inativo") + "</span>" +
-      (m.phone ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + escapeHtml(m.phone) + "</div>" : "") + "</div><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-edit-person=\"" + escapeHtml(m.id) + "\">Abrir e editar</button></div>"; }).join("") +
-    "<p class=\"muted-p\" style=\"margin-top:8px;\">" + (x.duo ? "Contrato duo: treinam os dois ao mesmo tempo e conta uma vez nos totais." : "Contrato individual. Para duplas que treinam juntas, «Editar contrato» → formato duo (nos dois alunos). Para duas pessoas a gastar o mesmo pack em sessões individuais, usa «Partilhar» no pacote.") + "</p></div>";
-  html += "<div class=\"card\"><div style=\"display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;\"><div class=\"eyebrow\">Contratos desta pessoa</div>" +
-    "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctNew\">Criar outro contrato</button></div>" +
-    "<p class=\"muted-p\">" + escapeHtml(x.name) + " " + (x.duo ? "participa neste contrato (duo)." : "só participa neste contrato.") + "</p>" +
-    "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px; margin-top:8px;\" id=\"ctAssoc\">Associar a um contrato existente</button></div>";
   var ids = x.ids, nums = sessionNumberMap();
   var sess = studio.sessions.filter(function(s){ return ids.indexOf(s.student_id) >= 0; }).sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1; });
   var next = sess.filter(function(s){ return s.status === "agendada" && s.date >= today; }).slice(0, 6), last = sess.filter(function(s){ return !(s.status === "agendada" && s.date >= today); }).slice(-6).reverse();
   var srow = function(s){ return "<div style=\"padding:3px 0;\">" + escapeHtml(s.date.slice(8) + "/" + s.date.slice(5, 7)) + (s.time ? " · " + escapeHtml(s.time) : "") + (x.duo ? " · " + escapeHtml(nameOf(s.student_id)) : "") + " " + sessionNumberPill(nums[s.id]) + " <span class=\"muted-p\">" + escapeHtml(((SESSION_STATUS[s.status] || {}).label || s.status)) + "</span></div>"; };
-  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Treinos</div><div style=\"display:grid; grid-template-columns:1fr 1fr; gap:12px;\"><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Próximos</div>" + (next.length ? next.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Últimos</div>" + (last.length ? last.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div></div></div>";
+  html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Sessões</div>" + (x.u ? "<div class=\"ct-sess\" style=\"justify-content:flex-start; margin-bottom:10px;\"><span><strong>" + (x.packs.length > 1 ? allUsed + "</strong> de " + allTotal : x.u.used + "</strong> de " + x.u.total) + "</span><div class=\"bar-track\" style=\"flex:1 1 140px;\"><div class=\"bar-fill\" style=\"width:" + x.u.pct + "%\"></div></div><small style=\"color:var(--muted);\">" + escapeHtml(x.packLabel) + "</small></div>" : "") + "<div style=\"display:grid; grid-template-columns:1fr 1fr; gap:12px;\"><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Próximos</div>" + (next.length ? next.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Últimos</div>" + (last.length ? last.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div></div></div>";
   var pays = studio.payments.filter(function(p){ return ids.indexOf(p.student_id) >= 0; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; });
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos</div>" + (pays.length ? pays.map(function(p){ return contractPaymentRowHtml(p, today, x); }).join("") : "<p class=\"muted-p\">Sem recebimentos.</p>") + "<p class=\"muted-p\" style=\"margin-top:8px; font-size:0.78rem;\">Também se marcam como pagos no Financeiro, mês a mês.</p></div>";
   html += "<details class=\"perfil-section\" style=\"margin:10px 0;\"><summary class=\"eyebrow\">Arquivo de packs · " + x.packs.length + "</summary>" + (x.packs.length ? x.packs.slice().reverse().map(function(p){ return packBarHtml(p, packUsage(p, today), x.ids[0]); }).join("") : "<p class=\"muted-p\">Sem packs.</p>") + "</details>";
@@ -2056,9 +2049,7 @@ function wireContractsMain(main){
     if (x) openContractEditModal(x, redraw);
   }); });
   main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); contractsView.sheet = null; redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
-  main.querySelectorAll("[data-edit-person]").forEach(function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var st = findStudent(b.getAttribute("data-edit-person")); if (st) openPersonalDataModal(st, redraw); }); });
-  var ctNew = main.querySelector("#ctNew"); if (ctNew) ctNew.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openNewContractModal(x, redraw); });
-  var ctAssoc = main.querySelector("#ctAssoc"); if (ctAssoc) ctAssoc.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openAssociateContractModal(x, redraw); });
+  var ctMore = main.querySelector("#ctMore"); if (ctMore) ctMore.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractMoreModal(x, redraw); });
   main.querySelectorAll("[data-ct-sheet]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.sheet = b.getAttribute("data-ct-sheet"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} if (b.hasAttribute("data-ct-print")) setTimeout(function(){ try { window.print(); } catch (e) {} }, 300); }); });
   var shBack = main.querySelector("#ctSheetBack"); if (shBack) shBack.addEventListener("click", function(){ contractsView.sheet = null; redraw(); });
   var shPrint = main.querySelector("#ctSheetPrint"); if (shPrint) shPrint.addEventListener("click", function(){ try { window.print(); } catch (e) {} });
@@ -2155,6 +2146,20 @@ function openAssociateContractModal(x, onDone){
       });
     });
   });
+}
+// «⋯»: dados pessoais, outro contrato e associar (fora da ficha para ela ficar curta)
+function openContractMoreModal(x, onDone){
+  var sheet = openModal("<div class=\"mtitle\">" + escapeHtml(x.name) + "</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + (x.duo ? "Contrato duo: treinam os dois ao mesmo tempo e conta uma vez nos totais." : "Contrato individual.") + "</p>" +
+    "<div class=\"eyebrow\" style=\"margin:6px 0;\">Dados pessoais</div>" + x.members.map(function(m){
+      return "<div class=\"history-row\" style=\"align-items:center;\"><div style=\"min-width:0; flex:1 1 160px;\"><div class=\"hlabel\">" + escapeHtml(m.name) + "</div>" + (m.phone ? "<div class=\"muted-p\" style=\"font-size:0.76rem;\">" + escapeHtml(m.phone) + "</div>" : "") + "</div>" +
+        "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-edit-person=\"" + escapeHtml(m.id) + "\">Abrir e editar</button></div>"; }).join("") +
+    "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">Contratos desta pessoa</div>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:8px;\">" + escapeHtml(x.name) + " " + (x.duo ? "participa neste contrato (duo)." : "só participa neste contrato.") + "</p>" +
+    "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctNew\">Criar outro contrato</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctAssoc\">Associar a um contrato existente</button></div>");
+  sheet.querySelectorAll("[data-edit-person]").forEach(function(b){ b.addEventListener("click", function(){ var st = findStudent(b.getAttribute("data-edit-person")); if (st){ closeModal(); openPersonalDataModal(st, onDone); } }); });
+  sheet.querySelector("#ctNew").addEventListener("click", function(){ closeModal(); openNewContractModal(x, onDone); });
+  sheet.querySelector("#ctAssoc").addEventListener("click", function(){ closeModal(); openAssociateContractModal(x, onDone); });
 }
 function openContractEditModal(x, onDone){
   var m = x.meta, hrs = x.hours ? String(Math.round(x.hours * 100) / 100).replace(".", ",") : "";
