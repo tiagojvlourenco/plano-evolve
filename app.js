@@ -9218,6 +9218,145 @@ function registerDeload(s, date){
   return true;
 }
 
+
+/* ---------- Periodização do treino de força ----------
+   Um bloco de 4 a 8 semanas: semanas de acumulação (mais séries por grupo muscular e menos repetições em reserva, RIR) e a última de deload.
+   Só há regras gerais (não há dados do aluno por trás): as séries por grupo vêm das zonas de volume já usadas na app (VOLUME_ZONES) e o deload
+   corta DELOAD_VOLUME_CUT %. Guarda-se só os parâmetros em trainingProgram.periodization = {v:1, days, goal, weeks, startDate}; o plano calcula-se sempre. */
+var PERIO_GOALS = {
+  massa: {label: "Ganho de massa", zone: VOLUME_ZONES.massa, reps: "6-12 repetições (compostos 6-10, isoladores 10-15)", rest: "90 a 150 s"},
+  recomp: {label: "Recomposição / perda de gordura", zone: VOLUME_ZONES.recomp, reps: "8-12 repetições", rest: "60 a 120 s"},
+  forca: {label: "Força", zone: {lo: 6, hi: 12}, reps: "3-6 repetições nos exercícios principais, 6-10 nos acessórios", rest: "3 a 5 min nos principais"},
+  manutencao: {label: "Manutenção", zone: VOLUME_ZONES.manutencao, reps: "8-12 repetições", rest: "60 a 120 s"}
+};
+var PERIO_SPLITS = {
+  2: {name: "Corpo inteiro ×2", days: ["Treino A — Corpo inteiro", "Treino B — Corpo inteiro"]},
+  3: {name: "Corpo inteiro ×3", days: ["Treino A — Corpo inteiro", "Treino B — Corpo inteiro", "Treino C — Corpo inteiro"]},
+  4: {name: "Superior / Inferior ×2", days: ["Treino A — Superior", "Treino B — Inferior", "Treino C — Superior", "Treino D — Inferior"]},
+  5: {name: "Superior / Inferior + Empurrar / Puxar / Pernas", days: ["Treino A — Superior", "Treino B — Inferior", "Treino C — Empurrar", "Treino D — Puxar", "Treino E — Pernas"]},
+  6: {name: "Empurrar / Puxar / Pernas ×2", days: ["Treino A — Empurrar", "Treino B — Puxar", "Treino C — Pernas", "Treino D — Empurrar", "Treino E — Puxar", "Treino F — Pernas"]}
+};
+function perioGoalFor(s){
+  var g = exLibFold(s && s.goal);
+  if (/forca/.test(g)) return "forca";
+  if (/massa|hipertrof|ganho|volume/.test(g)) return "massa";
+  if (/recomp|perda|gordura|emagrec|definicao|cut/.test(g)) return "recomp";
+  return "manutencao";
+}
+function perioNormalize(raw){
+  if (!raw || typeof raw !== "object") return null;
+  var days = Math.round(Number(raw.days)), weeks = Math.round(Number(raw.weeks));
+  if (!(days >= 2 && days <= 6) || !(weeks >= 4 && weeks <= 8) || !PERIO_GOALS[raw.goal] || !isIsoDate(raw.startDate)) return null;
+  return {v: 1, days: days, goal: raw.goal, weeks: weeks, startDate: raw.startDate};
+}
+function perioBuild(raw){
+  var o = perioNormalize(raw);
+  if (!o) return null;
+  var g = PERIO_GOALS[o.goal], acc = o.weeks - 1, plan = [], w, t, sets, rir, phase, note, base;
+  base = g.zone.lo;
+  for (w = 1; w <= o.weeks; w++){
+    if (w === o.weeks){
+      sets = Math.max(4, Math.round(base * (1 - DELOAD_VOLUME_CUT / 100))); rir = 4; phase = "Deload";
+      note = "Menos séries e mais folga: não vás à falha e mantém as cargas ou desce um pouco.";
+    } else {
+      t = acc > 1 ? (w - 1) / (acc - 1) : 0;
+      sets = Math.round(g.zone.lo + (g.zone.hi - g.zone.lo) * t);
+      rir = Math.round(3 - 2 * t);
+      phase = w === 1 ? "Adaptação" : (w === acc ? "Intensificação" : "Acumulação");
+      note = w === 1 ? "Cargas conservadoras: afina a técnica e as cargas de partida."
+        : w === acc ? "Semana mais dura: perto da falha nos exercícios principais, sem forçar os acessórios."
+        : "Sobe a carga ou as repetições quando chegares ao topo do intervalo, mantendo o RIR alvo.";
+    }
+    plan.push({n: w, phase: phase, rir: rir, setsPerGroup: sets, startDate: addDaysISO(o.startDate, 7 * (w - 1)), note: note});
+  }
+  var warnings = [];
+  if (o.days === 2 && (o.goal === "massa" || o.goal === "forca")) warnings.push("Com 2 dias por semana o volume por grupo muscular fica limitado: serve para começar, mas dificilmente chega ao topo da zona.");
+  if (o.days >= 5) warnings.push("Com " + o.days + " dias por semana a recuperação e o sono pesam mais: vigia a energia e o RIR real.");
+  return {params: o, split: PERIO_SPLITS[o.days], goal: g, plan: plan, warnings: warnings};
+}
+function perioDaysBetween(a, b){ return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 86400000); }
+// {state: "before"|"active"|"done", week, daysToStart} para uma data
+function perioCurrent(built, dateISO){
+  if (!built || !isIsoDate(dateISO)) return null;
+  var d = perioDaysBetween(built.params.startDate, dateISO);
+  if (d < 0) return {state: "before", week: null, daysToStart: -d};
+  var idx = Math.floor(d / 7);
+  if (idx >= built.plan.length) return {state: "done", week: null, weeks: built.plan.length};
+  return {state: "active", week: built.plan[idx], weeks: built.plan.length};
+}
+function perioApply(s, raw){
+  var o = perioNormalize(raw);
+  if (!o) return false;
+  ensureTrainingProgram(s).periodization = o;
+  return true;
+}
+function perioRemove(s){ var p = ensureTrainingProgram(s); if (!p.periodization) return false; delete p.periodization; return true; }
+function perioCreateDays(s, days){
+  var split = PERIO_SPLITS[days], p = ensureTrainingProgram(s);
+  if (!split || p.days.length) return 0;
+  split.days.forEach(function(n){ addTrainingDay(s, n); });
+  return split.days.length;
+}
+function perioWeekText(w, goal){
+  return "Semana " + w.n + " · " + w.phase + " · RIR alvo " + w.rir + " · cerca de " + w.setsPerGroup + " séries por grupo muscular na semana · " + goal.reps;
+}
+function tplPerioStudentBanner(s){
+  var built = perioBuild(trainingProgramOf(s).periodization);
+  var cur = built && perioCurrent(built, todayISO());
+  if (!cur) return "";
+  if (cur.state === "before") return `<div class="wl-perio muted-p">O teu bloco de treino começa daqui a ${cur.daysToStart} ${cur.daysToStart === 1 ? "dia" : "dias"}.</div>`;
+  if (cur.state === "done") return `<div class="wl-perio muted-p">O bloco de ${cur.weeks} semanas terminou. Fala com o teu profissional para o próximo.</div>`;
+  var w = cur.week;
+  return `<div class="wl-perio"><b>Semana ${w.n} de ${cur.weeks} · ${escapeHtml(w.phase)}</b><br>RIR alvo ${w.rir} (para ${w.rir} repetições antes da falha) · cerca de ${w.setsPerGroup} séries por grupo muscular na semana<br><span class="muted-p">${escapeHtml(w.note)}</span></div>`;
+}
+function tplPerioPro(s){
+  var prog = trainingProgramOf(s), cur = perioNormalize(prog.periodization);
+  var days = cur ? cur.days : Math.min(6, Math.max(2, (s.trainingDays && s.trainingDays.length) || prog.days.length || 3)), goal = cur ? cur.goal : perioGoalFor(s), weeks = cur ? cur.weeks : 6, start = cur ? cur.startDate : todayISO();
+  var h = `<details class="perfil-section" id="perioBox" style="margin:14px 0;"${cur ? " open" : ""}><summary class="eyebrow">Periodização do bloco${cur ? " · ativa" : ""}</summary>` +
+    `<p class="muted-p" style="margin:8px 0;">Regras gerais por semana (séries por grupo, RIR e deload). Não muda os teus exercícios: o aluno vê a semana do bloco no ecrã de treino.</p>` +
+    `<div class="assess-form-grid">` +
+    `<div class="f"><label for="perioDays">Dias por semana</label><select id="perioDays" class="mini-select">` + [2, 3, 4, 5, 6].map(function(n){ return `<option value="${n}"${n === days ? " selected" : ""}>${n}</option>`; }).join("") + `</select></div>` +
+    `<div class="f"><label for="perioWeeks">Semanas (com deload)</label><select id="perioWeeks" class="mini-select">` + [4, 5, 6, 7, 8].map(function(n){ return `<option value="${n}"${n === weeks ? " selected" : ""}>${n}</option>`; }).join("") + `</select></div>` +
+    `<div class="f" style="grid-column:1/-1;"><label for="perioGoal">Objetivo</label><select id="perioGoal" class="mini-select" style="width:100%;">` + Object.keys(PERIO_GOALS).map(function(k){ return `<option value="${k}"${k === goal ? " selected" : ""}>${escapeHtml(PERIO_GOALS[k].label)}</option>`; }).join("") + `</select></div>` +
+    `<div class="f" style="grid-column:1/-1;"><label for="perioStart">Início do bloco</label><input type="date" id="perioStart" value="${escapeHtml(start)}"></div></div>` +
+    `<div id="perioPreview">${tplPerioPreview({days: days, goal: goal, weeks: weeks, startDate: start})}</div>` +
+    `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"><button type="button" class="btn primary btn-sm" id="perioApply">${cur ? "Atualizar bloco" : "Aplicar bloco"}</button>` +
+    (cur ? `<button type="button" class="btn btn-sm" id="perioRemove">Remover bloco</button>` : "") +
+    (!prog.days.length ? `<button type="button" class="btn btn-sm" id="perioDaysCreate">Criar os dias sugeridos</button>` : "") + `</div></details>`;
+  return h;
+}
+function tplPerioPreview(raw){
+  var b = perioBuild(raw);
+  if (!b) return `<p class="muted-p">Escolhe uma data de início válida.</p>`;
+  return `<p class="muted-p" style="margin:8px 0 4px;"><b>${escapeHtml(b.split.name)}</b> · ${escapeHtml(b.goal.label)} · pausa ${escapeHtml(b.goal.rest)}</p>` +
+    `<div class="assess-table-scroll"><table class="assess-table"><thead><tr><th>Sem.</th><th>Fase</th><th>RIR</th><th>Séries/grupo</th></tr></thead><tbody>` +
+    b.plan.map(function(w){ return `<tr><td>${w.n}</td><td style="white-space:normal;">${escapeHtml(w.phase)}</td><td>${w.rir}</td><td>${w.setsPerGroup}</td></tr>`; }).join("") + `</tbody></table></div>` +
+    `<p class="muted-p" style="margin-top:6px;">${escapeHtml(b.goal.reps)}.</p>` +
+    b.warnings.map(function(t){ return `<p class="muted-p" style="color:var(--warn);">${escapeHtml(t)}</p>`; }).join("");
+}
+function wirePerio(s, el){
+  var box = el.querySelector("#perioBox");
+  if (!box) return;
+  function read(){ return {days: box.querySelector("#perioDays").value, weeks: box.querySelector("#perioWeeks").value, goal: box.querySelector("#perioGoal").value, startDate: box.querySelector("#perioStart").value}; }
+  ["#perioDays", "#perioWeeks", "#perioGoal", "#perioStart"].forEach(function(sel){
+    ["input", "change"].forEach(function(evt){
+      box.querySelector(sel).addEventListener(evt, function(){ var html = tplPerioPreview(read()), pv = box.querySelector("#perioPreview"); if (pv.innerHTML !== html) pv.innerHTML = html; });
+    });
+  });
+  box.querySelector("#perioApply").addEventListener("click", function(){
+    if (!perioApply(s, read())){ showToast("Escolhe uma data de início válida"); return; }
+    logPlanEvent(s, "treino_dia", "Periodização do bloco definida", null, read().goal + " · " + read().days + " dias · " + read().weeks + " semanas");
+    persistStudent(s); renderProTabContent(s); showToast("✓ Bloco guardado: o aluno vê a semana no ecrã de treino");
+  });
+  var rm = box.querySelector("#perioRemove");
+  if (rm) rm.addEventListener("click", function(){ if (perioRemove(s)){ persistStudent(s); renderProTabContent(s); showToast("Bloco removido"); } });
+  var mk = box.querySelector("#perioDaysCreate");
+  if (mk) mk.addEventListener("click", function(){
+    var n = perioCreateDays(s, parseInt(read().days, 10));
+    if (n){ logPlanEvent(s, "treino_dia", "Dias de treino sugeridos criados", null, n + " dias"); persistStudent(s); renderProTabContent(s); showToast("✓ Dias criados: acrescenta os exercícios"); }
+  });
+}
+
 // Novo recorde: melhor marca de sempre num exercício (1RM estimado, ou repetições se não há carga), com pelo menos 2 sessões anteriores
 function detectRecords(s, log){
   var before = {workoutLogs: (s.workoutLogs || []).filter(function(l){ return l !== log && l.id !== log.id; })};
@@ -9300,6 +9439,7 @@ function tplWorkoutLogger(s){
     `<div class="checkin-field"${days.length < 2 ? " hidden" : ""}><label for="wlDay">Mudar de treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
     `</select></div>` +
+    tplPerioStudentBanner(s) +
     `<p class="muted-p wl-hint">Toca em ✓ ao acabar cada série: o descanso começa sozinho.</p>`;
   selected.exercises.forEach(function(e){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
@@ -9991,6 +10131,7 @@ function tplProTreino(s){
   html += `<div class="assess-form-grid" style="margin-top:6px;"><div class="f" style="grid-column:1/-1;"><label>Novo dia de treino</label><input type="text" id="newDayName" maxlength="80" placeholder="Ex.: Treino B — Inferior"></div>` +
     `<div class="f"><button type="button" class="btn primary btn-sm" id="addTrainingDay" style="width:100%;">+ Dia</button></div></div>`;
 
+  html += tplPerioPro(s);
   html += tplVolumeAndDeload(s);
 
   // Progressão de carga por exercício
@@ -10032,6 +10173,7 @@ function tplProTreino(s){
 }
 
 function wireProTreino(s, el){
+  wirePerio(s, el);
   wireExerciseInfo(s, el);
   el.querySelectorAll("[data-edit-guide]").forEach(function(btn){
     btn.addEventListener("click", function(){
