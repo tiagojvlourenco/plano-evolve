@@ -913,3 +913,5 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 #restTimer .rt-sound{display:block; width:100%; margin-top:6px; min-height:40px; border:1px solid var(--line-strong); background:transparent; color:var(--muted); border-radius:12px; font-size:0.74rem; font-weight:700; cursor:pointer; touch-action:manipulation;}
 .reps-chips{display:flex; gap:6px; margin-top:6px;}
 .reps-chips button{min-height:36px; padding:0 12px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:999px; font-size:0.76rem; font-weight:700; cursor:pointer;}
+.ct-alert{margin:0 0 12px; padding:10px 14px; border:1px solid var(--critical); background:var(--critical-soft); font-size:0.86rem;}
+.ct-alert strong{font-weight:600;}

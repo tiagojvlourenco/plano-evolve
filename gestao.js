@@ -1794,7 +1794,7 @@ function contractFormatLabel(x){ return x.duo ? "Duo" : x.meta.formato === "part
 function contractPlanLabel(x){
   return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
 }
-var contractsView = {tab: "contratos", sheet: null, filter: "todos", search: "", sort: "nome", open: null};
+var contractsView = {tab: "contratos", sheet: null, pf: null, filter: "todos", search: "", sort: "nome", open: null};
 function renderProContractsMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded || !contractMeta.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; Promise.all([studioRefresh(), loadContractMeta()]).then(function(){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); }); return; }
@@ -2020,7 +2020,7 @@ function contractsFinanceHtml(today){
   var years = {}; years[today.slice(0, 4)] = 1; years[year] = 1; pays.forEach(function(p){ if (p.due_on) years[p.due_on.slice(0, 4)] = 1; if (p.paid_on) years[p.paid_on.slice(0, 4)] = 1; });
   var unpaid = pays.filter(function(p){ return !p.paid_on; }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
   var inMonth = pays.filter(function(p){ return monthOf(p.due_on) === month || (p.paid_on && monthOf(p.paid_on) === month); }).sort(function(a, b){ return a.due_on < b.due_on ? -1 : 1; });
-  var mName = MESES_PT[mi] || month;
+  var mName = MESES_PT[mi] || month, pf = contractsView.pf || (unpaid.length ? "receber" : "mes");
   var html = "<p class=\"muted-p\" style=\"margin:-4px 0 12px;\">Esta página é sua.</p><div class=\"checkin-field\" style=\"max-width:200px;\"><label for=\"ctYear\">Ano</label><select id=\"ctYear\" class=\"mini-select\" style=\"width:100%;\">" + Object.keys(years).sort().map(function(y){ return "<option value=\"" + y + "\"" + (y === year ? " selected" : "") + ">" + y + (y === today.slice(0, 4) ? " até " + MESES_PT[parseInt(today.slice(5, 7), 10) - 1] : "") + "</option>"; }).join("") + "</select></div>" +
     "<div class=\"ct-stats ct-stats4\" style=\"margin-top:10px;\">" + ctStat("Recebido em " + mName, eur(sum(paidIn(month))), "dinheiro que entrou") + ctStat("Previsto em " + mName, eur(sum(dueIn(month).filter(function(p){ return !p.paid_on; }))), "ainda esperado") +
     ctStat("Recebido em " + year, eur(sum(paidIn(year))), "até hoje") + ctStat("Previsto até ao fim do ano", eur(sum(pays.filter(function(p){ return !p.paid_on && p.due_on >= today && p.due_on.slice(0, 4) === year; }))), "de hoje em diante") + "</div>";
@@ -2030,9 +2030,9 @@ function contractsFinanceHtml(today){
     html += "<button type=\"button\" class=\"ct-row ct-mrow" + (pre === month ? " on" : "") + "\" data-ct-month=\"" + pre + "\"><div class=\"ct-c ct-name\"><strong>" + nm + "</strong></div><div class=\"ct-c r\" data-l=\"Recebido\"><span class=\"ct-good\">" + eur(sum(paidIn(pre))) + "</span></div><div class=\"ct-c r\" data-l=\"Previsto\"><span class=\"ct-warn\">" + eur(sum(dueIn(pre))) + "</span></div></button>";
   });
   html += "</div><div class=\"checkin-field\" style=\"max-width:200px; margin-top:14px;\"><label for=\"ctMonth\">Mês em detalhe</label><input type=\"month\" id=\"ctMonth\" value=\"" + escapeHtml(month) + "\"></div>" +
-    "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos de " + escapeHtml(mName) + "</div>" + (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem recebimentos neste mês.</p>") + "</div>" +
-    "<div class=\"card\" id=\"studioPayments\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Cobranças por receber</div>" +
-    (unpaid.length ? unpaid.slice(0, 15).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") + "</div>" +
+    "<div class=\"card\" id=\"studioPayments\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Cobranças</div>" +
+    "<div class=\"ct-filters\"><button type=\"button\" class=\"ct-f" + (pf === "receber" ? " on" : "") + "\" data-ct-pf=\"receber\">Por receber · " + unpaid.length + "</button><button type=\"button\" class=\"ct-f" + (pf === "mes" ? " on" : "") + "\" data-ct-pf=\"mes\">De " + escapeHtml(mName) + " · " + inMonth.length + "</button></div>" +
+    (pf === "receber" ? (unpaid.length ? unpaid.slice(0, 30).map(function(p){ return paymentRowHtml(p, today, true); }).join("") : "<p class=\"muted-p\">✓ Nada por receber.</p>") : (inMonth.length ? inMonth.map(function(p){ return contractPaymentRowHtml(p, today); }).join("") : "<p class=\"muted-p\">Sem cobranças neste mês.</p>")) + "</div>" +
     "<div class=\"card\" style=\"margin-top:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Exportar para a contabilidade</div><p class=\"muted-p\" style=\"margin-bottom:8px;\">Recebido em " + escapeHtml(mName) + ": " + escapeHtml(eur(sum(paidIn(month)))) + " (" + paidIn(month).length + "). A app só regista cobranças; a fatura certificada emite-se no teu programa de faturação.</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctCsv\">⬇ Recebimentos (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvPayments\">⬇ Cobranças (CSV)</button><button type=\"button\" class=\"btn btn-sm\" id=\"csvSessions\">⬇ Sessões (CSV)</button></div></div>";
   return html;
@@ -2040,6 +2040,7 @@ function contractsFinanceHtml(today){
 function wireContractsMain(main){
   var redraw = function(){ renderProContractsMain(); };
   main.querySelectorAll("[data-ct-tab]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.tab = b.getAttribute("data-ct-tab"); contractsView.open = null; contractsView.sheet = null; redraw(); }); });
+  main.querySelectorAll("[data-ct-pf]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.pf = b.getAttribute("data-ct-pf"); redraw(); }); });
   main.querySelectorAll("[data-ct-month]").forEach(function(b){ b.addEventListener("click", function(){ studioView.month = b.getAttribute("data-ct-month"); redraw(); }); });
   var yr = main.querySelector("#ctYear"); if (yr) yr.addEventListener("change", function(){ studioView.month = yr.value + "-" + (studioView.month || "01-01").slice(5, 7); redraw(); });
   main.querySelectorAll("[data-ct-filter]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.filter = b.getAttribute("data-ct-filter"); redraw(); }); });
@@ -2318,9 +2319,7 @@ function renderProStudioMain(){
   var today = localTodayISO(); if (!studioView.month) studioView.month = monthOf(today); if (!studioView.date) studioView.date = today;
   var k = studioKpis(studioView.month, today);
   var students = visibleStudentsForDashboard().filter(isStudentActive);
-  var html = "<h2 class=\"ct-title\">Hoje</h2><div class=\"ct-stats ct-stats5\" id=\"studioKpis\">" +
-    ctStat("A cobrar", eurShort(k.toCollect), "este mês") + ctStat("Em atraso", eurShort(k.overdue), k.overdueN ? k.overdueN + (k.overdueN === 1 ? " cobrança" : " cobranças") : "nada em atraso") +
-    ctStat("A acabar", k.endingN, k.endingN === 1 ? "pacote" : "pacotes") + ctStat("Presença", k.attendance == null ? "—" : k.attendance + "%", "no mês") + ctStat("Horas mensais ativas", totalActiveHours() ? fmtHours(totalActiveHours()) : "—", "contratadas") + "</div>";
+  var html = "<h2 class=\"ct-title\">Hoje</h2>" + (k.overdueN ? "<p class=\"ct-alert\" id=\"studioKpis\">⚠ <strong>" + escapeHtml(eurShort(k.overdue)) + "</strong> em atraso (" + k.overdueN + (k.overdueN === 1 ? " cobrança" : " cobranças") + ") <button type=\"button\" class=\"btn btn-sm\" id=\"goFin\" style=\"margin-left:8px; min-height:36px;\">Ver no Financeiro</button></p>" : "");
 
   html += "<div class=\"student-tools\" id=\"studioTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"stSearch\" placeholder=\"Procurar aluno no estúdio…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar aluno no estúdio\" value=\"" + escapeHtml(studioView.search || "") + "\"></label>" +
     "<select id=\"stSort\" class=\"mini-select\" aria-label=\"Ordenar o resumo de treinos\">" + [["urgencia", "Por urgência"], ["az", "Nome A → Z"], ["za", "Nome Z → A"], ["menos", "Menos aulas primeiro"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (studioView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>" +
@@ -2358,6 +2357,7 @@ function renderProStudioMain(){
   var redraw = function(){ renderProStudioMain(); };
   wireStudioCommon(main, redraw);
   wireCalendarCard(main, redraw);
+  var goFin = main.querySelector("#goFin"); if (goFin) goFin.addEventListener("click", function(){ contractsView.tab = "financeiro"; contractsView.open = null; contractsView.pf = "receber"; var n = document.getElementById("navContracts"); if (n) n.click(); });
   var allBtn = main.querySelector("#stShowAll"); if (allBtn) allBtn.addEventListener("click", function(){ studioView.showAll = !studioView.showAll; applyStudioFilter(); });
   var fixBtn = main.querySelector("#fixPacks");
   if (fixBtn) fixBtn.addEventListener("click", function(){
