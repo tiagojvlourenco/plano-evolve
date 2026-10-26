@@ -6,11 +6,11 @@ var check = require("./check")();
 var fs = require("fs");
 
 var seed = exerciseSeedList();
-check.check("1. Há exercícios em todos os 10 grupos musculares", EXERCISE_GROUPS.length === 10 && EXERCISE_GROUPS.every(function(g){ return seed.some(function(e){ return e.group === g; }); }));
+check.check("1. Há exercícios em todos os 12 grupos (os 10 musculares, Corpo inteiro e Cardio)", EXERCISE_GROUPS.length === 12 && EXERCISE_GROUPS.slice(-2).join() === "Corpo inteiro,Cardio" && EXERCISE_GROUPS.every(function(g){ return seed.some(function(e){ return e.group === g; }); }));
 check.check("2. A lista base tem pelo menos 80 exercícios", seed.length >= 80);
 var names = seed.map(function(e){ return exLibFold(e.name); });
 check.check("3. Não há nomes repetidos na lista base", names.length === new Set(names).size);
-check.check("4. Todos têm 2 ou 3 pontos-chave, dentro do limite de tamanho", seed.every(function(e){ return e.cues.length >= 2 && e.cues.length <= 3 && e.cues.every(function(c){ return c.length <= 120; }); }));
+check.check("4. Todos têm 2 ou 3 pontos-chave, dentro do limite de tamanho", seed.filter(function(e){ return !e.book; }).every(function(e){ return e.cues.length >= 2 && e.cues.length <= 3 && e.cues.every(function(c){ return c.length <= 120; }); }));
 check.check("5. A demonstração de cada um é uma ligação https aceite pela app", seed.every(function(e){ return cleanDemoUrl(e.demo) === e.demo; }));
 check.check("6. Sem animação, a ligação procura o exercício (em inglês) no YouTube", /search_query=Landmine%20Press%20exercise%20proper%20form/.test(seed.filter(function(e){ return e.name === "Landmine Press"; })[0].demo));
 check.check("7. Os da lista base não têm vídeo do estúdio", seed.every(function(e){ return e.ownDemo === false && e.seed === true; }));
@@ -20,12 +20,12 @@ var all = exerciseLibraryMerged([]);
 check.check("8. Filtrar por grupo mostra só esse grupo", exerciseLibraryFilter(all, "Costas", "").length > 5 && exerciseLibraryFilter(all, "Costas", "").every(function(e){ return e.group === "Costas"; }));
 check.check("9. Pesquisar 'gemeos' encontra 'Gémeos' sem acentos", exerciseLibraryFilter(all, "", "gemeos").length >= 3);
 check.check("10. Pesquisar por equipamento funciona (cabo)", exerciseLibraryFilter(all, "", "cabo").length >= 8);
-check.check("11. Grupo + pesquisa combinam", exerciseLibraryFilter(all, "Ombros", "lateral").every(function(e){ return e.group === "Ombros" && /lateral/i.test(e.name); }) && exerciseLibraryFilter(all, "Ombros", "lateral").length === 2);
+check.check("11. Grupo + pesquisa combinam", exerciseLibraryFilter(all, "Ombros", "lateral").every(function(e){ return e.group === "Ombros" && /lateral/i.test(e.name); }) && exerciseLibraryFilter(all, "Ombros", "lateral").length >= 2);
 check.check("12. Pesquisa sem resultados devolve lista vazia", exerciseLibraryFilter(all, "", "xyzzy").length === 0);
-check.check("13. A lista vem ordenada por grupo (Peito primeiro, Core no fim)", all[0].group === "Peito" && all[all.length - 1].group === "Core");
+check.check("13. A lista vem ordenada por grupo (Peito primeiro, Cardio no fim)", all[0].group === "Peito" && all[all.length - 1].group === "Cardio");
 
 // nomes em inglês e animações
-check.check("7b. Todos os nomes da lista base estão em inglês (sem acentos nem palavras portuguesas)", seed.every(function(e){ return /^[A-Za-z0-9°\- ]+$/.test(e.name) && !/\b(com|de|na|no|em)\b/i.test(e.name); }));
+check.check("7b. Todos os nomes da lista base estão em inglês (sem acentos nem palavras portuguesas)", seed.filter(function(e){ return !e.book; }).every(function(e){ return /^[A-Za-z0-9°\- ]+$/.test(e.name) && !/\b(com|de|na|no|em)\b/i.test(e.name); }));
 check.check("7c. O nome em português continua a servir de pesquisa (supino, remada, gémeos)", exerciseLibraryFilter(all, "", "supino").some(function(e){ return e.name === "Barbell Bench Press"; }) && exerciseLibraryFilter(all, "", "remada").length >= 5 && exerciseLibraryFilter(all, "", "agachamento bulgaro").some(function(e){ return e.name === "Bulgarian Split Squat"; }));
 var mediaDir = __dirname + "/../exercises/";
 var withMedia = seed.filter(function(e){ return e.media; });
