@@ -116,6 +116,12 @@ function fixtureRow(id, name){
   await pg.waitForFunction(function(){ return !document.querySelector("#acGo"); });
   var as = await pg.evaluate(function(){ var T = window.__fake.tables, v = T.studio_settings.filter(function(x){ return x.key === "contracts"; })[0].value, pc = T.session_packs.filter(function(p){ return p.id === "pc"; })[0]; return {a: v.a.formato, c: v.c.formato, sh: pc.shared_with}; });
   check.check("13e. Associar a um contrato existente: partilhado nos dois e o pacote passa a ser partilhado", as.a === "partilhado" && as.c === "partilhado" && Array.isArray(as.sh) && as.sh.indexOf("a") >= 0);
+  // reativar todos os cancelados
+  await pg.waitForSelector("#ctReactivate");
+  await pg.click("#ctReactivate");
+  await pg.waitForFunction(function(){ var v = window.__fake.tables.studio_settings.filter(function(r){ return r.key === "contracts"; })[0].value; return v.c && v.c.estado === "ativo"; });
+  await pg.waitForFunction(function(){ return !document.getElementById("ctReactivate"); });
+  check.check("13f. «Reativar todos os cancelados» passa o contrato cancelado a ativo e o botão desaparece", /Cancelado · 0/i.test(await pg.locator(".ct-filters").first().innerText()));
   check.check("17. O botão «Eu» já não existe (o profissional tem a sua ficha na lista de alunos)", (await cnt(pgA, "#navMe")) === 0);
   check.check("18. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));

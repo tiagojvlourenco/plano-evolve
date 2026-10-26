@@ -1888,11 +1888,26 @@ function studentsWithoutContract(units){
   var inUnits = {}; units.forEach(function(u){ u.ids.forEach(function(id){ inUnits[id] = true; }); });
   return visibleStudentsForDashboard().filter(function(st){ return isStudentActive(st) && !inUnits[st.id]; });
 }
+// reativa de uma vez os contratos «cancelados» (e os alunos arquivados com esse estado)
+function reactivateAllCancelled(){
+  var sts = visibleStudentsForDashboard().filter(function(st){ return contractEstadoOf(st) === "cancelado"; });
+  if (!sts.length){ showToast("Não há contratos cancelados"); return Promise.resolve(); }
+  if (!window.confirm("Reativar os " + sts.length + " contratos cancelados (e os alunos arquivados)?")) return Promise.resolve();
+  var prevMap = JSON.parse(JSON.stringify(contractMeta.map)), woke = [];
+  sts.forEach(function(st){ var cur = Object.assign({}, contractMeta.map[st.id] || {}); cur.estado = "ativo"; contractMeta.map[st.id] = cur; if (st.active === false){ st.active = true; woke.push(st); } });
+  return saveContractMeta("contracts").then(function(r){
+    if (r.error){ contractMeta.map = prevMap; woke.forEach(function(st){ st.active = false; }); showToast("⚠ " + r.error); return; }
+    woke.forEach(function(st){ persistStudent(st); });
+    showToast("✓ " + sts.length + (sts.length === 1 ? " contrato reativado" : " contratos reativados"));
+    renderProContractsMain();
+  });
+}
 function contractsListHtml(today){
   var units = contractUnits(today), nocon = studentsWithoutContract(units);
   var html = contractsTotalsHtml(units);
   var count = function(f){ return f === "todos" ? units.length + nocon.length : f === "semcontrato" ? nocon.length : units.filter(function(x){ return x.estado === f; }).length; };
   html += ctFilters([["todos", "Todos"], ["ativo", "Ativo"], ["suspenso", "Suspenso"], ["cancelado", "Cancelado"], ["semcontrato", "Sem contrato"]], contractsView.filter, "data-ct-filter", count);
+  if (units.some(function(x){ return x.estado === "cancelado"; })) html += "<p style=\"margin:-4px 0 10px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"ctReactivate\" style=\"min-height:44px;\">Reativar todos os cancelados · " + count("cancelado") + "</button></p>";
   html += "<div class=\"student-tools\" id=\"contractTools\"><label class=\"student-search\"><span aria-hidden=\"true\">🔍</span><input type=\"search\" id=\"ctSearch\" placeholder=\"Procurar nome…\" autocomplete=\"off\" autocapitalize=\"off\" aria-label=\"Procurar contrato\" value=\"" + escapeHtml(contractsView.search || "") + "\"></label>" +
     "<select id=\"ctSort\" class=\"mini-select\" aria-label=\"Ordenar contratos\">" + [["nome", "Nome A → Z"], ["nomeza", "Nome Z → A"], ["valor", "Maior valor"], ["restam", "Menos aulas por dar"], ["horas", "Mais horas"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + (contractsView.sort === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>";
   html += "<div class=\"ct-table\" style=\"--cols:2fr 1.3fr 1.8fr .8fr 1fr 1fr 1fr\"><div class=\"ct-head\"><span>Contrato</span><span>Plano</span><span>Sessões</span><span>Último treino</span><span>Último pagamento</span><span class=\"r\">Valor</span><span>Estado</span></div><div id=\"contractList\">";
@@ -2073,6 +2088,7 @@ function wireContractsMain(main){
     if (x) openContractEditModal(x, redraw);
   }); });
   main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); contractsView.sheet = null; contractsView.manage = false; redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
+  var ctRe = main.querySelector("#ctReactivate"); if (ctRe) ctRe.addEventListener("click", function(){ reactivateAllCancelled(); });
   var ctMore = main.querySelector("#ctMore"); if (ctMore) ctMore.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractMoreModal(x, redraw); });
   main.querySelectorAll("[data-ct-sheet]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.sheet = b.getAttribute("data-ct-sheet"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} if (b.hasAttribute("data-ct-print")) setTimeout(function(){ try { window.print(); } catch (e) {} }, 300); }); });
   var shBack = main.querySelector("#ctSheetBack"); if (shBack) shBack.addEventListener("click", function(){ contractsView.sheet = null; redraw(); });
