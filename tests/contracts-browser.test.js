@@ -63,7 +63,7 @@ function fixtureRow(id, name){
   await pg.fill("#ctSearch", ""); await pg.selectOption("#ctSort", "valor");
   check.check("8. «Maior valor» ordena pelo valor mensal (o duo à frente)", (await names())[0] === "Rui Duo + Eva Duo");
   var rowA = await pg.locator('[data-open-contract="a"]').innerText();
-  check.check("9. A linha mostra plano, horas, «12 de 26» e o estado", /Individual/.test(rowA) && /2×60/.test(rowA) && /Trimestral/.test(rowA) && /8,66 h/.test(rowA) && /12 de 26/.test(rowA) && /Ativo/.test(rowA));
+  check.check("9. A linha mostra plano, «12 de 26», valor e estado (sem formato nem horas)", /2×60/.test(rowA) && /Trimestral/.test(rowA) && /12 de 26/.test(rowA) && /902,50/.test(rowA) && /Ativo/.test(rowA) && !/Individual/.test(rowA));
   // ficha
   await pg.click('[data-open-contract="a"]'); await pg.waitForSelector("#ctEdit");
   var det = await pg.locator("#proMain").innerText();
