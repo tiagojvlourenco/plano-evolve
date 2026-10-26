@@ -12180,6 +12180,7 @@ function tplProPlano(s){
   if (s.fromOnboarding){
     html += "<div class=\"suggestion-banner\">🧾 Sugestão calculada a partir do questionário inicial — confirma ou ajusta antes de montares as refeições.</div>";
   }
+  html += tplPlateauCard(s);
   html += "<div class=\"eyebrow\">Alvos nutricionais</div>" +
     "<div class=\"macro-target-grid\">" +
     "<div class=\"f\"><label>Calorias <span class=\"num target-extra\" id=\"tKcalDiff\"></span></label><input type=\"number\" min=\"0\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
@@ -13429,6 +13430,214 @@ function signalInatividadeTreino(s){
   return signal("inatividade_treino", "Inatividade de treino", "positivo", "Última sessão de treino registada " + daysAgoLabel(a.daysSince) + ".", "Última sessão registada", "treino");
 }
 
+/* ===================== ESTAGNAÇÃO DE PESO (Fase 37) =====================
+   Deteta quando o peso deixa de acompanhar o objetivo (perda ou ganho) e propõe
+   um ajuste pequeno de calorias para o profissional aprovar com um clique.
+   Regras (pedido do profissional):
+   - só avalia com pelo menos PLATEAU_MIN_DAYS dias de pesagens (e 3 pontos) — nunca num dia isolado;
+   - tendência por regressão linear sobre as pesagens (kg/semana), não por dois pontos;
+   - se houve um ajuste de calorias recente, só conta as pesagens desde esse ajuste;
+   - com adesão baixa nos check-ins, a sugestão é rever a adesão em vez de mexer nas calorias;
+   - corte: -125 kcal (a maior parte de hidratos); ganho: +150 kcal; proteína intacta;
+   - o profissional pode adiar o alerta (férias, doença…): durante o adiamento não há alerta e, quando termina,
+     só contam as pesagens feitas depois dele (as de viagem não são fiáveis);
+   - nunca aplica nada sozinho — só o botão do profissional. */
+var PLATEAU_MIN_DAYS = 14;
+var PLATEAU_WINDOW_DAYS = 28;
+var PLATEAU_MIN_PCT_PER_WEEK = 0.10;   // % do peso por semana abaixo da qual se considera parado
+var PLATEAU_CUT_STEP_KCAL = 125;       // corte: 100 a 150 kcal
+var PLATEAU_BULK_STEP_KCAL = 150;      // ganho: 100 a 200 kcal
+var PLATEAU_MIN_KCAL = 1200;           // piso quando não há metabolismo basal calculável
+
+function plateauDirection(s){
+  var wg = s.weightGoal, wc = s.weightCurrent;
+  if (wg > 0 && wc > 0 && Math.abs(wg - wc) >= 0.5) return wg > wc ? 1 : -1;
+  var g = s.goal || "";
+  if (/manuten/i.test(g)) return 0;
+  if (/perda|gordura/i.test(g)) return -1;
+  if (/ganho|aumento|massa/i.test(g)) return 1;
+  if (/recomposi/i.test(g)) return -1;
+  return 0;
+}
+
+function lastKcalChangeDate(s){
+  var last = null;
+  (s.planHistory || []).forEach(function(e){
+    if (e && e.type === "kcal" && e.date && (!last || e.date > last)) last = e.date;
+  });
+  return last;
+}
+
+function lastPlateauSnoozeUntil(s){
+  var last = null;
+  (s.planHistory || []).forEach(function(e){
+    if (e && e.type === "estagnacao_adiada" && e.after) last = e.after; // o último evento manda (adiar ou retomar)
+  });
+  return last;
+}
+
+function isoPlusDays(base, n){
+  var d = new Date(base + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function snoozePlateau(s, days){
+  var until = isoPlusDays(todayISO(), days);
+  logPlanEvent(s, "estagnacao_adiada", "Alerta de estagnação adiado " + days + " dias (até " + until + ")", null, until);
+  return until;
+}
+
+function resumePlateau(s){
+  var until = isoPlusDays(todayISO(), -1);
+  logPlanEvent(s, "estagnacao_adiada", "Alerta de estagnação retomado", null, until);
+  return until;
+}
+
+function plateauDaysBetween(a, b){
+  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+}
+
+function computeWeightPlateau(s, today){
+  today = today || todayISO();
+  var dir = plateauDirection(s);
+  if (dir === 0) return null;
+  var changed = lastKcalChangeDate(s);
+  var snoozeUntil = lastPlateauSnoozeUntil(s);
+  if (snoozeUntil && snoozeUntil >= today) return {state: "adiado", dir: dir, until: snoozeUntil};
+  var startDate = new Date(today + "T00:00:00");
+  startDate.setDate(startDate.getDate() - PLATEAU_WINDOW_DAYS);
+  var start = startDate.toISOString().slice(0, 10);
+  if (changed && changed > start) start = changed;
+  if (snoozeUntil && snoozeUntil > start) start = snoozeUntil; // pesagens do período adiado não contam
+  var pts = (s.weights || []).filter(function(w){ return w && w.date >= start && w.date <= today && w.w > 0; })
+    .sort(function(a, b){ return a.date < b.date ? -1 : 1; });
+  var span = pts.length ? plateauDaysBetween(pts[0].date, pts[pts.length-1].date) : 0;
+  if (pts.length < 3 || span < PLATEAU_MIN_DAYS){
+    var recent = changed && plateauDaysBetween(changed, today) < PLATEAU_MIN_DAYS;
+    return {state: recent ? "aguarda" : "insuficiente", dir: dir, since: changed, days: span, n: pts.length};
+  }
+  var t0 = new Date(pts[0].date + "T00:00:00").getTime();
+  var xs = pts.map(function(p){ return (new Date(p.date + "T00:00:00").getTime() - t0) / 86400000; });
+  var ys = pts.map(function(p){ return p.w; });
+  var n = pts.length, mx = xs.reduce(function(a, b){ return a + b; }, 0) / n, my = ys.reduce(function(a, b){ return a + b; }, 0) / n;
+  var num = 0, den = 0;
+  xs.forEach(function(x, i){ num += (x - mx) * (ys[i] - my); den += (x - mx) * (x - mx); });
+  var slopeDay = den ? num / den : 0;
+  var rate = slopeDay * 7;                       // kg por semana
+  var pct = my ? rate / my * 100 : 0;             // % do peso por semana
+  var stalled = dir < 0 ? pct > -PLATEAU_MIN_PCT_PER_WEEK : pct < PLATEAU_MIN_PCT_PER_WEEK;
+  return {state: stalled ? "estagnado" : "a_evoluir", dir: dir, days: span, n: n, rateKgWeek: rate, pctWeek: pct, from: pts[0].date, to: pts[pts.length-1].date, since: changed};
+}
+
+function plateauAdherenceAvg(s){
+  var recent = recentCheckins(s);
+  if (!recent.length) return null;
+  return recent.reduce(function(a, c){ return a + (c.adherence || 0); }, 0) / recent.length;
+}
+
+function suggestPlateauAdjustment(s, plateau){
+  if (!plateau || plateau.state !== "estagnado") return null;
+  var t = s.targets;
+  if (!t || !(t.kcal > 0)) return null;
+  var adh = plateauAdherenceAvg(s);
+  if (adh != null && adh < SIGNAL_LOW_ADHERENCE){
+    return {type: "adesao", adherence: adh, text: "Adesão baixa (" + adh.toFixed(1).replace(".", ",") + "/10 nos últimos check-ins): antes de mexer nas calorias, reforça a adesão ao plano atual."};
+  }
+  var cut = plateau.dir < 0;
+  var delta = cut ? -PLATEAU_CUT_STEP_KCAL : PLATEAU_BULK_STEP_KCAL;
+  var carbs0 = t.carbs != null ? t.carbs : t.carbsMax, fat0 = t.fat != null ? t.fat : t.fatMax;
+  var cDelta = Math.round(delta * (cut ? 0.7 : 0.75) / 4);
+  var fDelta = Math.round((delta - 4 * cDelta) / 9);
+  var realDelta = 4 * cDelta + 9 * fDelta;
+  var newKcal = t.kcal + realDelta;
+  var floor = computeBMR(s) || PLATEAU_MIN_KCAL;
+  if (cut && newKcal < floor){
+    return {type: "limite", text: "As calorias já estão perto do mínimo seguro (" + floor + " kcal): em vez de cortar mais, sobe os passos diários (+2000 a 3000) ou faz uma semana em manutenção."};
+  }
+  return {type: "ajuste", delta: realDelta,
+    newTargets: {kcal: newKcal, protein: t.protein, carbs: Math.max(0, carbs0 + cDelta), fat: Math.max(0, fat0 + fDelta)},
+    text: (cut ? "Sugestão: cortar " : "Sugestão: acrescentar ") + Math.abs(realDelta) + " kcal (" + t.kcal + " → " + newKcal + " kcal), mantendo a proteína."};
+}
+
+function plateauRateLabel(p){
+  return (p.rateKgWeek >= 0 ? "+" : "") + p.rateKgWeek.toFixed(2).replace(".", ",") + " kg/semana";
+}
+
+function signalWeightPlateau(s){
+  var base = signalWeight(s);
+  var p = computeWeightPlateau(s);
+  if (p && p.state === "adiado"){
+    return signal("peso", "Peso", "insuficiente", "Alerta de estagnação adiado até " + fmtDatePt(p.until) + ".", "Adiamento ativo", "plano");
+  }
+  if (p && p.state === "estagnado"){
+    return signal("peso", "Peso", "atencao", "Peso estagnado há " + p.days + " dias (" + plateauRateLabel(p) + "). Vê o ajuste sugerido no Plano.", "Últimos " + p.days + " dias", "plano");
+  }
+  return base;
+}
+
+function wirePlateauCard(el, s){
+  el.querySelectorAll("[data-snooze-plateau]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var until = snoozePlateau(s, parseInt(btn.getAttribute("data-snooze-plateau"), 10));
+      persistStudent(s);
+      renderProTabContent(s);
+      showToast("⏸ Alerta de estagnação adiado até " + fmtDatePt(until));
+    });
+  });
+  var resume = el.querySelector("#resumePlateau");
+  if (resume) resume.addEventListener("click", function(){
+    resumePlateau(s);
+    persistStudent(s);
+    renderProTabContent(s);
+    showToast("Alerta de estagnação retomado");
+  });
+  var applyPlateau = el.querySelector("#applyPlateauAdjust");
+  if (!applyPlateau) return;
+  applyPlateau.addEventListener("click", function(){
+    var sug = suggestPlateauAdjustment(s, computeWeightPlateau(s));
+    if (!sug || sug.type !== "ajuste") return;
+    logTargetsChange(s, s.targets, sug.newTargets);
+    logPlanEvent(s, "estagnacao", "Ajuste por estagnação de peso: " + (sug.delta > 0 ? "+" : "") + sug.delta + " kcal");
+    s.targets = sug.newTargets;
+    s.fromOnboarding = false;
+    persistStudent(s);
+    renderProTabContent(s);
+    showToast("✓ Ajuste aplicado: " + s.targets.kcal + " kcal — nova reavaliação dentro de " + PLATEAU_MIN_DAYS + " dias");
+  });
+}
+
+function tplPlateauCard(s){
+  var p = computeWeightPlateau(s);
+  if (!p) return "";
+  var goalWord = p.dir < 0 ? "perda" : "ganho";
+  if (p.state === "adiado"){
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏸ Alerta de estagnação adiado até " + escapeHtml(fmtDatePt(p.until)) + " — as pesagens deste período não contam. <button type=\"button\" class=\"btn btn-sm\" id=\"resumePlateau\">Retomar agora</button></p>";
+  }
+  if (p.state === "aguarda"){
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏳ Calorias ajustadas em " + escapeHtml(p.since) + " — espera pelo menos " + PLATEAU_MIN_DAYS + " dias de pesagens antes de reavaliar o ritmo de " + goalWord + ".</p>";
+  }
+  if (p.state === "a_evoluir"){
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">✓ Ritmo de " + goalWord + " adequado: " + plateauRateLabel(p) + " (" + p.days + " dias, " + p.n + " pesagens).</p>";
+  }
+  if (p.state !== "estagnado") return "";
+  var sug = suggestPlateauAdjustment(s, p);
+  var html = "<div class=\"suggestion-banner\" id=\"plateauCard\" style=\"margin-bottom:14px;\">" +
+    "<strong>⚠ Peso estagnado</strong> — " + plateauRateLabel(p) + " há " + p.days + " dias (" + p.n + " pesagens), abaixo do ritmo esperado para " + goalWord + ".";
+  if (sug){
+    html += "<br>" + escapeHtml(sug.text);
+    if (sug.type === "ajuste"){
+      html += "<br><span class=\"muted-p\" style=\"font-size:0.8rem;\">Hidratos " + (s.targets.carbs != null ? s.targets.carbs : s.targets.carbsMax) + " → " + sug.newTargets.carbs + " g · Gordura " + (s.targets.fat != null ? s.targets.fat : s.targets.fatMax) + " → " + sug.newTargets.fat + " g · Proteína " + sug.newTargets.protein + " g</span>" +
+        "<br><button type=\"button\" class=\"btn primary btn-sm\" id=\"applyPlateauAdjust\" style=\"margin-top:8px;\">Aplicar ajuste (" + (sug.delta > 0 ? "+" : "") + sug.delta + " kcal)</button>" +
+        " <span class=\"muted-p\" style=\"font-size:0.78rem;\">Depois do ajuste, espera 2 a 3 semanas antes de nova reavaliação.</span>";
+    }
+  }
+  html += "<br><span class=\"muted-p\" style=\"font-size:0.8rem;\">Férias ou doença? Adia o alerta:</span> " +
+    "<button type=\"button\" class=\"btn btn-sm\" data-snooze-plateau=\"14\" style=\"margin-top:6px;\">Adiar 2 semanas</button> " +
+    "<button type=\"button\" class=\"btn btn-sm\" data-snooze-plateau=\"21\" style=\"margin-top:6px;\">Adiar 3 semanas</button>";
+  return html + "</div>";
+}
+
 function signalAdherence(s){
   var recent = recentCheckins(s).filter(function(c){ return Number(c.adherence) > 0; });   // só valores preenchidos: 0 é «sem resposta», não adesão nula
   if (!recent.length){
@@ -13508,7 +13717,7 @@ function computeStudentSignals(s){
     WEEKLY_CHECKIN_ENABLED ? safeSignal(signalCheckin, s) : null,
     safeSignal(signalPlanoAtivo, s),
     safeSignal(signalAdherence, s),
-    safeSignal(signalWeight, s),
+    safeSignal(signalWeightPlateau, s),
     safeSignal(signalHungerEnergy, s),
     safeSignal(signalTreinos, s),
     safeSignal(signalPesagem, s),
@@ -14843,6 +15052,7 @@ function wireProTab(s){
     renderProTabContent(s);
     showToast("Nota acrescentada");
   });
+  wirePlateauCard(el, s);
 }
 
 /* ===================== MODE SWITCH / BOOT ===================== */
