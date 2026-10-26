@@ -165,6 +165,8 @@
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
      runActivityCfg(activity) → cfg   «bike» sobe os limites de velocidade (vMaxMs e maxAvgSpeedMs 25 m/s) e aceita ficheiros de ciclismo; qualquer outro valor = RUN_CFG
      runSpeedKmh(distM, movingS) → km/h | null     as linhas normalizadas trazem activity ("run"|"bike") e speedKmh
+     Treinos estruturados: runSessionNormalize(raw) → sessão | null; runSessionSteps(sessão) → passos; runSessionSummary(sessão) → texto PT-PT; runSessionCursor() e
+     runSessionAdvance(cursor, passos, elapsedS, distM) → {cursor, changed, finished, step, remaining}; modelos em RUN_SESSION_TEMPLATES (ver o bloco «treinos estruturados de cardio»)
      runPlanAddDays(dataISO, n) → dataISO     runPlanGoalOf(params) → perfil do objetivo {label, raceKm, peakKm, longCap, weeks, taper}
      runPlanBuild({goal, sessions, weeks, baseKm, startDate}) → plano semana a semana (objetivo 5k/10k/21k/42k/livre, 2 a 5 sessões, 6 a 20 semanas) | null; runPlanNormalize, runPlanCurrent(built, dataISO)
      runPaceCheck(distM, movingS, durationS, cfg) → {ask, paceSPerKm|null, kmh|null}   ask = ritmo em movimento (senão o total) mais rápido que
@@ -1272,6 +1274,91 @@ function runPlanCurrent(built, dateISO){
   if (d < 0) return {state: "before", daysToStart: -d};
   var idx = Math.floor(d / 7);
   return idx >= built.weeks.length ? {state: "done", weeks: built.weeks.length} : {state: "active", week: built.weeks[idx], weeks: built.weeks.length};
+}
+
+
+/* ---------- treinos estruturados de cardio (intervalos, meta) ----------
+   Sessão: {id, name, activity: "run"|"bike", kind: "intervals"|"goal", date?: "aaaa-mm-dd",
+            intervals?: {warmupMin, reps, work: {unit: "m"|"s", value}, rest: {unit: "s"|"m", value}, cooldownMin}, goal?: {unit: "km"|"min", value}}
+   O profissional prescreve (guarda-se em trainingProgram.cardioSessions) e o aluno também pode escolher um modelo ou montar o seu sem prescrição.
+   runSessionNormalize(raw) → sessão limpa | null     runSessionSteps(sessão) → passos [{kind: "warmup"|"work"|"rest"|"cooldown"|"goal", unit: "s"|"m", value, n?}]
+   runSessionSummary(sessão) → texto PT-PT      RUN_SESSION_TEMPLATES → modelos prontos
+   runSessionCursor() → cursor novo      runSessionAdvance(cursor, passos, elapsedS, distM) → {cursor, changed, finished, step, remaining: {unit, value}}
+   O avanço é por tempo (s) ou por distância (m) desde o início do passo; só para dar o sinal («agora corre 400 m»), nunca altera o que se grava. */
+var RUN_SESSION_LIMITS = {reps: [1, 30], workM: [50, 10000], workS: [10, 1800], restS: [10, 900], restM: [50, 2000], warmMin: [0, 30], goalKm: [0.5, 100], goalMin: [5, 360], nameMax: 60, maxPerStudent: 30};
+function runISesNum(v, lo, hi){ var n = Number(v); return isFinite(n) && n >= lo && n <= hi ? n : null; }
+function runSessionNormalize(raw){
+  if (!raw || typeof raw !== "object") return null;
+  var L = RUN_SESSION_LIMITS, name = String(raw.name == null ? "" : raw.name).replace(/\s+/g, " ").replace(/^ | $/g, "").slice(0, L.nameMax);
+  if (!name) return null;
+  var out = {id: typeof raw.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(raw.id) ? raw.id : "", name: name, activity: raw.activity === "bike" ? "bike" : "run", kind: raw.kind === "goal" ? "goal" : raw.kind === "intervals" ? "intervals" : ""};
+  if (!out.kind) return null;
+  if (typeof raw.date === "string" && raw.date) { if (!/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) return null; out.date = raw.date; }
+  if (out.kind === "goal") {
+    var g = raw.goal || {}, gu = g.unit === "min" ? "min" : g.unit === "km" ? "km" : "", gv = gu === "min" ? runISesNum(g.value, L.goalMin[0], L.goalMin[1]) : gu === "km" ? runISesNum(g.value, L.goalKm[0], L.goalKm[1]) : null;
+    if (gv == null) return null;
+    out.goal = {unit: gu, value: Math.round(gv * 10) / 10};
+    return out;
+  }
+  var iv = raw.intervals || {}, reps = runISesNum(iv.reps, L.reps[0], L.reps[1]), w = iv.work || {}, r = iv.rest || {};
+  var wu = w.unit === "s" ? "s" : w.unit === "m" ? "m" : "", ru = r.unit === "m" ? "m" : r.unit === "s" ? "s" : "";
+  var wv = wu === "m" ? runISesNum(w.value, L.workM[0], L.workM[1]) : wu === "s" ? runISesNum(w.value, L.workS[0], L.workS[1]) : null;
+  var rv = ru === "m" ? runISesNum(r.value, L.restM[0], L.restM[1]) : ru === "s" ? runISesNum(r.value, L.restS[0], L.restS[1]) : null;
+  var wm = iv.warmupMin == null || iv.warmupMin === "" ? 0 : runISesNum(iv.warmupMin, L.warmMin[0], L.warmMin[1]), cm = iv.cooldownMin == null || iv.cooldownMin === "" ? 0 : runISesNum(iv.cooldownMin, L.warmMin[0], L.warmMin[1]);
+  if (reps == null || wv == null || rv == null || wm == null || cm == null) return null;
+  out.intervals = {warmupMin: Math.round(wm), reps: Math.round(reps), work: {unit: wu, value: Math.round(wv)}, rest: {unit: ru, value: Math.round(rv)}, cooldownMin: Math.round(cm)};
+  return out;
+}
+function runSessionSteps(session){
+  var ses = runSessionNormalize(session), steps = [], i;
+  if (!ses) return [];
+  if (ses.kind === "goal") return [ses.goal.unit === "km" ? {kind: "goal", unit: "m", value: Math.round(ses.goal.value * 1000)} : {kind: "goal", unit: "s", value: Math.round(ses.goal.value * 60)}];
+  var iv = ses.intervals;
+  if (iv.warmupMin) steps.push({kind: "warmup", unit: "s", value: iv.warmupMin * 60});
+  for (i = 1; i <= iv.reps; i++) {
+    steps.push({kind: "work", unit: iv.work.unit, value: iv.work.value, n: i});
+    if (i < iv.reps) steps.push({kind: "rest", unit: iv.rest.unit, value: iv.rest.value, n: i});
+  }
+  if (iv.cooldownMin) steps.push({kind: "cooldown", unit: "s", value: iv.cooldownMin * 60});
+  return steps;
+}
+function runISesAmount(unit, value){
+  if (unit === "m") return value >= 1000 && value % 100 === 0 ? String(value / 1000).replace(".", ",") + " km" : value + " m";
+  return value >= 120 && value % 60 === 0 ? (value / 60) + " min" : value + " s";
+}
+function runSessionSummary(session){
+  var ses = runSessionNormalize(session);
+  if (!ses) return "";
+  if (ses.kind === "goal") return "Meta: " + (ses.goal.unit === "km" ? String(ses.goal.value).replace(".", ",") + " km" : ses.goal.value + " min");
+  var iv = ses.intervals, parts = [];
+  if (iv.warmupMin) parts.push("Aquecimento " + iv.warmupMin + " min");
+  parts.push(iv.reps + " × " + runISesAmount(iv.work.unit, iv.work.value) + " (recuperação " + runISesAmount(iv.rest.unit, iv.rest.value) + ")");
+  if (iv.cooldownMin) parts.push("Arrefecimento " + iv.cooldownMin + " min");
+  return parts.join(" · ");
+}
+var RUN_SESSION_TEMPLATES = [
+  {name: "Repetições 8 × 400 m", activity: "run", kind: "intervals", intervals: {warmupMin: 10, reps: 8, work: {unit: "m", value: 400}, rest: {unit: "s", value: 90}, cooldownMin: 5}},
+  {name: "5 × 1000 m", activity: "run", kind: "intervals", intervals: {warmupMin: 10, reps: 5, work: {unit: "m", value: 1000}, rest: {unit: "s", value: 120}, cooldownMin: 5}},
+  {name: "10 × 1 min rápido", activity: "run", kind: "intervals", intervals: {warmupMin: 10, reps: 10, work: {unit: "s", value: 60}, rest: {unit: "s", value: 60}, cooldownMin: 5}},
+  {name: "Sprints de 20 s", activity: "run", kind: "intervals", intervals: {warmupMin: 10, reps: 8, work: {unit: "s", value: 20}, rest: {unit: "s", value: 100}, cooldownMin: 5}},
+  {name: "Corrida contínua de 30 min", activity: "run", kind: "goal", goal: {unit: "min", value: 30}},
+  {name: "Meta de 5 km", activity: "run", kind: "goal", goal: {unit: "km", value: 5}},
+  {name: "Bicicleta: 6 × 3 min fortes", activity: "bike", kind: "intervals", intervals: {warmupMin: 10, reps: 6, work: {unit: "s", value: 180}, rest: {unit: "s", value: 120}, cooldownMin: 5}},
+  {name: "Bicicleta: 60 min contínuos", activity: "bike", kind: "goal", goal: {unit: "min", value: 60}}
+];
+function runSessionCursor(){ return {i: 0, startS: 0, startM: 0}; }
+function runSessionAdvance(cursor, steps, elapsedS, distM){
+  var cur = {i: cursor && cursor.i >= 0 ? cursor.i : 0, startS: cursor ? cursor.startS : 0, startM: cursor ? cursor.startM : 0}, changed = false, guard = 0;
+  var es = runIFin(elapsedS) && elapsedS >= 0 ? elapsedS : 0, dm = runIFin(distM) && distM >= 0 ? distM : 0;
+  if (!Array.isArray(steps) || !steps.length) return {cursor: cur, changed: false, finished: true, step: null, remaining: null};
+  while (cur.i < steps.length && guard++ < steps.length + 1) {
+    var st = steps[cur.i], done = st.unit === "m" ? dm - cur.startM >= st.value : es - cur.startS >= st.value;
+    if (!done) break;
+    cur.i++; cur.startS = es; cur.startM = dm; changed = true;
+  }
+  if (cur.i >= steps.length) return {cursor: cur, changed: changed, finished: true, step: null, remaining: null};
+  var s2 = steps[cur.i];
+  return {cursor: cur, changed: changed, finished: false, step: s2, remaining: {unit: s2.unit, value: Math.max(0, s2.unit === "m" ? Math.round(s2.value - (dm - cur.startM)) : Math.round(s2.value - (es - cur.startS)))}};
 }
 
 /* ---------- formatação PT-PT e entradas do registo à mão ---------- */

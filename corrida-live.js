@@ -367,10 +367,34 @@ function runLiveQueueAdd(list, item, uid, nowMs){
 }
 
 /* ---------- estado em memória (RUN.live) ---------- */
+var RUN_L_STEP_NAMES = {warmup: "Aquecimento", work: "Corre forte", rest: "Recuperação", cooldown: "Arrefecimento", goal: "Meta"};
+function runLGuideAmount(r){
+  if (!r) return "";
+  if (r.unit === "m") return r.value >= 1000 ? String(Math.round(r.value / 100) / 10).replace(".", ",") + " km" : r.value + " m";
+  var m = Math.floor(r.value / 60), sec = r.value % 60;
+  return m ? m + ":" + (sec < 10 ? "0" : "") + sec : sec + " s";
+}
+function runLGuideText(L, r){
+  if (!r) return "";
+  if (r.finished) return "Treino concluído. Podes terminar a corrida.";
+  var st = r.step;
+  return (RUN_L_STEP_NAMES[st.kind] || "") + (st.n ? " " + st.n : "") + " · faltam " + runLGuideAmount(r.remaining) + " (passo " + (L.cur.i + 1) + " de " + L.steps.length + ")";
+}
+// avança o guia com o tempo e a distância da gravação; no fim de cada passo dá o sinal (som e vibração, se o aluno os tiver ligados)
+function runLGuideTick(L, view){
+  if (!L.sess || !L.steps || !L.cur || !view) return;
+  var r = runSessionAdvance(L.cur, L.steps, view.elapsedS, view.distM), el = document.getElementById("runLiveGuide");
+  var ping = r.changed && (!r.finished || !L.guideDone);
+  L.cur = r.cursor;
+  if (r.finished) L.guideDone = true;
+  if (ping) { try { if (typeof restTimerAlert === "function") restTimerAlert(); } catch (e) {} }
+  L.guide = runLGuideText(L, r);
+  if (el) { el.textContent = L.guide; el.setAttribute("data-kind", r.finished ? "done" : r.step.kind); }
+}
 function runLSpeedStr(distM, movingS){ var k = runSpeedKmh(distM, movingS); return k ? String(Math.round(k * 10) / 10).replace(".", ",") : "–"; }
 function runLNew(){
   return {
-    sid: 0, phase: "intro", uid: null, stu: null, act: "run",
+    sid: 0, phase: "intro", uid: null, stu: null, act: "run", sess: null, steps: null, cur: null, guideDone: false,
     st: null, ended: false, hiddenS: 0, hiddenAt: null, notice: "", restarts: 0, restartLog: [],
     gpsOn: false, watching: false, err: null, prepGood: false, prepStartMs: null, watchStartMs: null, lastCbMs: null, lastAcc: null, seq3: 0, tapMs: null, visibleAt: 0,
     wlWanted: false, wlSentinel: null, wlPending: false, wl: "", wlLog: [],
@@ -649,6 +673,7 @@ function runLPaint(now){
   runLSetText("runLiveDist", runDistStr(view.distM));
   runLSetText("runLivePace", L.act === "bike" ? runLSpeedStr(view.distM, view.movingS) : runPaceStr(view.paceSPerKm));
   runLSetText("runLiveGaps", "Lacunas: " + view.gaps + (view.gaps ? " (" + runLDurWords(view.gapS) + " sem posições)" : ""));
+  runLGuideTick(L, view);
   var notes = document.getElementById("runLiveNotes");
   if (notes) {
     var nh = runLNotesHtml();
@@ -790,6 +815,7 @@ function runLStartPrepare(){
   var L = RUN.live;
   L.phase = "prep"; L.gpsOn = true; L.err = null; L.prepGood = false; L.lastCbMs = null; L.lastAcc = null; L.prepStartMs = Date.now();
   L.wlWanted = true;
+  try { if (typeof unlockRestAudio === "function") unlockRestAudio(); } catch (e) {}   // o sinal sonoro de cada passo precisa do áudio desbloqueado por um toque
   runLWakeAcquire();
   runLGpsStart();
   runLTickStart();
@@ -797,6 +823,9 @@ function runLStartPrepare(){
 function runLStartRecording(){
   var L = RUN.live;
   L.act = RUN.activity === "bike" ? "bike" : "run";
+  var sx = RUN.session && typeof runSessionNormalize === "function" ? runSessionNormalize(RUN.session) : null;   // treino estruturado escolhido no ecrã Cardio: só guia, não altera o que se grava
+  L.sess = sx; L.steps = sx ? runSessionSteps(sx) : null; L.cur = sx ? runSessionCursor() : null; L.guideDone = false; RUN.session = null;
+  if (sx) L.act = sx.activity;
   L.st = runFeedInit(); L.phase = "rec"; L.ended = false; L.hiddenS = 0; L.hiddenAt = null; L.notice = ""; L.restarts = 0; L.restartLog = [];
   L.tapMs = Date.now(); L.dirty = false; L.draftOk = null; L.lastDraftMs = 0; L.notesHtml = ""; L.badRun = 0; L.modeLost = false; L.cutNote = "";
   L.wlWanted = true;
@@ -935,7 +964,7 @@ function runLReview(s){
   if (!chk.ok) { runLToast(chk.error); return; }
   if (typeof RUN.saveFlow !== "function") { runLToast("Não foi possível abrir o ecrã de guardar. Tenta outra vez."); return; }
   prep = {
-    activity: L.act === "bike" ? "bike" : "run", source: "live", stats: built.stats, segments: runLCopy(L.st.segs), hiddenS: Math.round(L.hiddenS),
+    activity: L.act === "bike" ? "bike" : "run", notes: L.sess ? "Treino: " + L.sess.name : "", source: "live", stats: built.stats, segments: runLCopy(L.st.segs), hiddenS: Math.round(L.hiddenS),
     warnings: runLiveWarnings(built.stats, Math.round(L.hiddenS), L.restarts), fileDistM: null, startedAtMs: built.stats.startedAtMs,
     onSaved: function(res){ if (!res || res.ok !== false) runLAfterSaved(); },
     cancelView: {name: "live"}      // «Cancelar» no ecrã de guardar volta ao resumo da corrida (nunca a perde)
@@ -964,6 +993,7 @@ function runLIntroHtml(){
     "<p class=\"run-live-p\">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>" +
     "<p class=\"run-live-p run-live-strong\">Testado num iPhone: ao bloquear o ecrã a gravação pára e ficam lacunas no percurso. Mantém o ecrã ligado durante toda a corrida.</p>" +
     "<p class=\"run-live-p run-live-strong\">Não garantimos que o registo continue com o ecrã bloqueado ou noutra aplicação.</p>" +
+    (RUN.session && typeof runSessionSummary === "function" && runSessionNormalize(RUN.session) ? "<p class=\"run-live-p run-live-strong\">Treino: " + escapeHtml(runSessionNormalize(RUN.session).name) + ". " + escapeHtml(runSessionSummary(RUN.session)) + ". O telemóvel avisa com um som a cada passo (se o som estiver ligado).</p>" : "") +
     "<p class=\"run-live-p\">" + RUN_LIVE_MUSIC + "</p>" + runLMusicRowHtml() +
     "<div class=\"run-live-btns\"><button type=\"button\" class=\"btn primary run-live-btn\" id=\"runLiveGo\">Continuar</button></div></div>");
 }
@@ -1012,6 +1042,7 @@ function runLRecHtml(){
   }
   h += runLHead("A gravar" + (paused ? " · em pausa" : ""), "");
   h += "<div id=\"runLiveSignal\" class=\"run-live-signal wait\" role=\"status\" aria-live=\"polite\">A procurar sinal…</div>";
+  if (L.sess && L.steps) h += "<div id=\"runLiveGuide\" class=\"run-live-guide\" role=\"status\" aria-live=\"polite\" data-kind=\"" + (L.guideDone ? "done" : L.steps[Math.min(L.cur.i, L.steps.length - 1)].kind) + "\">" + escapeHtml(L.guide || runLGuideText(L, runSessionAdvance(L.cur, L.steps, v.elapsedS, v.distM))) + "</div>";
   h += "<div class=\"run-live-big\">" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Tempo</div><div class=\"run-live-num run-live-time num\" id=\"runLiveTime\">" + escapeHtml(runDurStr(v.elapsedS)) + "</div></div>" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Distância</div><div class=\"run-live-num num\" id=\"runLiveDist\">" + escapeHtml(runDistStr(v.distM)) + "</div></div>" +
