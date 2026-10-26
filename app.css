@@ -915,3 +915,6 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .reps-chips button{min-height:36px; padding:0 12px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:999px; font-size:0.76rem; font-weight:700; cursor:pointer;}
 .ct-alert{margin:0 0 12px; padding:10px 14px; border:1px solid var(--critical); background:var(--critical-soft); font-size:0.86rem;}
 .ct-alert strong{font-weight:600;}
+.run-seg{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;}
+.run-seg-btn{min-height:44px; border:1px solid var(--line-strong); background:var(--bg); color:var(--ink); border-radius:12px; font-weight:700; font-size:0.86rem; cursor:pointer; touch-action:manipulation;}
+.run-seg-btn[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--on-accent, #04140f);}

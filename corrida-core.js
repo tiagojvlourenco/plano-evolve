@@ -163,6 +163,8 @@
 
    Formatação PT-PT e entradas do registo à mão
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
+     runActivityCfg(activity) → cfg   «bike» sobe os limites de velocidade (vMaxMs e maxAvgSpeedMs 25 m/s) e aceita ficheiros de ciclismo; qualquer outro valor = RUN_CFG
+     runSpeedKmh(distM, movingS) → km/h | null     as linhas normalizadas trazem activity ("run"|"bike") e speedKmh
      runPaceCheck(distM, movingS, durationS, cfg) → {ask, paceSPerKm|null, kmh|null}   ask = ritmo em movimento (senão o total) mais rápido que
          RUN_CFG.askPaceSPerKm, a partir de askMinDistM. Só avisa; quem chama pergunta «foi mesmo uma corrida?» (hipótese de desenho, não medida).
      runDurStr(s) → «42:10» | «1:02:10»            runDistStr(m) → «5,23 km»
@@ -226,7 +228,8 @@ var RUN_CFG = {
   maxGaps: 1000,          // runs.gaps <= 1000
   maxSplits: 300,         // jsonb_array_length(splits_s) <= 300
   maxNotes: 300,          // char_length(notes) <= 300
-  maxAvgSpeedMs: 12,      // distance_m / duration_s <= 12
+  maxAvgSpeedMs: 12,      // distance_m / duration_s <= 12 (corrida; bicicleta: 25, ver runActivityCfg e a migração 0033)
+  allowBike: false,       // importação: um ficheiro de ciclismo só se aceita quando a atividade é bicicleta
   maxSegments: 200,       // jsonb_array_length(run_tracks.points) <= 200
   maxTrackBytes: 200000,  // octet_length(run_tracks.points::text) <= 200000
   maxTrimM: 2000,         // run_tracks.trim_m <= 2000
@@ -242,7 +245,7 @@ var RUN_MSG = {
   notime: "Este ficheiro não tem horas, por isso não dá para calcular o ritmo. Podes registar a corrida à mão.",
   route: "É um percurso planeado, não uma corrida gravada.",
   doctype: "Por segurança, não aceitamos este tipo de ficheiro XML.",
-  bike: "Este ficheiro parece ciclismo; a Corrida só guarda corridas e caminhadas.",
+  bike: "Este ficheiro parece ciclismo. Escolhe «Bicicleta» no topo para o guardar como passeio de bicicleta.",
   naive: "O ficheiro não tinha fuso horário: assumimos hora UTC.",
   multi: "O ficheiro tem várias atividades: importámos só a primeira.",
   empty: "Este ficheiro não tem nenhum percurso gravado. Se foi um treino interior, podes registar a corrida à mão.",
@@ -253,6 +256,16 @@ var RUN_MSG = {
   order: "O ficheiro tem horas fora de ordem: a corrida pode estar incompleta.",
   noparser: "Este navegador não consegue ler ficheiros GPX ou TCX."
 };
+
+var RUN_ACTIVITIES = ["run", "bike"];
+// atividade «bike»: o mesmo motor, com limites de velocidade de bicicleta (25 m/s = 90 km/h de média no SQL; saltos de GPS acima de 25 m/s)
+function runActivityCfg(activity){
+  return activity === "bike" ? runCfg({vMaxMs: 25, maxAvgSpeedMs: 25, allowBike: true}) : RUN_CFG;
+}
+function runSpeedKmh(distM, movingS){
+  var p = runPaceOf(distM, movingS);
+  return p == null ? null : 3600 / p;
+}
 
 /* ---------- auxiliares internos ---------- */
 function runCfg(cfg){
@@ -943,7 +956,7 @@ function runIGpx(root, o){
   var trks = runIKids(root, "trk"), raw = [], n = 0, a, b, c;
   for (a = 0; a < trks.length; a++) {
     var ty = runIKid(trks[a], "type");
-    if (ty && /bik|cycl/i.test(runIText(ty))) return runIFail("bike", cfg);   // só se o ficheiro o diz (<trk><type>); sem tipo, aceita-se
+    if (ty && /bik|cycl/i.test(runIText(ty)) && !cfg.allowBike) return runIFail("bike", cfg);   // só se o ficheiro o diz (<trk><type>); sem tipo, aceita-se
     var tsegs = runIKids(trks[a], "trkseg");
     for (b = 0; b < tsegs.length; b++) {
       var pts = runIKids(tsegs[b], "trkpt"), seg = [];
@@ -965,7 +978,7 @@ function runITcx(root, o){
   var acts = root.getElementsByTagNameNS("*", "Activity");
   if (!acts.length) return runIFail(root.getElementsByTagNameNS("*", "Course").length ? "route" : "empty", cfg);
   var act = acts[0], sport = String(act.getAttribute("Sport") || "").toLowerCase();
-  if (/bik|cycl/.test(sport)) return runIFail("bike", cfg);
+  if (/bik|cycl/.test(sport) && !cfg.allowBike) return runIFail("bike", cfg);
   var tracks = act.getElementsByTagNameNS("*", "Track"), raw = [], n = 0, a, b;
   for (a = 0; a < tracks.length; a++) {
     var tps = runIKids(tracks[a], "Trackpoint"), seg = [];
@@ -1057,7 +1070,7 @@ function runIBuild(run, nowMs, cfg){
   var distRaw = runINum(run.distM), dist = distRaw == null ? -1 : Math.round(distRaw);
   if (dist < 0) return runIRowFail("dist", "Falta a distância da corrida.");
   if (dist > cfg.maxDistM) return runIRowFail("dist", "A distância máxima é " + Math.round(cfg.maxDistM / 1000) + " km.");
-  if (dist > cfg.maxAvgSpeedMs * dur) return runIRowFail("speed", "Confirma a distância e o tempo: este ritmo parece impossível.");
+  if (dist > cfg.maxAvgSpeedMs * dur) return runIRowFail("speed", "Confirma a distância e o tempo: " + (run.activity === "bike" ? "esta velocidade parece impossível." : "este ritmo parece impossível."));
   var consentRaw = runINum(run.consentV), consent = consentRaw == null ? 0 : Math.round(consentRaw);
   if (consent < 1 || consent > 32767) return runIRowFail("consent", "Falta o consentimento da Corrida.");
   var mov = runIInt(run.movingS, 0, cfg.maxDurationS, dur);
@@ -1070,7 +1083,7 @@ function runIBuild(run, nowMs, cfg){
     }
   }
   var rpe = runINum(run.rpe), notes = runIStr(run.notes, cfg.maxNotes);
-  return {ok: true, row: {
+  var out = {ok: true, row: {
     id: run.id.toLowerCase(), student_id: sid, started_at: new Date(Math.round(startMs)).toISOString(), source: run.source,
     duration_s: dur, moving_s: mov, distance_m: dist,
     gaps: runIInt(run.gaps, 0, cfg.maxGaps, 0), gap_s: runIInt(run.gapS, 0, cfg.maxDurationS, 0), hidden_s: runIInt(run.hiddenS, 0, cfg.maxDurationS, 0),
@@ -1078,13 +1091,15 @@ function runIBuild(run, nowMs, cfg){
     rpe: rpe != null && rpe >= 1 && rpe <= 10 ? Math.round(rpe) : null,
     notes: notes ? notes : null, consent_v: consent
   }};
+  if (run.activity === "bike") out.row.activity = "bike";   // só se escreve para bicicleta: assim as corridas continuam a gravar-se antes de correr a migração 0033
+  return out;
 }
 function runBuildInsert(run, nowMs){
-  var r = runIBuild(run, runIFin(nowMs) ? nowMs : Date.now(), RUN_CFG);
+  var r = runIBuild(run, runIFin(nowMs) ? nowMs : Date.now(), runActivityCfg(run && run.activity));
   return r.ok ? r.row : null;
 }
 function runCheckRun(run, nowMs){
-  var r = runIBuild(run, runIFin(nowMs) ? nowMs : Date.now(), RUN_CFG);
+  var r = runIBuild(run, runIFin(nowMs) ? nowMs : Date.now(), runActivityCfg(run && run.activity));
   return r.ok ? {ok: true} : {ok: false, code: r.code, error: r.error};
 }
 function runNormalizeRow(row){
@@ -1108,7 +1123,8 @@ function runNormalizeRow(row){
     gaps: runIInt(row.gaps, 0, RUN_CFG.maxGaps, 0), gapS: runIInt(row.gap_s, 0, RUN_CFG.maxDurationS, 0), hiddenS: runIInt(row.hidden_s, 0, RUN_CFG.maxDurationS, 0),
     splitsS: splits, rpe: rpe != null && rpe >= 1 && rpe <= 10 ? Math.round(rpe) : null,
     notes: runIStr(row.notes, RUN_CFG.maxNotes), consentV: cv > 0 ? cv : null,
-    createdBy: typeof row.created_by === "string" ? row.created_by.slice(0, 40) : "", paceSPerKm: runPaceOf(dist, mov)
+    createdBy: typeof row.created_by === "string" ? row.created_by.slice(0, 40) : "", paceSPerKm: runPaceOf(dist, mov),
+    activity: row.activity === "bike" ? "bike" : "run", speedKmh: runSpeedKmh(dist, mov)
   };
 }
 function runNormalizeRows(arr){

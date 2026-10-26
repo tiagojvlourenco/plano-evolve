@@ -355,6 +355,13 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - Ao fazer uma série, a carga e o RIR passam para a série seguinte do mesmo exercício (se o aluno ainda não escreveu nada nela). O esforço da sessão sugere-se como 10 − média do RIR, até o aluno mexer no seletor.
 - No programa, as repetições aceitam «Falha» e «Dropset» (atalhos ao adicionar); não geram sugestão de sobrecarga.
 
+## 8x. Bicicleta na Corrida (migração 0033)
+- **Para ti, Tiago**: corre `supabase/migrations/0033_corrida_bike.sql` no SQL Editor (uma vez; é segura de repetir). Acrescenta a coluna `runs.activity` (`run` por omissão, `bike`) e troca o limite de velocidade média: corrida 12 m/s, bicicleta 25 m/s. Não mexe em políticas nem privilégios.
+- Sem a 0033 a app continua a funcionar: as corridas gravam-se e leem-se como antes; guardar uma bicicleta diz «falta correr a migração 0033».
+- No ecrã da Corrida há «Corrida | Bicicleta». A escolha vale para importar ficheiro (GPX/TCX de ciclismo só se aceitam como Bicicleta), registar à mão e gravar com GPS (limites de velocidade de bicicleta; o ecrã mostra km/h). A lista, o detalhe e os totais mostram «Bicicleta» e km/h; o ritmo médio das semanas só conta as corridas.
+- **Não verificado**: GPS de bicicleta numa volta real (a 30 km/h o GPS do navegador tem muito menos pontos por quilómetro e a distância pode sair diferente; nada foi medido), ecrã do profissional com bicicletas, e o aviso de privacidade (v1) só fala de «corridas»: antes de abrir a bicicleta a alunos, rever o texto e, se for preciso, subir a versão do aviso.
+- Não há aviso de «foi mesmo bicicleta?» (o aviso de ritmo rápido só vale para corrida).
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:

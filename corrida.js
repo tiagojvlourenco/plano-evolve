@@ -159,9 +159,19 @@ function runUiTrackFromDb(points){
 
 /* ---------- ler as corridas ---------- */
 // sem limite de idade: quem pode apagar uma corrida tem de a poder ver (só os totais das 8 semanas têm janela, mais abaixo)
+var RUN_UI_ACT = {noCol: false};   // true quando o servidor ainda não tem a coluna activity (migração 0033 por correr): tudo se lê como corrida
+function runUiActColErr(res){ return !!(res && res.error && /activity|42703|PGRST204/i.test(String(res.error.message || "") + " " + String(res.error.code || ""))); }
 function runUiFetchRuns(sid, from, count){
-  return runUiCall(function(db){
-    return db.from("runs").select(RUN_UI_COLS).eq("student_id", sid).order("started_at", {ascending: false}).range(from, from + count - 1);
+  function go(cols){
+    return runUiCall(function(db){
+      return db.from("runs").select(cols).eq("student_id", sid).order("started_at", {ascending: false}).range(from, from + count - 1);
+    });
+  }
+  if (RUN_UI_ACT.noCol) return go(RUN_UI_COLS);
+  return go(RUN_UI_COLS + ", activity").then(function(res){
+    if (!runUiActColErr(res)) return res;
+    RUN_UI_ACT.noCol = true;
+    return go(RUN_UI_COLS);
   });
 }
 function runUiNormalize(rows, sid){
@@ -193,7 +203,7 @@ function runUiLoad(d, sid, more, done){
     if (!more && d.more && d.runs.length && d.runs[d.runs.length - 1].startedAtMs >= winStart){
       // a página cheia ainda está toda dentro das 8 semanas: os totais precisam de ler o resto dessas semanas (colunas mínimas)
       runUiCall(function(db){
-        return db.from("runs").select(RUN_UI_COLS_LIGHT).eq("student_id", sid).gte("started_at", new Date(winStart).toISOString()).order("started_at", {ascending: false}).range(0, 999);
+        return db.from("runs").select(RUN_UI_COLS_LIGHT + (RUN_UI_ACT.noCol ? "" : ", activity")).eq("student_id", sid).gte("started_at", new Date(winStart).toISOString()).order("started_at", {ascending: false}).range(0, 999);
       }).then(function(r2){
         if (!r2.error && gen === d.gen) d.weekRuns = runUiNormalize(runUiRows(r2), sid);
         done();
@@ -246,11 +256,13 @@ function runUiOnline(){ return !(typeof navigator !== "undefined" && navigator.o
 /* ---------- totais por semana ---------- */
 function runUiWeeks(rows, nowMs){
   var weeks = [], i;
-  for (i = 0; i < RUN_UI_WEEKS; i++) weeks.push({start: runUiWeekStartAgo(nowMs, i), n: 0, distM: 0, movingS: 0, durationS: 0});
+  for (i = 0; i < RUN_UI_WEEKS; i++) weeks.push({start: runUiWeekStartAgo(nowMs, i), n: 0, distM: 0, movingS: 0, durationS: 0, nBike: 0, runDistM: 0, runMovingS: 0});
   rows.forEach(function(r){
     var k;
     for (k = 0; k < weeks.length; k++){
-      if (r.startedAtMs >= weeks[k].start){ weeks[k].n++; weeks[k].distM += r.distM; weeks[k].movingS += r.movingS; weeks[k].durationS += r.durationS; break; }
+      if (r.startedAtMs >= weeks[k].start){ weeks[k].n++; weeks[k].distM += r.distM; weeks[k].movingS += r.movingS; weeks[k].durationS += r.durationS;
+        if (r.activity === "bike") weeks[k].nBike++; else { weeks[k].runDistM += r.distM; weeks[k].runMovingS += r.movingS; }
+        break; }
     }
   });
   return weeks;
@@ -259,11 +271,11 @@ function runUiKpi(label, value, unit){
   return '<div class="kpi"><div class="l">' + escapeHtml(label) + '</div><div class="v num">' + escapeHtml(value) + (unit ? '<small>' + escapeHtml(unit) + '</small>' : '') + '</div></div>';
 }
 function runUiWeeksHtml(d){
-  var rows = d.weekRuns || d.runs, weeks = runUiWeeks(rows, Date.now()), tot = {n: 0, distM: 0, movingS: 0, durationS: 0}, maxM = 0;
-  weeks.forEach(function(w){ tot.n += w.n; tot.distM += w.distM; tot.movingS += w.movingS; tot.durationS += w.durationS; if (w.distM > maxM) maxM = w.distM; });
-  var pace = runPaceOf(tot.distM, tot.movingS);
+  var rows = d.weekRuns || d.runs, weeks = runUiWeeks(rows, Date.now()), tot = {n: 0, distM: 0, movingS: 0, durationS: 0, nBike: 0, runDistM: 0, runMovingS: 0}, maxM = 0;
+  weeks.forEach(function(w){ tot.nBike += w.nBike; tot.runDistM += w.runDistM; tot.runMovingS += w.runMovingS; tot.n += w.n; tot.distM += w.distM; tot.movingS += w.movingS; tot.durationS += w.durationS; if (w.distM > maxM) maxM = w.distM; });
+  var pace = runPaceOf(tot.runDistM, tot.runMovingS), mixed = tot.nBike > 0;   // o ritmo médio é só das corridas (a bicicleta não entra na conta)
   var h = '<div class="card run-weeks"><div class="eyebrow">Últimas ' + RUN_UI_WEEKS + ' semanas</div>' +
-    '<div class="kpi-grid run-kpis">' + runUiKpi("Corridas", String(tot.n), "") + runUiKpi("Distância", runUiKmNum(tot.distM), "km") +
+    '<div class="kpi-grid run-kpis">' + runUiKpi(mixed ? "Atividades" : "Corridas", String(tot.n), "") + runUiKpi("Distância", runUiKmNum(tot.distM), "km") +
     runUiKpi("Tempo", runDurStr(tot.durationS), "") + runUiKpi("Ritmo médio", runPaceStr(pace), pace ? "/km" : "") + '</div>';
   if (maxM > 0){
     h += '<div class="run-bars" role="img" aria-label="Quilómetros por semana, das mais antigas para a atual">';
@@ -275,14 +287,15 @@ function runUiWeeksHtml(d){
     h += '</div>';
   }
   var cur = weeks[0];
-  h += '<p class="muted-p run-this">Esta semana: ' + escapeHtml(cur.n ? plural(cur.n, "corrida", "corridas") + " · " + runDistStr(cur.distM) + " · " + runDurStr(cur.durationS) : "ainda sem corridas") + '.</p>';
+  h += '<p class="muted-p run-this">Esta semana: ' + escapeHtml(cur.n ? (cur.nBike ? plural(cur.n, "atividade", "atividades") : plural(cur.n, "corrida", "corridas")) + " · " + runDistStr(cur.distM) + " · " + runDurStr(cur.durationS) : "ainda sem corridas") + '.</p>';
   return h + '</div>';
 }
 
 /* ---------- linhas e detalhe ---------- */
 function runUiRowHtml(r, attr){
-  var bits = [runDurStr(r.durationS)], pace = runPaceStr(r.paceSPerKm);
-  if (pace !== "–") bits.push(pace + "/km");
+  var bits = [runDurStr(r.durationS)], pace = runPaceStr(r.paceSPerKm), bike = r.activity === "bike";
+  if (bike){ bits.unshift("Bicicleta"); if (r.speedKmh) bits.push(runUiNum1(r.speedKmh) + " km/h"); }
+  else if (pace !== "–") bits.push(pace + "/km");
   if (r.rpe) bits.push("esforço " + r.rpe + "/10");
   if (r.gaps) bits.push(r.gaps === 1 ? "1 lacuna" : r.gaps + " lacunas");
   return '<button type="button" class="run-row" ' + attr + '="' + escapeHtml(r.id) + '">' +
@@ -381,13 +394,14 @@ function runUiDetailHtml(d, id, pro, preview, backId){
   if (!r) return '<div class="card"><button type="button" class="btn btn-sm run-back" id="' + backId + '">← Corridas</button><p class="muted-p">Esta corrida já não existe.</p></div>';
   var track = d.tracks[id], kp = '';
   kp += runUiKpi("Tempo", runDurStr(r.durationS), "");
-  kp += runUiKpi("Ritmo em movimento", runPaceStr(r.paceSPerKm), r.paceSPerKm ? "/km" : "");
+  if (r.activity === "bike") kp += runUiKpi("Velocidade média em movimento", r.speedKmh ? runUiNum1(r.speedKmh) : "–", r.speedKmh ? "km/h" : "");
+  else kp += runUiKpi("Ritmo em movimento", runPaceStr(r.paceSPerKm), r.paceSPerKm ? "/km" : "");
   if (r.movingS && r.movingS < r.durationS) kp += runUiKpi("Tempo em movimento", runDurStr(r.movingS), "");
   if (r.rpe) kp += runUiKpi("Esforço", String(r.rpe), "/10");
   if (r.hiddenS) kp += runUiKpi("Em segundo plano", runDurStr(r.hiddenS), "");
   if (r.gaps) kp += runUiKpi("Lacunas", String(r.gaps), r.gapS ? runDurStr(r.gapS) + " sem posições" : "");
   var h = '<div class="run-detail"><button type="button" class="btn btn-sm run-back" id="' + backId + '">← ' + (pro ? "Corridas do aluno" : "Corridas") + '</button>' +
-    '<div class="card"><div class="eyebrow">' + escapeHtml(runUiDateStr(r.startedAtMs) + " · " + runUiTimeStr(r.startedAtMs) + " · " + (RUN_UI_SRC[r.source] || "")) + '</div>' +
+    '<div class="card"><div class="eyebrow">' + escapeHtml((r.activity === "bike" ? "Bicicleta · " : "") + runUiDateStr(r.startedAtMs) + " · " + runUiTimeStr(r.startedAtMs) + " · " + (RUN_UI_SRC[r.source] || "")) + '</div>' +
     '<div class="hero-num run-dist num">' + escapeHtml(runUiKmNum(r.distM)) + '<small>km</small></div><div class="kpi-grid run-kpis">' + kp + '</div>' +
     (r.notes ? '<p class="run-notes">' + escapeHtml(r.notes) + '</p>' : '') + '</div>';
   if (r.splitsS.length) h += '<div class="card"><div class="eyebrow">Parciais por quilómetro</div>' + runUiSplitsHtml(r.splitsS) + '</div>';
@@ -473,6 +487,13 @@ function runUiOffHtml(sv){
   h += runUiListHtml(d, {weeks: false, empty: RUN_UI_MSG.offEmpty});
   return h + '<div class="card run-priv">' + runUiPrivacyHtml(d, preview, true) + '</div>';
 }
+function runUiAct(){ return RUN.activity === "bike" ? "bike" : "run"; }
+function runUiActHtml(){
+  var a = runUiAct();
+  return '<div class="run-seg" role="group" aria-label="Tipo de atividade">' +
+    '<button type="button" class="run-seg-btn" id="runActRun" aria-pressed="' + (a === "run") + '">Corrida</button>' +
+    '<button type="button" class="run-seg-btn" id="runActBike" aria-pressed="' + (a === "bike") + '">Bicicleta</button></div>';
+}
 function runUiHomeHtml(sv){
   if (corridaModeOf(sv) === "off") return runUiOffHtml(sv);
   var d = runUiData, preview = authRole !== "student", live = sv.runsMode === "live" && typeof RUN.liveOpen === "function";
@@ -484,7 +505,7 @@ function runUiHomeHtml(sv){
   h += '<div class="card run-actions">';
   if (preview) h += '<p class="muted-p run-note" id="runPreviewNote">' + escapeHtml(RUN_UI_MSG.previewOnly) + '</p>';
   else {
-    h += '<button type="button" class="btn primary run-btn" id="runGoImport">Importar ficheiro (GPX ou TCX)</button>' +
+    h += runUiActHtml() + '<button type="button" class="btn primary run-btn" id="runGoImport">Importar ficheiro (GPX ou TCX)</button>' +
       '<button type="button" class="btn run-btn" id="runGoManual">Registar à mão</button>';
     if (live){
       h += '<button type="button" class="btn run-btn" id="runGoLive">Gravar com GPS</button>' +
@@ -515,6 +536,8 @@ function runUiWireHome(s, el){
   });
   runUiOn(el, "#runOffBack", function(){ RUN.dataMode = false; RUN.go("home"); });   // volta ao cartão «A Corrida ainda não está ativa para ti» (app.js)
   if (preview) return;
+  runUiOn(el, "#runActRun", function(){ RUN.activity = "run"; RUN.go("home"); });
+  runUiOn(el, "#runActBike", function(){ RUN.activity = "bike"; RUN.go("home"); });
   if (!off){   // com a Corrida desligada só se vê e apaga
     runUiOn(el, "#runGoImport", function(){ RUN.ensureConsent(s, function(){ RUN.go("import"); }); });
     runUiOn(el, "#runGoManual", function(){ RUN.ensureConsent(s, function(){ RUN.go("manual"); }); });
@@ -654,7 +677,7 @@ function runUiInsertRun(row){
   return runUiCall(function(db){ return db.from("runs").insert(row); }).then(function(res){
     var k = runUiKind(res);
     if (!k) return {ok: true};
-    if (k !== "dup") return {ok: false, kind: k};
+    if (k !== "dup") return {ok: false, kind: k, actCol: runUiActColErr(res)};
     // já tinha chegado (reenvio): confirma que está lá
     return runUiCall(function(db){ return db.from("runs").select("id").eq("id", row.id).maybeSingle(); }).then(function(r2){
       return !r2.error && r2.data ? {ok: true} : {ok: false, kind: r2.error ? runUiKind(r2) : "other"};
@@ -689,6 +712,7 @@ RUN.submitRun = function(s, item){
     return runUiInsertRun(row).then(function(r1){
       if (!r1.ok){
         if (r1.kind === "net") return runUiQueueOr(item, {ok: false, error: RUN_UI_MSG.net, permanent: false});
+        if (row.activity === "bike" && r1.actCol) return {ok: false, error: "A bicicleta ainda não está ativa neste servidor: falta correr a migração 0033 no Supabase.", permanent: true};
         return {ok: false, error: runUiRunMsg(r1.kind, s.id), permanent: true};
       }
       if (!track || !Array.isArray(track.segments)) return {ok: true, queued: false};
@@ -765,13 +789,14 @@ function runUiImportFile(s, file, input){
   runUiReadText(file).then(function(text){
     if (input) input.value = "";
     if (RUN.v !== v) return;
-    var r = runParseFile(name, text, null);
+    var act = runUiAct(), acfg = runActivityCfg(act);
+    var r = runParseFile(name, text, act === "bike" ? {cfg: acfg} : null);
     if (!r.ok){ runUiSetMsg("runImpMsg", r.error, "run-err"); return; }
-    var stats = runStats(r.segments, null, "import");
+    var stats = runStats(r.segments, act === "bike" ? acfg : null, "import");
     if (!stats || stats.startedAtMs == null || stats.distM < 100 || stats.durationS < 30){ runUiSetMsg("runImpMsg", "Quase não há deslocação neste ficheiro (menos de 100 m ou 30 s).", "run-err"); return; }
     if (stats.distM > RUN_CFG.maxDistM){ runUiSetMsg("runImpMsg", "Esta corrida passa dos 300 km e não pode ser guardada.", "run-err"); return; }
-    if (stats.distM > RUN_CFG.maxAvgSpeedMs * stats.durationS){ runUiSetMsg("runImpMsg", "A velocidade média é impossível para corrida. Confirma o ficheiro.", "run-err"); return; }
-    RUN.saveFlow(s, {source: r.source, stats: stats, segments: r.segments, hiddenS: 0, warnings: r.warnings || [], fileDistM: (typeof r.declaredDistM === "number" && isFinite(r.declaredDistM) ? r.declaredDistM : null), startedAtMs: stats.startedAtMs, cancelView: {name: "import"}});
+    if (stats.distM > acfg.maxAvgSpeedMs * stats.durationS){ runUiSetMsg("runImpMsg", "A velocidade média é impossível para " + (act === "bike" ? "bicicleta" : "corrida") + ". Confirma o ficheiro.", "run-err"); return; }
+    RUN.saveFlow(s, {activity: act, source: r.source, stats: stats, segments: r.segments, hiddenS: 0, warnings: r.warnings || [], fileDistM: (typeof r.declaredDistM === "number" && isFinite(r.declaredDistM) ? r.declaredDistM : null), startedAtMs: stats.startedAtMs, cancelView: {name: "import"}});
   }, function(){ fail(RUN_MSG.unreadable); });
 }
 function runUiWireImport(s, el){
@@ -826,7 +851,7 @@ function runUiManualCheck(f){
   var km = runParseKm(f.km), dur = runParseDuration(f.dur);
   if (!isFinite(km) || km < 100) errs.push("Indica uma distância entre 0,1 e 300 km.");
   if (!isFinite(dur)) errs.push("Indica o tempo, por exemplo 32:15 ou 1:05:30.");
-  if (isFinite(km) && isFinite(dur) && km >= 100 && km > RUN_CFG.maxAvgSpeedMs * dur) errs.push("Esta combinação dá uma velocidade impossível. Confirma a distância e o tempo.");
+  if (isFinite(km) && isFinite(dur) && km >= 100 && km > runActivityCfg(runUiAct()).maxAvgSpeedMs * dur) errs.push("Esta combinação dá uma velocidade impossível. Confirma a distância e o tempo.");
   if (!errs.length && noTime && startMs > now) startMs = now - dur * 1000;   // hora vazia (12:00) ainda no futuro: foi agora mesmo
   return {errs: errs, startMs: startMs, distM: km, durS: dur, noTime: noTime};
 }
@@ -851,7 +876,7 @@ function runUiWireManual(s, el){
     var c = runUiManualCheck(v.form), box = document.getElementById("runManErr");
     if (c.errs.length){ if (box) box.textContent = c.errs.join(" "); return; }
     if (box) box.textContent = "";
-    RUN.saveFlow(s, {source: "manual", stats: runManualStats(c.startMs, c.distM, c.durS), segments: [], hiddenS: 0, warnings: [], fileDistM: null,
+    RUN.saveFlow(s, {activity: runUiAct(), source: "manual", stats: runManualStats(c.startMs, c.distM, c.durS), segments: [], hiddenS: 0, warnings: [], fileDistM: null,
       startedAtMs: c.startMs, noTime: c.noTime, cancelView: {name: "manual", params: {form: v.form}}});
   });
 }
@@ -872,7 +897,7 @@ function runUiPrepWarnings(prep){
   if (typeof prep.fileDistM === "number" && isFinite(prep.fileDistM) && prep.fileDistM > 0 && st.distM > 0 && Math.abs(prep.fileDistM - st.distM) / prep.fileDistM > 0.02){
     out.push("A app de origem indicava " + runUiKmNum(prep.fileDistM) + " km; a EVOLVE calculou " + runUiKmNum(st.distM) + " km. Pode diferir uns por cento.");
   }
-  var pc = runPaceCheck(st.distM, st.movingS, st.durationS);
+  var pc = prep.activity === "bike" ? {ask: false} : runPaceCheck(st.distM, st.movingS, st.durationS);
   if (pc.ask) out.push(runUiPaceMsg(pc));
   return out;
 }
@@ -891,8 +916,10 @@ function runUiSaveHtml(sv){
   var dl = function(k, val){ return '<div><dt>' + escapeHtml(k) + '</dt><dd class="num">' + escapeHtml(val) + '</dd></div>'; };
   var sum = dl("Data", runUiDateStr(start)) + (prep.noTime ? "" : dl("Hora de início", runUiTimeStr(start))) + dl("Distância", runDistStr(st.distM)) + dl("Tempo", runDurStr(st.durationS));
   if (st.movingS && st.movingS < st.durationS) sum += dl("Tempo em movimento", runDurStr(st.movingS));
-  var pace = runPaceStr(runPaceOf(st.distM, st.movingS));
-  if (pace !== "–") sum += dl("Ritmo em movimento", pace + "/km");
+  var pace = runPaceStr(runPaceOf(st.distM, st.movingS)), kmh = runSpeedKmh(st.distM, st.movingS);
+  if (prep.activity === "bike"){ if (kmh) sum += dl("Velocidade média em movimento", runUiNum1(kmh) + " km/h"); }
+  else if (pace !== "–") sum += dl("Ritmo em movimento", pace + "/km");
+  if (prep.activity === "bike") sum = dl("Atividade", "Bicicleta") + sum;
   sum += dl("Origem", RUN_UI_SRC[prep.source] || "");
   var h = '<div class="card run-form" id="runSave"><div class="eyebrow">Corrida</div><h3 class="run-h">Confirma antes de guardar</h3><dl class="run-sum">' + sum + '</dl>';
   if (st.gaps) h += '<p class="muted-p run-gaps">Lacunas: ' + st.gaps + ' (' + escapeHtml(runDurStr(st.gapS)) + ' sem posições; não contam para a distância)</p>';
@@ -952,11 +979,11 @@ function runUiSaveClick(s){
   var st = prep.stats, start = prep.startedAtMs != null ? prep.startedAtMs : st.startedAtMs, rpe = parseInt(f.rpe, 10);
   if (!v.runId) v.runId = runUuid();
   var run = {id: v.runId, studentId: s.id, source: prep.source, startedAtMs: start, durationS: st.durationS, movingS: st.movingS, distM: st.distM,
-    gaps: st.gaps, gapS: st.gapS, splitsS: st.splitsS, hiddenS: prep.hiddenS || 0, rpe: rpe >= 1 && rpe <= 10 ? rpe : null, notes: String(f.notes || ""), consentV: RUN.consentVersion()};
+    gaps: st.gaps, gapS: st.gapS, splitsS: st.splitsS, activity: prep.activity === "bike" ? "bike" : "run", hiddenS: prep.hiddenS || 0, rpe: rpe >= 1 && rpe <= 10 ? rpe : null, notes: String(f.notes || ""), consentV: RUN.consentVersion()};
   var chk = runCheckRun(run, Date.now()), row = chk.ok ? runBuildInsert(run, Date.now()) : null;
   if (!row){ runUiSaveErr(chk.error || "Não foi possível preparar esta corrida."); return; }
   if (runUiDupOf(prep) && !runUiAsk(RUN_UI_MSG.dupAsk)) return;
-  var pc = runPaceCheck(st.distM, st.movingS, st.durationS);
+  var pc = run.activity === "bike" ? {ask: false} : runPaceCheck(st.distM, st.movingS, st.durationS);
   if (pc.ask && !runUiAsk(runUiPaceMsg(pc) + " Guardar mesmo assim?")) return;
   var item = {row: row, track: null}, shortMsg = "";
   if (f.share === true && runUiHasTrack(prep)){

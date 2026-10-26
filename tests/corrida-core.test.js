@@ -728,6 +728,13 @@ ck("149. Fuzz de séries hostis (300): pontos soltos, horas adiantadas, duplicad
       C.runPaceCheck(5000, 0, 900).ask === true && C.runPaceCheck(200, 20, 20).ask === false && C.runPaceCheck(0, 10, 10).ask === false && C.runPaceCheck(NaN, 10, 10).ask === false &&
       C.runPaceCheck(5000, 1000, 1000, {askPaceSPerKm: 150}).ask === false;
   })());
+  ck("157. runActivityCfg: «bike» sobe os limites (vMaxMs e maxAvgSpeedMs 25) e aceita ciclismo; qualquer outro valor devolve RUN_CFG sem mexer nele", C.runActivityCfg("bike").vMaxMs === 25 && C.runActivityCfg("bike").maxAvgSpeedMs === 25 && C.runActivityCfg("bike").allowBike === true && C.runActivityCfg("run") === C.RUN_CFG && C.runActivityCfg("x") === C.RUN_CFG && C.RUN_CFG.vMaxMs === 12 && C.RUN_CFG.allowBike === false);
+  var bikeRun = {id: "11111111-2222-4333-8444-555555555555", studentId: "s", source: "manual", startedAtMs: NOW - 3600000, durationS: 3600, movingS: 3600, distM: 50000, consentV: 1};
+  ck("158. Um passeio de bicicleta a 50 km/h de média passa com activity «bike» (e a linha leva activity), a mesma coisa como corrida é recusada", C.runBuildInsert(Object.assign({activity: "bike"}, bikeRun), NOW).activity === "bike" && C.runBuildInsert(bikeRun, NOW) === null && C.runCheckRun(bikeRun, NOW).code === "speed");
+  ck("159. A linha de uma corrida NÃO leva o campo activity (as corridas gravam-se antes de correr a migração 0033)", !("activity" in C.runBuildInsert(Object.assign({}, bikeRun, {distM: 5000}), NOW)));
+  ck("160. 90 km/h de média numa bicicleta é o teto (25 m/s); acima é recusado", C.runBuildInsert(Object.assign({activity: "bike"}, bikeRun, {distM: 90000}), NOW) !== null && C.runBuildInsert(Object.assign({activity: "bike"}, bikeRun, {distM: 90100}), NOW) === null);
+  var nr = C.runNormalizeRow({id: "abc123", student_id: "s", started_at: "2026-10-01T10:00:00Z", source: "gpx", duration_s: 3600, moving_s: 3000, distance_m: 30000, consent_v: 1, activity: "bike"});
+  ck("161. runNormalizeRow lê activity (bike) e dá a velocidade em km/h; sem a coluna é «run»", nr.activity === "bike" && Math.abs(nr.speedKmh - 36) < 1e-9 && C.runNormalizeRow({id: "abc124", student_id: "s", started_at: "2026-10-01T10:00:00Z", source: "gpx", duration_s: 60, moving_s: 60, distance_m: 100, consent_v: 1}).activity === "run");
 })();
 
 check.summarize();
