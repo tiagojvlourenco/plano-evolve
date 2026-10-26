@@ -82,7 +82,7 @@ function row(id, name, mut, logs, runsMode){
   var T = await open("student", [row("ana", "Ana Treina", null, [{id: "w1", date: "2026-10-10", dayId: null, dayName: "Treino A", rpe: 7, notes: "", entries: [{exerciseId: null, name: "Agachamento", sets: [{reps: 8, load: 60}, {reps: 8, load: 60}]}]}])], "treino.html");
   await T.pg.waitForSelector("#startWorkout");
   var tT = await tabs(T.pg);
-  check.check("12. Treino: os separadores são Treino e Corrida (sem Plano nem Progresso)", tT.join("|") === "Treino|Corrida");
+  check.check("12. Treino: os separadores são Treino e Cardio (corrida e bicicleta; sem Plano nem Progresso)", tT.join("|") === "Treino|Cardio");
   var homeTxt = await T.pg.locator("#alunoTabContent").innerText();
   check.check("13. Treino, início: treino de hoje, programa e últimos treinos; nada de refeições", (await T.pg.locator(".check-circle[data-circle]").count()) === 0 && /Programa de treino/i.test(homeTxt) && /Últimos treinos/i.test(homeTxt) && /Treino A/i.test(homeTxt) && /2 séries/i.test(homeTxt));
   check.check("14. Treino, início: há ligação para a app EVOLVE (alimentação e avaliações)", (await T.pg.locator('#alunoTabContent a[href="index.html"]').count()) === 1);
