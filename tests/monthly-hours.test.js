@@ -60,7 +60,7 @@ function fixtureRow(id, name, active){
   await pg.fill("#stuHours", "6,5"); await pg.press("#stuHours", "Tab");
   await pg.waitForFunction(function(){ var r = window.__fake.tables.studio_settings.filter(function(x){ return x.key === "monthly_hours"; })[0]; return r && r.value.s3 === 6.5; });
   check.check("9. Editar na ficha grava as horas", true);
-  await pg.click("#proBack"); await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
+  await pg.click("#ctBack"); await pg.click("#navContracts"); await pg.waitForSelector("#contractTotals");
   check.check("10. E os totais dos Contratos somam-nas (6,5 h)", /6,5 h/.test(await pg.locator("#contractTotals").innerText()));
   check.check("11. Nenhum erro de JavaScript", errors.length === 0);
   if (errors.length) console.log(errors.slice(0, 3));

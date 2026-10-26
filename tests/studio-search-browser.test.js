@@ -41,7 +41,7 @@ function fixtureRow(id, name){
   var ficha = await pg.locator("#proMain").innerText();
   check.check("1. A ficha mostra «Aula 1/13» e «Aula 2/13» ao lado das sessões da aluna", /Aula 1\/13/.test(ficha) && /Aula 2\/13/.test(ficha));
   // ---- Estúdio ----
-  await pg.click("#proBack"); await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); });
+  await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); });
   var names = function(){ return pg.evaluate(function(){ return [].filter.call(document.querySelectorAll("#studioSummary .studio-row"), function(r){ return !r.hidden; }).map(function(r){ return r.querySelector(".wl-info").textContent.trim(); }); }); };
   check.check("2. O Estúdio tem a lupa e a ordem, e o resumo mostra os 4 alunos", (await pg.locator("#stSearch").count()) === 1 && (await pg.locator("#stSort").count()) === 1 && (await names()).length === 4);
   await pg.focus("#stSearch"); await pg.keyboard.type("br", {delay: 40});

@@ -1363,7 +1363,7 @@ function removeStudioOnlyStudent(s){
   }, function(){ return {error: "Não foi possível apagar — verifica a ligação."}; });
 }
 
-function studioRerender(s){ if (s && state.proSelectedId === s.id) renderProTabContent(s); else renderProStudioMain(); }
+function studioRerender(s){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); else if (s && state.proSelectedId === s.id) renderProTabContent(s); else renderProStudioMain(); }
 function openPayModal(paymentId, onDone){
   var p = studio.payments.filter(function(x){ return x.id === paymentId; })[0];
   if (!p) return;
@@ -1649,7 +1649,9 @@ function openSharePackModal(pack, onDone){
 }
 // botões que existem na ficha e na visão geral
 function wireStudioCommon(el, redraw){
-  el.querySelectorAll("[data-renew-pack]").forEach(function(b){ b.addEventListener("click", function(){
+  var embedRoot = el.hasAttribute && el.hasAttribute("data-ct-embed");
+  var own = function(sel){ return [].filter.call(el.querySelectorAll(sel), function(n){ var e = n.closest("[data-ct-embed]"); return embedRoot || !e; }); };
+  own("[data-renew-pack]").forEach(function(b){ b.addEventListener("click", function(){
     var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-renew-pack"); })[0];
     if (!pk) return;
     if (!window.confirm("Renovar «" + pk.name + "» de " + nameOf(pk.student_id) + "? Cria um pacote igual, com " + pk.total + " aulas" + (Number(pk.price) > 0 ? " e uma cobrança de " + eur(pk.price) + " por pagar" : "") + ".")) return;
@@ -1661,40 +1663,38 @@ function wireStudioCommon(el, redraw){
       redraw(); updateStudioBadge();
     });
   }); });
-  el.querySelectorAll("[data-edit-pack]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-edit-pack]").forEach(function(b){ b.addEventListener("click", function(){
     var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-edit-pack"); })[0];
     if (pk) openEditPackModal(pk, redraw);
   }); });
-  el.querySelectorAll("[data-extend-pack]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-extend-pack]").forEach(function(b){ b.addEventListener("click", function(){
     var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-extend-pack"); })[0];
     if (!pk) return;
     b.disabled = true;
     extendPackAndAttach(pk).then(function(r){ showToast(r.error ? "⚠ " + r.error : "✓ Pacote sem validade" + (r.n ? " · " + r.n + (r.n === 1 ? " aula contada" : " aulas contadas") : "")); redraw(); updateStudioBadge(); });
   }); });
-  el.querySelectorAll("[data-share-pack]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-share-pack]").forEach(function(b){ b.addEventListener("click", function(){
     var pk = studio.packs.filter(function(x){ return x.id === b.getAttribute("data-share-pack"); })[0];
     if (pk) openSharePackModal(pk, redraw);
   }); });
-  el.querySelectorAll("[data-del-pack]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-del-pack]").forEach(function(b){ b.addEventListener("click", function(){
     if (!window.confirm("Apagar este pacote? As sessões e cobranças registadas ficam, mas sem pacote.")) return;
     studioDelete("packs", b.getAttribute("data-del-pack")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
   }); });
-  el.querySelectorAll("[data-del-slot]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-del-slot]").forEach(function(b){ b.addEventListener("click", function(){
     if (!window.confirm("Remover este horário? As sessões já contadas ficam.")) return;
     studioDelete("slots", b.getAttribute("data-del-slot")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
   }); });
-  el.querySelectorAll("[data-del-session]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-del-session]").forEach(function(b){ b.addEventListener("click", function(){
     studioDelete("sessions", b.getAttribute("data-del-session")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
   }); });
-  el.querySelectorAll("[data-del-payment]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-del-payment]").forEach(function(b){ b.addEventListener("click", function(){
     if (!window.confirm("Apagar esta cobrança?")) return;
     studioDelete("payments", b.getAttribute("data-del-payment")).then(function(r){ if (r.error) showToast("⚠ " + r.error); redraw(); });
   }); });
-  el.querySelectorAll("[data-pay]").forEach(function(b){ b.addEventListener("click", function(){ openPayModal(b.getAttribute("data-pay"), redraw); }); });
-  el.querySelectorAll("[data-open-student]").forEach(function(b){ b.addEventListener("click", function(){
-    state.proSelectedId = b.getAttribute("data-open-student"); state.proTab = "sessoes"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
-  }); });
-  el.querySelectorAll("[data-remind]").forEach(function(b){ b.addEventListener("click", function(){
+  own("[data-pay]").forEach(function(b){ b.addEventListener("click", function(){ openPayModal(b.getAttribute("data-pay"), redraw); }); });
+  own("[data-open-student]").forEach(function(b){ b.addEventListener("click", function(){ openContractOfStudent(b.getAttribute("data-open-student")); }); });
+  own("[data-remind]").forEach(function(b){ b.addEventListener("click", function(){
     var p = studio.payments.filter(function(x){ return x.id === b.getAttribute("data-remind"); })[0], st = p && findStudent(p.student_id);
     if (st) openContactModal(st, "pagamento-atrasado", redraw);
   }); });
@@ -1794,7 +1794,7 @@ function contractFormatLabel(x){ return x.duo ? "Duo" : x.meta.formato === "part
 function contractPlanLabel(x){
   return (x.weekly ? x.weekly + "×" : "") + x.meta.minutos + " · " + CONTRACT_MODALIDADES[x.meta.modalidade].label;
 }
-var contractsView = {tab: "contratos", sheet: null, pf: null, filter: "todos", search: "", sort: "nome", open: null};
+var contractsView = {tab: "contratos", manage: false, sheet: null, pf: null, filter: "todos", search: "", sort: "nome", open: null};
 function renderProContractsMain(){
   var main = document.getElementById("proMain");
   if (!studio.loaded || !contractMeta.loaded){ main.innerHTML = "<p class=\"muted-p\">A carregar…</p>"; Promise.all([studioRefresh(), loadContractMeta()]).then(function(){ if (state.proView === "contracts" && !state.proSelectedId) renderProContractsMain(); }); return; }
@@ -1804,11 +1804,21 @@ function renderProContractsMain(){
     return "<button type=\"button\" class=\"ct-tab" + (contractsView.tab === t[0] ? " on" : "") + "\" data-ct-tab=\"" + t[0] + "\">" + t[1] + "</button>"; }).join("") + "</div>";
   if (contractsView.tab === "financeiro") html += contractsFinanceHtml(today);
   else if (contractsView.open && contractsView.sheet) html += contractSheetHtml(contractsView.open, contractsView.sheet, today);
+  else if (contractsView.open && String(contractsView.open).indexOf("new:") === 0) html += contractNewStudentHtml(String(contractsView.open).slice(4));
   else if (contractsView.open) html += contractDetailHtml(contractsView.open, today);
   else html += contractsListHtml(today);
   main.innerHTML = html;
   wireContractsMain(main);
+  main.querySelectorAll("details[id^=\"ctManage\"]").forEach(function(d){ d.addEventListener("toggle", function(){ contractsView.manage = d.open; }); });   // a secção continua aberta depois de gravar
+  main.querySelectorAll("[data-ct-embed]").forEach(function(el){ var st = findStudent(el.getAttribute("data-ct-embed")); if (st && studio.available) wireProSessoes(st, el); });
+  var pn = main.querySelector("[data-open-person]"); if (pn) pn.addEventListener("click", function(){ var st = findStudent(pn.getAttribute("data-open-person")); if (st) openPersonalDataModal(st, function(){ renderProContractsMain(); }); });
   if (contractsView.tab === "contratos" && !contractsView.open) applyContractsFilter();
+}
+// abrir um aluno = abrir o contrato dele (a ficha do aluno vive dentro da ficha do contrato)
+function openContractOfStudent(id){
+  var u = contractUnits().filter(function(x){ return x.ids.indexOf(id) >= 0; })[0];
+  contractsView.tab = "contratos"; contractsView.open = u ? u.key : "new:" + id; contractsView.sheet = null; contractsView.manage = true;
+  state.proSelectedId = null; state.proView = "contracts"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {}
 }
 function ctStat(label, value, sub){ return "<div class=\"ct-stat\"><div class=\"l\">" + label + "</div><div class=\"v\">" + value + "</div><div class=\"s\">" + sub + "</div></div>"; }
 function ctFilters(list, current, attr, counts){
@@ -1954,7 +1964,6 @@ function contractDetailHtml(key, today){
     "<div class=\"card\" style=\"margin-bottom:10px;\"><p style=\"margin:0 0 10px;\"><span class=\"ct-st " + tone + "\">" + CONTRACT_ESTADO_LABEL[x.estado] + "</span>" + (since ? " · desde " + escapeHtml(fmtDateFullPt(since)) : "") + (ptName ? " · PT: " + escapeHtml(ptName) : "") + "</p>" +
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap;\">" + (x.cur ? "<button type=\"button\" class=\"btn btn-sm primary\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\">Ver ficha atual <span style=\"opacity:.7; margin-left:6px;\">" + ctSheetCode(x.cur.id) + "</span></button>" +
       "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-ct-sheet=\"" + escapeHtml(x.cur.id) + "\" data-ct-print=\"1\" title=\"Guardar em PDF\" aria-label=\"Descarregar a ficha\">⬇</button>" : "") +
-      x.members.map(function(m){ return "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" data-open-student=\"" + escapeHtml(m.id) + "\" title=\"Pacotes, partilha e cobranças do aluno\">Pacotes" + (x.members.length > 1 ? " · " + escapeHtml(String(m.name).split(" ")[0]) : "") + "</button>"; }).join("") +
       "<button type=\"button\" class=\"btn btn-sm\" style=\"min-height:44px;\" id=\"ctMore\" title=\"Dados pessoais, outro contrato, associar\" aria-label=\"Mais opções\">⋯</button></div></div>";
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Condições</div><div class=\"assess-form-grid\">" +
     "<div class=\"f\"><div class=\"muted-p\">Formato</div><div class=\"hlabel\">" + contractFormatLabel(x) + "</div></div>" +
@@ -1972,8 +1981,22 @@ function contractDetailHtml(key, today){
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Sessões</div>" + (x.u ? "<div class=\"ct-sess\" style=\"justify-content:flex-start; margin-bottom:10px;\"><span><strong>" + (x.packs.length > 1 ? allUsed + "</strong> de " + allTotal : x.u.used + "</strong> de " + x.u.total) + "</span><div class=\"bar-track\" style=\"flex:1 1 140px;\"><div class=\"bar-fill\" style=\"width:" + x.u.pct + "%\"></div></div><small style=\"color:var(--muted);\">" + escapeHtml(x.packLabel) + "</small></div>" : "") + "<div style=\"display:grid; grid-template-columns:1fr 1fr; gap:12px;\"><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Próximos</div>" + (next.length ? next.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div><div><div class=\"muted-p\" style=\"margin-bottom:4px;\">Últimos</div>" + (last.length ? last.map(srow).join("") : "<span class=\"muted-p\">—</span>") + "</div></div></div>";
   var pays = studio.payments.filter(function(p){ return ids.indexOf(p.student_id) >= 0; }).sort(function(a, b){ return a.due_on < b.due_on ? 1 : -1; });
   html += "<div class=\"card\"><div class=\"eyebrow\" style=\"margin-bottom:8px;\">Recebimentos</div>" + (pays.length ? pays.map(function(p){ return contractPaymentRowHtml(p, today, x); }).join("") : "<p class=\"muted-p\">Sem recebimentos.</p>") + "<p class=\"muted-p\" style=\"margin-top:8px; font-size:0.78rem;\">Também se marcam como pagos no Financeiro, mês a mês.</p></div>";
-  html += "<details class=\"perfil-section\" style=\"margin:10px 0;\"><summary class=\"eyebrow\">Arquivo de packs · " + x.packs.length + "</summary>" + (x.packs.length ? x.packs.slice().reverse().map(function(p){ return packBarHtml(p, packUsage(p, today), x.ids[0]); }).join("") : "<p class=\"muted-p\">Sem packs.</p>") + "</details>";
+  html += contractManageHtml(x.members);
   return html;
+}
+// packs, partilha, horário e sessões: a antiga ficha do aluno, agora dentro da ficha do contrato (fechada por omissão)
+function contractManageHtml(members){
+  return members.map(function(m, i){
+    return "<details class=\"perfil-section\" id=\"ctManage" + (i ? i : "") + "\" style=\"margin:10px 0;\"" + (contractsView.manage ? " open" : "") + "><summary class=\"eyebrow\">Packs, partilha e sessões" + (members.length > 1 ? " · " + escapeHtml(m.name) : "") + "</summary>" +
+      "<div data-ct-embed=\"" + escapeHtml(m.id) + "\"" + (i ? "" : " id=\"proTabContent\"") + " style=\"margin-top:10px;\">" + tplProSessoes(m) + "</div></details>";
+  }).join("");
+}
+function contractNewStudentHtml(id){
+  var st = findStudent(id);
+  if (!st) return "<p class=\"muted-p\">Aluno não encontrado.</p><button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\">← Voltar aos contratos</button>";
+  return "<button type=\"button\" class=\"btn btn-sm\" id=\"ctBack\" style=\"margin-bottom:10px; min-height:44px;\">← Voltar aos contratos</button><h2 class=\"ct-title\" style=\"margin-bottom:4px;\">" + escapeHtml(st.name) + "</h2>" +
+    "<div class=\"card\" style=\"margin-bottom:10px;\"><p style=\"margin:0 0 10px;\">Ainda sem contrato. Cria o primeiro pacote abaixo.</p><button type=\"button\" class=\"btn btn-sm\" id=\"ctMoreNew\" data-open-person=\"" + escapeHtml(st.id) + "\" style=\"min-height:44px;\">Dados pessoais</button></div>" +
+    contractManageHtml([st]);
 }
 function contractPaymentRowHtml(p, today, x){
   var st = paymentStatus(p, today), tone = {pago: "good", atrasado: "critical", "a vencer": "warn", futuro: ""}[st];
@@ -2049,7 +2072,7 @@ function wireContractsMain(main){
     var x = contractUnits().filter(function(u){ return u.key === b.getAttribute("data-edit-contract"); })[0];
     if (x) openContractEditModal(x, redraw);
   }); });
-  main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); contractsView.sheet = null; redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
+  main.querySelectorAll("[data-open-contract]").forEach(function(c){ c.addEventListener("click", function(){ contractsView.open = c.getAttribute("data-open-contract"); contractsView.sheet = null; contractsView.manage = false; redraw(); try { window.scrollTo(0, 0); } catch (e) {} }); });
   var ctMore = main.querySelector("#ctMore"); if (ctMore) ctMore.addEventListener("click", function(){ var x = contractUnits().filter(function(u){ return u.key === contractsView.open; })[0]; if (x) openContractMoreModal(x, redraw); });
   main.querySelectorAll("[data-ct-sheet]").forEach(function(b){ b.addEventListener("click", function(){ contractsView.sheet = b.getAttribute("data-ct-sheet"); redraw(); try { window.scrollTo(0, 0); } catch (e) {} if (b.hasAttribute("data-ct-print")) setTimeout(function(){ try { window.print(); } catch (e) {} }, 300); }); });
   var shBack = main.querySelector("#ctSheetBack"); if (shBack) shBack.addEventListener("click", function(){ contractsView.sheet = null; redraw(); });
@@ -2061,7 +2084,7 @@ function wireContractsMain(main){
   var csvP = main.querySelector("#csvPayments"); if (csvP) csvP.addEventListener("click", function(){ if (!downloadText("cobrancas-" + studioView.month + ".csv", paymentsCsv(studioView.month))) showToast("Não foi possível gerar o ficheiro"); });
   var csvS = main.querySelector("#csvSessions"); if (csvS) csvS.addEventListener("click", function(){ if (!downloadText("sessoes-" + studioView.month + ".csv", sessionsCsv(studioView.month))) showToast("Não foi possível gerar o ficheiro"); });
   var csv = main.querySelector("#ctCsv"); if (csv) csv.addEventListener("click", function(){ downloadText("recebimentos-" + studioView.month + ".csv", paymentsCsv(studioView.month)); });
-  main.querySelectorAll("[data-open-student]").forEach(function(btn){ btn.addEventListener("click", function(e){ e.stopPropagation(); state.proSelectedId = btn.getAttribute("data-open-student"); state.proTab = "leitura"; renderProShell(); try { window.scrollTo(0, 0); } catch (err) {} }); });
+  main.querySelectorAll("[data-open-student]").forEach(function(btn){ if (btn.closest("[data-ct-embed]")) return; btn.addEventListener("click", function(e){ e.stopPropagation(); openContractOfStudent(btn.getAttribute("data-open-student")); }); });
   wireStudioCommon(main, redraw);   // Pago, Renovar, Editar/Partilhar/Apagar pacote
   wireImportsExtra(main, redraw);
   var imp = main.querySelector("#ctImpGo");

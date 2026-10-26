@@ -50,7 +50,7 @@ function fixtureRow(id, name){
   // criar pacote na ficha
   await pg.click("#navContracts"); await pg.waitForSelector("#contractList [data-open-contract]");
   await pg.locator("#contractList [data-open-contract]").first().click();
-  await pg.locator('[data-open-student="stu1"]').first().click();
+  await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });   // «Packs, partilha e sessões» (a antiga ficha do aluno)
   await pg.waitForSelector("#pkName", {state: "attached"});
   await pg.evaluate(function(){ document.querySelectorAll("details.perfil-section").forEach(function(d){ d.open = true; }); });
   await pg.fill("#pkName", "Pack 10 sessões"); await pg.fill("#pkTotal", "10"); await pg.fill("#pkPrice", "250");
@@ -77,7 +77,7 @@ function fixtureRow(id, name){
 
   // ecrã Estúdio: registo rápido do outro aluno com pacote
   await pg.evaluate(function(){ window.__fake.tables.session_packs.push({id: "pk-x", student_id: "stu2", name: "Pack 20", total: 20, price: 440, starts_on: "2026-01-01", expires_on: null, missed_consumes: true, late_cancel_consumes: true}); });
-  await pg.click("#proBack");
+  await pg.click("#navStudio");
   await pg.click("#navStudio");
   await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   check.check("8. O Hoje lê os dados de novo ao abrir e mostra o aluno que tem pacote a decorrer", (await pg.locator('#studioSummary [data-open-student="stu2"]').count()) === 1);
@@ -86,7 +86,7 @@ function fixtureRow(id, name){
   await pg.selectOption("#seStatus", "feita"); await pg.click("#seAdd");
   await pg.waitForFunction(function(){ return window.__fake.tables.sessions.length === 3; });
   check.check("9. Registar a sessão na ficha grava-a como feita", (await pg.evaluate(function(){ var l = window.__fake.tables.sessions; return l[l.length - 1].status; })) === "feita");
-  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
+  await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary");
   // horário semanal: conta sozinho as sessões que já passaram
   await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   await pg.locator('#studioSummary [data-open-student="stu1"]').first().click();
@@ -101,7 +101,7 @@ function fixtureRow(id, name){
   check.check("9b. O horário conta sozinho a sessão que já passou (feita, 07:00, do horário)", auto.sess.length === 1 && auto.sess[0].status === "feita" && auto.sess[0].time === "07:00" && auto.sess[0].date === weekAgoISO);
   await pg.waitForFunction(function(){ var sl = window.__fake.tables.session_slots[0]; return sl && sl.generated_until; });
   check.check("9c. O horário fica marcado como contado até ontem, para não repetir", !!(await pg.evaluate(function(){ return window.__fake.tables.session_slots[0].generated_until; })));
-  await pg.click("#proBack"); await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
+  await pg.click("#navStudio"); await pg.waitForSelector("#studioSummary"); await pg.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   check.check("9d. O Estúdio mostra o resumo de treinos com o pacote (faltam 8), sem o cartão da agenda do dia", /faltam 8/.test(await pg.locator("#studioSummary").innerText()) && (await pg.locator("#studioAgenda").count()) === 0);
   check.check("9e. A sessão contada pelo horário não se duplica ao reabrir o Estúdio", (await pg.evaluate(function(){ return window.__fake.tables.sessions.filter(function(x){ return x.source === "agenda"; }).length; })) === 1);
   // importar pacotes a decorrer (as importações vivem nos Contratos)

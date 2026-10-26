@@ -139,7 +139,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.click("#navContracts"); await page.waitForSelector("#contractTotals");
   await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   await page.click('[data-open-student="' + beaId + '"]');
-  await page.waitForSelector("#proBack");
+  await page.waitForSelector("#ctBack");
   check.check("9b. Na Gestão a ficha do aluno abre só com os Pacotes (sem separadores de acompanhamento) e mostra «Remover este aluno»", (await page.locator("[data-sub]").count()) === 0 && (await page.locator("#stuRemove").count()) === 1);
   await page.waitForSelector("#stuRemove", {state: "attached"});
   await page.evaluate(function(){ document.querySelectorAll("#proMain details").forEach(function(d){ d.open = true; }); });
@@ -148,7 +148,7 @@ function ev(id, title, daysAgo, hhmm, color){ return {id: id, summary: title, co
   await page.waitForFunction(function(n){ return window.__fake.rows.length === n - 1; }, rowsBefore);
   await page.waitForSelector("#gcalCard");
   var left = await page.evaluate(function(id){ return window.__fake.tables.sessions.filter(function(x){ return x.student_id === id; }).length; }, beaId);
-  check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta ao Estúdio", left === 0 && (await page.locator("#proBack").count()) === 0 && (await page.locator("[data-open-student]").count()) >= 1 && !(await page.locator('[data-open-student="' + beaId + '"]').count()));
+  check.check("10. Apagar um aluno só de estúdio remove a ficha e as sessões dele e volta ao Estúdio", left === 0 && (await page.locator("#ctManage").count()) === 0 && (await page.locator("[data-open-student]").count()) >= 1 && !(await page.locator('[data-open-student="' + beaId + '"]').count()));
   await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   await page.click("#gcSync"); await page.waitForFunction(function(){ return /eventos lidos/.test(document.querySelector("#gcOut").textContent); });
   check.check("11. O aluno apagado não volta: o título fica ignorado e não é recriado", (await page.evaluate(function(){ return window.__fake.rows.filter(function(r){ return r.name === "Beatriz Lopes"; }).length; })) === 0 && (await page.locator("[data-gc-name]").count()) === 0);
