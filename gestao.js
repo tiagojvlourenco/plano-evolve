@@ -443,6 +443,12 @@ function wireCalendarCard(main, redraw){
     sync.disabled = true; out("A pedir autorização ao Google e a ler a agenda…");
     runCalendarSync().then(function(sum){ var fx = sum && sum.fixed; showToast("✓ Agenda sincronizada" + (fx && fx.sessions ? " · " + fx.sessions + (fx.sessions === 1 ? " aula acertada" : " aulas acertadas") + " em " + fx.students + (fx.students === 1 ? " aluno" : " alunos") : "")); updateStudioBadge(); redraw(); }, function(e){ sync.disabled = false; out(e && e.message ? e.message : "Não foi possível sincronizar.", true); });
   });
+  var shk = card.querySelector("#gcSheets");
+  if (shk) shk.addEventListener("change", function(){
+    calSettings.sheets = shk.checked;
+    if (shk.checked) showToast("Ao sincronizar, o Google vai pedir também acesso às folhas (só leitura).");
+    calSaveSettings().then(function(r){ if (r.error){ calSettings.sheets = !shk.checked; shk.checked = calSettings.sheets; showToast("⚠ " + r.error); } });
+  });
   var tog = card.querySelector("#gcToggle");
   if (tog) tog.addEventListener("click", function(){
     if (!calSettings.useAsSource && !window.confirm("Usar o Google Agenda como fonte das sessões? O horário semanal deixa de contar sessões (as já contadas ficam).")) return;
@@ -772,14 +778,15 @@ function studioImportSchedule(text){
 // contam-se os eventos até ao fim de hoje. O calendário é a fonte: se o evento mudar de dia/hora ou desaparecer, a sessão acompanha-o.
 // Mexer numa sessão na app (Agenda → Alterar) desliga-a do calendário (passa a "manual") e a sincronização deixa-a em paz.
 var CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+var SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.metadata.readonly";
 var CAL_LOCAL_KEY = "evolve_gcal_v1";
 var CAL_DEFAULT_BACK_DAYS = 120, CAL_MAX_BACK_DAYS = 400;
 var CAL_FALTA_COLOR = "11";
-var calSettings = {clientId: "", calendarId: "primary", useAsSource: false, titlePrefix: "PT", aliases: {}, ignored: {}, lastSync: null, loaded: false, available: true};
+var calSettings = {clientId: "", sheets: false, calendarId: "primary", useAsSource: false, titlePrefix: "PT", aliases: {}, ignored: {}, lastSync: null, loaded: false, available: true};
 
 function calLoadSettings(){
   var done = function(v){
-    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.titlePrefix = typeof v.titlePrefix === "string" ? v.titlePrefix.trim().slice(0, 30) : "PT"; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.ignored = v.ignored && typeof v.ignored === "object" ? v.ignored : {}; calSettings.lastSync = v.lastSync || null; }
+    if (v && typeof v === "object"){ calSettings.clientId = String(v.clientId || ""); calSettings.sheets = !!v.sheets; calSettings.calendarId = String(v.calendarId || "primary"); calSettings.useAsSource = !!v.useAsSource; calSettings.titlePrefix = typeof v.titlePrefix === "string" ? v.titlePrefix.trim().slice(0, 30) : "PT"; calSettings.aliases = v.aliases && typeof v.aliases === "object" ? v.aliases : {}; calSettings.ignored = v.ignored && typeof v.ignored === "object" ? v.ignored : {}; calSettings.lastSync = v.lastSync || null; }
     calSettings.loaded = true; return true;
   };
   if (!sbReady){ try { return Promise.resolve(done(JSON.parse(localStorage.getItem(CAL_LOCAL_KEY) || "null"))); } catch (e) { return Promise.resolve(done(null)); } }
@@ -789,7 +796,7 @@ function calLoadSettings(){
     return done(res && res.data ? res.data.value : null);
   }, function(){ calSettings.available = false; calSettings.loaded = true; return false; });
 }
-function calSettingsValue(){ return {clientId: calSettings.clientId, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, titlePrefix: calSettings.titlePrefix, aliases: calSettings.aliases, ignored: calSettings.ignored, lastSync: calSettings.lastSync}; }
+function calSettingsValue(){ return {clientId: calSettings.clientId, sheets: calSettings.sheets, calendarId: calSettings.calendarId, useAsSource: calSettings.useAsSource, titlePrefix: calSettings.titlePrefix, aliases: calSettings.aliases, ignored: calSettings.ignored, lastSync: calSettings.lastSync}; }
 function calSaveSettings(){
   if (!sbReady){ try { localStorage.setItem(CAL_LOCAL_KEY, JSON.stringify(calSettingsValue())); } catch (e) {} return Promise.resolve({}); }
   return Promise.resolve(sb.from("studio_settings").upsert({key: "google_calendar", value: calSettingsValue(), updated_at: new Date().toISOString()}).then(function(r){ return r; })).then(function(res){
@@ -965,11 +972,11 @@ function loadGoogleIdentity(){
     document.head.appendChild(sc);
   });
 }
-function googleAccessToken(clientId){
+function googleAccessToken(clientId, scope){
   return loadGoogleIdentity().then(function(){
     return new Promise(function(resolve, reject){
       var client = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId, scope: CAL_SCOPE,
+        client_id: clientId, scope: scope || CAL_SCOPE,
         callback: function(resp){ if (resp && resp.access_token) resolve(resp.access_token); else reject(new Error(resp && resp.error === "access_denied" ? "Não autorizaste o acesso à agenda." : "O Google recusou a autorização" + (resp && resp.error ? " (" + resp.error + ")" : "") + ". Confirma o ID de cliente e as origens autorizadas.")); },
         error_callback: function(err){ reject(new Error(err && err.type === "popup_closed" ? "Fechaste a janela do Google antes de autorizar." : "Não foi possível abrir a janela do Google (o browser bloqueou o pop-up?).")); }
       });
@@ -1035,6 +1042,88 @@ function applyCalendarPlan(plan){
   }).then(function(){ return res; });
   return chain;
 }
+// ---- folhas «Cliente …» do Google (aba «Dados»): pacotes, contratos e horas ----
+// lê uma folha: devolve {name, total, start, price, modalidade, hours, formato, estado, minutos} (null se não for uma ficha de cliente)
+function parseClientSheet(values){
+  var v = {}, estado = null, rows = Array.isArray(values) ? values : [];
+  rows.forEach(function(row, ri){
+    if (!Array.isArray(row)) return;
+    var key = exLibFold(String(row[0] || "").replace(/:\s*$/, "")).replace(/\s+/g, " ");
+    if (key && row[1] != null && row[1] !== "") v[key] = String(row[1]).trim();
+    row.forEach(function(cell, ci){
+      if (exLibFold(String(cell || "")) === "estado" && ci > 0 && rows[ri + 1] && rows[ri + 1][ci]) estado = exLibFold(String(rows[ri + 1][ci]));
+    });
+  });
+  var rawName = v["nome"]; if (!rawName) return null;
+  var pm = /^PT(?:\s+Duo)?\s+(\d{2,3})\b/i.exec(rawName), name = rawName.replace(/^PT(?:\s+[\w.]+)*?\s*[-–]\s*/i, "").trim();
+  var fmtRaw = exLibFold(v["individual /duo"] || v["individual / duo"] || v["individual/duo"] || ""), mod = exLibFold(v["modalidade"] || "");
+  var total = parseImportNumber(v["contrato"]), price = parseImportNumber(v["valor"]), start = parseImportDate(v["data de inicio"]), hours = parseImportNumber(v["horas mensais"]);
+  if (estado === "activo") estado = "ativo";
+  return {name: name, total: total != null && total >= 1 && total <= 500 && total === Math.round(total) ? total : null, start: start, price: price != null && price >= 0 ? price : null,
+    modalidade: CONTRACT_MODALIDADES[mod] ? mod : null, hours: hours != null && hours > 0 && hours <= 200 ? hours : null,
+    formato: /\+/.test(name) || /^PT\s+Duo/i.test(rawName) || fmtRaw === "duo" ? "duo" : fmtRaw === "partilhado" ? "partilhado" : "individual",
+    estado: estado === "ativo" || estado === "suspenso" || estado === "cancelado" ? estado : null, minutos: pm ? parseInt(pm[1], 10) : null};
+}
+// as linhas de texto para as importações que já existem (idempotentes): pacotes, contratos e horas
+function sheetImportTexts(list){
+  var packs = [], contracts = [], hours = [];
+  list.forEach(function(c){
+    if (!c || !c.name) return;
+    var names = c.name.split(/\s*\+\s*/).filter(Boolean), first = names[0] || c.name;
+    if (c.total && c.start) packs.push([first, c.total, c.start.slice(8) + "/" + c.start.slice(5, 7) + "/" + c.start.slice(0, 4), c.price != null ? String(c.price).replace(".", ",") : "", 0, "", names.slice(1).join(" | ")].join("; ").replace(/(;\s*)+$/, ""));
+    contracts.push([(c.minutos ? "PT " + c.minutos + " - " : "") + c.name, c.modalidade ? CONTRACT_MODALIDADES[c.modalidade].label : "", c.formato === "duo" ? "Duo" : "Individual", c.estado ? CONTRACT_ESTADO_LABEL[c.estado] : ""].join("; "));
+    if (c.hours) hours.push(c.name + "; " + String(c.hours).replace(".", ","));
+  });
+  return {packs: packs.join("\n"), contracts: contracts.join("\n"), hours: hours.join("\n")};
+}
+// o aluno já tem um pacote com as mesmas aulas e um início a menos de 14 dias do da folha (renovado na app, por exemplo)?
+function sheetPackExists(c){
+  if (!c || !c.total || !c.start) return false;
+  var st = matchStudentWholeName(c.name.split(/\s*\+\s*/)[0]) || matchStudentByName(c.name.split(/\s*\+\s*/)[0]);
+  if (!st) return false;
+  var t0 = new Date(c.start + "T00:00:00Z").getTime();
+  return packsOf(st.id).some(function(p){ return Number(p.total) === c.total && p.starts_on && Math.abs(new Date(p.starts_on + "T00:00:00Z").getTime() - t0) <= 14 * 86400000; });
+}
+function fetchSheetJson(token, url){
+  return fetch(url, {headers: {Authorization: "Bearer " + token}}).then(function(res){
+    if (res.status === 401) throw new Error("A autorização expirou — tenta sincronizar outra vez.");
+    if (res.status === 403) throw new Error("O Google recusou o acesso às folhas: ativa a Google Sheets API e a Google Drive API no teu projeto, acrescenta os âmbitos no ecrã de consentimento e volta a sincronizar.");
+    if (!res.ok) throw new Error("O Google respondeu com o erro " + res.status + ".");
+    return res.json();
+  });
+}
+// lê as folhas «Cliente …» e atualiza pacotes (só cria os novos), contratos e horas; devolve um resumo curto
+function runSheetsSync(token){
+  var q = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false and name contains 'Cliente '", files = [];
+  function listPage(pt){
+    return fetchSheetJson(token, "https://www.googleapis.com/drive/v3/files?pageSize=200&fields=" + encodeURIComponent("nextPageToken,files(id,name)") + "&q=" + encodeURIComponent(q) + (pt ? "&pageToken=" + encodeURIComponent(pt) : "")).then(function(j){
+      (j.files || []).forEach(function(f){ if (/^Cliente\s/.test(f.name)) files.push(f); });
+      return j.nextPageToken ? listPage(j.nextPageToken) : null;
+    });
+  }
+  var parsed = [], failed = 0;
+  return listPage(null).then(function(){
+    var idx = 0;
+    function worker(){
+      if (idx >= files.length) return Promise.resolve();
+      var f = files[idx++];
+      return fetchSheetJson(token, "https://sheets.googleapis.com/v4/spreadsheets/" + encodeURIComponent(f.id) + "/values/" + encodeURIComponent("Dados!A1:H30")).then(function(j){ var c = parseClientSheet(j.values); if (c) parsed.push(c); else failed++; }, function(e){ if (/autoriza|recusou/.test(e.message)) throw e; failed++; }).then(worker);
+    }
+    return Promise.all([worker(), worker(), worker(), worker()]);
+  }).then(function(){
+    parsed.forEach(function(c){ if (sheetPackExists(c)) c.start = null; });   // já tem um pacote igual (por exemplo renovado na app): não cria outro
+    var t = sheetImportTexts(parsed);
+    return studioImportContracts(t.contracts).then(function(rc){ return studioImportHours(t.hours).then(function(rh){ return studioImportPacks(t.packs).then(function(rp){
+      var errs = rc.errors.concat(rh.errors, rp.errors).filter(function(e, i, a){ return a.indexOf(e) === i; });
+      return {files: files.length, read: parsed.length, failed: failed, packs: rp.created, contracts: rc.saved, hours: rh.saved, errors: errs.slice(0, 8), more: Math.max(0, errs.length - 8)};
+    }); }); });
+  });
+}
+function sheetsSummaryText(sh){
+  if (!sh) return "";
+  if (sh.error) return " · Folhas: ⚠ " + sh.error;
+  return " · Folhas: " + sh.read + " lidas" + (sh.failed ? " (" + sh.failed + " sem dados)" : "") + ", " + sh.packs + (sh.packs === 1 ? " pacote novo" : " pacotes novos") + ", " + sh.contracts + " contratos e " + sh.hours + " horas atualizados" + (sh.errors && sh.errors.length ? " · ⚠ " + sh.errors.slice(0, 3).join(" ") + (sh.errors.length + (sh.more || 0) > 3 ? " (+" + (sh.errors.length + (sh.more || 0) - 3) + ")" : "") : "");
+}
 var calSyncing = false;
 var calLastRun = null; // eventos da última leitura (só em memória): permite contar as aulas de alunos novos sem pedir autorização outra vez
 // deixa as sessões iguais aos eventos lidos; devolve o resumo para mostrar
@@ -1057,9 +1146,15 @@ function runCalendarSync(){
   if (!calSettings.clientId) return Promise.reject(new Error("Falta o ID de cliente do Google."));
   calSyncing = true;
   var today = localTodayISO(), win = calendarWindow(today);
-  return googleAccessToken(calSettings.clientId).then(function(token){ return fetchCalendarEvents(token, calSettings.calendarId, win.from, win.to); }).then(function(events){
+  var sheetsRes = null;
+  return googleAccessToken(calSettings.clientId, CAL_SCOPE + (calSettings.sheets ? " " + SHEETS_SCOPE : "")).then(function(token){
+    // 1.º as folhas (os pacotes têm de existir antes de as aulas do calendário lhes serem ligadas)
+    var pre = calSettings.sheets ? runSheetsSync(token).then(function(r){ sheetsRes = r; }, function(e){ sheetsRes = {error: e.message}; }) : Promise.resolve();
+    return pre.then(function(){ return fetchCalendarEvents(token, calSettings.calendarId, win.from, win.to); });
+  }).then(function(events){
     return calApplyEvents(events, win);
   }).then(function(s){
+    s.sheets = sheetsRes; if (sheetsRes){ calSettings.lastSync = s; calSaveSettings(); }
     return autoFixPacks().then(function(fix){ s.fixed = fix; calSyncing = false; return s; }, function(){ calSyncing = false; return s; });
   }, function(e){ calSyncing = false; throw e; });
 }
@@ -1164,6 +1259,7 @@ function calendarCardHtml(){
     "<div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;\">" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcToggle\">" + (cs.useAsSource ? "Voltar ao horário semanal" : "Usar como fonte das sessões") + "</button>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"gcOff\">Desligar</button></div>" +
+    "<label class=\"history-row\" style=\"display:flex; justify-content:flex-start; gap:12px; align-items:center; min-height:44px; cursor:pointer; margin-bottom:8px;\"><input type=\"checkbox\" id=\"gcSheets\" style=\"width:22px; height:22px; accent-color:var(--accent); flex:none;\"" + (cs.sheets ? " checked" : "") + "> <span class=\"muted-p\">Ler também as folhas «Cliente …» do Google (pacotes, contratos e horas) em cada sincronização.</span></label>" +
     "<div class=\"checkin-field\" style=\"max-width:320px;\"><label for=\"gcCal\">Agenda (por omissão a principal)</label><input type=\"text\" id=\"gcCal\" value=\"" + escapeHtml(cs.calendarId) + "\" autocomplete=\"off\"></div>" +
     "<div class=\"checkin-field\" style=\"max-width:320px; margin-top:8px;\"><label for=\"gcPrefix\">Só eventos que começam por (vazio = todos)</label><input type=\"text\" id=\"gcPrefix\" maxlength=\"30\" value=\"" + escapeHtml(cs.titlePrefix) + "\" placeholder=\"PT\" autocomplete=\"off\"></div>";
   if (ls && ls.unmatched && ls.unmatched.length){
@@ -1186,6 +1282,7 @@ function calendarCardHtml(){
 function calendarSummaryText(ls){
   var days = Math.floor((Date.now() - new Date(ls.at).getTime()) / 86400000);
   var t = "Última sincronização " + (days <= 0 ? "hoje" : "há " + days + (days === 1 ? " dia" : " dias")) + ": " + ls.events + " eventos lidos, " + ls.matched + " de alunos · " + ls.inserted + " novas, " + ls.updated + " atualizadas, " + ls.removed + " removidas" + (ls.errors ? " · ⚠ " + ls.errors + " com erro" : "") + ".";
+  t += sheetsSummaryText(ls.sheets);
   if (ls.warnUsedBefore && ls.warnUsedBefore.length) t += " ⚠ Pacotes com 'aulas já dadas' maior que 0 (" + ls.warnUsedBefore.slice(0, 4).join(", ") + "): o calendário também conta essas aulas — põe 0.";
   return t;
 }

@@ -125,6 +125,15 @@ Nenhuma destas pode ser feita por uma migração SQL nem pela app — confirma c
 - Segurança: o *token* de acesso fica só na memória (nunca é guardado nem enviado para o Supabase) e o âmbito é só de leitura. Só o ID de cliente e os alias ficam guardados (`studio_settings`, ou `localStorage` em modo local).
 - Limites: sincronizar exige um clique (a Google abre uma janela); sem o clique não há leitura em segundo plano.
 
+### 8e-bis. Folhas «Cliente …» do Google (pacotes, contratos e horas)
+
+Com a opção **«Ler também as folhas «Cliente …»»** (Hoje → Google Agenda → Definições), cada **Sincronizar agora** lê, antes do calendário, a aba **Dados** de todas as folhas do Drive cujo nome começa por «Cliente » (Nome, Contrato, Data de início, Valor, Modalidade, Horas mensais, Individual/Duo, Estado) e atualiza a app: cria os **pacotes novos** (um pacote com as mesmas aulas e início a menos de 14 dias do da folha conta como já existente), grava modalidade/formato/estado do contrato e as horas mensais. Só leitura; a app nunca escreve nas folhas.
+
+- **Uma vez**, no mesmo projeto do Google Cloud do Agenda: ativar a **Google Sheets API** e a **Google Drive API**; no ecrã de consentimento acrescentar os âmbitos `…/auth/spreadsheets.readonly` e `…/auth/drive.metadata.readonly`; na app ligar a opção e voltar a sincronizar (o Google pede a nova autorização).
+- A folha é a fonte de verdade do **estado**, das **horas** e do **formato**: uma alteração feita na app a esses campos é reposta pela folha na sincronização seguinte.
+- Os alunos têm de existir na app com o mesmo nome (sem «PT 60 - »); os nomes que não existirem aparecem no resumo da sincronização.
+- Sincronizar é um toque (o Google exige autorização no browser); uma sincronização sem toques exigiria um serviço no servidor (Edge Function com conta de serviço partilhada na pasta), que ainda não existe.
+
 ## 8f. Migração 0026 e criar alunos a partir da agenda
 
 - [ ] Correr `supabase/migrations/0026_studio_only_students.sql` (depois da 0025; é repetível). Acrescenta `students.studio_only`. Sem ela, os alunos criados da agenda criam-se na mesma, mas não ficam marcados como "só estúdio" (entram nos alertas de "sem registos").
