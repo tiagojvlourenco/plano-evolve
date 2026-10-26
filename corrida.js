@@ -496,7 +496,7 @@ function runUiActHtml(){
 }
 
 /* ---------- plano de corrida (objetivo + frequência): o profissional define, o aluno vê a semana ---------- */
-var RUN_UI_PLAN_TYPE = {easy: "Fácil", quality: "Qualidade", long: "Longão"};
+var RUN_UI_PLAN_TYPE = {easy: "Fácil", quality: "Qualidade", long: "Longão", race: "Prova"};
 function runUiPlanDoneKm(rows, week){
   var end = runPlanAddDays(week.startDate, 6), m = 0;
   (rows || []).forEach(function(r){
@@ -513,9 +513,14 @@ function runUiPlanHtml(sv, d){
   var h = '<div class="card run-plan" id="runPlan"><div class="eyebrow">Plano · ' + escapeHtml(g.label) + '</div>';
   if (cur.state === "before") return h + '<p class="muted-p">O plano começa daqui a ' + plural(cur.daysToStart, "dia", "dias") + '.</p></div>';
   if (cur.state === "done") return h + '<p class="muted-p">O plano de ' + cur.weeks + ' semanas terminou. Fala com o teu profissional para o próximo.</p></div>';
+  var raceLine = "";
+  if (built.params.raceDate){
+    var left = Math.round((Date.UTC(+built.params.raceDate.slice(0, 4), +built.params.raceDate.slice(5, 7) - 1, +built.params.raceDate.slice(8, 10)) - Date.UTC(+runUiIsoDay(Date.now()).slice(0, 4), +runUiIsoDay(Date.now()).slice(5, 7) - 1, +runUiIsoDay(Date.now()).slice(8, 10))) / 86400000);
+    raceLine = '<p class="muted-p run-race">Prova a ' + escapeHtml(built.params.raceDate.split("-").reverse().join("/")) + (left > 0 ? ' · faltam ' + plural(left, "dia", "dias") : left === 0 ? ' · é hoje!' : '') + '</p>';
+  }
   var w = cur.week, doneM = runUiPlanDoneKm((d && (d.weekRuns || d.runs)) || [], w), pct = Math.min(100, Math.round(doneM / (w.totalKm * 1000) * 100));
   h += '<h3 class="run-h">Semana ' + w.n + ' de ' + cur.weeks + ' · ' + escapeHtml(w.phase) + '</h3>' +
-    '<p class="muted-p">Previsto ' + escapeHtml(runUiNum1(w.totalKm)) + ' km · feito ' + escapeHtml(runUiKmNum(doneM)) + ' km</p>' +
+    raceLine + '<p class="muted-p">Previsto ' + escapeHtml(runUiNum1(w.totalKm)) + ' km · feito ' + escapeHtml(runUiKmNum(doneM)) + ' km</p>' +
     '<div class="run-plan-bar" role="img" aria-label="' + pct + '% do previsto"><i style="width:' + pct + '%"></i></div><ul class="run-plan-list">' +
     w.sessions.map(function(x){ return '<li><b>' + escapeHtml(RUN_UI_PLAN_TYPE[x.type] || "") + ' · ' + escapeHtml(runUiNum1(x.km)) + ' km</b><br><span class="muted-p">' + escapeHtml(x.desc) + '</span></li>'; }).join("") + '</ul>';
   return h + '<p class="muted-p run-note">Regras gerais por esforço (RPE), não ritmos. Se tens dores, para e fala com o teu profissional.</p></div>';
@@ -523,8 +528,8 @@ function runUiPlanHtml(sv, d){
 function runUiPlanForm(d, s){
   if (!d.planForm){
     var cur = runPlanNormalize(trainingProgramOf(s).runPlan);
-    d.planForm = cur ? {goal: cur.goal, sessions: String(cur.sessions), weeks: String(cur.weeks), baseKm: String(cur.baseKm), startDate: cur.startDate} :
-      {goal: "10k", sessions: "3", weeks: String(RUN_PLAN_GOALS["10k"].weeks), baseKm: "15", startDate: runUiIsoDay(Date.now())};
+    d.planForm = cur ? {goal: cur.goal, distanceKm: cur.distanceKm != null ? String(cur.distanceKm) : "8", raceDate: cur.raceDate || "", sessions: String(cur.sessions), weeks: String(cur.weeks), baseKm: String(cur.baseKm), startDate: cur.startDate} :
+      {goal: "10k", distanceKm: "8", raceDate: "", sessions: "3", weeks: String(RUN_PLAN_GOALS["10k"].weeks), baseKm: "15", startDate: runUiIsoDay(Date.now())};
   }
   return d.planForm;
 }
@@ -535,6 +540,7 @@ function runUiPlanPreviewInto(pv, f){
   var mk = function(tag, text, cls){ var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
   var b = runPlanBuild(f);
   if (!b){ pv.appendChild(mk("p", "Preenche objetivo, sessões (2 a 5), semanas (6 a 20), km por semana (3 a 150) e a data de início.", "muted-p")); return; }
+  if (b.params.raceDate) pv.appendChild(mk("p", "Prova a " + b.params.raceDate.split("-").reverse().join("/") + ": " + plural(b.params.weeks, "semana", "semanas") + " de preparação a partir de " + b.params.startDate.split("-").reverse().join("/") + ".", "muted-p run-note"));
   var wrap = mk("div", null, "assess-table-scroll"), table = mk("table", null, "assess-table"), head = mk("thead"), hr = mk("tr"), body = mk("tbody");
   ["Sem.", "Fase", "km"].forEach(function(t){ hr.appendChild(mk("th", t)); });
   head.appendChild(hr); table.appendChild(head);
@@ -551,9 +557,11 @@ function runUiPlanProHtml(s, d){
   return '<details class="card run-plan-pro" id="runPlanPro"' + (active ? ' open' : '') + '><summary class="eyebrow">Plano de corrida' + (active ? ' · ativo' : '') + '</summary>' +
     '<p class="muted-p">Regras gerais por objetivo e frequência (volume semanal, recuperação e afinação). O aluno vê a semana no separador Corrida.</p>' +
     '<div class="assess-form-grid"><div class="f" style="grid-column:1/-1;"><label for="rpGoal">Objetivo</label><select id="rpGoal" class="mini-select" style="width:100%;">' +
-    Object.keys(RUN_PLAN_GOALS).map(function(k){ return '<option value="' + k + '"' + (k === f.goal ? ' selected' : '') + '>' + escapeHtml(RUN_PLAN_GOALS[k].label) + '</option>'; }).join("") + '</select></div>' +
+    Object.keys(RUN_PLAN_GOALS).map(function(k){ return '<option value="' + k + '"' + (k === f.goal ? ' selected' : '') + '>' + escapeHtml(k === "custom" ? "Outra distância…" : RUN_PLAN_GOALS[k].label) + '</option>'; }).join("") + '</select></div>' +
     '<div class="f"><label for="rpSessions">Sessões por semana</label><select id="rpSessions" class="mini-select">' + [2, 3, 4, 5].map(function(n){ return '<option value="' + n + '"' + (String(n) === f.sessions ? ' selected' : '') + '>' + n + '</option>'; }).join("") + '</select></div>' +
-    '<div class="f"><label for="rpWeeks">Semanas</label><input type="number" id="rpWeeks" min="6" max="20" value="' + escapeHtml(f.weeks) + '"></div>' +
+    '<div class="f' + (f.goal === "custom" ? '' : ' hidden') + '" id="rpDistBox"><label for="rpDist">Distância da prova (km)</label><input type="number" id="rpDist" min="1" max="100" step="0.1" value="' + escapeHtml(f.distanceKm) + '"></div>' +
+    '<div class="f"><label for="rpRace">Data da prova (opcional)</label><input type="date" id="rpRace" value="' + escapeHtml(f.raceDate) + '"></div>' +
+    '<div class="f"><label for="rpWeeks">Semanas' + (f.raceDate ? ' (pela prova)' : '') + '</label><input type="number" id="rpWeeks" min="6" max="20" value="' + escapeHtml(f.weeks) + '"' + (f.raceDate ? ' disabled' : '') + '></div>' +
     '<div class="f"><label for="rpBase">km por semana agora</label><input type="number" id="rpBase" min="3" max="150" step="0.5" value="' + escapeHtml(f.baseKm) + '"></div>' +
     '<div class="f"><label for="rpStart">Início</label><input type="date" id="rpStart" value="' + escapeHtml(f.startDate) + '"></div></div>' +
     '<div id="rpPreview"></div>' +
@@ -565,14 +573,20 @@ function runUiPlanProWire(s, el, d){
   if (!box) return;
   var f = runUiPlanForm(d, s);
   runUiPlanPreviewInto(box.querySelector("#rpPreview"), f);
-  function read(){ f.goal = box.querySelector("#rpGoal").value; f.sessions = box.querySelector("#rpSessions").value; f.weeks = box.querySelector("#rpWeeks").value; f.baseKm = box.querySelector("#rpBase").value; f.startDate = box.querySelector("#rpStart").value; return f; }
+  function read(){ f.goal = box.querySelector("#rpGoal").value; f.distanceKm = box.querySelector("#rpDist").value; f.raceDate = box.querySelector("#rpRace").value; f.sessions = box.querySelector("#rpSessions").value; f.weeks = box.querySelector("#rpWeeks").value; f.baseKm = box.querySelector("#rpBase").value; f.startDate = box.querySelector("#rpStart").value; return f; }
   // «input» além de «change»: a pré-visualização muda enquanto se escreve, e não só ao sair do campo (senão tocar em «Aplicar» logo a seguir a escrever
   // mudava a altura da página entre o toque e o levantar do dedo, e o toque perdia-se)
-  ["#rpGoal", "#rpSessions", "#rpWeeks", "#rpBase", "#rpStart"].forEach(function(sel){
+  ["#rpGoal", "#rpDist", "#rpRace", "#rpSessions", "#rpWeeks", "#rpBase", "#rpStart"].forEach(function(sel){
     ["input", "change"].forEach(function(evt){
       box.querySelector(sel).addEventListener(evt, function(){
         var prevGoal = f.goal, nf = read();
-        if (sel === "#rpGoal" && nf.goal !== prevGoal && RUN_PLAN_GOALS[nf.goal]){ nf.weeks = String(RUN_PLAN_GOALS[nf.goal].weeks); box.querySelector("#rpWeeks").value = nf.weeks; }
+        var gd = box.querySelector("#rpDistBox"), wk = box.querySelector("#rpWeeks"), dist = parseFloat(nf.distanceKm);
+        if (gd) gd.classList.toggle("hidden", nf.goal !== "custom");
+        wk.disabled = !!nf.raceDate;
+        if ((sel === "#rpGoal" && nf.goal !== prevGoal) || (sel === "#rpDist" && nf.goal === "custom")){
+          var prof = nf.goal === "custom" ? (dist >= 1 && dist <= 100 ? runPlanGoalOf({goal: "custom", distanceKm: dist}) : null) : RUN_PLAN_GOALS[nf.goal];
+          if (prof){ nf.weeks = String(prof.weeks); wk.value = nf.weeks; }
+        }
         runUiPlanPreviewInto(box.querySelector("#rpPreview"), nf);
       });
     });
