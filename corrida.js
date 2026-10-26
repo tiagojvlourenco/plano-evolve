@@ -606,7 +606,7 @@ function runUiPlanProWire(s, el, d){
 function runUiHomeHtml(sv){
   if (corridaModeOf(sv) === "off") return runUiOffHtml(sv);
   var d = runUiData, preview = authRole !== "student", live = sv.runsMode === "live" && typeof RUN.liveOpen === "function";
-  var h = '<div class="tab-head run-head"><h2>Corrida</h2><p>' + escapeHtml(live ?
+  var h = '<div class="tab-head run-head"><h2>Cardio</h2><p>' + escapeHtml(live ?
     "Grava a corrida aqui, com o GPS do telemóvel e a EVOLVE aberta, ou traz um ficheiro do relógio ou de outra app." :
     "A EVOLVE não usa o GPS do telemóvel: lê o ficheiro que trouxeres do relógio ou de outra app.") + '</p></div>';
   if (d.loaded && d.err === "missing") return h + runUiMissingHtml();

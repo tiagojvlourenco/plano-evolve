@@ -7348,7 +7348,7 @@ function renderAlunoShell(){
     "<div class=\"tabbar\">" +
     (treinoApp ?
       "<button data-tab=\"hoje\" aria-label=\"Treino\">" + icon("<path d=\"M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11\"/>") + "<span>Treino</span></button>" +
-      "<button data-tab=\"corrida\" aria-label=\"Corrida\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Corrida</span></button>"
+      "<button data-tab=\"corrida\" aria-label=\"Cardio: corrida e bicicleta\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Cardio</span></button>"
     :
       "<button data-tab=\"hoje\" aria-label=\"Hoje\">" + icon("<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>") + "<span>Hoje</span></button>" +
       "<button data-tab=\"plano\" aria-label=\"Plano de alimentação\">" + icon("<path d=\"M9 6h12M9 12h12M9 18h12\"/><path d=\"M4 6h.01M4 12h.01M4 18h.01\"/>") + "<span>Plano</span></button>" +
