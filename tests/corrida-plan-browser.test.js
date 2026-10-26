@@ -253,7 +253,35 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var after = await lastPlanWrite();
   ck("9. «Remover plano» apaga-o da ficha (a última gravação já não leva o plano)", after === undefined);
   await P.ctx.close();
-  ck("10. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
+
+  // distância à escolha e data da prova
+  var raceIso = (function(){ var d = new Date(); d.setDate(d.getDate() + 77); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); })();
+  var S4 = await open("student", [withPlan("ana", {v: 1, goal: "custom", distanceKm: 8, raceDate: raceIso, sessions: 3, weeks: 6, baseKm: 15, startDate: localToday()})], "treino.html");
+  await S4.pg.waitForSelector("#startWorkout"); await seedConsent(S4.pg, "ana");
+  await S4.pg.click('.tabbar [data-tab="corrida"]'); await S4.pg.waitForSelector("#runPlan");
+  var t4 = await S4.pg.locator("#runPlan").innerText();
+  ck("11. Plano para 8 km com data da prova: o aluno vê «Plano · 8 km», a data da prova e «faltam 77 dias», e «Semana 1 de 12»", /Plano · 8 km/i.test(t4) && /Prova a \d\d\/\d\d\/\d{4}/i.test(t4) && /faltam 77 dias/i.test(t4) && /Semana 1 de 12/i.test(t4));
+  await S4.ctx.close();
+  var P2 = await open("professional", [row("a", "Ana Silva", "import")], "index.html");
+  await P2.pg.waitForSelector(".student-row");
+  await P2.pg.locator('[data-open="a"]').first().click(); await P2.pg.waitForSelector("#proBack");
+  await P2.pg.click('.pro-nav-item[data-g="treino"]'); await P2.pg.click('[data-sub="corridas"]');
+  await P2.pg.waitForSelector("#proTabContent #runEmpty, #proTabContent .run-row"); await P2.pg.waitForSelector("#runPlanPro");
+  await P2.pg.locator("#runPlanPro summary").click();
+  ck("12. «Outra distância…» mostra o campo da distância; sem data da prova as semanas são editáveis", (await P2.pg.locator("#rpDistBox.hidden").count()) === 1 && (await P2.pg.locator("#rpWeeks").isDisabled()) === false);
+  await P2.pg.selectOption("#rpGoal", "custom");
+  await P2.pg.fill("#rpDist", "8");
+  await P2.pg.fill("#rpRace", raceIso);
+  ck("13. Com «Outra distância…» 8 km e data da prova (77 dias), as semanas ficam automáticas (desativadas), a pré-visualização diz «12 semanas de preparação» e a última semana está lá", (await P2.pg.locator("#rpDistBox.hidden").count()) === 0 && (await P2.pg.locator("#rpWeeks").isDisabled()) && /12 semanas de preparação/.test(await P2.pg.locator("#rpPreview").innerText()) && (await P2.pg.locator("#rpPreview tbody tr").count()) === 12);
+  await P2.pg.waitForTimeout(300);
+  await P2.pg.click("#rpApply");
+  await P2.pg.waitForSelector("#rpRemove");
+  await P2.pg.waitForTimeout(2200);
+  var wr = (await writes(P2.pg)).filter(function(x){ return x.table === "students" && x.payload && "training_program" in x.payload; }).slice(-1)[0];
+  var rp = wr && wr.payload.training_program && wr.payload.training_program.runPlan;
+  ck("14. Aplicar grava a distância (8) e a data da prova na ficha", rp && rp.goal === "custom" && rp.distanceKm === 8 && rp.raceDate === raceIso);
+  await P2.ctx.close();
+  ck("15. Nenhum erro de JavaScript", errors.length === 0 || (console.log(errors), false));
   await browser.close(); srv.server.close();
   check.summarize();
 })().catch(function(e){ console.log("FAIL: exceção", String(e && e.stack || e).split("\n").slice(0, 5).join(" | ")); process.exit(1); });
