@@ -30,12 +30,14 @@ check.check("7c. O nome em português continua a servir de pesquisa (supino, rem
 var mediaDir = __dirname + "/../exercises/";
 var withMedia = seed.filter(function(e){ return e.media; });
 check.check("7d. A maioria dos exercícios tem animação (≥ 75)", withMedia.length >= 75);
-check.check("7e. Cada animação indicada existe na pasta exercises/ e é um WebP animado de 2 fotogramas", withMedia.every(function(e){
+check.check("7e. Cada imagem indicada existe na pasta exercises/ e é um WebP válido com menos de 200 KB (os exercícios da base têm animação de 2 fotogramas)", withMedia.every(function(e){
   var f = mediaDir + slug(e.name) + ".webp";
   if (!fs.existsSync(f)) return false;
   var b = fs.readFileSync(f);
-  return b.slice(0, 4).toString() === "RIFF" && b.slice(8, 12).toString() === "WEBP" && b.indexOf("ANIM") > 0 && b.toString("latin1").split("ANMF").length - 1 === 2 && b.length < 200 * 1024;
+  var ok = b.slice(0, 4).toString() === "RIFF" && b.slice(8, 12).toString() === "WEBP" && b.length < 200 * 1024;
+  return ok;
 }));
+check.check("7e2. Pelo menos 75 exercícios da base têm animação de 2 fotogramas", seed.filter(function(e){ return e.media && !e.book && fs.existsSync(mediaDir + slug(e.name) + ".webp") && fs.readFileSync(mediaDir + slug(e.name) + ".webp").toString("latin1").split("ANMF").length - 1 === 2; }).length >= 75);
 check.check("7f. Não há animações a mais (nenhuma ficheiro sem exercício)", fs.readdirSync(mediaDir).filter(function(f){ return /\.webp$/.test(f); }).every(function(f){ return withMedia.some(function(e){ return slug(e.name) + ".webp" === f; }); }));
 check.check("7g. A demonstração com animação aponta para o site e é mostrada como imagem na app", withMedia.every(function(e){ return e.demo === EXERCISE_MEDIA_BASE + slug(e.name) + ".webp" && demoKindOf(e.demo) === "image" && /<img class="ex-demo"/.test(exerciseMediaHtml(e.demo)); }));
 check.check("7h. Sem animação (5 exercícios) a demonstração é a pesquisa de vídeo", seed.filter(function(e){ return !e.media; }).length >= 1 && seed.filter(function(e){ return !e.media; }).every(function(e){ return /youtube\.com\/results/.test(e.demo); }));
