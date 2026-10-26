@@ -109,8 +109,8 @@ function fixtureRow(id, name){
   await G2.pg.click("#navStudio"); await G2.pg.waitForSelector("#gcalCard");
   check.check("14. Na Gestão dá para ir de Estúdio a Contratos e voltar", (await G2.pg.locator("#gcalCard").count()) === 1);
   // 14b. alunos sem pacote: sem lista de alunos na Gestão, abrem-se a partir do separador Clientes dos Contratos para lhes criar o primeiro pacote
-  await G2.pg.click("#navContracts"); await G2.pg.waitForSelector("#contractTotals"); await G2.pg.click('[data-ct-tab="clientes"]'); await G2.pg.waitForSelector("[data-open-student]");
-  check.check("14b. Na Gestão, o separador Clientes lista os alunos (também os sem pacote) e abre a ficha de Pacotes para criar o primeiro", (await G2.pg.locator("[data-open-student]").count()) >= 2);
+  await G2.pg.click("#navContracts"); await G2.pg.waitForSelector("#contractTotals"); await G2.pg.click('[data-ct-filter="semcontrato"]'); await G2.pg.waitForSelector("[data-open-student]");
+  check.check("14b. Na Gestão, o filtro «Sem contrato» lista os alunos sem pacote e abre a ficha de Pacotes para criar o primeiro", (await G2.pg.locator("[data-open-student]").count()) >= 2);
   await G2.pg.locator('[data-open-student]').first().click();
   await G2.pg.waitForSelector("#pkAdd", {state: "attached"});
   check.check("14c. A ficha aberta a partir daí mostra só Pacotes (formulário para criar o pacote), sem separadores de acompanhamento", (await G2.pg.locator("[data-sub]").count()) === 0 && (await G2.pg.locator("#pkAdd").count()) === 1);

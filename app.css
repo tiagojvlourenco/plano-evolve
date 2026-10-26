@@ -906,3 +906,6 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 /* ---- Corrida: registo à mão numa linha ---- */
 .run-quick{padding-bottom:10px; margin-bottom:6px; border-bottom:1px solid var(--line, rgba(255,255,255,0.08));}
 .run-quick-btn{margin-top:8px; min-height:44px;}
+
+.ct-totals{display:flex; flex-wrap:wrap; gap:6px 22px; margin:0 0 12px; font-size:0.8rem; font-weight:300; color:var(--muted);}
+.ct-totals strong{font-size:1.15rem; font-weight:400; color:var(--ink); margin-right:4px;}
