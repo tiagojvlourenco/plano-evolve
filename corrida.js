@@ -923,7 +923,8 @@ function runUiManualHtml(){
   return '<div class="card run-form" id="runManual"><button type="button" class="btn btn-sm run-back" id="runBack">← Corridas</button>' +
     '<h3 class="run-h">Registar à mão</h3><p class="muted-p">Para o tapete rolante, para corridas gravadas na app Fitness da Apple ou quando o GPS falhou.</p>' +
     '<div class="run-field run-quick"><label for="runManLine">Tudo numa linha (opcional)</label>' +
-    '<input type="text" inputmode="text" autocomplete="off" autocapitalize="off" id="runManLine" maxlength="200" placeholder="5,2 km 28:30  ·  ontem 18:30 5,23 km 27:58">' +
+    '<textarea id="runManLine" rows="2" autocomplete="off" autocapitalize="off" maxlength="4000" placeholder="5,2 km 28:30  ·  ontem 18:30 5,23 km 27:58"></textarea>' +
+    '<p class="muted-p run-note" id="runManFitHint">App Fitness da Apple: abre o treino, faz uma captura, abre-a em Fotografias, toca no ícone de Texto em Direto (canto inferior), «Copiar tudo» e cola aqui. Não testado em todos os iPhones: confirma sempre os números antes de guardar.</p>' +
     '<button type="button" class="btn btn-sm run-quick-btn" id="runManFill">Preencher</button>' +
     '<p class="muted-p run-note">Copia a distância e o tempo da app Fitness e escreve-os aqui. Também aceita «hoje», «ontem», «22/10 às 20:17» e «1h05».</p></div>' +
     '<div class="run-field"><label for="runManDate">Data</label><input type="date" id="runManDate" data-f="date" min="2000-01-01" max="' + escapeHtml(localTodayISO()) + '" value="' + escapeHtml(f.date) + '"></div>' +

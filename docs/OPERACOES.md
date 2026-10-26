@@ -377,6 +377,10 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - **Direitos**: o estúdio confirmou ter autorização para publicar as imagens, mas várias trazem a marca de água «WorkoutLabs.com»: convém confirmar a licença com a origem. Se for preciso retirar, apagar as imagens de `exercises/` que não são do Free Exercise DB e os `|1` de `EXERCISE_BOOK`.
 - Não são vídeos: são fotografias/ilustrações. Vídeos de verdade (MP4) pesariam demasiado para a app offline e não há uma fonte livre; a opção seria ligações do estúdio a vídeos próprios no campo «GIF / vídeo demonstrativo» de cada exercício.
 
+## 8aa. Registo à mão a partir do texto da app Fitness
+- No «Registar à mão» o campo «Tudo numa linha» é agora uma caixa de texto e aceita também o **texto copiado do resumo de um treino da app Fitness da Apple** (português ou inglês). Como copiar no iPhone: abrir o treino, fazer uma captura de ecrã, abri-la em Fotografias, tocar no ícone do Texto em Direto, «Copiar tudo» e colar. A app lê a distância, a data, a hora de início (a primeira do intervalo «18:51–19:23») e o **tempo de treino** (sem as pausas; se o rótulo não vier junto do valor, o menor dos dois tempos h:mm:ss). Só preenche o formulário: o aluno confirma antes de guardar.
+- **Não verificado**: o formato foi tirado de uma captura de ecrã real (Fitness em português, iPhone), mas **não** foi testado o que o Texto em Direto realmente copia (a ordem do texto pode variar) nem noutras versões do iOS; por isso o leitor aceita rótulos e valores separados ou na mesma linha. Não traz o percurso nem as parciais: só os números.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:
