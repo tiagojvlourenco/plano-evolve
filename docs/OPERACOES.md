@@ -362,6 +362,13 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - **Não verificado**: GPS de bicicleta numa volta real (a 30 km/h o GPS do navegador tem muito menos pontos por quilómetro e a distância pode sair diferente; nada foi medido), ecrã do profissional com bicicletas, e o aviso de privacidade (v1) só fala de «corridas»: antes de abrir a bicicleta a alunos, rever o texto e, se for preciso, subir a versão do aviso.
 - Não há aviso de «foi mesmo bicicleta?» (o aviso de ritmo rápido só vale para corrida).
 
+## 8y. Periodização (treino de força e corrida)
+- **Sem migração**: os dois planos ficam dentro do programa de treino do aluno (`training_program`, que só o profissional escreve): `periodization` (bloco de força) e `runPlan` (plano de corrida). Guardam-se só os parâmetros; as semanas calculam-se sempre, por isso mudar uma regra no código muda os planos já definidos.
+- **Força** (ficha do aluno → Treino → «Periodização do bloco»): escolhes dias por semana (2 a 6), objetivo (massa, recomposição, força, manutenção), semanas (4 a 8, a última é deload) e início. As séries por grupo muscular sobem da base ao topo da zona de volume do objetivo (as mesmas zonas do painel de volume); o RIR alvo desce de 3 para 1; o deload corta 40 % e usa RIR 4. O aluno vê «Semana n de N · fase · RIR alvo · séries por grupo» no ecrã de registo do treino. «Criar os dias sugeridos» cria os dias da divisão (corpo inteiro ×2 e ×3, superior/inferior ×2, 5 dias, empurrar/puxar/pernas ×2) só se o programa estiver vazio. Não mexe nos exercícios.
+- **Corrida** (ficha do aluno → Corridas → «Plano de corrida»): objetivo (5 km, 10 km, meia, maratona, treino livre), sessões por semana (2 a 5), semanas (6 a 20), km por semana de partida e início. Sobe cerca de 8 % por semana até ao pico do objetivo, com semana de recuperação (−25 %) de 4 em 4 e afinação no fim. Cada semana tem fácil, qualidade (3 ou mais sessões) e longão, descritos por **esforço (RPE)**, não por ritmo (não há dados do aluno para dar ritmos). O aluno vê a semana no separador Corrida, com o previsto e o feito (só corridas, a bicicleta não conta).
+- **Importante**: são regras gerais de treino (progressão gradual, recuperação, afinação), não um plano individualizado, e nenhum dos valores foi validado com alunos reais nem por um estudo desta app. Servem de ponto de partida para o profissional ajustar. Avisos honestos aparecem quando o objetivo não cabe nas semanas ou a base é baixa.
+- Não verificado: aspeto no iPhone, e como os alunos reais respondem às semanas de RIR alto no início do bloco.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:

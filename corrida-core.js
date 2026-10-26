@@ -165,6 +165,8 @@
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
      runActivityCfg(activity) → cfg   «bike» sobe os limites de velocidade (vMaxMs e maxAvgSpeedMs 25 m/s) e aceita ficheiros de ciclismo; qualquer outro valor = RUN_CFG
      runSpeedKmh(distM, movingS) → km/h | null     as linhas normalizadas trazem activity ("run"|"bike") e speedKmh
+     runPlanAddDays(dataISO, n) → dataISO
+     runPlanBuild({goal, sessions, weeks, baseKm, startDate}) → plano semana a semana (objetivo 5k/10k/21k/42k/livre, 2 a 5 sessões, 6 a 20 semanas) | null; runPlanNormalize, runPlanCurrent(built, dataISO)
      runPaceCheck(distM, movingS, durationS, cfg) → {ask, paceSPerKm|null, kmh|null}   ask = ritmo em movimento (senão o total) mais rápido que
          RUN_CFG.askPaceSPerKm, a partir de askMinDistM. Só avisa; quem chama pergunta «foi mesmo uma corrida?» (hipótese de desenho, não medida).
      runDurStr(s) → «42:10» | «1:02:10»            runDistStr(m) → «5,23 km»
@@ -1148,6 +1150,82 @@ function runDupCheck(existingRuns, candidate){
     if (Math.abs(rs - cs) <= 60000 && Math.abs(rd - cd) <= 0.02 * Math.max(rd, cd)) return r;
   }
   return null;
+}
+
+
+/* ---------- plano de corrida por objetivo e frequência ----------
+   runPlanBuild({goal, sessions, weeks, baseKm, startDate}) → {params, goal, weeks:[{n, phase, totalKm, startDate, sessions:[{type, km, desc}]}], peakKm, warnings}
+   goal: "5k" | "10k" | "21k" | "42k" | "livre". Regras gerais (não é um plano individual nem substitui um profissional): +8 % de volume por semana até ao pico do objetivo,
+   semana de recuperação (−25 %) de 4 em 4, afinação no fim (10 %–60 % a menos), um treino longo, um de qualidade (3 ou mais sessões) e o resto fácil. Sem ritmos por km:
+   descreve-se por esforço (RPE e «consegues falar»), porque não há dados do aluno para dar ritmos. Devolve null se os parâmetros forem inválidos. */
+var RUN_PLAN_GOALS = {
+  "5k": {label: "5 km", peakKm: 25, longCap: 10, weeks: 8, taper: [0.7]},
+  "10k": {label: "10 km", peakKm: 35, longCap: 16, weeks: 10, taper: [0.7]},
+  "21k": {label: "Meia maratona", peakKm: 48, longCap: 22, weeks: 12, taper: [0.6]},
+  "42k": {label: "Maratona", peakKm: 65, longCap: 32, weeks: 16, taper: [0.75, 0.5]},
+  "livre": {label: "Treino livre", peakKm: null, longCap: 20, weeks: 8, taper: []}
+};
+var RUN_PLAN_SHARES = {2: {long: 0.55, quality: 0}, 3: {long: 0.4, quality: 0.3}, 4: {long: 0.33, quality: 0.25}, 5: {long: 0.3, quality: 0.22}};
+function runPlanNormalize(raw){
+  if (!raw || typeof raw !== "object" || !RUN_PLAN_GOALS[raw.goal]) return null;
+  var sessions = Math.round(Number(raw.sessions)), weeks = Math.round(Number(raw.weeks)), km = Number(raw.baseKm);
+  if (!(sessions >= 2 && sessions <= 5) || !(weeks >= 6 && weeks <= 20) || !(km >= 3 && km <= 150) || typeof raw.startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.startDate)) return null;
+  return {v: 1, goal: raw.goal, sessions: sessions, weeks: weeks, baseKm: Math.round(km * 2) / 2, startDate: raw.startDate};
+}
+function runPlanAddDays(iso, n){ var d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function runIPlanQuality(goal, phase){
+  if (phase === "Recuperação" || phase === "Afinação") return "Soltinhos: 6 × 20 s mais rápido (RPE 7) com trote fácil entre eles.";
+  if (phase === "Base") return "Fartlek leve: 6 × 1 min mais rápido (RPE 7) com 2 min de trote.";
+  if (phase === "Construção") return goal === "5k" ? "Intervalos: 5 × 3 min a RPE 8, com 2 min de trote." : goal === "10k" ? "Tempo run: 15 a 25 min a RPE 7 (difícil mas controlado), com aquecimento e retorno à calma." :
+    goal === "livre" ? "Tempo run: 15 a 20 min a RPE 7 com aquecimento e retorno à calma." : "Ritmo de prova: 2 × 15 min a RPE 6-7, com 5 min de trote entre blocos.";
+  return goal === "5k" ? "Intervalos: 6 × 800 m a RPE 8-9, com 2 min de recuperação." : goal === "10k" ? "Intervalos: 4 × 1500 m a RPE 8, com 2 min de trote." :
+    goal === "livre" ? "Intervalos: 5 × 3 min a RPE 8, com 2 min de trote." : "Ritmo de prova: 3 × 15 min a RPE 6-7, com 5 min de trote entre blocos.";
+}
+function runPlanBuild(raw){
+  var o = runPlanNormalize(raw);
+  if (!o) return null;
+  var g = RUN_PLAN_GOALS[o.goal], taper = g.taper.length, build = o.weeks - taper, peakTarget = g.peakKm == null ? Math.round(o.baseKm * 1.3 * 2) / 2 : Math.max(g.peakKm, o.baseKm);
+  var vols = [], phases = [], lastNormal = o.baseKm, i, v, peak = o.baseKm;
+  for (i = 1; i <= build; i++){
+    if (i === 1) v = o.baseKm;
+    else if (i % 4 === 0 && i < build) v = lastNormal * 0.75;
+    else v = Math.min(peakTarget, lastNormal * 1.08);
+    var cut = i > 1 && i % 4 === 0 && i < build;
+    if (!cut){ lastNormal = v; if (v > peak) peak = v; }
+    vols.push(v);
+    var prog = i / build;
+    phases.push(cut ? "Recuperação" : prog <= 0.35 ? "Base" : prog <= 0.7 ? "Construção" : "Específica");
+  }
+  for (i = 0; i < taper; i++){ vols.push(peak * g.taper[i]); phases.push("Afinação"); }
+  var weeks = [];
+  vols.forEach(function(vol, idx){
+    var total = Math.round(vol * 2) / 2, phase = phases[idx], sh = RUN_PLAN_SHARES[o.sessions], types = [], longKm, qKm = 0, easyN, easyKm, k;
+    longKm = Math.min(g.longCap, Math.round(total * sh.long * 2) / 2);
+    if (sh.quality) qKm = Math.round(total * sh.quality * 2) / 2;
+    easyN = o.sessions - 1 - (sh.quality ? 1 : 0);
+    easyKm = Math.max(1, Math.round((total - longKm - qKm) / easyN * 2) / 2);
+    var order = o.sessions === 2 ? ["easy", "long"] : o.sessions === 3 ? ["easy", "quality", "long"] : o.sessions === 4 ? ["easy", "quality", "easy", "long"] : ["easy", "quality", "easy", "easy", "long"];
+    var sessions = order.map(function(t){
+      if (t === "long") return {type: "long", km: longKm, desc: (phase === "Específica" && (o.goal === "21k" || o.goal === "42k") ? "Longão: os últimos 3 a 5 km a RPE 6-7." : "Longão fácil: ritmo de conversa, sem forçar.")};
+      if (t === "quality") return {type: "quality", km: qKm, desc: runIPlanQuality(o.goal, phase)};
+      return {type: "easy", km: easyKm, desc: "Corrida fácil: consegues falar (RPE 3-4)."};
+    });
+    weeks.push({n: idx + 1, phase: phase, totalKm: Math.round(sessions.reduce(function(a, x){ return a + x.km; }, 0) * 2) / 2, startDate: runPlanAddDays(o.startDate, 7 * idx), sessions: sessions});
+  });
+  var warnings = [];
+  if (g.peakKm != null && peak < g.peakKm * 0.8) warnings.push("Com " + o.weeks + " semanas e " + o.baseKm + " km por semana de partida só chegas a cerca de " + (Math.round(peak * 2) / 2) + " km por semana; para " + g.label + " costuma recomendar-se chegar perto de " + g.peakKm + " km. Considera mais semanas.");
+  if (o.baseKm < 5) warnings.push("Com menos de 5 km por semana convém começar com corrida e marcha alternadas e só depois seguir este plano.");
+  if ((o.goal === "21k" || o.goal === "42k") && o.baseKm < 15) warnings.push("Para " + g.label + " convém já correr com regularidade (pelo menos 15 km por semana) antes de começar.");
+  warnings.push("São regras gerais, não um plano individual: se tens dores ou doença, para e fala com o teu profissional.");
+  return {params: o, goal: g, weeks: weeks, peakKm: Math.round(peak * 2) / 2, warnings: warnings};
+}
+// semana do plano numa data: {state: "before"|"active"|"done", week, weeks, daysToStart}
+function runPlanCurrent(built, dateISO){
+  if (!built || typeof dateISO !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  var a = built.params.startDate, d = Math.round((Date.UTC(+dateISO.slice(0, 4), +dateISO.slice(5, 7) - 1, +dateISO.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 86400000);
+  if (d < 0) return {state: "before", daysToStart: -d};
+  var idx = Math.floor(d / 7);
+  return idx >= built.weeks.length ? {state: "done", weeks: built.weeks.length} : {state: "active", week: built.weeks[idx], weeks: built.weeks.length};
 }
 
 /* ---------- formatação PT-PT e entradas do registo à mão ---------- */
