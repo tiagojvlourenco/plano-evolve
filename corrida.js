@@ -612,7 +612,7 @@ function runUiSessFormHtml(px, withDate){
   return '<div class="assess-form-grid run-sess-form" data-px="' + px + '">' +
     '<div class="f" style="grid-column:1/-1;"><label for="' + px + 'Name">Nome do treino</label><input type="text" id="' + px + 'Name" maxlength="' + L.nameMax + '" placeholder="Ex.: Repetições 8 × 400 m"></div>' +
     '<div class="f"><label for="' + px + 'Act">Atividade</label><select id="' + px + 'Act" class="mini-select">' + runUiSessOpts([["run", "Corrida"], ["bike", "Bicicleta"]], runUiAct()) + '</select></div>' +
-    '<div class="f"><label for="' + px + 'Kind">Tipo</label><select id="' + px + 'Kind" class="mini-select">' + runUiSessOpts([["intervals", "Repetições (intervalos)"], ["goal", "Meta (distância ou tempo)"]], "intervals") + '</select></div>' +
+    '<div class="f"><label for="' + px + 'Kind">Tipo</label><select id="' + px + 'Kind" class="mini-select">' + runUiSessOpts([["intervals", "Repetições (intervalos)"], ["goal", "Meta (distância ou tempo)"], ["beat", "Contra o relógio (distância e tempo)"]], "intervals") + '</select></div>' +
     '<div class="f run-sess-iv"><label for="' + px + 'Warm">Aquecimento (min)</label><input type="number" id="' + px + 'Warm" min="0" max="' + L.warmMin[1] + '" value="10"></div>' +
     '<div class="f run-sess-iv"><label for="' + px + 'Reps">Repetições</label><input type="number" id="' + px + 'Reps" min="' + L.reps[0] + '" max="' + L.reps[1] + '" value="8"></div>' +
     '<div class="f run-sess-iv"><label for="' + px + 'Work">Esforço</label><input type="number" id="' + px + 'Work" min="10" value="400"></div>' +
@@ -622,6 +622,8 @@ function runUiSessFormHtml(px, withDate){
     '<div class="f run-sess-iv"><label for="' + px + 'Cool">Arrefecimento (min)</label><input type="number" id="' + px + 'Cool" min="0" max="' + L.warmMin[1] + '" value="5"></div>' +
     '<div class="f run-sess-goal hidden"><label for="' + px + 'Goal">Meta</label><input type="number" id="' + px + 'Goal" min="0.5" step="0.5" value="5"></div>' +
     '<div class="f run-sess-goal hidden"><label for="' + px + 'GoalU">em</label><select id="' + px + 'GoalU" class="mini-select">' + runUiSessOpts([["km", "quilómetros"], ["min", "minutos"]], "km") + '</select></div>' +
+    '<div class="f run-sess-beat hidden"><label for="' + px + 'Bkm">Distância (km)</label><input type="number" id="' + px + 'Bkm" min="0.5" step="0.1" value="5"></div>' +
+    '<div class="f run-sess-beat hidden"><label for="' + px + 'Btime">Tempo a bater (mm:ss)</label><input type="text" id="' + px + 'Btime" inputmode="numeric" maxlength="8" value="25:00"></div>' +
     (withDate ? '<div class="f" style="grid-column:1/-1;"><label for="' + px + 'Date">Para o dia (opcional)</label><input type="date" id="' + px + 'Date"></div>' : '') +
     '</div>';
 }
@@ -629,16 +631,18 @@ function runUiSessFormRead(box, px){
   var g = function(id){ var e = box.querySelector("#" + px + id); return e ? e.value : ""; };
   var kind = g("Kind"), o = {name: g("Name"), activity: g("Act"), kind: kind};
   if (g("Date")) o.date = g("Date");
-  if (kind === "goal") o.goal = {unit: g("GoalU"), value: g("Goal")};
+  if (kind === "beat") o.beat = {km: g("Bkm"), timeS: runParseDuration(g("Btime"))};
+  else if (kind === "goal") o.goal = {unit: g("GoalU"), value: g("Goal")};
   else o.intervals = {warmupMin: g("Warm"), reps: g("Reps"), work: {unit: g("WorkU"), value: g("Work")}, rest: {unit: g("RestU"), value: g("Rest")}, cooldownMin: g("Cool")};
   return o;
 }
 function runUiSessFormWire(box, px){
   var kind = box.querySelector("#" + px + "Kind");
   function sync(){
-    var goal = kind.value === "goal";
-    box.querySelectorAll(".run-sess-iv").forEach(function(e){ e.classList.toggle("hidden", goal); });
-    box.querySelectorAll(".run-sess-goal").forEach(function(e){ e.classList.toggle("hidden", !goal); });
+    var k = kind.value;
+    box.querySelectorAll(".run-sess-iv").forEach(function(e){ e.classList.toggle("hidden", k !== "intervals"); });
+    box.querySelectorAll(".run-sess-goal").forEach(function(e){ e.classList.toggle("hidden", k !== "goal"); });
+    box.querySelectorAll(".run-sess-beat").forEach(function(e){ e.classList.toggle("hidden", k !== "beat"); });
   }
   kind.addEventListener("change", sync); sync();
 }
@@ -654,20 +658,38 @@ function runUiSessItemHtml(ses, idx, kind, live){
     '<br><span class="muted-p">' + escapeHtml(runSessionSummary(ses)) + '</span></div>' +
     (live ? '<button type="button" class="btn btn-sm primary" data-sess-start="' + kind + ':' + idx + '">Começar</button>' : '') + '</li>';
 }
-function runUiSessionsHtml(sv){
+// corridas anteriores que se podem tentar bater (a mesma atividade, pelo menos 1 km e 5 min), as mais recentes primeiro
+function runUiBeatCandidates(d){
+  var act = runUiAct();
+  return ((d && d.runs) || []).filter(function(r){ return (r.activity === "bike" ? "bike" : "run") === act && r.distM >= 1000 && r.durationS >= 300 && runBeatRef(r); }).slice(0, 8);
+}
+function runUiSessionsHtml(sv, d){
   var live = sv.runsMode === "live" && typeof RUN.liveOpen === "function", list = runUiSessList(sv);
   var h = '<div class="card run-sessions" id="runSessions"><div class="eyebrow">Treinos</div>';
   h += list.length ? '<p class="muted-p">Do teu profissional:</p><ul class="run-sess-list">' + list.map(function(x, i){ return runUiSessItemHtml(x, i, "p", live); }).join("") + '</ul>' :
     '<p class="muted-p">Sem treinos do teu profissional por agora. Podes escolher um treino pronto ou montar o teu.</p>';
   h += '<details class="soft-details" id="runSessTpl"><summary>Treinos prontos</summary><ul class="run-sess-list">' +
     RUN_SESSION_TEMPLATES.map(function(t, i){ return runUiSessItemHtml(runSessionNormalize(t), i, "t", live); }).join("") + '</ul></details>' +
+    runUiBeatHtml(sv, d, live) +
     '<details class="soft-details" id="runSessOwn"><summary>Montar o meu treino</summary>' + runUiSessFormHtml("ss", false) +
     (live ? '<button type="button" class="btn primary run-btn" id="runSessOwnGo">Começar este treino</button>' : '') + '<p class="run-err" id="runSessErr" role="alert"></p></details>' +
     '<p class="muted-p run-note">' + (live ? 'O telemóvel avisa com um som e uma vibração a cada passo. Mantém o ecrã ligado.' : 'Para seres guiado pelo telemóvel, o teu profissional tem de ligar a gravação por GPS. Podes fazer o treino na mesma e registar a corrida depois.') + '</p></div>';
   return h;
 }
+function runUiBeatHtml(sv, d, live){
+  var list = runUiBeatCandidates(d), h = '<details class="soft-details" id="runBeat"><summary>Melhorar tempo</summary>';
+  if (!d || !d.loaded) return h + '<p class="muted-p">A carregar as tuas corridas…</p></details>';
+  if (!list.length) return h + '<p class="muted-p">Precisas de uma ' + (runUiAct() === "bike" ? 'volta de bicicleta' : 'corrida') + ' guardada de pelo menos 1 km e 5 min para tentar bater o tempo dela.</p></details>';
+  h += '<p class="muted-p">Escolhe uma ' + (runUiAct() === "bike" ? 'volta' : 'corrida') + ' anterior e tenta fazer a mesma distância mais depressa: o telemóvel diz-te se estás adiantado ou atrasado. Compara só o tempo com a distância (o percurso pode ser outro).</p><ul class="run-sess-list">';
+  list.forEach(function(r, i){
+    h += '<li class="run-sess-item"><div><b>' + escapeHtml(runUiDateStr(r.startedAtMs) + " · " + runDistStr(r.distM) + " · " + runDurStr(r.durationS)) + '</b>' +
+      '<br><span class="muted-p">' + escapeHtml((r.activity === "bike" ? runUiNum1(r.speedKmh || 0) + " km/h" : runPaceStr(r.paceSPerKm) + "/km") + (r.splitsS && r.splitsS.length ? " · com parciais por km" : "")) + '</span></div>' +
+      (live ? '<button type="button" class="btn btn-sm primary" data-beat-start="' + i + '">Melhorar</button>' : '') + '</li>';
+  });
+  return h + '</ul></details>';
+}
 function runUiSessionStart(s, ses){
-  RUN.session = ses; RUN.activity = ses.activity === "bike" ? "bike" : "run";
+  RUN.beat = null; RUN.session = ses; RUN.activity = ses.activity === "bike" ? "bike" : "run";
   RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); });
 }
 function runUiSessionsWire(s, el){
@@ -676,6 +698,16 @@ function runUiSessionsWire(s, el){
   var own = box.querySelector("#runSessOwn .run-sess-form");
   if (own) runUiSessFormWire(box, "ss");
   var list = runUiSessList(s);
+  var cands = runUiBeatCandidates(runUiData);
+  box.querySelectorAll("[data-beat-start]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var r = cands[+b.getAttribute("data-beat-start")], ref = r && runBeatRef(r);
+      if (!ref) return;
+      RUN.session = null; RUN.activity = r.activity === "bike" ? "bike" : "run";
+      RUN.beat = {distM: ref.distM, durationS: ref.durationS, splitsS: ref.splitsS, label: runUiDateStr(r.startedAtMs) + " · " + runDistStr(r.distM) + " · " + runDurStr(r.durationS)};
+      RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); });
+    });
+  });
   box.querySelectorAll("[data-sess-start]").forEach(function(b){
     b.addEventListener("click", function(){
       var p = b.getAttribute("data-sess-start").split(":"), ses = p[0] === "t" ? runSessionNormalize(RUN_SESSION_TEMPLATES[+p[1]]) : list[+p[1]];
@@ -739,7 +771,7 @@ function runUiHomeHtml(sv){
         '<p class="muted-p run-note" id="runLiveNote">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>';
     }
   }
-  h += '</div>' + (preview ? '' : runUiSessionsHtml(sv)) + runUiPlanHtml(sv, d) + runUiListHtml(d, {weeks: true, empty: RUN_UI_MSG.empty});
+  h += '</div>' + (preview ? '' : runUiSessionsHtml(sv, d)) + runUiPlanHtml(sv, d) + runUiListHtml(d, {weeks: true, empty: RUN_UI_MSG.empty});
   if (!preview) h += runUiGuideHtml();
   return h + '<div class="card run-priv">' + runUiPrivacyHtml(d, preview, false) + '</div>';
 }
@@ -769,7 +801,7 @@ function runUiWireHome(s, el){
   if (!off){   // com a Corrida desligada só se vê e apaga
     runUiOn(el, "#runGoImport", function(){ RUN.ensureConsent(s, function(){ RUN.go("import"); }); });
     runUiOn(el, "#runGoManual", function(){ RUN.ensureConsent(s, function(){ RUN.go("manual"); }); });
-    runUiOn(el, "#runGoLive", function(){ RUN.session = null; RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); }); });
+    runUiOn(el, "#runGoLive", function(){ RUN.session = null; RUN.beat = null; RUN.ensureConsent(s, function(){ if (typeof RUN.liveOpen === "function") RUN.liveOpen(s); }); });
   }
   runUiOn(el, "#runDelAll", function(){
     var extra = runUiQueueCount() > 0 ? " Também apaga as corridas por enviar que estão neste telemóvel." : "";
