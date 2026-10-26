@@ -163,6 +163,8 @@
 
    Formatação PT-PT e entradas do registo à mão
      runPaceOf(distM, movingS) → s/km | null      runPaceStr(sPorKm) → «5:30» (ou «–»)
+     runPaceCheck(distM, movingS, durationS, cfg) → {ask, paceSPerKm|null, kmh|null}   ask = ritmo em movimento (senão o total) mais rápido que
+         RUN_CFG.askPaceSPerKm, a partir de askMinDistM. Só avisa; quem chama pergunta «foi mesmo uma corrida?» (hipótese de desenho, não medida).
      runDurStr(s) → «42:10» | «1:02:10»            runDistStr(m) → «5,23 km»
      runParseKm(str) → metros inteiros | NaN       aceita «5,23», «5.23», «5,23 km» (até 3 decimais, 0 < km <= 300)
    runParseQuick(texto, nowMs) → {ok:true, distM, durS, date, time} | {ok:false, error}   o registo à mão numa só linha («5,2 km 28:30», «ontem 18:30 5,23 km 27:58»)
@@ -208,6 +210,8 @@ var RUN_CFG = {
   spikeK: 3,              // pontos soltos: N pontos seguidos, coerentes entre si e incoerentes com o resto, abrem um trecho novo
   orderWindow: 50,        // importação: quantos pontos à frente se olha para apanhar uma hora adiantada (ponto isolado ou série curta)
   timeBackS: 5,           // ao vivo: um fix que recua mais de N s em relação ao fix que abriu o segmento desfaz esse fix (hora adiantada)
+  askPaceSPerKm: 200,     // aviso antes de guardar: ritmo em movimento mais rápido que 3:20/km (18 km/h) pergunta se foi mesmo uma corrida (carro, bicicleta)
+  askMinDistM: 300,       // o aviso de ritmo só vale a partir desta distância (tiros curtos não perguntam)
   trimM: 200,             // privacidade: metros aparados à partida e à chegada (por omissão, e valor usado se trimM for inválido)
   trimChoices: [0, 100, 200, 500, 1000, 2000],   // valores aceites para trimM; qualquer outro (NaN, texto, negativo) cai em trimM
   trimSlack: 0.5,         // aparo: raio efetivo = trimM × (1 + trimSlack × rnd), com rnd ∈ [0,1) dado por quem chama
@@ -1134,6 +1138,12 @@ function runDupCheck(existingRuns, candidate){
 function runPaceOf(distM, movingS){
   if (!runIFin(distM) || !runIFin(movingS) || distM <= 0 || movingS <= 0) return null;
   return movingS / (distM / 1000);
+}
+function runPaceCheck(distM, movingS, durationS, cfg){
+  var c = runCfg(cfg), t = runIFin(movingS) && movingS > 0 && (!runIFin(durationS) || movingS <= durationS) ? movingS : durationS;
+  var pace = runPaceOf(distM, t);
+  if (pace == null) return {ask: false, paceSPerKm: null, kmh: null};
+  return {ask: distM >= c.askMinDistM && pace < c.askPaceSPerKm, paceSPerKm: pace, kmh: 3600 / pace};
 }
 function runPaceStr(sPerKm){
   if (!runIFin(sPerKm) || sPerKm <= 0 || sPerKm >= 3600) return "–";

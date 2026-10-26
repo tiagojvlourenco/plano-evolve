@@ -722,6 +722,12 @@ ck("149. Fuzz de séries hostis (300): pontos soltos, horas adiantadas, duplicad
   ck("153. runParseQuick: um ritmo («5:30 min/km», «5:30/km») nunca é confundido com o tempo", q("5.23 km 1:05:30 5:30 min/km").durS === 3930 && q("5 km 40:00 5:30/km").durS === 2400);
   ck("154. runParseQuick: recusa o que não é claro (sem tempo, sem distância, duas horas ambíguas, texto livre, distância absurda) sem lançar", ["10 km", "28:30", "5,2 km 28:30 20:00", "olá", "", "50 m 1:00", "400 km 3:00", "5 km 99:99"].every(function(x){ var r = q(x); return r.ok === false && /Escreve|distância/.test(r.error); }) && q(null).ok === false && q("x".repeat(500)).ok === false);
   ck("155. runParseQuick: uma data de dia/mês sem ano no futuro usa o ano anterior (ex.: «30/12» em outubro)", q("30/12 5 km 30:00").date === "2025-12-30");
+  ck("156. runPaceCheck: pergunta abaixo de 3:20/km em movimento (carro a 3:08/km), não em 3:20 exato nem em 5:30; usa o tempo total sem tempo em movimento; ignora menos de 300 m e dados maus", (function(){
+    var pc = C.runPaceCheck(1360, 255, 347);
+    return pc.ask === true && Math.abs(pc.paceSPerKm - 187.5) < 0.01 && C.runPaceCheck(5000, 1000, 1000).ask === false && C.runPaceCheck(5000, 1650, 1700).ask === false &&
+      C.runPaceCheck(5000, 0, 900).ask === true && C.runPaceCheck(200, 20, 20).ask === false && C.runPaceCheck(0, 10, 10).ask === false && C.runPaceCheck(NaN, 10, 10).ask === false &&
+      C.runPaceCheck(5000, 1000, 1000, {askPaceSPerKm: 150}).ask === false;
+  })());
 })();
 
 check.summarize();

@@ -300,6 +300,8 @@ No ecrã de treino do aluno há três botões: «♪ Spotify», «♪ Apple Musi
 
 ## 8u. Corrida (migração 0032, na app EVOLVE Treino)
 
+- **Aviso de ritmo (hipótese, não medida)**: antes de guardar, se o ritmo em movimento for mais rápido que 3:20/km (18 km/h) e a distância tiver 300 m ou mais, aparece o aviso no ecrã e uma pergunta «Guardar mesmo assim?» (carro, bicicleta ou transportes). Limiares em `RUN_CFG.askPaceSPerKm` e `askMinDistM`. A base de dados continua só a recusar médias acima de 43 km/h.
+
 A Corrida vive no separador «Corrida» da app EVOLVE Treino (`treino.html`) e, para o profissional, no chip «Corridas» da ficha do aluno (grupo «Treino», app EVOLVE). O código está em três ficheiros carregados só quando se abre a Corrida: `corrida-core.js` (contas e leitura de ficheiros, sem ecrã), `corrida.js` (ecrãs do aluno e do profissional) e `corrida-live.js` (gravador GPS e fila de envio).
 
 **O que o aluno pode fazer** (só se o profissional ligar a Corrida nesse aluno):

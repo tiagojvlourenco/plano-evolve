@@ -378,7 +378,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   // velocidade média alta
   await importFile(Ch, "rapido.gpx", gpxOf(PFAST));
   await Ch.pg.waitForSelector("#runSave");
-  ck("47. Velocidade média acima de 25 km/h avisa («muito alta para corrida. Tens a certeza?»)", /A velocidade média é de \d+,\d km\/h, muito alta para corrida\. Tens a certeza\?/.test(await Ch.pg.locator("#runSvWarns").innerText()));
+  ck("47. Ritmo mais rápido que 3:20/km avisa («muito rápido para uma corrida… carro, bicicleta»)", /Ritmo de \d+:\d\d\/km \(\d+,\d km\/h\): muito rápido para uma corrida\. Se foi de carro, bicicleta ou transportes/.test(await Ch.pg.locator("#runSvWarns").innerText()));
   await Ch.pg.click("#runSvCancel"); await Ch.pg.waitForSelector("#runFile", {state: "attached"});
   var PGAP = P5K.slice(0, 100).concat(P5K.slice(119));   // ~95 s sem posições a meio
   await Ch.pg.setInputFiles("#runFile", {name: "lacuna.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from(gpxOf(PGAP))});
