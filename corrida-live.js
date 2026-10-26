@@ -186,7 +186,7 @@ function runLiveDraftBuild(st, o){
   o = o || {};
   return {
     v: 1, uid: o.uid, iid: typeof o.iid === "string" ? o.iid.slice(0, 64) : "", rel: o.rel === true,
-    ts: runLFin(o.nowMs) ? o.nowMs : Date.now(), view: "live", ended: o.ended === true,
+    ts: runLFin(o.nowMs) ? o.nowMs : Date.now(), view: "live", ended: o.ended === true, act: o.act === "bike" ? "bike" : "run",
     hiddenS: runLInt(o.hiddenS, 0, 86400), restarts: runLInt(o.restarts, 0, 1000), st: st
   };
 }
@@ -221,9 +221,9 @@ function runLiveDraftParse(raw, uid){
   if (!uid || d.uid !== uid) return {ok: false, reason: "other"};
   st = d.v === 1 && d.st && typeof d.st === "object" && Array.isArray(d.st.segs) ? runFeedRestore(d.st) : null;
   if (!st || st.nPts < 1) return {ok: false, reason: "unusable"};
-  stats = runStats(st.segs, null, "live");
+  stats = runStats(st.segs, runActivityCfg(d.act === "bike" ? "bike" : "run"), "live");
   return {
-    ok: true, st: st, ended: d.ended === true, hiddenS: runLInt(d.hiddenS, 0, 86400), restarts: runLInt(d.restarts, 0, 1000),
+    ok: true, act: d.act === "bike" ? "bike" : "run", st: st, ended: d.ended === true, hiddenS: runLInt(d.hiddenS, 0, 86400), restarts: runLInt(d.restarts, 0, 1000),
     ts: runLFin(d.ts) ? d.ts : null, iid: typeof d.iid === "string" ? d.iid.slice(0, 64) : "", rel: d.rel === true,
     points: st.nPts, stats: stats, lastT: st.lastGoodT, startedAtMs: st.startedAtMs
   };
@@ -240,20 +240,20 @@ function runLiveDraftOwner(info, nowMs, ownIid){
 }
 // «Terminar no último ponto bom»: o que se perde (e o que fica) se se cortar a corrida na última lacuna grande, ou null se não há nada a oferecer
 // (sem lacuna final de pelo menos cutGapMinS, ou o que fica não se pode guardar). Não decide nada: quem chama mostra os números ao aluno.
-function runLiveCutOffer(st, hiddenS, nowMs){
+function runLiveCutOffer(st, hiddenS, nowMs, act){
   var cut, kept, whole, chk;
   if (!st || !Array.isArray(st.segs) || typeof runCutAtLastGap !== "function") return null;
   cut = runCutAtLastGap(st.segs, RUN_LIVE_CFG.cutGapMinS);
   if (!cut || !(cut.cutPoints > 0) || !Array.isArray(cut.segments) || !cut.segments.length) return null;
-  kept = runStats(cut.segments, null, "live");
+  kept = runStats(cut.segments, runActivityCfg(act), "live");
   if (kept.points < 2) return null;
-  whole = runStats(st.segs, null, "live");
-  chk = runLCheckStats(kept, Math.max(0, runLInt(hiddenS, 0, 86400) - cut.cutS), nowMs);
+  whole = runStats(st.segs, runActivityCfg(act), "live");
+  chk = runLCheckStats(kept, Math.max(0, runLInt(hiddenS, 0, 86400) - cut.cutS), nowMs, act);
   if (!chk.ok) return null;
   return {cutS: cut.cutS, cutPoints: cut.cutPoints, kept: kept, lostDistM: Math.max(0, whole.distM - kept.distM), segments: cut.segments, hiddenS: Math.max(0, runLInt(hiddenS, 0, 86400) - cut.cutS)};
 }
-function runLCheckStats(stats, hiddenS, nowMs){
-  return runCheckRun({id: "00000000-0000-4000-8000-000000000000", studentId: "x", source: "live", startedAtMs: stats.startedAtMs, durationS: stats.durationS,
+function runLCheckStats(stats, hiddenS, nowMs, act){
+  return runCheckRun({activity: act === "bike" ? "bike" : "run", id: "00000000-0000-4000-8000-000000000000", studentId: "x", source: "live", startedAtMs: stats.startedAtMs, durationS: stats.durationS,
     movingS: stats.movingS, distM: stats.distM, gaps: stats.gaps, gapS: stats.gapS, hiddenS: hiddenS, consentV: 1}, nowMs);
 }
 // O que o aluno pode fazer com um rascunho: retomar (só se não terminou, a Corrida ao vivo está ligada e passaram <= 6 h), guardar o que há (só se dá uma
@@ -268,10 +268,10 @@ function runLiveDraftChoices(info, nowMs, mode, ownIid){
     return out;
   }
   if (mode !== "live") { out.why = "A gravação com GPS não está ligada para ti neste momento, por isso não dá para retomar nem guardar esta corrida. Podes descartá-la."; return out; }
-  chk = runLCheckStats(info.stats, info.hiddenS, nowMs);
+  chk = runLCheckStats(info.stats, info.hiddenS, nowMs, info.act);
   out.save = info.stats.points >= 2 && chk.ok;
   if (!chk.ok) out.saveError = chk.error;
-  out.cut = runLiveCutOffer(info.st, info.hiddenS, nowMs);
+  out.cut = runLiveCutOffer(info.st, info.hiddenS, nowMs, info.act);
   age = nowMs - info.lastT;
   if (!info.ended) {
     if (age <= RUN_LIVE_CFG.resumeMaxMs) out.resume = true;
@@ -367,9 +367,10 @@ function runLiveQueueAdd(list, item, uid, nowMs){
 }
 
 /* ---------- estado em memória (RUN.live) ---------- */
+function runLSpeedStr(distM, movingS){ var k = runSpeedKmh(distM, movingS); return k ? String(Math.round(k * 10) / 10).replace(".", ",") : "–"; }
 function runLNew(){
   return {
-    sid: 0, phase: "intro", uid: null, stu: null,
+    sid: 0, phase: "intro", uid: null, stu: null, act: "run",
     st: null, ended: false, hiddenS: 0, hiddenAt: null, notice: "", restarts: 0, restartLog: [],
     gpsOn: false, watching: false, err: null, prepGood: false, prepStartMs: null, watchStartMs: null, lastCbMs: null, lastAcc: null, seq3: 0, tapMs: null, visibleAt: 0,
     wlWanted: false, wlSentinel: null, wlPending: false, wl: "", wlLog: [],
@@ -425,7 +426,7 @@ function runLDraftWrite(force, release){
   if (L.st.nPts < 1) { runLDraftClear(); L.draftOk = null; L.dirty = false; return true; }
   hid = L.hiddenS + (L.hiddenAt != null ? Math.max(0, (now - L.hiddenAt) / 1000) : 0);
   if (release === true) L.released = true;     // despedida: as escritas seguintes (o «oculta» que vem depois do pagehide) mantêm-na até a página voltar
-  res = runLiveDraftSerialize(runLiveDraftBuild(L.st, {uid: uid, hiddenS: hid, ended: L.ended, restarts: L.restarts, nowMs: now, iid: runLInst, rel: L.released === true}));
+  res = runLiveDraftSerialize(runLiveDraftBuild(L.st, {uid: uid, hiddenS: hid, ended: L.ended, restarts: L.restarts, nowMs: now, act: L.act, iid: runLInst, rel: L.released === true}));
   L.draftOk = res.ok && runLSet(RUN_DRAFT_KEY, res.text);
   if (L.draftOk) L.dirty = false;
   return L.draftOk;
@@ -646,7 +647,7 @@ function runLPaint(now){
   view = runLiveView(L.st, now);
   runLSetText("runLiveTime", runDurStr(view.elapsedS));
   runLSetText("runLiveDist", runDistStr(view.distM));
-  runLSetText("runLivePace", runPaceStr(view.paceSPerKm));
+  runLSetText("runLivePace", L.act === "bike" ? runLSpeedStr(view.distM, view.movingS) : runPaceStr(view.paceSPerKm));
   runLSetText("runLiveGaps", "Lacunas: " + view.gaps + (view.gaps ? " (" + runLDurWords(view.gapS) + " sem posições)" : ""));
   var notes = document.getElementById("runLiveNotes");
   if (notes) {
@@ -675,7 +676,7 @@ function runLOnFix(sid, fix){
   t = runLiveClampT(fix.t, now);
   if (t !== fix.t) fix = {lat: fix.lat, lon: fix.lon, acc: fix.acc, t: t, speed: fix.speed};
   before = L.st.nPts;
-  info = runFeed(L.st, fix);
+  info = runFeed(L.st, fix, runActivityCfg(L.act));
   if (info.good || info.added) L.badRun = 0;
   else if (info.reason === "time" || info.reason === "jump" || info.reason === "invalid") L.badRun++;
   if (info.added || info.gap) L.dirty = true;
@@ -795,6 +796,7 @@ function runLStartPrepare(){
 }
 function runLStartRecording(){
   var L = RUN.live;
+  L.act = RUN.activity === "bike" ? "bike" : "run";
   L.st = runFeedInit(); L.phase = "rec"; L.ended = false; L.hiddenS = 0; L.hiddenAt = null; L.notice = ""; L.restarts = 0; L.restartLog = [];
   L.tapMs = Date.now(); L.dirty = false; L.draftOk = null; L.lastDraftMs = 0; L.notesHtml = ""; L.badRun = 0; L.modeLost = false; L.cutNote = "";
   L.wlWanted = true;
@@ -869,7 +871,7 @@ function runLResumeDraft(s){
   runLHardStop(); runLResetState();
   L = RUN.live;
   L.uid = runLUid(); L.stu = s;
-  L.st = info.st; L.hiddenS = info.hiddenS; L.restarts = info.restarts; L.ended = false;
+  L.st = info.st; L.act = info.act; L.hiddenS = info.hiddenS; L.restarts = info.restarts; L.ended = false;
   L.phase = "rec"; L.gpsOn = true; L.tapMs = now; L.dirty = true; L.prepStartMs = now;
   L.wlWanted = true;
   runLWakeAcquire();
@@ -879,8 +881,8 @@ function runLResumeDraft(s){
   return true;
 }
 // corta a corrida na última lacuna grande: devolve o estado novo (só o que vem antes) ou null. Os segundos ocultos que cabiam no que se tirou saem também.
-function runLCutState(st, hiddenS, nowMs){
-  var offer = runLiveCutOffer(st, hiddenS, nowMs), ns;
+function runLCutState(st, hiddenS, nowMs, act){
+  var offer = runLiveCutOffer(st, hiddenS, nowMs, act), ns;
   if (!offer) return null;
   ns = runFeedRestore({segs: offer.segments, paused: false, pauseAt: null, pausedMs: st.pausedMs, rej: st.rej});
   if (!ns || ns.nPts < 2) return null;
@@ -892,11 +894,11 @@ function runLDraftToEnd(s, cut){
   if (!info.ok) return false;
   ch = runLiveDraftChoices(info, now, runLMode(s), runLInst);
   if (cut === true ? !ch.cut : !ch.save) return false;
-  if (cut === true) { c = runLCutState(info.st, info.hiddenS, now); if (!c) return false; }
+  if (cut === true) { c = runLCutState(info.st, info.hiddenS, now, info.act); if (!c) return false; }
   runLHardStop(); runLResetState();
   L = RUN.live;
   L.uid = runLUid(); L.stu = s;
-  L.st = c ? c.st : info.st; L.hiddenS = c ? c.hiddenS : info.hiddenS; L.restarts = info.restarts; L.ended = true; L.phase = "end";
+  L.act = info.act; L.st = c ? c.st : info.st; L.hiddenS = c ? c.hiddenS : info.hiddenS; L.restarts = info.restarts; L.ended = true; L.phase = "end";
   if (c) L.cutNote = runLCutNote(c.offer);
   L.dirty = true;
   runLDraftWrite(true);
@@ -907,7 +909,7 @@ function runLDraftToEnd(s, cut){
 function runLCutNow(){
   var L = RUN.live, c;
   if (L.phase !== "end" || !L.st) return false;
-  c = runLCutState(L.st, L.hiddenS, Date.now());
+  c = runLCutState(L.st, L.hiddenS, Date.now(), L.act);
   if (!c) return false;
   L.st = c.st; L.hiddenS = c.hiddenS; L.cutNote = runLCutNote(c.offer); L.dirty = true;
   runLDraftWrite(true);
@@ -917,9 +919,9 @@ function runLCutNote(offer){
   return "Terminaste no último ponto bom: tirei o fim da corrida (" + runLDurWords(offer.cutS) + ", " + runLPlural(offer.cutPoints, "posição", "posições") + ").";
 }
 function runLRunFromState(studentId, consentV){
-  var L = RUN.live, stats = runStats(L.st.segs, null, "live");
+  var L = RUN.live, stats = runStats(L.st.segs, runActivityCfg(L.act), "live");
   return {stats: stats, run: {
-    id: "00000000-0000-4000-8000-000000000000", studentId: studentId || "x", source: "live", startedAtMs: stats.startedAtMs, durationS: stats.durationS, movingS: stats.movingS,
+    activity: L.act === "bike" ? "bike" : "run", id: "00000000-0000-4000-8000-000000000000", studentId: studentId || "x", source: "live", startedAtMs: stats.startedAtMs, durationS: stats.durationS, movingS: stats.movingS,
     distM: stats.distM, gaps: stats.gaps, gapS: stats.gapS, splitsS: stats.splitsS, hiddenS: Math.round(L.hiddenS), consentV: consentV || 1
   }};
 }
@@ -933,7 +935,7 @@ function runLReview(s){
   if (!chk.ok) { runLToast(chk.error); return; }
   if (typeof RUN.saveFlow !== "function") { runLToast("Não foi possível abrir o ecrã de guardar. Tenta outra vez."); return; }
   prep = {
-    source: "live", stats: built.stats, segments: runLCopy(L.st.segs), hiddenS: Math.round(L.hiddenS),
+    activity: L.act === "bike" ? "bike" : "run", source: "live", stats: built.stats, segments: runLCopy(L.st.segs), hiddenS: Math.round(L.hiddenS),
     warnings: runLiveWarnings(built.stats, Math.round(L.hiddenS), L.restarts), fileDistM: null, startedAtMs: built.stats.startedAtMs,
     onSaved: function(res){ if (!res || res.ok !== false) runLAfterSaved(); },
     cancelView: {name: "live"}      // «Cancelar» no ecrã de guardar volta ao resumo da corrida (nunca a perde)
@@ -1013,7 +1015,7 @@ function runLRecHtml(){
   h += "<div class=\"run-live-big\">" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Tempo</div><div class=\"run-live-num run-live-time num\" id=\"runLiveTime\">" + escapeHtml(runDurStr(v.elapsedS)) + "</div></div>" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Distância</div><div class=\"run-live-num num\" id=\"runLiveDist\">" + escapeHtml(runDistStr(v.distM)) + "</div></div>" +
-    "<div class=\"run-live-tile\"><div class=\"run-live-label\">Ritmo médio (min/km)</div><div class=\"run-live-num num\" id=\"runLivePace\">" + escapeHtml(runPaceStr(v.paceSPerKm)) + "</div></div></div>";
+    "<div class=\"run-live-tile\"><div class=\"run-live-label\">" + (L.act === "bike" ? "Velocidade média (km/h)" : "Ritmo médio (min/km)") + "</div><div class=\"run-live-num num\" id=\"runLivePace\">" + escapeHtml(L.act === "bike" ? runLSpeedStr(v.distM, v.movingS) : runPaceStr(v.paceSPerKm)) + "</div></div></div>";
   h += "<div class=\"run-live-gaps\" id=\"runLiveGaps\">Lacunas: " + v.gaps + (v.gaps ? " (" + escapeHtml(runLDurWords(v.gapS)) + " sem posições)" : "") + "</div>";
   L.notesHtml = runLNotesHtml();
   h += "<div id=\"runLiveNotes\" aria-live=\"polite\">" + L.notesHtml + "</div>";
@@ -1031,12 +1033,12 @@ function runLEndHtml(sv){
   h += "<div class=\"card run-live-card\"><h2 class=\"run-live-h\">Resumo</h2><div class=\"run-live-big\">" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Distância</div><div class=\"run-live-num num\">" + escapeHtml(runDistStr(stats.distM)) + "</div></div>" +
     "<div class=\"run-live-tile\"><div class=\"run-live-label\">Tempo</div><div class=\"run-live-num num\">" + escapeHtml(runDurStr(stats.durationS)) + "</div></div>" +
-    "<div class=\"run-live-tile\"><div class=\"run-live-label\">Ritmo médio (min/km)</div><div class=\"run-live-num num\">" + escapeHtml(runPaceStr(runPaceOf(stats.distM, stats.movingS))) + "</div></div></div>";
+    "<div class=\"run-live-tile\"><div class=\"run-live-label\">" + (L.act === "bike" ? "Velocidade média (km/h)" : "Ritmo médio (min/km)") + "</div><div class=\"run-live-num num\">" + escapeHtml(L.act === "bike" ? runLSpeedStr(stats.distM, stats.movingS) : runPaceStr(runPaceOf(stats.distM, stats.movingS))) + "</div></div></div>";
   if (L.modeLost || !live) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">A gravação com GPS foi desligada pelo teu profissional" + (L.modeLost ? ": a gravação parou aqui" : "") + ". Esta corrida ficou guardada neste telemóvel, mas só dá para a guardar se o teu profissional voltar a ligar a gravação com GPS. Se não precisares dela, podes descartá-la.</p>";
   if (L.cutNote) h += "<p class=\"run-live-p\">" + escapeHtml(L.cutNote) + "</p>";
   warns = runLiveWarnings(stats, Math.round(L.hiddenS), L.restarts);
   warns.forEach(function(w){ h += "<p class=\"run-live-p run-live-warn\">" + escapeHtml(w) + "</p>"; });
-  offer = live ? runLiveCutOffer(L.st, L.hiddenS, Date.now()) : null;
+  offer = live ? runLiveCutOffer(L.st, L.hiddenS, Date.now(), L.act) : null;
   if (offer) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">" + escapeHtml(runLCutAsk(offer, stats)) + "</p>";
   if (stats.points < 2) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">Não houve posições suficientes para guardar esta corrida.</p>";
   else if (!chk.ok && live) h += "<p class=\"run-live-p run-live-warn\" role=\"alert\">Esta corrida não pode ser guardada: " + escapeHtml(chk.error) + "</p>";
