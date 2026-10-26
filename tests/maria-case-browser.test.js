@@ -63,7 +63,7 @@ function ev(id, title, daysAgo, hhmm){ return {id: id, summary: title, colorId: 
   await page.click("#navStudio"); await page.waitForSelector("#gcalCard");
   await page.evaluate(function(){ var b = document.getElementById("stShowAll"); if (b && /Ver todos/.test(b.textContent)) b.click(); }); 
   await page.locator('[data-open-student="m1"]').first().click();
-  await page.waitForSelector("#proBack");
+  await page.waitForSelector("#ctBack");
   await page.waitForFunction(function(){ return /10 de 13 usadas/.test(document.getElementById("proMain").innerText); });
   var txt = await page.locator("#proMain").innerText();
   check.check("4. A ficha mostra 10 de 13 usadas, restam 3, e nenhuma aula «por confirmar»", /restam 3/.test(txt) && !/por confirmar/i.test(txt));
