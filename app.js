@@ -8841,8 +8841,9 @@ function restTimerLeftMs(t, now){ if (!t) return 0; return t.pausedLeft != null 
 function restTimerStart(seconds, label, now){
   seconds = Math.min(3600, Math.max(5, Math.round(seconds) || REST_DEFAULT_SECONDS));
   now = now == null ? Date.now() : now;
-  restTimer = {total: seconds, endsAt: now + seconds * 1000, label: label || "Descanso", pausedLeft: null, notified: false};
+  restTimer = {total: seconds, base: seconds, endsAt: now + seconds * 1000, label: label || "Descanso", pausedLeft: null, notified: false};
   unlockRestAudio();
+  restWakeAcquire();
   startRestTicker();
   renderRestTimer(now);
   return restTimer;
@@ -8865,10 +8866,11 @@ function restTimerTogglePause(now){
 }
 function restTimerRestart(now){
   if (!restTimer) return;
-  restTimerStart(restTimer.total, restTimer.label, now);
+  restTimerStart(restTimer.base || restTimer.total, restTimer.label, now); // volta ao descanso pré-definido, mesmo depois de −15/+15
 }
 function restTimerStop(){
   restTimer = null;
+  restWakeRelease();
   if (restTimerInterval){ clearInterval(restTimerInterval); restTimerInterval = null; }
   renderRestTimer();
 }
@@ -8885,6 +8887,22 @@ function restTimerTick(now){
   }
   renderRestTimer(now);
 }
+var REST_SOUND_KEY = "evolve_rest_sound_v1";
+function restSoundOn(){ try { return !(window.localStorage && window.localStorage.getItem(REST_SOUND_KEY) === "0"); } catch (e) { return true; } }
+function restSoundSet(on){ try { window.localStorage && window.localStorage.setItem(REST_SOUND_KEY, on ? "1" : "0"); } catch (e) {} }
+// ecrã ligado enquanto o descanso corre (o iPhone bloqueava o ecrã a meio e o aluno deixava de ver o tempo); sem suporte, nada acontece
+var restWakeLock = null;
+function restWakeAcquire(){
+  try {
+    if (!navigator.wakeLock || restWakeLock) return;
+    navigator.wakeLock.request("screen").then(function(l){
+      if (!restTimer){ try { l.release(); } catch (e) {} return; }
+      restWakeLock = l;
+      l.addEventListener("release", function(){ if (restWakeLock === l) restWakeLock = null; });
+    }).catch(function(){});
+  } catch (e) {}
+}
+function restWakeRelease(){ var l = restWakeLock; restWakeLock = null; try { if (l) l.release(); } catch (e) {} }
 function unlockRestAudio(){
   try {
     var AC = window.AudioContext || window.webkitAudioContext;
@@ -8894,6 +8912,7 @@ function unlockRestAudio(){
   } catch (e) {}
 }
 function restTimerAlert(){
+  if (!restSoundOn()) return; // o painel continua a piscar
   try {
     if (restAudioCtx){
       var t0 = restAudioCtx.currentTime;
@@ -8921,7 +8940,8 @@ function restTimerHtml(now){
     `<div class="rt-time${over ? " over" : ""}" role="timer">${over ? "+" : ""}${fmtClock(secs)}</div>` +
     `<div class="rt-bar"><i style="width:${pct.toFixed(1)}%"></i></div>` +
     `<div class="rt-status" aria-live="polite">${over ? "Descanso terminado — próxima série!" : ""}</div>` +
-    `<div class="rt-actions"><button type="button" data-rt="-15">−15 s</button><button type="button" data-rt="pause">${paused ? "Continuar" : "Pausa"}</button><button type="button" data-rt="+15">+15 s</button><button type="button" data-rt="restart">Reiniciar</button></div>`;
+    `<div class="rt-actions"><button type="button" data-rt="-15">−15 s</button><button type="button" data-rt="pause">${paused ? "Continuar" : "Pausa"}</button><button type="button" data-rt="+15">+15 s</button><button type="button" data-rt="restart">Reiniciar</button></div>` +
+    `<button type="button" class="rt-sound" data-rt="sound" aria-pressed="${restSoundOn()}">${restSoundOn() ? "🔔 Som ao acabar: ligado" : "🔕 Som ao acabar: desligado"}</button>`;
 }
 // Desenha o painel de raiz só quando a estrutura muda (início, pausa, fim, outro exercício); a cada "tick" só atualiza
 // o número e a barra no sítio — reconstruir os botões 4×/s fazia perder o foco e engolia cliques.
@@ -8939,7 +8959,7 @@ function renderRestTimer(now){
   now = now == null ? Date.now() : now;
   var left = restTimerLeftMs(restTimer, now), over = left < 0, paused = restTimer.pausedLeft != null;
   el.classList.toggle("done", left <= 0 && !paused);
-  var key = [restTimer.label, paused, over].join("|");
+  var key = [restTimer.label, paused, over, restSoundOn()].join("|");
   if (el._rtKey !== key){
     el.innerHTML = restTimerHtml(now);
     el._rtKey = key;
@@ -8961,6 +8981,12 @@ function renderRestTimer(now){
     else if (a === "restart") restTimerRestart();
     else if (a === "-15") restTimerAdjust(-15);
     else if (a === "+15") restTimerAdjust(15);
+    else if (a === "sound"){ restSoundSet(!restSoundOn()); if (restSoundOn()) unlockRestAudio(); renderRestTimer(); }
+  });
+  // ao voltar ao ecrã (desbloquear, mudar de app): recupera o som, o ecrã ligado e o tempo certo sem esperar pelo próximo tick
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState !== "visible" || !restTimer) return;
+    unlockRestAudio(); restWakeAcquire(); restTimerTick(Date.now());
   });
 })();
 
@@ -9311,7 +9337,7 @@ function tplWorkoutLogger(s){
   html += `<details class="soft-details wl-timer"><summary>Cronómetro de descanso livre</summary><div class="rt-presets">` +
       REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
     `</div></details>` +
-    `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7) + `</div>` +
+    `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7).replace('id="wlRpe"', 'id="wlRpe"' + (draft.rpeManual ? ' data-manual="1"' : "")) + `</div>` +
     `<details class="soft-details"${draft.notes ? " open" : ""}><summary>Como correu? (opcional)</summary><div class="checkin-field" style="margin-top:8px;"><label for="wlNotes" class="sr-only">Como correu?</label><textarea id="wlNotes" maxlength="500" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div></details>` +
     `<p class="muted-p" id="wlError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>` +
     `<button type="button" class="btn primary big" id="wlSave">Terminar treino</button></div>`;
@@ -9320,6 +9346,37 @@ function tplWorkoutLogger(s){
 
 var uiTapGuardUntil = 0; // depois de terminar o treino ignora toques rápidos que cairiam em 'Hoje'
 var wlSaving = {}; // alunos com uma gravação de treino em curso (id → true): impede duplo toque enquanto o pedido está a meio
+// próxima série do mesmo exercício: herda a carga e o RIR da que acabou de ser feita, se ainda não foram tocados nem feita
+function wlCopyToNextSet(el, box, recordDraft){
+  var m = /^(.*):(\d+)$/.exec(box.getAttribute("data-wl-done") || "");
+  if (!m) return;
+  var nextKey = m[1] + ":" + (parseInt(m[2], 10) + 1);
+  var nextBox = el.querySelector('[data-wl-done="' + nextKey + '"]');
+  if (!nextBox || nextBox.checked) return;
+  ["load", "rir"].forEach(function(kind){
+    var from = el.querySelector('[data-wl-' + kind + '="' + box.getAttribute("data-wl-done") + '"]'), to = el.querySelector('[data-wl-' + kind + '="' + nextKey + '"]');
+    if (!from || !to || from.value === "" || to.getAttribute("data-touched") === "1") return;
+    to.value = from.value;
+    recordDraft(to);
+  });
+}
+// esforço da sessão = 10 − média do RIR das séries feitas (RIR 2 ≈ RPE 8), enquanto o aluno não mexer no seletor
+function wlSuggestSessionRpe(el, recordDraft){
+  var rpe = el.querySelector("#wlRpe");
+  if (!rpe || rpe.getAttribute("data-manual") === "1") return;
+  var sum = 0, n = 0;
+  el.querySelectorAll("[data-wl-done]").forEach(function(b){
+    if (!b.checked) return;
+    var r = el.querySelector('[data-wl-rir="' + b.getAttribute("data-wl-done") + '"]'), v = r ? parseInt(r.value, 10) : NaN;
+    if (v >= 0 && v <= 10){ sum += v; n++; }
+  });
+  if (!n) return;
+  var val = Math.min(10, Math.max(1, Math.round(10 - sum / n)));
+  rpe.value = String(val);
+  var lab = el.querySelector("#wlRpeVal"); if (lab) lab.textContent = String(val);
+  rpe.style.setProperty("--p", rangeFill(rpe.value) + "%");
+  recordDraft(rpe);
+}
 function wireWorkoutLogger(s, el, rerender){
   var daySel = el.querySelector("#wlDay");
   if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
@@ -9340,6 +9397,11 @@ function wireWorkoutLogger(s, el, rerender){
     wlDraftSave(draft);
   }
   // ligado a cada campo (o contentor #alunoTabContent é reutilizado entre desenhos: um listener nele acumular-se-ia)
+  el.querySelectorAll("[data-wl-load], [data-wl-rir]").forEach(function(f){
+    var d0 = dayId ? wlDraftGet(s, dayId).sets[f.getAttribute("data-wl-load") || f.getAttribute("data-wl-rir")] : null;
+    f.addEventListener("input", function(){ f.setAttribute("data-touched", "1"); });
+    if (d0 && ((f.hasAttribute("data-wl-load") && d0.load !== undefined) || (f.hasAttribute("data-wl-rir") && d0.rir !== undefined))) f.setAttribute("data-touched", "1");
+  });
   el.querySelectorAll("[data-wl-reps], [data-wl-load], [data-wl-rir], [data-wl-done], #wlRpe, #wlNotes").forEach(function(field){
     ["input", "change"].forEach(function(evt){ field.addEventListener(evt, function(){ recordDraft(field); }); });
   });
@@ -9353,6 +9415,7 @@ function wireWorkoutLogger(s, el, rerender){
       if (kind === "reps") next = Math.min(100, Math.round(next));
       if (kind === "rir") next = Math.min(10, Math.round(next));
       input.value = String(next);
+      input.setAttribute("data-touched", "1");
       recordDraft(input);
     });
   });
@@ -9370,6 +9433,10 @@ function wireWorkoutLogger(s, el, rerender){
       if (row) row.classList.toggle("done", !!box.checked);
       updateProgress();
       if (!box.checked) return;
+      wlCopyToNextSet(el, box, recordDraft);
+      wlSuggestSessionRpe(el, recordDraft);
+      var allBoxes = el.querySelectorAll("[data-wl-done]");
+      if (allBoxes[allBoxes.length - 1] === box){ restTimerStop(); return; } // última série do treino: não há mais descanso
       var secs = parseInt(box.getAttribute("data-rest-start"), 10);
       if (secs >= 5) restTimerStart(secs, box.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
     });
@@ -9383,7 +9450,7 @@ function wireWorkoutLogger(s, el, rerender){
   });
   if (!save) return;
   var rpeInput = el.querySelector("#wlRpe");
-  if (rpeInput) rpeInput.addEventListener("input", function(){ el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
+  if (rpeInput) rpeInput.addEventListener("input", function(){ rpeInput.setAttribute("data-manual", "1"); var dr = dayId ? wlDraftGet(s, dayId) : null; if (dr){ dr.rpeManual = true; wlDraftSave(dr); } el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
   save.addEventListener("click", function(){
     var err = el.querySelector("#wlError");
     if (wlSaving[s.id]){ err.textContent = "A guardar o treino… aguarda um instante."; err.style.display = "block"; return; } // duplo toque / formulário reconstruído durante o pedido
@@ -9892,7 +9959,7 @@ function tplProTreino(s){
       `<div class="f" style="grid-column:1/-1;"><button type="button" class="btn btn-sm" data-ex-lib style="width:100%;">📚 Escolher da biblioteca</button></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Exercício</label><input type="text" data-ex-name maxlength="120" placeholder="Ex.: Supino com barra"></div>` +
       `<div class="f"><label>Séries</label><input type="number" min="1" max="20" value="3" data-ex-sets></div>` +
-      `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps></div>` +
+      `<div class="f"><label>Repetições</label><input type="text" value="8-12" data-ex-reps><span class="reps-chips"><button type="button" data-reps-chip="Falha">Falha</button><button type="button" data-reps-chip="Dropset">Dropset</button></span></div>` +
       `<div class="f"><label>RPE alvo</label><input type="number" min="1" max="10" step="0.5" data-ex-rpe></div>` +
       `<div class="f"><label>Descanso (s)</label><input type="number" min="0" max="900" step="15" value="90" data-ex-rest></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Grupo muscular (conta para o volume semanal)</label><select data-ex-group class="mini-select" style="width:100%;"><option value="">Automático (pelo nome)</option>${EXERCISE_GROUPS.map(function(g){ return `<option>${escapeHtml(g)}</option>`; }).join("")}</select></div>` +
@@ -9986,6 +10053,12 @@ function wireProTreino(s, el){
         box.querySelector("[data-ex-cues]").value = fill.cues;
         var gSel = box.querySelector("[data-ex-group]"); if (gSel) gSel.value = fill.group || "";
       });
+    });
+  });
+  el.querySelectorAll("[data-reps-chip]").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      var box = chip.closest ? chip.closest("[data-exform]") : null, inp = box ? box.querySelector("[data-ex-reps]") : null;
+      if (inp) inp.value = chip.getAttribute("data-reps-chip");
     });
   });
   el.querySelectorAll("[data-add-ex]").forEach(function(btn){
