@@ -872,9 +872,12 @@ function runUiPrepWarnings(prep){
   if (typeof prep.fileDistM === "number" && isFinite(prep.fileDistM) && prep.fileDistM > 0 && st.distM > 0 && Math.abs(prep.fileDistM - st.distM) / prep.fileDistM > 0.02){
     out.push("A app de origem indicava " + runUiKmNum(prep.fileDistM) + " km; a EVOLVE calculou " + runUiKmNum(st.distM) + " km. Pode diferir uns por cento.");
   }
-  var kmh = st.durationS > 0 ? st.distM / st.durationS * 3.6 : 0;
-  if (kmh > 25) out.push("A velocidade média é de " + runUiNum1(kmh) + " km/h, muito alta para corrida. Tens a certeza?");
+  var pc = runPaceCheck(st.distM, st.movingS, st.durationS);
+  if (pc.ask) out.push(runUiPaceMsg(pc));
   return out;
+}
+function runUiPaceMsg(pc){
+  return "Ritmo de " + runPaceStr(pc.paceSPerKm) + "/km (" + runUiNum1(pc.kmh) + " km/h): muito rápido para uma corrida. Se foi de carro, bicicleta ou transportes, não guardes como corrida.";
 }
 function runUiSaveHtml(sv){
   var v = RUN.v, f = v.form;
@@ -953,6 +956,8 @@ function runUiSaveClick(s){
   var chk = runCheckRun(run, Date.now()), row = chk.ok ? runBuildInsert(run, Date.now()) : null;
   if (!row){ runUiSaveErr(chk.error || "Não foi possível preparar esta corrida."); return; }
   if (runUiDupOf(prep) && !runUiAsk(RUN_UI_MSG.dupAsk)) return;
+  var pc = runPaceCheck(st.distM, st.movingS, st.durationS);
+  if (pc.ask && !runUiAsk(runUiPaceMsg(pc) + " Guardar mesmo assim?")) return;
   var item = {row: row, track: null}, shortMsg = "";
   if (f.share === true && runUiHasTrack(prep)){
     var tr = runPrepareTrack(prep.segments, {trimM: parseInt(f.trim, 10), rnd: Math.random()});   // o raio escondido é o escolhido mais uma folga ao acaso (até 50 %)
