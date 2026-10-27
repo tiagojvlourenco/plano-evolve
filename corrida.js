@@ -1577,8 +1577,8 @@ function runUiProLoad(s, d){
 }
 function runUiProHtml(s, d){ return '<div class="run-pro">' + runUiProInner(s, d) + '</div>'; }
 function runUiProInner(s, d){
-  var h = '<div class="eyebrow">Corridas</div>';
-  h += '<div class="card run-pro-mode"><div class="eyebrow">Corrida neste aluno</div><div class="run-modes" role="radiogroup" aria-label="Corrida neste aluno">' +
+  var h = '<div class="eyebrow">Cardio</div>';
+  h += '<div class="card run-pro-mode"><div class="eyebrow">Cardio neste aluno</div><div class="run-modes" role="radiogroup" aria-label="Cardio neste aluno">' +
     RUN_UI_MODES.map(function(m){
       var on = corridaModeOf(s) === m[0];
       return '<button type="button" class="chip run-mode' + (on ? ' on' : '') + '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-run-mode="' + m[0] + '"' + (d.modeBusy ? ' disabled' : '') + '>' + escapeHtml(m[1]) + '</button>';

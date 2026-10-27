@@ -479,3 +479,8 @@ Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar
 - **Progresso:** os 4 números do peso numa linha; tabelas com sombras nas pontas (deslizam); «Antes vs Depois» sem a grelha de quadrados vazios enquanto não houver fotografias.
 - **Hoje:** o botão «Abrir» do atalho para a app Treino ficou centrado.
 - Não alterado, por decisão pendente do dono: o tom dos avisos a vermelho («risco aumentado», «adiposidade central aumentada») mostrados ao aluno.
+
+## 8ao. Desfazer adaptação e «Cardio» na ficha do profissional
+
+- O aluno pode **desfazer** uma adaptação de refeição feita por engano: «Desfazer adaptação» (adaptação sem trocas) ou «Repor plano original» (com trocas). Ambos usam `undoMealAdaptation`: repõem os alimentos, tiram a marca e retiram do registo **de hoje** as trocas e adaptações dessa refeição (para os resumos do profissional não contarem o que não aconteceu). O histórico de dias anteriores nunca é apagado.
+- Na ficha do aluno (profissional) o separador e o título passaram de «Corridas» a **«Cardio»** («Cardio neste aluno»), como na app do aluno.

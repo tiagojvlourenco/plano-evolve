@@ -2104,6 +2104,15 @@ function revertMeal(meal){
   meal.adapted = false;
 }
 
+// desfaz uma adaptação feita por engano: repõe os alimentos originais (se houve trocas), tira a marca «adaptada» e retira do registo de hoje
+// as trocas e adaptações dessa refeição (para os resumos do profissional não contarem o que não aconteceu)
+function undoMealAdaptation(s, meal){
+  revertMeal(meal);
+  var today = todayISO();
+  function keep(e){ return !(e && e.date === today && e.meal === meal.name); }
+  s.adaptationHistory = (s.adaptationHistory || []).filter(function(e){ return keep(e) || (e && e.type !== "adaptacao" && e.type !== "substituicao"); });
+  s.substitutionHistory = (s.substitutionHistory || []).filter(keep);
+}
 function mealHasRevertible(meal){
   return meal.foods.some(function(f){ return f.original; });
 }
@@ -6931,7 +6940,7 @@ function openLowTime(s){
     commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
-    showToast("Refeição adaptada");
+    showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
     closeModal();
   }, s, m);
 }
@@ -7085,7 +7094,7 @@ function openAssistantPickFood(s, m, swappable){
         commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);
-        showToast("Refeição adaptada");
+        showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
         closeModal();
       }, s, m);
     });
@@ -7145,7 +7154,7 @@ function openAssistantSwapMeal(s, meal){
     commitMealView(s, meal);
     renderAlunoTab(s);
     persistStudent(s);
-    showToast("Refeição adaptada");
+    showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
     closeModal();
   });
 }
@@ -7181,6 +7190,7 @@ function openMealDetail(s, idx){
         (!m.done ? "<button type=\"button\" class=\"btn\" id=\"mdReschedule\">🕐 Alterar horário</button>" : "") +
         (!m.done && m.status !== "skipped" ? "<button type=\"button\" class=\"btn\" id=\"mdSkip\">○ Não vou fazer esta refeição</button>" : "") +
         (mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdRevert\">↺ Repor plano original</button>" : "") +
+        (m.adapted && !mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdUndoAdapt\">↺ Desfazer adaptação</button>" : "") +
       "</div>";
     sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + html;
     sheet.querySelector(".mclose button").addEventListener("click", closeModal);
@@ -7208,7 +7218,7 @@ function openMealDetail(s, idx){
         commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);
-        showToast("Refeição adaptada");
+        showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
         openMealDetail(s, idx);
       }, s, m);
     });
@@ -7220,15 +7230,25 @@ function openMealDetail(s, idx){
       render();
       renderAlunoTab(s);
       persistStudent(s);
-      showToast("Refeição adaptada");
+      showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
     });
     var rescheduleBtn = sheet.querySelector("#mdReschedule");
     if (rescheduleBtn) rescheduleBtn.addEventListener("click", function(){ openReschedule(s, m, idx); });
     var skipBtn = sheet.querySelector("#mdSkip");
     if (skipBtn) skipBtn.addEventListener("click", function(){ openSkipMeal(s, m, idx); });
     var revertBtn = sheet.querySelector("#mdRevert");
+    var undoAdaptBtn = sheet.querySelector("#mdUndoAdapt");
+    if (undoAdaptBtn) undoAdaptBtn.addEventListener("click", function(){
+      undoMealAdaptation(s, m);
+      commitMealView(s, m);
+      render();
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast("Adaptação desfeita");
+      closeModal();
+    });
     if (revertBtn) revertBtn.addEventListener("click", function(){
-      revertMeal(m);
+      undoMealAdaptation(s, m);
       commitMealView(s, m);
       render();
       renderAlunoTab(s);
@@ -7257,7 +7277,7 @@ function openFoodUnavailable(s, m, fi, idx){
       commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
-      showToast("Refeição adaptada");
+      showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
       openMealDetail(s, idx);
     }, s, m);
   });
@@ -7268,7 +7288,7 @@ function openFoodUnavailable(s, m, fi, idx){
     commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
-    showToast("Refeição adaptada");
+    showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
     openMealDetail(s, idx);
   });
 }
@@ -11502,7 +11522,7 @@ function wireAlunoTab(s){
       commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
-      showToast("Refeição adaptada");
+      showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
       closeModal();
     }, s, m);
   });
@@ -11514,7 +11534,7 @@ function wireAlunoTab(s){
     commitMealView(s, m);
     renderAlunoTab(s);
     persistStudent(s);
-    showToast("Refeição adaptada");
+    showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
   });
 
   var goBtn = el.querySelector("#goToMeal");
@@ -11534,7 +11554,7 @@ function wireAlunoTab(s){
         commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);
-        showToast("Refeição adaptada");
+        showToast("Refeição adaptada · podes desfazer ao abrir a refeição");
         closeModal();
       }, s, m);
     });
@@ -12233,7 +12253,7 @@ function proStudentNavHtml(){
 }
 function proNavGroupOf(tabKey){ return PRO_NAV.filter(function(g){ return g.tabs.indexOf(tabKey) >= 0; })[0] || PRO_NAV[0]; }
 function proTabLabel(key){ var t = PRO_TABS.filter(function(x){ return x[0] === key; })[0]; return t ? t[1] : key; }
-var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["corridas","Corridas"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
+var PRO_TABS = [["perfil","Perfil"],["leitura","Leitura"],["pedidos","Pedidos"],["plano","Nutrição"],["treino","Treino"],["corridas","Cardio"],["evolucao","Avaliação"],["checkins","Check-ins"],["sessoes","Pacotes"],["notas","Notas"],["historico","Histórico"]];
 
 function renderProDetailMain(s){
   ensureSyncBaseline(s);
@@ -12281,7 +12301,7 @@ function wireProDetailNav(main){
 
 // separador «Corridas» da ficha (app EVOLVE): a migração 0032 em falta, ou o módulo (carregado sob pedido, ao molde do separador «Pacotes» da Gestão)
 function tplProCorridasMissing(){
-  return "<div class=\"eyebrow\">Corridas</div><p class=\"muted-p\" id=\"corridasMissing\" style=\"margin-top:8px;\"><strong>Falta aplicar a migração 0032 no Supabase.</strong> " +
+  return "<div class=\"eyebrow\">Cardio</div><p class=\"muted-p\" id=\"corridasMissing\" style=\"margin-top:8px;\"><strong>Falta aplicar a migração 0032 no Supabase.</strong> " +
     "Abre o SQL Editor do projeto, cola o conteúdo de <code>supabase/migrations/0032_corrida.sql</code> e corre-o. Depois recarrega a app: este separador passa a mostrar as corridas e a Corrida de cada aluno.</p>";
 }
 function renderProCorridas(s, el){
@@ -12289,7 +12309,7 @@ function renderProCorridas(s, el){
   if (corridaHas("proTab")){ RUN.proTab(s, el); return; }
   var here = function(){ return state.proSelectedId === s.id && state.proTab === "corridas" ? document.getElementById("proTabContent") : null; };
   if (RUN.loaded || RUN.failed){ // carregou sem o separador do profissional, ou falhou antes: mensagem e nova tentativa
-    el.innerHTML = "<div class=\"eyebrow\">Corridas</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir as Corridas. Verifica a ligação e tenta outra vez.</p><button type=\"button\" class=\"btn btn-sm\" id=\"corridasRetry\" style=\"margin-top:8px;\">Tentar outra vez</button>";
+    el.innerHTML = "<div class=\"eyebrow\">Cardio</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir o Cardio. Verifica a ligação e tenta outra vez.</p><button type=\"button\" class=\"btn btn-sm\" id=\"corridasRetry\" style=\"margin-top:8px;\">Tentar outra vez</button>";
     var retry = el.querySelector("#corridasRetry");
     if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderProCorridas(s, document.getElementById("proTabContent") || el); });
     return;
