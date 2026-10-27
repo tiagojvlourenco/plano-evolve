@@ -437,3 +437,7 @@ O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu 
 - O aviso (RUN_UI_NOTICE) passou à **versão 2**: cobre bicicleta, treinos guiados e o mapa opcional (OpenStreetMap: recebe IP e zona). Quem aceitou a v1 volta a ver o aviso uma vez; as corridas antigas ficam ligadas ao consentimento v1. **Ainda precisa de revisão jurídica.**
 - Migração `0034_hardening_funcoes.sql` (aplicada em produção): `search_path` fixo nas 3 funções de validação do diário; `claim_student_row` só para `authenticated`; `enforce_student_column_permissions` sem EXECUTE para clientes.
 - Fica por fazer no painel Supabase: ativar «Leaked password protection» (Auth). O aviso `claim_student_row` executável por `authenticated` é intencional (o aluno reclama o convite).
+
+## 8af. Nomes em português do livro (pesquisa)
+
+Os exercícios do livro ganham um alias em português (`exercisePtAlias`, dicionário `EXERCISE_PT_WORDS` em app.js), usado só na pesquisa da biblioteca. É tradução palavra a palavra, **por rever** por um profissional (ex.: «Push Up» → «flexão»). Para corrigir um nome, edita o exercício na biblioteca (o alias próprio tem prioridade) ou o dicionário. As 9 imagens em falta continuam por fazer: o Excel original já não está disponível; precisa de ser carregado de novo para `scripts/build-book-media.py`.

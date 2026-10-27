@@ -651,7 +651,7 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG; window.__
     // B2. «Cancelar» no ecrã de guardar volta ao resumo; banner com o rascunho no home real
     var R2 = await open({real: true, rls: true});
     var r2p = R2.pg;
-    await r2p.evaluate(function(){ window.__fake.tables.run_consents.push({student_id: "ana", version: 1}); });
+    await r2p.evaluate(function(){ window.__fake.tables.run_consents.push({student_id: "ana", version: 2}); });
     await r2p.click('.tabbar [data-tab="corrida"]');
     await r2p.waitForFunction(function(){ return window.__RUN && window.__RUN.loaded && window.__realUi; });
     await r2p.waitForSelector("#runGoLive");
@@ -682,7 +682,7 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG; window.__
     // B3. fila offline com o submitRun real
     var R3 = await open({real: true, rls: true});
     var r3p = R3.pg;
-    await r3p.evaluate(function(){ window.__fake.tables.run_consents.push({student_id: "ana", version: 1}); });
+    await r3p.evaluate(function(){ window.__fake.tables.run_consents.push({student_id: "ana", version: 2}); });
     await r3p.click('.tabbar [data-tab="corrida"]');
     await r3p.waitForFunction(function(){ return window.__RUN && window.__RUN.loaded && window.__realUi; });
     await r3p.waitForSelector("#runGoLive");
@@ -821,7 +821,7 @@ var HOOK = "\n;window.__RUN = RUN; window.__runLiveCfg = RUN_LIVE_CFG; window.__
   var So = await open({init: capAuth});
   await openCorrida(So);
   await startRecording(So);
-  await So.pg.evaluate(function(){ window.__goN(30, 1000, 3); localStorage.setItem("evolve_run_consent_v1", JSON.stringify({uid: "user-1", studentId: "ana", version: 1, at: 1})); });
+  await So.pg.evaluate(function(){ window.__goN(30, 1000, 3); localStorage.setItem("evolve_run_consent_v1", JSON.stringify({uid: "user-1", studentId: "ana", version: 2, at: 1})); });
   var haveCb = await So.pg.evaluate(function(){ return typeof window.__authCb === "function"; });
   var soStops = await So.pg.evaluate(function(){ return window.__fakeGps.stops; });
   await So.pg.evaluate(function(seed){ localStorage.setItem("evolve_runs_outbox_v1", seed); }, JSON.stringify([ob2(RID2)]));

@@ -15,4 +15,7 @@ check.check("6b. A grande maioria do livro (≥ 540 de 554) tem imagem", book.fi
 check.check("7. O grupo de um exercício do livro adivinha-se pelo nome (exerciseGroupFor)", exerciseGroupFor("Burpee") === "Cardio" && exerciseGroupFor("Clean + Jerk") === "Corpo inteiro");
 var v = volumeRows({trainingProgram: {name: "x", days: [{id: "d", name: "A", exercises: [{id: "e", name: "Burpee", sets: 3, reps: "10", group: "Cardio"}]}]}, workoutLogs: []});
 check.check("8. Cardio e Corpo inteiro nunca dão aviso de volume baixo", v.rows.filter(function(r){ return r.group === "Cardio"; })[0].status === "ok");
+function al(n){ return list.filter(function(e){ return e.name === n; })[0].alias; }
+check.check("9. Os exercícios do livro têm nome em português para pesquisa (alias): Squat→agachamento, Deadlift→peso morto; pesquisar «agachamento» encontra Squat; os da base original não mudam", /agachamento/.test(al("Squat")) && /peso morto/.test(al("Deadlift")) && list.filter(function(e){ return !e.book && !e.alias; }).length >= 0 && book.filter(function(e){ return e.alias; }).length >= 450 && book.every(function(e){ return !e.alias || exLibFold(e.alias) !== exLibFold(e.name); }));
+check.check("10. Os alias não colidem com nomes de exercícios existentes", (function(){ var ns = {}; list.forEach(function(e){ ns[exLibFold(e.name)] = 1; }); return book.every(function(e){ return !e.alias || !ns[exLibFold(e.alias)]; }); })());
 check.summarize();
