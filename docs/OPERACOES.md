@@ -430,3 +430,10 @@ O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu 
 - **Código da Corrida**: `corrida-core.js`, `corrida.js` e `corrida-live.js` (~200 KB no total) **não** estão na cache inicial: só se descarregam quando o aluno com a Corrida ligada abre a EVOLVE Treino (a app pede-os em segundo plano ao arrancar, para ficarem guardados e abrirem sem rede ao ar livre) ou quando alguém abre a Corrida/ficha «Corridas». Com a Corrida desligada nada disto é pedido. Um aluno que ligues e que **nunca** tenha aberto a app com rede não consegue abrir a Corrida sem rede.
 - **Quota**: um aluno com sessão válida e a Corrida ligada pode, tecnicamente, inserir muitas linhas (cada percurso até 200 KB). Os CHECK limitam cada linha, não o número delas (mesmo risco das outras tabelas do projeto). Vigia o tamanho com `select pg_total_relation_size('run_tracks')` de vez em quando.
 - `tests/runs-db.test.js` **salta** (e diz que saltou) se não houver Postgres local; nesse caso a suíte fica verde sem provar a RLS. Corre-o onde haja Postgres antes de mexer na migração.
+
+
+## 8ae. Aviso de privacidade v2 e endurecimento de funções (0034)
+
+- O aviso (RUN_UI_NOTICE) passou à **versão 2**: cobre bicicleta, treinos guiados e o mapa opcional (OpenStreetMap: recebe IP e zona). Quem aceitou a v1 volta a ver o aviso uma vez; as corridas antigas ficam ligadas ao consentimento v1. **Ainda precisa de revisão jurídica.**
+- Migração `0034_hardening_funcoes.sql` (aplicada em produção): `search_path` fixo nas 3 funções de validação do diário; `claim_student_row` só para `authenticated`; `enforce_student_column_permissions` sem EXECUTE para clientes.
+- Fica por fazer no painel Supabase: ativar «Leaked password protection» (Auth). O aviso `claim_student_row` executável por `authenticated` é intencional (o aluno reclama o convite).

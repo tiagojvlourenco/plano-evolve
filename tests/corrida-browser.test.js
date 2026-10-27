@@ -631,7 +631,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await proCorridas(P.pg, "b");
   await P.pg.waitForSelector(".run-row");
   var ptb = (await P.pg.locator("#proTabContent").innerText()).replace(/\s+/g, " ");
-  ck("92. Aluno com corridas: estado do consentimento «Aceitou o aviso em dd/mm/aaaa (versão 1)», totais e lista leve (2 corridas)", /Aceitou o aviso em 01\/10\/2026 \(versão 1\)/.test(ptb) && (await P.pg.locator(".run-row").count()) === 2 && /Últimas 8 semanas/i.test(ptb) && /Importar e registar à mão/.test(ptb));
+  ck("92. Aluno com corridas: estado do consentimento «Aceitou o aviso em dd/mm/aaaa (versão 2)», totais e lista leve (2 corridas)", /Aceitou o aviso em 01\/10\/2026 \(versão 1\)/.test(ptb) && (await P.pg.locator(".run-row").count()) === 2 && /Últimas 8 semanas/i.test(ptb) && /Importar e registar à mão/.test(ptb));
   ck("93. A lista do profissional não lê percursos nem usa «*»", (await P.pg.evaluate(function(){ return window.__fake.selectCols.filter(function(x){ return x.table === "runs"; }).every(function(x){ return x.cols !== "*" && !/points/.test(x.cols); }) && window.__fake.selects.indexOf("run_tracks") < 0; })));
   await P.pg.click('.run-row[data-prun="' + uuid(22) + '"]');
   await P.pg.waitForSelector(".run-detail");
@@ -854,7 +854,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
     out.isPromise = !!(p && typeof p.then === "function"); out.val = await p; out.v = T.RUN.consentVersion();
     return out;
   });
-  ck("127. RUN.flush() por omissão devolve uma Promise que resolve (o gravador sobrepõe-na) e RUN.consentVersion() é 1", misc.isPromise && misc.val === undefined && misc.v === 1);
+  ck("127. RUN.flush() por omissão devolve uma Promise que resolve (o gravador sobrepõe-na) e RUN.consentVersion() é 2", misc.isPromise && misc.val === undefined && misc.v === 2);
   await M1.ctx.close();
 
   var M2 = await open("professional", [row("a", "Ana Silva", "import"), row("b", "Bruno Costa", "import")], "treino.html");
@@ -953,7 +953,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await Y.ctx.close();
 
   // ==================================================================================================================== O. revisão: aviso único, vista de dados, recibo do consentimento, fila, lista sem limite de idade
-  // (3/9/39) O aviso é UM só (versão 1) e diz a verdade sobre TODOS os usos: não pode afirmar que o GPS não é usado quando o profissional o pode ligar.
+  // (3/9/39) O aviso é UM só (versão 2) e diz a verdade sobre TODOS os usos: não pode afirmar que o GPS não é usado quando o profissional o pode ligar.
   var NC1 = await student({consent: false});
   var privImport = (await NC1.pg.evaluate(function(){ var d = document.getElementById("runPrivacy"); return d ? d.textContent : ""; }));
   await NC1.pg.click("#runGoImport"); await NC1.pg.waitForSelector("#runConsent");
@@ -967,7 +967,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await NC2.pg.click("#runCsAccept"); await NC2.pg.waitForSelector("#fakeLive");
   var accV = (await tables(NC2.pg)).run_consents.map(function(c){ return c.version; });
   await NC2.ctx.close();
-  ck("137. O aviso de consentimento é o MESMO nos dois modos (importar e gravar com GPS) e continua na versão 1: quem aceita no modo «importar» aceitou o que diz sobre o GPS", noticeImport === noticeLive && accV.join() === "1" && noticeParas.length >= 4);
+  ck("137. O aviso de consentimento é o MESMO nos dois modos (importar e gravar com GPS) e está na versão 2: quem aceita no modo «importar» aceitou o que diz sobre o GPS", noticeImport === noticeLive && accV.join() === "2" && noticeParas.length >= 4);
   var liveSrc = fs.readFileSync(path.join(root, "corrida-live.js"), "utf8"), mig = fs.readFileSync(path.join(root, "supabase/migrations/0032_corrida.sql"), "utf8");
   var prepLabel = (/runLivePrepare[\\"']*>([^<]+)</.exec(liveSrc) || [])[1];
   ck("138. O aviso descreve os três usos (ficheiro GPX/TCX, à mão, GPS), o que o GPS faz («" + liveBtn + "» e «" + prepLabel + "», só com a EVOLVE aberta, rascunho neste telemóvel) e que o ecrã bloqueado pode falhar", !!prepLabel && noticeLive.indexOf("«" + liveBtn + "»") >= 0 && noticeLive.indexOf("«" + prepLabel + "»") >= 0 && /ficheiro \(GPX ou TCX\)/.test(noticeLive) && /registas a corrida à mão/.test(noticeLive) && /gravas aqui com o GPS do telemóvel/.test(noticeLive) && /só enquanto a EVOLVE está aberta a gravar/.test(noticeLive) && /rascunho neste telemóvel até guardares ou descartares/.test(noticeLive) && /ecrã bloqueado ou noutra aplicação o registo pode falhar/.test(noticeLive) && /\bRUN_DRAFT_KEY\b/.test(liveSrc));
@@ -1069,11 +1069,11 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await RC4.pg.waitForSelector("#runConsent");
   ck("158. Com rede quem decide é o servidor: sem consentimento no servidor mostra-se o aviso mesmo com um recibo local, e o recibo é apagado", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === undefined && (await RC4.pg.evaluate(function(){ return window.__cacheLog.map(function(x){ return x[0]; }).join(); })) === "clear");
   await RC4.pg.click("#runCsAccept"); await RC4.pg.waitForSelector("#runFile", {state: "attached"});
-  ck("159. Aceitar o aviso guarda o recibo (versão 1)", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  ck("159. Aceitar o aviso guarda o recibo (versão 2)", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
   await RC4.ctx.close();
   var RC5 = await student({consent: true});
   await RC5.pg.click("#runGoImport"); await RC5.pg.waitForSelector("#runFile", {state: "attached"});
-  ck("160. Ler o consentimento no servidor e ver que existe guarda o recibo (versão 1)", (await RC5.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  ck("160. Ler o consentimento no servidor e ver que existe guarda o recibo (versão 2)", (await RC5.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
   var lost = await RC5.pg.evaluate(async function(){
     var T = window.__T, s = T.findStudent("ana");
     window.__fake.tables.run_consents.length = 0;   // o consentimento foi retirado noutro aparelho
