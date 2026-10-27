@@ -403,9 +403,9 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - **Diferença para a app Fitness**: a Fitness compara com a **mesma rota**; aqui só se compara o tempo com a **distância** (o percurso pode ser outro), porque o percurso do aluno só fica no servidor se ele o partilhar (e aparado). O erro do GPS na distância entra na comparação. **Não verificado** numa corrida real.
 
 ## 8ad. Mapa interativo
-- Com «Mostrar mapa» ligado, o detalhe da corrida mostra **só o mapa** (o desenho simples do percurso desaparece até o mapa ser escondido) e o mapa já não é uma imagem fixa: **um dedo arrasta**, **dois dedos** (ou os botões **+** e **−**, a roda do rato, o duplo toque) mudam o zoom (3 a 18) e **◎** volta à vista do percurso. O aluno e o profissional (nos percursos partilhados) usam o mesmo mapa.
+- Com «Mostrar mapa» ligado, o detalhe da corrida mostra **só o mapa** (o desenho simples do percurso desaparece até o mapa ser escondido) e o mapa já não é uma imagem fixa. **No telemóvel: um dedo faz deslizar a página e dois dedos mexem e aproximam o mapa** (a pinça arredonda ao nível de zoom mais próximo ao largar); os botões **+** e **−** e **◎** (voltar à vista do percurso) funcionam sempre. **No computador**: o rato arrasta, a roda e o duplo clique fazem zoom (3 a 18). O aluno e o profissional (nos percursos partilhados) usam o mesmo mapa.
 - A vista inicial continua a pedir 1 a 9 quadrados ao OpenStreetMap; **só quando se mexe** carrega-se uma margem à volta e os quadrados do novo zoom (sempre só `z/x/y`, sem coordenadas nem identificadores). O aviso de «Mostrar mapa» diz isso. Sem biblioteca de mapas: o desenho e os gestos são código nosso.
-- **Não verificado**: o gesto de pinça com dois dedos (os testes cobrem arrastar, botões, duplo clique e roda num Chromium de secretária, não o toque num iPhone), nem o desempenho do arrastar em telemóveis lentos. Se um gesto for incómodo, os botões + e − funcionam sempre. Com o mapa em cima, tocar e arrastar dentro dele não faz deslizar a página: desliza-se a página por fora do mapa.
+- **Não verificado**: os gestos foram testados com toques simulados num Chromium de secretária (um dedo, pinça e dois dedos a deslizar), **não** num iPhone real; nem o desempenho em telemóveis lentos.
 
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
