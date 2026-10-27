@@ -202,7 +202,10 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
 
   var AL = await student({mode: "live", consent: false});
   var txtL = await tabText(AL.pg);
-  ck("7. Modo «live» (com o gravador carregado): aparece «Gravar com GPS» e o aviso do ecrã (pode falhar; não testado em todos os telemóveis), sem afirmar que funciona com o ecrã bloqueado", (await AL.pg.locator("#runGoLive").count()) === 1 && /ecrã bloquear/.test(txtL) && /pode falhar/.test(txtL) && /Ainda não testámos/.test(txtL) && !/funciona com o ecrã bloqueado/i.test(txtL));
+  var noteL = await AL.pg.locator("#runLiveNote").textContent(); // o aviso está numa secção recolhida («Antes de gravar»)
+  ck("7. Modo «live» (com o gravador carregado): aparece «Gravar com GPS» e o aviso do ecrã (pode falhar; não testado em todos os telemóveis), sem afirmar que funciona com o ecrã bloqueado", (await AL.pg.locator("#runGoLive").count()) === 1 && /ecrã bloquear/.test(noteL) && /pode falhar/.test(noteL) && /Ainda não testámos/.test(noteL) && !/funciona com o ecrã bloqueado/i.test(noteL) && (await AL.pg.locator(".run-live-info").evaluate(function(d){ return !d.open; })));
+  var ordL = await AL.pg.evaluate(function(){ return Array.prototype.map.call(document.querySelectorAll("#runGoLive, #runGoImport, #runGoManual"), function(b){ return b.id + (b.classList.contains("primary") ? "*" : ""); }).join(","); });
+  ck("7b. Com o GPS ligado, «Gravar com GPS» vem primeiro e é a ação principal (importar e registar à mão ficam por baixo)", ordL === "runGoLive*,runGoImport,runGoManual");
   AL.pg.on("dialog", function(){});
   await AL.pg.click("#runGoLive");
   await AL.pg.waitForSelector("#runConsent");
