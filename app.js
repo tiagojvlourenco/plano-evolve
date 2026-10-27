@@ -8594,7 +8594,7 @@ function tplTrainingProgramCard(s){
 
 // ecrã de treino: um passo de "Hoje" (volta atrás com ← Hoje), com o progresso das séries no topo
 function tplTreinoScreen(s){
-  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Treino</div></div>" + playlistRowHtml();
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Treino</div></div>" + "<details class=\"soft-details wl-music\"><summary>♪ Música</summary>" + playlistRowHtml() + "</details>";
   var day = workoutDayFor(s);
   if (!day) return head + tplWorkoutLogger(s);
   var total = workoutSetCount(day), done = workoutDraftDone(s, day);
@@ -9434,6 +9434,8 @@ function wireExerciseInfo(s, el){
   });
 }
 
+// em que séries se pergunta o RIR: «last» (omissão: só na última de cada exercício), «all» ou «off» (definido pelo profissional em trainingProgram.rirMode)
+function rirModeOf(s){ var m = trainingProgramOf(s).rirMode; return m === "all" || m === "off" ? m : "last"; }
 function tplWorkoutLogger(s){
   var days = workoutDaysWithExercises(s);
   if (!days.length){
@@ -9441,12 +9443,18 @@ function tplWorkoutLogger(s){
   }
   var selected = workoutDayFor(s);
   var draft = wlDraftGet(s, selected.id);
+  var rirMode = rirModeOf(s);
   var html = `<div class="card wl-card">` +
     `<div class="checkin-field"${days.length < 2 ? " hidden" : ""}><label for="wlDay">Mudar de treino</label><select id="wlDay" class="mini-select" style="width:100%;">` +
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
     `</select></div>` +
     tplPerioStudentBanner(s) +
-    `<p class="muted-p wl-hint">Toca em ✓ ao acabar cada série: o descanso começa sozinho.</p>`;
+    `<details class="soft-details wl-help" id="wlHelp"><summary>Como registar</summary><div class="wl-help-body">` +
+      `<p>Toca em <b>✓</b> ao acabar cada série: o descanso começa sozinho.</p>` +
+      (rirMode === "off" ? "" : `<p><b>RIR = repetições em reserva.</b> Quantas repetições ainda conseguias fazer no fim da série, antes de não conseguires mais.</p>` +
+        `<ul><li><b>Falha (0):</b> não davas mais nenhuma.</li><li><b>+1:</b> ainda fazias mais 1.</li><li><b>+2:</b> mais 2. Uma boa série costuma ficar aqui.</li><li><b>3+:</b> estava fácil.</li></ul>` +
+        `<p>Se não tens a certeza, escolhe o que te parecer mais honesto. Não precisa de ser exato.</p>`) +
+    `</div></details>`;
   selected.exercises.forEach(function(e){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
     var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
@@ -9463,17 +9471,25 @@ function tplWorkoutLogger(s){
       var key = escapeHtml(e.id) + ":" + i, d = draft.sets[e.id + ":" + i] || {};
       var repsVal = d.reps !== undefined ? d.reps : (firstRepsOf(e.reps) || ""), loadVal = d.load !== undefined ? d.load : prefillLoad, rirVal = d.rir !== undefined ? d.rir : "";
       var step = function(kind, delta, label){ return `<button type="button" class="wl-step" data-step-kind="${kind}" data-step-key="${key}" data-step-delta="${delta}" aria-label="${label} na série ${i + 1}">${delta < 0 ? "−" : "+"}</button>`; };
+      var showRir = rirMode === "all" || (rirMode === "last" && i === e.sets - 1) || (rirMode !== "off" && rirVal !== "");
+      var rirNum = parseInt(rirVal, 10);
+      var chips = showRir ? `<div class="wl-rir" role="group" aria-label="RIR da série ${i + 1}"><span class="wl-lbl">RIR <button type="button" class="wl-q" data-rir-help aria-label="O que é o RIR?">?</button></span>` +
+        [[0, "Falha"], [1, "+1"], [2, "+2"], [3, "3+"]].map(function(c){
+          var on = c[0] === 3 ? rirNum >= 3 : rirNum === c[0];
+          return `<button type="button" class="wl-chip${on ? " on" : ""}" data-rir-pick="${key}" data-rir-val="${c[0]}" aria-pressed="${on}">${c[1]}</button>`;
+        }).join("") + `</div>` : "";
       html += `<div class="wl-set${d.done ? " done" : ""}">` +
         `<div class="wl-fields">` +
-          `<div class="wl-field"><span class="wl-lbl">kg</span>` + step("load", -2.5, "Menos 2,5 kg") +
-            `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Carga em kg da série ${i + 1}" data-wl-load="${key}" value="${escapeHtml(loadVal)}">` +
-            step("load", 2.5, "Mais 2,5 kg") + `</div>` +
-          `<div class="wl-field"><span class="wl-lbl">reps</span>` + step("reps", -1, "Menos uma repetição") +
-            `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" aria-label="Repetições da série ${i + 1}" data-wl-reps="${key}" value="${escapeHtml(repsVal)}">` +
-            step("reps", 1, "Mais uma repetição") + `</div>` +
-          `<div class="wl-field"><span class="wl-lbl">rir</span>` + step("rir", -1, "Menos 1 de RIR") +
-            `<input type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" aria-label="RIR (repetições em reserva) da série ${i + 1}" data-wl-rir="${key}" value="${escapeHtml(rirVal)}">` +
-            step("rir", 1, "Mais 1 de RIR") + `</div>` +
+          `<div class="wl-row">` +
+            `<div class="wl-field"><span class="wl-lbl">kg</span><div class="wl-ctl">` + step("load", -2.5, "Menos 2,5 kg") +
+              `<input type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Carga em kg da série ${i + 1}" data-wl-load="${key}" value="${escapeHtml(loadVal)}">` +
+              step("load", 2.5, "Mais 2,5 kg") + `</div></div>` +
+            `<div class="wl-field"><span class="wl-lbl">reps</span><div class="wl-ctl">` + step("reps", -1, "Menos uma repetição") +
+              `<input type="number" inputmode="numeric" min="0" max="100" placeholder="reps" aria-label="Repetições da série ${i + 1}" data-wl-reps="${key}" value="${escapeHtml(repsVal)}">` +
+              step("reps", 1, "Mais uma repetição") + `</div></div>` +
+          `</div>` +
+          chips +
+          `<input type="hidden" data-wl-rir="${key}" value="${escapeHtml(rirVal)}">` +
         `</div>` +
         `<label class="wl-done"><input type="checkbox" data-wl-done="${key}" data-rest-start="${restSec}" data-rest-label="${escapeHtml(e.name)}" aria-label="Série ${i + 1} feita"${d.done ? " checked" : ""}><span class="wl-tick" aria-hidden="true">✓</span><small>Série ${i + 1}</small></label>` +
       `</div>`;
@@ -9503,6 +9519,14 @@ function wlCopyToNextSet(el, box, recordDraft){
     var from = el.querySelector('[data-wl-' + kind + '="' + box.getAttribute("data-wl-done") + '"]'), to = el.querySelector('[data-wl-' + kind + '="' + nextKey + '"]');
     if (!from || !to || from.value === "" || to.getAttribute("data-touched") === "1") return;
     to.value = from.value;
+    if (kind === "rir"){ // as pastilhas do RIR (se a série as mostra) acompanham o valor copiado
+      var n = parseInt(to.value, 10);
+      el.querySelectorAll('[data-rir-pick="' + nextKey + '"]').forEach(function(c){
+        var v = parseInt(c.getAttribute("data-rir-val"), 10), on = v === 3 ? n >= 3 : n === v;
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+        if (c.classList) c.classList.toggle("on", on);
+      });
+    }
     recordDraft(to);
   });
 }
@@ -9563,6 +9587,31 @@ function wireWorkoutLogger(s, el, rerender){
       input.value = String(next);
       input.setAttribute("data-touched", "1");
       recordDraft(input);
+    });
+  });
+  // RIR em toque: 0 / 1 / 2 / 3+ (volta a tocar no mesmo para limpar); o valor fica no campo escondido e no rascunho
+  el.querySelectorAll("[data-rir-pick]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var key = b.getAttribute("data-rir-pick"), v = b.getAttribute("data-rir-val");
+      var input = el.querySelector('[data-wl-rir="' + key + '"]');
+      if (!input) return;
+      var same = b.getAttribute("aria-pressed") === "true";
+      input.value = same ? "" : v;
+      input.setAttribute("data-touched", "1");
+      el.querySelectorAll('[data-rir-pick="' + key + '"]').forEach(function(o){
+        var on = !same && o === b;
+        o.setAttribute("aria-pressed", on ? "true" : "false");
+        if (o.classList) o.classList.toggle("on", on);
+      });
+      recordDraft(input);
+    });
+  });
+  el.querySelectorAll("[data-rir-help]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var h = el.querySelector("#wlHelp");
+      if (!h) return;
+      h.open = true;
+      try { h.scrollIntoView({block: "center"}); } catch (e) {}
     });
   });
   // ✓ numa série: marca-a, avança o progresso e começa sozinho o descanso prescrito (desmarcar não faz nada)
@@ -10123,6 +10172,9 @@ function tplProTreino(s){
   var html = `<div class="eyebrow" style="margin-bottom:4px;">Programa de treino</div>` +
     `<p class="muted-p" style="margin-bottom:12px;">Define os dias e os exercícios (séries, repetições, RPE alvo e descanso). O aluno regista cada sessão e tu vês a progressão de carga.</p>`;
   html += tplTemplatesBar("treino");
+  var rm = rirModeOf(s);
+  html += `<div class="checkin-field" style="margin-bottom:12px;"><label for="rirMode">Pedir o RIR (repetições em reserva) ao aluno</label><select id="rirMode" class="mini-select" style="width:100%;">` +
+    [["last", "Só na última série de cada exercício (recomendado)"], ["all", "Em todas as séries"], ["off", "Não pedir"]].map(function(o){ return `<option value="${o[0]}"${rm === o[0] ? " selected" : ""}>${o[1]}</option>`; }).join("") + `</select></div>`;
   if (!prog.days.length) html += `<p class="muted-p" style="margin-bottom:12px;">Ainda sem dias de treino. Acrescenta o primeiro (ex.: "Treino A — Superior").</p>`;
   prog.days.forEach(function(d){
     html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
@@ -10192,6 +10244,12 @@ function tplProTreino(s){
 
 function wireProTreino(s, el){
   wirePerio(s, el);
+  var rirSel = el.querySelector("#rirMode");
+  if (rirSel) rirSel.addEventListener("change", function(){
+    ensureTrainingProgram(s).rirMode = rirSel.value === "all" || rirSel.value === "off" ? rirSel.value : "last";
+    persistStudent(s);
+    showToast("✓ Guardado");
+  });
   wireExerciseInfo(s, el);
   el.querySelectorAll("[data-edit-guide]").forEach(function(btn){
     btn.addEventListener("click", function(){

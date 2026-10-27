@@ -459,3 +459,7 @@ Os 2 exercícios em formato EMF/WMF foram convertidos com o LibreOffice (`soffic
 ## 8aj. Aluno «só treino» (sem nutrição)
 
 O interruptor «Não faz nutrição comigo» é também o «só treino». Na app EVOLVE o aluno vê agora Hoje e Progresso (sem o separador Plano): o Hoje tem um cartão grande para a app EVOLVE Treino e um atalho para o Progresso (medidas, avaliações, fotos). Não há redirecionamento automático porque a evolução só existe na app EVOLVE. Ideia futura: levar o Progresso para a app Treino e então redirecionar.
+
+## 8ak. Ecrã de registo do treino (redesenho)
+
+Uma série ocupa um bloco compacto: kg e reps lado a lado (com − / +), círculo de «série feita» à direita. O RIR passou de campo numérico a quatro pastilhas (Falha, +1, +2, 3+), com «?» que abre a legenda «Como registar» (recolhida por omissão). O valor continua num campo escondido (`data-wl-rir`), por isso o envio, o esforço da sessão e as sugestões de sobrecarga e deload não mudaram. Modo do RIR por programa (`trainingProgram.rirMode`): `last` (omissão: só na última série de cada exercício), `all`, `off`; o profissional escolhe no separador Treino. A música ficou recolhida («♪ Música»). Em ecrãs ≤ 370 px os botões − / + passam para baixo do campo. Verificado em Chromium (390 e 320 px); não visto num telemóvel real.
