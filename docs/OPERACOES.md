@@ -447,3 +447,7 @@ Os exercícios do livro ganham um alias em português (`exercisePtAlias`, dicion
 - 72 exercícios do livro passaram a usar animações feitas com o Free Exercise DB (domínio público, 2 fotogramas), onde o nome coincide exatamente. Podem ficar.
 - **As restantes ~475 imagens do livro vieram de pesquisa no Google (marca de água WorkoutLabs): são de terceiros, sem licença, e estão num site público.** Decisão pendente do dono: retirá-las (os exercícios mantêm-se, com pesquisa de vídeo) ou obter licença. Alternativa recomendada: vídeos curtos próprios, ligados a cada exercício na biblioteca.
 - Aviso «Leaked password protection»: indisponível no plano Free do Supabase, aceite. O registo livre (signUp) tem de ficar ligado porque o convite do profissional funciona por signUp + `claim_student_row`.
+
+## 8ah. Verificação de segurança J-B (27/10/2026)
+
+O bloco J-B de `supabase/verify_security.sql` correu no Supabase real (projeto «Nutrição EVOLVE»): **40 ok, 0 falhas**, sem gravar nada (rollback final confirmado: sem utilizadores, consentimentos ou corridas novas). Como só havia 1 aluno com conta, o aluno B foi criado **dentro da transação** (linha em `auth.users` + `students.auth_user_id`) e desfeito com ela. Não prova o caminho real de login (GoTrue/PostgREST): isso é o J-C, que continua pendente e precisa de uma 2.ª conta de aluno real.
