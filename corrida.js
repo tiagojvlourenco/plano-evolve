@@ -375,9 +375,9 @@ function runUiMapHtml(segs){
 // o bloco do mapa: botão (com o aviso do que implica) ou o mapa já ligado
 function runUiMapBlock(segs, pro){
   if (!runUiMapPoints(segs).length) return "";
-  if (RUN.uiMapOn) return runUiMapHtml(segs) + '<p class="muted-p run-note"><button type="button" class="btn btn-sm" data-run-map="off">Esconder o mapa</button></p>';
+  if (RUN.uiMapOn) return runUiMapHtml(segs) + '<p class="muted-p run-note"><button type="button" class="btn btn-sm" data-run-map="off">Esconder o mapa</button></p><p class="muted-p run-note">Dois dedos para mexer e aproximar o mapa; um dedo faz deslizar a página.</p>';
   return '<div class="run-map-ask"><button type="button" class="btn btn-sm" data-run-map="on">Mostrar mapa</button>' +
-    '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Se mexeres no mapa (arrastar ou aproximar), pedem-se mais quadrados. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
+    '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Se mexeres no mapa (dois dedos, ou os botões + e −), pedem-se mais quadrados. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
 }
 
 // com o mapa ligado fica só o mapa (o desenho simples do percurso só aparece enquanto o mapa está desligado)
@@ -401,8 +401,8 @@ function runUiMapWire(el){
   var pts = RUN_UI_MAP_LAST, all = [].concat.apply([], pts), W = RUN_UI_MAP_W, H = RUN_UI_MAP_H, fit = runUiMapFit(all);
   var st = {z: fit.z, cx: fit.cx, cy: fit.cy}, layer = null, tiles = {}, svg = box.querySelector("svg"), ptrs = {}, drag = null, pinch = null, wheelAt = 0;
   var NS = svg ? svg.namespaceURI : null;   // o espaço de nomes vem do próprio SVG (sem escrever mais endereços no código)
-  box.setAttribute("data-live", "1"); box.setAttribute("role", "group"); box.setAttribute("aria-label", "Mapa do percurso: arrasta para mexer; usa + e − para o zoom");
-  box.style.touchAction = "none"; box.setAttribute("data-z", String(st.z));
+  box.setAttribute("data-live", "1"); box.setAttribute("role", "group"); box.setAttribute("aria-label", "Mapa do percurso: com dois dedos mexe-se e aproxima-se; o rato arrasta; os botões + e − fazem zoom");
+  box.setAttribute("data-z", String(st.z));
   function ensureLayer(){
     if (layer) return;
     layer = document.createElement("div"); layer.className = "run-map-layer";
@@ -456,6 +456,7 @@ function runUiMapWire(el){
   function frac(e){ var r = box.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
   function dist(){ var ids = Object.keys(ptrs); if (ids.length < 2) return 0; var a = ptrs[ids[0]], b = ptrs[ids[1]]; return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2)); }
   box.addEventListener("pointerdown", function(e){
+    if (e.pointerType === "touch") return;   // no toque, um dedo faz deslizar a página; o mapa mexe-se com dois dedos (abaixo)
     if (e.target.closest && e.target.closest(".run-map-ctl, .run-map-attr")) return;
     ensureLayer(); render();   // ao primeiro toque carrega a margem de quadrados à volta
     ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
@@ -464,7 +465,7 @@ function runUiMapWire(el){
     if (Object.keys(ptrs).length === 1) drag = {x: e.clientX, y: e.clientY, cx: st.cx, cy: st.cy, k: W / r.width, dx: 0, dy: 0}; else { drag = null; pinch = {d0: dist(), s: 1}; }
   });
   box.addEventListener("pointermove", function(e){
-    if (!ptrs[e.pointerId]) return;
+    if (e.pointerType === "touch" || !ptrs[e.pointerId]) return;
     ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
     if (drag && Object.keys(ptrs).length === 1){
       drag.dx = e.clientX - drag.x; drag.dy = e.clientY - drag.y;
@@ -481,6 +482,32 @@ function runUiMapWire(el){
     else if (pinch){ var dz = Math.round(Math.log(pinch.s) / Math.LN2); pinch = null; drag = null; ptrs = {}; if (dz) zoomBy(dz, 0.5, 0.5); else render(); }
   }
   box.addEventListener("pointerup", endPtr); box.addEventListener("pointercancel", endPtr);
+  // dois dedos: mexem e aproximam o mapa (um dedo deixa a página deslizar); a pinça arredonda ao nível de zoom mais próximo ao largar
+  var tch = null;
+  function tMid(ts){ return [(ts[0].clientX + ts[1].clientX) / 2, (ts[0].clientY + ts[1].clientY) / 2]; }
+  function tDist(ts){ return Math.sqrt(Math.pow(ts[0].clientX - ts[1].clientX, 2) + Math.pow(ts[0].clientY - ts[1].clientY, 2)); }
+  box.addEventListener("touchstart", function(e){
+    if (e.touches.length < 2 || (e.target.closest && e.target.closest(".run-map-ctl"))) return;
+    if (e.cancelable) e.preventDefault();
+    ensureLayer(); render();
+    var m = tMid(e.touches), r = box.getBoundingClientRect();
+    tch = {mx: m[0], my: m[1], d0: tDist(e.touches) || 1, cx: st.cx, cy: st.cy, k: W / r.width, dx: 0, dy: 0, s: 1};
+  }, {passive: false});
+  box.addEventListener("touchmove", function(e){
+    if (!tch || e.touches.length < 2) return;
+    if (e.cancelable) e.preventDefault();
+    var m = tMid(e.touches);
+    tch.dx = m[0] - tch.mx; tch.dy = m[1] - tch.my; tch.s = Math.min(4, Math.max(0.25, tDist(e.touches) / tch.d0));
+    layer.style.transformOrigin = "50% 50%"; layer.style.transform = "translate(" + tch.dx + "px," + tch.dy + "px) scale(" + tch.s + ")";
+  }, {passive: false});
+  function tEnd(e){
+    if (!tch || e.touches.length >= 2) return;
+    var t = tch; tch = null;
+    st.cx = t.cx - t.dx * t.k; st.cy = t.cy - t.dy * t.k;
+    var dz = Math.round(Math.log(t.s) / Math.LN2);
+    if (dz) zoomBy(dz, 0.5, 0.5); else render();
+  }
+  box.addEventListener("touchend", tEnd); box.addEventListener("touchcancel", tEnd);
   box.addEventListener("dblclick", function(e){ var f = frac(e); ensureLayer(); zoomBy(1, f[0], f[1]); });
   box.addEventListener("wheel", function(e){
     e.preventDefault(); var now = Date.now(); if (now - wheelAt < 250) return; wheelAt = now;
