@@ -34,6 +34,8 @@ var startStaticServer = require("./helpers/static-server");
   var pg = await ctx.newPage(); pg.setDefaultTimeout(6000); pg.on("pageerror", function(e){ errors.push(e.message); });
   await pg.goto(srv.url + "treino.html");
   await pg.waitForSelector(".prog-day");
+  var brand = await pg.evaluate(function(){ return [document.getElementById("appBrandName").textContent, document.getElementById("appLoadingBrand").textContent, document.getElementById("dbStatusLabel").textContent]; });
+  check.check("3b. A faixa e o ecrã de arranque da app Treino dizem «EVOLVE Treino» (e não «Evolve Nutrition · protótipo») e não mostram «base de dados real»", brand[0] === "EVOLVE Treino" && brand[1] === "EVOLVE Treino" && brand[2] === "" && ["index.html", "treino.html", "gestao.html"].every(function(f){ var h = fs.readFileSync(path.join(__dirname, "..", f), "utf8"); return !/protótipo|Evolve Nutrition ·/i.test(h.slice(h.indexOf("<body>"))); }));
   var closed = await pg.locator(".prog-day").first().evaluate(function(d){ return !d.open; });
   await pg.locator(".prog-day .pd-name").first().click();
   var opened = await pg.locator(".prog-day").first().evaluate(function(d){ return d.open; });

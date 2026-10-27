@@ -909,12 +909,13 @@ function runUiHomeHtml(sv){
   h += '<div class="card run-actions">';
   if (preview) h += '<p class="muted-p run-note" id="runPreviewNote">' + escapeHtml(RUN_UI_MSG.previewOnly) + '</p>';
   else {
-    h += runUiActHtml() + '<button type="button" class="btn primary run-btn" id="runGoImport">Importar ficheiro (GPX ou TCX)</button>' +
-      '<button type="button" class="btn run-btn" id="runGoManual">Registar à mão</button>';
-    if (live){
-      h += '<button type="button" class="btn run-btn" id="runGoLive">Gravar com GPS</button>' +
-        '<p class="muted-p run-note" id="runLiveNote">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p>';
-    }
+    var bImport = '<button type="button" class="btn' + (live ? '' : ' primary') + ' run-btn" id="runGoImport">Importar ficheiro (GPX ou TCX)</button>',
+      bManual = '<button type="button" class="btn run-btn" id="runGoManual">Registar à mão</button>';
+    h += runUiActHtml();
+    if (live){   // gravar é o uso principal: vem primeiro e em destaque; importar e registar à mão ficam em segundo plano
+      h += '<button type="button" class="btn primary run-btn" id="runGoLive">Gravar com GPS</button>' + bImport + bManual +
+        '<details class="soft-details run-live-info"><summary>Antes de gravar</summary><p class="muted-p run-note" id="runLiveNote">Mantém a EVOLVE aberta e o ecrã ligado durante a corrida. Se o ecrã bloquear ou mudares de aplicação, o registo pode falhar e ficará uma lacuna no percurso. Ainda não testámos isto em todos os telemóveis.</p></details>';
+    } else h += bImport + bManual;
   }
   h += '</div>' + (preview ? '' : runUiSessionsHtml(sv, d)) + runUiPlanHtml(sv, d) + runUiListHtml(d, {weeks: true, empty: RUN_UI_MSG.empty});
   if (!preview) h += runUiGuideHtml();

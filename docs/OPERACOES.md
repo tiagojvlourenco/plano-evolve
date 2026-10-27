@@ -467,3 +467,8 @@ Uma série ocupa um bloco compacto: kg e reps lado a lado (com − / +), círcul
 ## 8al. Ecrã «Hoje» da app Treino (redesenho)
 
 Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar mesmo assim»). O programa lista cada treino como um bloco: o nome abre os exercícios, o botão «Iniciar» (dentro do cabeçalho do bloco) começa o treino sem abrir a lista. O atalho para a app EVOLVE passou a cartão com «Abrir». Os ids `#startWorkout`, `data-start-day` e `#goEvolveApp` mantêm-se.
+
+## 8am. Cardio: ação principal e login com a marca certa
+
+- Com o GPS ligado pelo profissional, «Gravar com GPS» é a ação principal (primeira e a laranja); importar ficheiro e registar à mão ficam por baixo. O aviso do ecrã e das lacunas está na secção recolhida «Antes de gravar». Sem GPS, «Importar ficheiro» continua a principal.
+- A faixa do topo e o ecrã de arranque dizem «EVOLVE», «EVOLVE Treino» ou «EVOLVE Gestão» conforme a app (já não «Evolve Nutrition · protótipo ... base de dados real»); só avisa se estiver em modo local.

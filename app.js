@@ -5050,8 +5050,10 @@ function initSupabase(){
       sbReady = true;
     }
   } catch(e){ sbReady = false; }
+  var brand = APP_MODE === "treino" ? "EVOLVE Treino" : APP_MODE === "gestao" ? "EVOLVE Gestão" : "EVOLVE";
+  ["appBrandName", "appLoadingBrand"].forEach(function(id){ var b = document.getElementById(id); if (b) b.textContent = brand; });
   var label = document.getElementById("dbStatusLabel");
-  if (label) label.textContent = sbReady ? "· ligado a uma base de dados real" : "· modo local (sem ligação à base de dados)";
+  if (label) label.textContent = sbReady ? "" : "· modo local (sem ligação à base de dados)"; // ligado: nada a dizer
 }
 
 // meals guarda só estrutura (nome/horário/alimentos) — nunca estado do dia nem
