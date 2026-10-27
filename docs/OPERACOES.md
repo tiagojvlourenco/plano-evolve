@@ -463,3 +463,7 @@ O interruptor «Não faz nutrição comigo» é também o «só treino». Na app
 ## 8ak. Ecrã de registo do treino (redesenho)
 
 Uma série ocupa um bloco compacto: kg e reps lado a lado (com − / +), círculo de «série feita» à direita. O RIR passou de campo numérico a quatro pastilhas (Falha, +1, +2, 3+), com «?» que abre a legenda «Como registar» (recolhida por omissão). O valor continua num campo escondido (`data-wl-rir`), por isso o envio, o esforço da sessão e as sugestões de sobrecarga e deload não mudaram. Modo do RIR por programa (`trainingProgram.rirMode`): `last` (omissão: só na última série de cada exercício), `all`, `off`; o profissional escolhe no separador Treino. A música ficou recolhida («♪ Música»). Em ecrãs ≤ 370 px os botões − / + passam para baixo do campo. Verificado em Chromium (390 e 320 px); não visto num telemóvel real.
+
+## 8al. Ecrã «Hoje» da app Treino (redesenho)
+
+Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar mesmo assim»). O programa lista cada treino como um bloco: o nome abre os exercícios, o botão «Iniciar» (dentro do cabeçalho do bloco) começa o treino sem abrir a lista. O atalho para a app EVOLVE passou a cartão com «Abrir». Os ids `#startWorkout`, `data-start-day` e `#goEvolveApp` mantêm-se.
