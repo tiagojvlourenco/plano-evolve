@@ -126,7 +126,7 @@ check.check("29. whenCorrida devolve sempre uma Promise e engole os erros de fn 
 
 // 6. estrutura
 check.check("30. app.js continua abaixo de 1 100 000 bytes", Buffer.byteLength(appJs) < 1100000);
-check.check("31. Ficha do profissional: o grupo «Treino» tem os separadores treino e corridas, e «Corridas» está nos PRO_TABS", PRO_NAV.filter(function(g){ return g.id === "treino"; })[0].tabs.join() === "treino,corridas" && PRO_TABS.some(function(t){ return t[0] === "corridas" && t[1] === "Corridas"; }));
+check.check("31. Ficha do profissional: o grupo «Treino» tem os separadores treino e corridas, e «Cardio» está nos PRO_TABS", PRO_NAV.filter(function(g){ return g.id === "treino"; })[0].tabs.join() === "treino,corridas" && PRO_TABS.some(function(t){ return t[0] === "corridas" && t[1] === "Cardio"; }));
 check.check("32. O texto de apagar aluno inclui as corridas e os percursos", /as corridas e os percursos/.test(appJs));
 check.check("33. O núcleo só lê as chaves da Corrida com os helpers (runStoredJson) e os nomes do módulo só aparecem através de RUN", (appJs.match(/evolve_run_draft_v1|evolve_runs_outbox_v1/g) || []).length === 2);
 
@@ -325,7 +325,7 @@ function row(id, name, runsMode){
   await G.pg.click('.pro-nav-item[data-g="treino"]');
   await G.pg.waitForSelector('[data-sub="corridas"]');
   var chips = (await G.pg.locator(".pro-subtabs").innerText()).replace(/\s+/g, " ");
-  check.check("57. A ficha tem, no grupo «Treino», os separadores «Treino» e «Corridas»; ainda sem abrir «Corridas» nada foi pedido", /Treino/.test(chips) && /Corridas/.test(chips) && G.ctl.core === 0 && G.ctl.module === 0);
+  check.check("57. A ficha tem, no grupo «Treino», os separadores «Treino» e «Cardio»; ainda sem abrir «Cardio» nada foi pedido", /Treino/.test(chips) && /Cardio/.test(chips) && G.ctl.core === 0 && G.ctl.module === 0);
   await G.pg.click('[data-sub="corridas"]');
   await G.pg.waitForSelector("#fakeProTab");
   check.check("58. Abrir «Corridas» carrega o módulo (uma vez cada ficheiro) e chama RUN.proTab(s, el) com a ficha certa", G.ctl.core === 1 && G.ctl.module === 1 && /Corridas de Ana Silva · núcleo-ok/.test(await G.pg.locator("#proTabContent").innerText()));
@@ -355,7 +355,7 @@ function row(id, name, runsMode){
   await G3.pg.click('.pro-nav-item[data-g="treino"]');
   await G3.pg.click('[data-sub="corridas"]');
   await G3.pg.waitForSelector("#corridasRetry");
-  check.check("61. Se o módulo falhar, o separador «Corridas» avisa e oferece «Tentar outra vez» (o resto da ficha continua)", /Não foi possível abrir as Corridas/.test(await G3.pg.locator("#proTabContent").innerText()));
+  check.check("61. Se o módulo falhar, o separador «Cardio» avisa e oferece «Tentar outra vez» (o resto da ficha continua)", /Não foi possível abrir o Cardio/.test(await G3.pg.locator("#proTabContent").innerText()));
   G3.ctl.moduleStatus = 200;
   await G3.pg.click("#corridasRetry");
   await G3.pg.waitForSelector("#fakeProTab");

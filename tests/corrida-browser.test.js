@@ -594,7 +594,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   }
   await proCorridas(P.pg, "a");
   var pt = await P.pg.locator("#proTabContent").innerText();
-  ck("84. Na ficha: interruptor «Corrida neste aluno» com «Desligada», «Importar e registar à mão» e «Também gravar com GPS (experimental)», com a atual (Desligada) marcada", /Corrida neste aluno/i.test(pt) && /Desligada/.test(pt) && /Importar e registar à mão/.test(pt) && /Também gravar com GPS \(experimental\)/.test(pt) && (await P.pg.locator('.run-mode[aria-checked="true"]').innerText()) === "Desligada");
+  ck("84. Na ficha: interruptor «Cardio neste aluno» com «Desligada», «Importar e registar à mão» e «Também gravar com GPS (experimental)», com a atual (Desligada) marcada", /Cardio neste aluno/i.test(pt) && /Desligada/.test(pt) && /Importar e registar à mão/.test(pt) && /Também gravar com GPS \(experimental\)/.test(pt) && (await P.pg.locator('.run-mode[aria-checked="true"]').innerText()) === "Desligada");
   ck("85. O profissional não vê botões de importar nem de registar corridas (não cria nem altera), e vê a nota «A localização é um dado sensível: não partilhes estas corridas com terceiros.»", (await P.pg.locator("#runGoImport, #runGoManual, #runGoLive, #runFile").count()) === 0 && /A localização é um dado sensível: não partilhes estas corridas com terceiros\./.test(pt));
   ck("86. Mostra o estado do consentimento: «Ainda não aceitou o aviso»", await P.pg.waitForFunction(function(){ return /Ainda não aceitou o aviso/.test(document.getElementById("runProConsent").innerText); }).then(function(){ return true; }));
   await P.pg.click('[data-run-mode="import"]');
