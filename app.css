@@ -930,3 +930,7 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .run-live-guide{border:2px solid var(--accent); border-radius:14px; padding:12px 14px; margin:0 0 12px; font-weight:700; font-size:1.05rem; text-align:center;}
 .run-live-guide[data-kind="work"]{background:var(--accent); color:var(--on-accent, #04140f);}
 .run-live-guide[data-kind="done"]{border-color:var(--good, #4caf50);}
+.run-map-layer{position:absolute; inset:0; will-change:transform;}
+.run-map{cursor:grab; touch-action:none;}
+.run-map-ctl{position:absolute; left:8px; top:8px; display:flex; flex-direction:column; gap:6px;}
+.run-map-ctl button{width:44px; height:44px; border-radius:12px; border:1px solid rgba(0,0,0,0.25); background:rgba(255,255,255,0.92); color:#222; font-size:1.3rem; font-weight:700; line-height:1; cursor:pointer; touch-action:manipulation;}

@@ -227,13 +227,13 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await B.pg.click("#runActRun");
   await B.pg.click("#runGoManual");
   await B.pg.waitForSelector("#runManNext");
-  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "07:30"); await B.pg.fill("#runManKm", "5"); await B.pg.fill("#runManDur", "28:00");
+  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "00:10"); await B.pg.fill("#runManKm", "5"); await B.pg.fill("#runManDur", "28:00");
   await B.pg.click("#runManNext"); await B.pg.waitForSelector("#runSave"); await B.pg.click("#runSvSave");
   await B.pg.waitForSelector(".run-row");
   var tb2 = await tables(B.pg), manual = tb2.runs.filter(function(r){ return r.source === "manual"; })[0];
   ck("8. Uma corrida normal continua a gravar-se SEM o campo activity (funciona antes de correr a migração 0033)", manual && !("activity" in manual));
   await B.pg.click("#runActBike"); await B.pg.click("#runGoManual"); await B.pg.waitForSelector("#runManNext");
-  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "09:00"); await B.pg.fill("#runManKm", "40"); await B.pg.fill("#runManDur", "1:20:00");
+  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "00:20"); await B.pg.fill("#runManKm", "40"); await B.pg.fill("#runManDur", "1:20:00");
   await B.pg.click("#runManNext"); await B.pg.waitForSelector("#runSave");
   ck("9. À mão como Bicicleta: 40 km em 1:20 passa e mostra 30 km/h (e «Guardar corrida» sem aviso de ritmo)", /30 km\/h/i.test(await B.pg.locator("#runSave").innerText()));
   await B.ctx.close();
@@ -255,7 +255,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var NC = await student({init: NOCOL, runs: [runRow(0)]});
   ck("11. Sem a coluna activity no servidor, a lista de corridas lê-se na mesma (sem erro)", (await NC.pg.locator(".run-row").count()) === 1 && (await NC.pg.locator("#runLoadErr").count()) === 0);
   await NC.pg.click("#runActBike"); await NC.pg.click("#runGoManual"); await NC.pg.waitForSelector("#runManNext");
-  await NC.pg.fill("#runManDate", todayIso); await NC.pg.fill("#runManTime", "09:00"); await NC.pg.fill("#runManKm", "30"); await NC.pg.fill("#runManDur", "1:00:00");
+  await NC.pg.fill("#runManDate", todayIso); await NC.pg.fill("#runManTime", "00:20"); await NC.pg.fill("#runManKm", "30"); await NC.pg.fill("#runManDur", "1:00:00");
   await NC.pg.click("#runManNext"); await NC.pg.waitForSelector("#runSave"); await NC.pg.click("#runSvSave");
   await NC.pg.waitForFunction(function(){ var e = document.getElementById("runSvErr"); return e && e.textContent.length > 0; });
   ck("12. Guardar uma bicicleta sem a migração 0033 diz «falta correr a migração 0033» e não guarda nada", /migração 0033/.test(await NC.pg.locator("#runSvErr").innerText()) && (await tables(NC.pg)).runs.length === 1);

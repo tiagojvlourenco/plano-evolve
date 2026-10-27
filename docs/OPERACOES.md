@@ -402,6 +402,11 @@ Suunto e COROS: na app, abrir o treino → exportar GPX. Strava, Garmin Connect 
 - O profissional também pode prescrever **«Contra o relógio»** (distância e tempo a bater, por exemplo 5 km em 25:00) em Treinos de cardio prescritos: o gravador compara com ritmo constante. Recusa-se um tempo impossível (mais de 43 km/h de média a correr, 90 km/h de bicicleta).
 - **Diferença para a app Fitness**: a Fitness compara com a **mesma rota**; aqui só se compara o tempo com a **distância** (o percurso pode ser outro), porque o percurso do aluno só fica no servidor se ele o partilhar (e aparado). O erro do GPS na distância entra na comparação. **Não verificado** numa corrida real.
 
+## 8ad. Mapa interativo
+- Com «Mostrar mapa» ligado, o detalhe da corrida mostra **só o mapa** (o desenho simples do percurso desaparece até o mapa ser escondido) e o mapa já não é uma imagem fixa: **um dedo arrasta**, **dois dedos** (ou os botões **+** e **−**, a roda do rato, o duplo toque) mudam o zoom (3 a 18) e **◎** volta à vista do percurso. O aluno e o profissional (nos percursos partilhados) usam o mesmo mapa.
+- A vista inicial continua a pedir 1 a 9 quadrados ao OpenStreetMap; **só quando se mexe** carrega-se uma margem à volta e os quadrados do novo zoom (sempre só `z/x/y`, sem coordenadas nem identificadores). O aviso de «Mostrar mapa» diz isso. Sem biblioteca de mapas: o desenho e os gestos são código nosso.
+- **Não verificado**: o gesto de pinça com dois dedos (os testes cobrem arrastar, botões, duplo clique e roda num Chromium de secretária, não o toque num iPhone), nem o desempenho do arrastar em telemóveis lentos. Se um gesto for incómodo, os botões + e − funcionam sempre. Com o mapa em cima, tocar e arrastar dentro dele não faz deslizar a página: desliza-se a página por fora do mapa.
+
 ## 8v. Três apps: EVOLVE, EVOLVE Treino e EVOLVE Gestão
 
 O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu manifesto e o seu ícone:

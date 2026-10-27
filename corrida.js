@@ -337,8 +337,10 @@ function runUiMerc(lat, lon, z){
   var n = 256 * Math.pow(2, z), r = lat * Math.PI / 180;
   return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n];
 }
+var RUN_UI_MAP_LAST = null;   // os pontos do mapa que está no ecrã (para o tornar interativo depois de desenhado)
 function runUiMapHtml(segs){
   var pts = runUiMapPoints(segs);
+  RUN_UI_MAP_LAST = pts;
   var all = [].concat.apply([], pts);
   if (all.length < 2) return "";
   var minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
@@ -375,9 +377,125 @@ function runUiMapBlock(segs, pro){
   if (!runUiMapPoints(segs).length) return "";
   if (RUN.uiMapOn) return runUiMapHtml(segs) + '<p class="muted-p run-note"><button type="button" class="btn btn-sm" data-run-map="off">Esconder o mapa</button></p>';
   return '<div class="run-map-ask"><button type="button" class="btn btn-sm" data-run-map="on">Mostrar mapa</button>' +
-    '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
+    '<p class="muted-p run-note">Ao mostrar o mapa, o OpenStreetMap (um serviço de terceiros) fica a saber a zona do percurso e o teu endereço IP. Se mexeres no mapa (arrastar ou aproximar), pedem-se mais quadrados. Os teus números e o percurso continuam só entre ti e a EVOLVE.</p></div>';
 }
 
+// com o mapa ligado fica só o mapa (o desenho simples do percurso só aparece enquanto o mapa está desligado)
+
+/* ---------- mapa interativo: arrastar, aproximar e afastar ----------
+   O mapa desenhado por runUiMapHtml é uma imagem. Aqui passa a mexer: um dedo arrasta, dois dedos (ou os botões + e −, a roda do rato, o duplo toque) mudam o zoom.
+   Os quadrados vêm do mesmo servidor e com o mesmo endereço (z/x/y); só se pedem mais quadrados quando se mexe. Tudo é desenhado com o DOM (createElement). */
+function runUiMapFit(all){
+  var minLat = 90, maxLat = -90, minLon = 180, maxLon = -180, z = 17, a, b;
+  all.forEach(function(p){ minLat = Math.min(minLat, p[0]); maxLat = Math.max(maxLat, p[0]); minLon = Math.min(minLon, p[1]); maxLon = Math.max(maxLon, p[1]); });
+  for (; z > 3; z--){
+    a = runUiMerc(maxLat, minLon, z); b = runUiMerc(minLat, maxLon, z);
+    if (b[0] - a[0] <= RUN_UI_MAP_W - 2 * RUN_UI_MAP_PAD && b[1] - a[1] <= RUN_UI_MAP_H - 2 * RUN_UI_MAP_PAD) break;
+  }
+  a = runUiMerc(maxLat, minLon, z); b = runUiMerc(minLat, maxLon, z);
+  return {z: z, cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2};
+}
+function runUiMapWire(el){
+  var box = el.querySelector(".run-map");
+  if (!box || box.getAttribute("data-live") === "1" || !RUN_UI_MAP_LAST || !RUN_UI_MAP_LAST.length) return;
+  var pts = RUN_UI_MAP_LAST, all = [].concat.apply([], pts), W = RUN_UI_MAP_W, H = RUN_UI_MAP_H, fit = runUiMapFit(all);
+  var st = {z: fit.z, cx: fit.cx, cy: fit.cy}, layer = null, tiles = {}, svg = box.querySelector("svg"), ptrs = {}, drag = null, pinch = null, wheelAt = 0;
+  var NS = svg ? svg.namespaceURI : null;   // o espaço de nomes vem do próprio SVG (sem escrever mais endereços no código)
+  box.setAttribute("data-live", "1"); box.setAttribute("role", "group"); box.setAttribute("aria-label", "Mapa do percurso: arrasta para mexer; usa + e − para o zoom");
+  box.style.touchAction = "none"; box.setAttribute("data-z", String(st.z));
+  function ensureLayer(){
+    if (layer) return;
+    layer = document.createElement("div"); layer.className = "run-map-layer";
+    box.insertBefore(layer, box.firstChild);
+    Array.prototype.slice.call(box.querySelectorAll(".run-map-tile")).forEach(function(t){ layer.appendChild(t); });
+    if (svg) layer.appendChild(svg);
+  }
+  function clampC(){ var n = 256 * Math.pow(2, st.z); st.cx = Math.min(n, Math.max(0, st.cx)); st.cy = Math.min(n, Math.max(0, st.cy)); }
+  function render(){
+    ensureLayer(); clampC();
+    var z = st.z, n = Math.pow(2, z), ox = st.cx - W / 2, oy = st.cy - H / 2, need = {}, tx, ty, k;
+    for (ty = Math.floor((oy - 256) / 256); ty <= Math.floor((oy + H + 256) / 256); ty++){
+      if (ty < 0 || ty >= n) continue;
+      for (tx = Math.floor((ox - 256) / 256); tx <= Math.floor((ox + W + 256) / 256); tx++){
+        var wx = ((tx % n) + n) % n; k = z + "/" + wx + "/" + ty + "@" + tx;
+        var img = tiles[k];
+        if (!img){
+          img = document.createElement("img"); img.className = "run-map-tile"; img.alt = ""; img.width = 256; img.height = 256; img.draggable = false;
+          img.src = "https://tile.openstreetmap.org/" + z + "/" + wx + "/" + ty + ".png";
+          layer.insertBefore(img, svg || null); tiles[k] = img;
+        }
+        img.style.left = ((tx * 256 - ox) / W * 100).toFixed(3) + "%"; img.style.top = ((ty * 256 - oy) / H * 100).toFixed(3) + "%";
+        img.style.width = (256 / W * 100).toFixed(3) + "%"; img.style.height = (256 / H * 100).toFixed(3) + "%";
+        need[k] = true;
+      }
+    }
+    Object.keys(tiles).forEach(function(key){ if (!need[key]){ if (tiles[key].parentNode) tiles[key].parentNode.removeChild(tiles[key]); delete tiles[key]; } });
+    if (svg){
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      pts.forEach(function(seg){
+        var pl = document.createElementNS(NS, "polyline");
+        pl.setAttribute("points", seg.map(function(p){ var m = runUiMerc(p[0], p[1], z); return (m[0] - ox).toFixed(1) + "," + (m[1] - oy).toFixed(1); }).join(" "));
+        pl.setAttribute("fill", "none"); pl.setAttribute("stroke", "#e8602c"); pl.setAttribute("stroke-width", "4"); pl.setAttribute("stroke-linecap", "round"); pl.setAttribute("stroke-linejoin", "round");
+        svg.appendChild(pl);
+      });
+      var lastSeg = pts[pts.length - 1], ends = [[pts[0][0], "#e8602c", "#fff", 2], [lastSeg[lastSeg.length - 1], "#fff", "#e8602c", 3]];
+      ends.forEach(function(e){
+        var m = runUiMerc(e[0][0], e[0][1], z), c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", (m[0] - ox).toFixed(1)); c.setAttribute("cy", (m[1] - oy).toFixed(1)); c.setAttribute("r", "5.5"); c.setAttribute("fill", e[1]); c.setAttribute("stroke", e[2]); c.setAttribute("stroke-width", String(e[3]));
+        svg.appendChild(c);
+      });
+    }
+    layer.style.transform = ""; layer.style.transformOrigin = "";
+    box.setAttribute("data-z", String(z));
+  }
+  function zoomBy(dz, fx, fy){
+    var z2 = Math.min(18, Math.max(3, st.z + dz)); if (z2 === st.z) return;
+    var f = Math.pow(2, z2 - st.z), fwx = st.cx - W / 2 + fx * W, fwy = st.cy - H / 2 + fy * H;
+    st.cx = fwx * f - fx * W + W / 2; st.cy = fwy * f - fy * H + H / 2; st.z = z2; render();
+  }
+  function frac(e){ var r = box.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
+  function dist(){ var ids = Object.keys(ptrs); if (ids.length < 2) return 0; var a = ptrs[ids[0]], b = ptrs[ids[1]]; return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2)); }
+  box.addEventListener("pointerdown", function(e){
+    if (e.target.closest && e.target.closest(".run-map-ctl, .run-map-attr")) return;
+    ensureLayer(); render();   // ao primeiro toque carrega a margem de quadrados à volta
+    ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+    try { box.setPointerCapture(e.pointerId); } catch (x) {}
+    var r = box.getBoundingClientRect();
+    if (Object.keys(ptrs).length === 1) drag = {x: e.clientX, y: e.clientY, cx: st.cx, cy: st.cy, k: W / r.width, dx: 0, dy: 0}; else { drag = null; pinch = {d0: dist(), s: 1}; }
+  });
+  box.addEventListener("pointermove", function(e){
+    if (!ptrs[e.pointerId]) return;
+    ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+    if (drag && Object.keys(ptrs).length === 1){
+      drag.dx = e.clientX - drag.x; drag.dy = e.clientY - drag.y;
+      layer.style.transform = "translate(" + drag.dx + "px," + drag.dy + "px)";
+    } else if (pinch && pinch.d0 > 0){
+      pinch.s = Math.min(4, Math.max(0.25, dist() / pinch.d0));
+      layer.style.transformOrigin = "50% 50%"; layer.style.transform = "scale(" + pinch.s + ")";
+    }
+  });
+  function endPtr(e){
+    if (!ptrs[e.pointerId]) return;
+    delete ptrs[e.pointerId];
+    if (drag && Object.keys(ptrs).length === 0){ st.cx = drag.cx - drag.dx * drag.k; st.cy = drag.cy - drag.dy * drag.k; drag = null; render(); }
+    else if (pinch){ var dz = Math.round(Math.log(pinch.s) / Math.LN2); pinch = null; drag = null; ptrs = {}; if (dz) zoomBy(dz, 0.5, 0.5); else render(); }
+  }
+  box.addEventListener("pointerup", endPtr); box.addEventListener("pointercancel", endPtr);
+  box.addEventListener("dblclick", function(e){ var f = frac(e); ensureLayer(); zoomBy(1, f[0], f[1]); });
+  box.addEventListener("wheel", function(e){
+    e.preventDefault(); var now = Date.now(); if (now - wheelAt < 250) return; wheelAt = now;
+    var f = frac(e); ensureLayer(); zoomBy(e.deltaY < 0 ? 1 : -1, f[0], f[1]);
+  }, {passive: false});
+  var ctl = document.createElement("div"); ctl.className = "run-map-ctl";
+  [["+", "Aproximar", function(){ ensureLayer(); zoomBy(1, 0.5, 0.5); }], ["−", "Afastar", function(){ ensureLayer(); zoomBy(-1, 0.5, 0.5); }], ["◎", "Centrar no percurso", function(){ ensureLayer(); st.z = fit.z; st.cx = fit.cx; st.cy = fit.cy; render(); }]].forEach(function(c){
+    var b = document.createElement("button"); b.type = "button"; b.textContent = c[0]; b.setAttribute("aria-label", c[1]); b.addEventListener("click", c[2]); ctl.appendChild(b);
+  });
+  box.appendChild(ctl);
+}
+function runUiTrackDraw(svg, segs, pro){
+  if (RUN.uiMapOn && runUiMapPoints(segs).length) return runUiMapBlock(segs, pro);
+  return '<div class="run-svg-wrap">' + svg + '</div>' + runUiMapBlock(segs, pro);
+}
 function runUiTrackBlock(r, track, pro){
   if (r.source === "manual") return "";
   var h = '<div class="card run-track"><div class="eyebrow">Percurso</div>';
@@ -386,7 +504,7 @@ function runUiTrackBlock(r, track, pro){
   if (track.state === "none") return h + '<p class="muted-p run-no-track">' + escapeHtml(pro ? "O aluno não partilhou o percurso." : "Não partilhaste o percurso: ficaram só os números.") + '</p></div>';
   var svg = runTrackSvg(track.segs, {width: 320, height: 220});
   if (!svg) return h + '<p class="muted-p">O percurso é curto demais para desenhar.</p></div>';
-  return h + '<div class="run-svg-wrap">' + svg + '</div>' + runUiMapBlock(track.segs, pro) + '<p class="muted-p run-note">Este percurso foi aparado e simplificado antes de ser guardado' +
+  return h + runUiTrackDraw(svg, track.segs, pro) + '<p class="muted-p run-note">Este percurso foi aparado e simplificado antes de ser guardado' +
     (track.trimM ? ' (início e fim escondidos: pelo menos ' + track.trimM + ' m)' : '') + '.</p></div>';
 }
 function runUiDetailHtml(d, id, pro, preview, backId){
@@ -1191,7 +1309,7 @@ function runUiSaveHtml(sv){
       v.svg = pv ? runTrackSvg(pv.segments, {width: 320, height: 220}) : "";
       v.mapSegs = pv ? pv.segments : null;
     }
-    if (v.svg) h += '<div class="run-svg-wrap">' + v.svg + '</div>' + runUiMapBlock(v.mapSegs, false);
+    if (v.svg) h += runUiTrackDraw(v.svg, v.mapSegs, false);
   }
   var warns = runUiPrepWarnings(prep);
   h += '<ul class="run-warns" id="runSvWarns">' + warns.map(function(w){ return '<li>' + escapeHtml(w) + '</li>'; }).join("") + '</ul>';
@@ -1388,6 +1506,7 @@ RUN.wire = function(s, el){
     el.querySelectorAll("[data-run-map]").forEach(function(b){
       b.addEventListener("click", function(){ RUN.uiMapOn = b.getAttribute("data-run-map") === "on"; renderAlunoTab(s); });
     });
+    runUiMapWire(el);
     var v = RUN.v || {name: "home"};
     if (v.name === "live" && runUiLiveView(s) && typeof RUN.liveWire === "function"){ RUN.liveWire(s, el); return; }
     if (v.name === "import") runUiWireImport(s, el);
@@ -1479,6 +1598,7 @@ function runUiProWire(s, el, d){
   el.querySelectorAll("[data-run-map]").forEach(function(b){
     b.addEventListener("click", function(){ RUN.uiMapOn = b.getAttribute("data-run-map") === "on"; RUN.proTab(s, document.getElementById("proTabContent") || el); });
   });
+  runUiMapWire(el);
   runUiOn(el, "#runProRetry", function(){ runUiInvalidate(d); d.err = ""; d.consent = undefined; RUN.proTab(s, document.getElementById("proTabContent") || el); });
   runUiOn(el, "#runProMore", function(){ runUiLoad(d, s.id, true, function(){ runUiRedrawPro(s); }); runUiRedrawPro(s); });
   runUiOn(el, "#runProBack", function(){ d.detailId = null; RUN.proTab(s, document.getElementById("proTabContent") || el); });
