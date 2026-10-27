@@ -7936,9 +7936,9 @@ function tplPlano(s){
     var totals = resolvedMealTotals(s, m);
     html += "<div class=\"card plano-meal-card\">" +
       "<div class=\"plano-meal-head\"><span class=\"mname\">" + escapeHtml(m.name) + "</span><span class=\"mtime\">" + escapeHtml(m.time) + "</span></div>";
-    if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s);
+    if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s, true);
     else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
-    else html += tplMealChoice(m, idx, s);
+    else html += tplMealChoice(m, idx, s, true);
     if (idx === creatineIdx) html += creatineLineHtml(s);
     html += "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
     html += "</div>";
@@ -7959,7 +7959,8 @@ function tplMealFixed(m, idx, s){
 
 var INLINE_BUILDER_OPTIONS_MAX = 6;
 
-function tplMealChoice(m, idx, s){
+// compact (só o ecrã do aluno): cada grupo mostra a opção escolhida e «Trocar»; as alternativas só aparecem ao tocar (state.planOpen)
+function tplMealChoice(m, idx, s, compact){
   ensureLiveChoiceDefaults(m, s);
   // Modo de segurança: com alergias/restrições em texto livre não mapeadas,
   // o construtor de refeições não pode oferecer escolha entre alimentos do
@@ -7988,6 +7989,13 @@ function tplMealChoice(m, idx, s){
     var shownIndices = [];
     for (var oi = 0; oi < options.length && shownIndices.length < INLINE_BUILDER_OPTIONS_MAX; oi++) shownIndices.push(oi);
     if (selIdx != null && selIdx >= 0 && options[selIdx] && shownIndices.indexOf(selIdx) === -1) shownIndices.push(selIdx);
+    var openKey = idx + ":" + f.group;
+    if (compact && !(state.planOpen && state.planOpen[openKey]) && ((selIdx === -1 && f.required === false) || (selIdx != null && selIdx >= 0 && options[selIdx]))){
+      var chosen = selIdx === -1 ? "Nenhum" : escapeHtml(options[selIdx].name) + " <span class=\"num\" style=\"color:var(--muted);\">(" + escapeHtml(options[selIdx].qty) + ")</span>";
+      html += "<div class=\"builder-group pick\"><div class=\"gtitle\">" + groupLabel(f.group) + (f.required===false ? " — opcional" : "") + "</div>" +
+        "<div class=\"pick-row\"><span class=\"pick-name\">" + chosen + "</span><button type=\"button\" class=\"btn btn-sm\" data-open-group=\"" + openKey + "\" aria-label=\"Trocar " + escapeHtml(groupLabel(f.group)) + "\">Trocar</button></div></div>";
+      return;
+    }
     html += "<div class=\"builder-group\"><div class=\"gtitle\">" + groupLabel(f.group) + (f.required===false ? " — opcional" : " — escolhe 1") + "</div>";
     shownIndices.forEach(function(oi){
       var o = options[oi];
@@ -8030,7 +8038,7 @@ function rangeTile(label, center){
   return "<div class=\"f\"><label>" + label + "</label><div class=\"v num\">" + lo + "–" + hi + " g</div></div>";
 }
 
-function tplMealBuilder(m, idx, s){
+function tplMealBuilder(m, idx, s, compact){
   ensureLiveChoiceDefaults(m, s);
   var base = foodsTotals(m.foods);
   var html = "<div class=\"macro-target-grid\" style=\"margin-bottom:12px;\">" +
@@ -8042,7 +8050,7 @@ function tplMealBuilder(m, idx, s){
       feedback.map(function(msg){ return "<p class=\"muted-p\" style=\"margin:0 0 4px;\">" + msg + "</p>"; }).join("") +
     "</div>";
   }
-  return html + tplMealChoice(m, idx, s);
+  return html + tplMealChoice(m, idx, s, compact);
 }
 
 function tplCheckin(s){
@@ -11175,12 +11183,12 @@ function tplPhotoCompare(s){
   var optsB = dates.map(function(d,i){ return "<option value=\"" + d + "\"" + (i===lastIdx?" selected":"") + ">" + fmtDatePt(d) + "</option>"; }).join("");
   return "<div class=\"photo-compare\" style=\"margin-top:14px; padding-top:14px; border-top:1px solid var(--line);\">" +
     "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Antes vs Depois</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Escolhe duas datas — mostra frente, lado e costas lado a lado (mesmo que falte alguma foto) e a evolução do peso e das medições.</p>" +
+    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + ((s.photos || []).length ? "Escolhe duas datas — mostra frente, lado e costas lado a lado (mesmo que falte alguma foto) e a evolução do peso e das medições." : "Escolhe duas datas para ver a evolução do peso e das medições. As fotografias aparecem aqui quando as tiveres.") + "</p>" +
     "<div style=\"display:flex; gap:10px; margin-bottom:12px;\">" +
       "<select class=\"mini-select\" id=\"compareA\" style=\"flex:1;\">" + optsA + "</select>" +
       "<select class=\"mini-select\" id=\"compareB\" style=\"flex:1;\">" + optsB + "</select>" +
     "</div>" +
-    "<div class=\"compare-grid\" id=\"compareGrid\"></div>" +
+    "<div class=\"compare-grid\" id=\"compareGrid\"" + ((s.photos || []).length ? "" : " hidden") + "></div>" + // sem fotografias não há nada para pôr lado a lado
     "<div id=\"compareMetrics\"></div>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar / enviar ao aluno</button>" +
     "<p class=\"muted-p\" id=\"compareDownloadError\" style=\"color:var(--critical); display:none; margin-top:8px;\"></p>" +
@@ -11540,9 +11548,17 @@ function wireAlunoTab(s){
       var m = resolveMealsForToday(s)[midx];
       if (!m.liveChoice) m.liveChoice = {};
       m.liveChoice[group] = oi;
+      if (state.planOpen) delete state.planOpen[midx + ":" + group]; // escolhida a opção, o grupo volta a recolher
       commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
+    });
+  });
+  el.querySelectorAll("[data-open-group]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      state.planOpen = state.planOpen || {};
+      state.planOpen[btn.getAttribute("data-open-group")] = true;
+      renderAlunoTab(s);
     });
   });
 
@@ -11556,6 +11572,7 @@ function wireAlunoTab(s){
       openMealOptionPicker(optionsFor(f, s), function(oi){
         if (!m.liveChoice) m.liveChoice = {};
         m.liveChoice[group] = oi;
+        if (state.planOpen) delete state.planOpen[midx + ":" + group];
         commitMealView(s, m);
         renderAlunoTab(s);
         persistStudent(s);

@@ -472,3 +472,10 @@ Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar
 
 - Com o GPS ligado pelo profissional, «Gravar com GPS» é a ação principal (primeira e a laranja); importar ficheiro e registar à mão ficam por baixo. O aviso do ecrã e das lacunas está na secção recolhida «Antes de gravar». Sem GPS, «Importar ficheiro» continua a principal.
 - A faixa do topo e o ecrã de arranque dizem «EVOLVE», «EVOLVE Treino» ou «EVOLVE Gestão» conforme a app (já não «Evolve Nutrition · protótipo ... base de dados real»); só avisa se estiver em modo local.
+
+## 8an. App EVOLVE (aluno): Plano recolhido e Progresso mais limpo
+
+- **Plano:** cada grupo de uma refeição mostra a opção escolhida e «Trocar»; as alternativas só aparecem ao tocar nesse grupo (`state.planOpen`) e voltam a recolher ao escolher. A página passou de cerca de 7200 px para cerca de 2500. Só no ecrã do aluno (`compact`); o profissional e os testes de `tplMealChoice` continuam a ver a lista completa.
+- **Progresso:** os 4 números do peso numa linha; tabelas com sombras nas pontas (deslizam); «Antes vs Depois» sem a grelha de quadrados vazios enquanto não houver fotografias.
+- **Hoje:** o botão «Abrir» do atalho para a app Treino ficou centrado.
+- Não alterado, por decisão pendente do dono: o tom dos avisos a vermelho («risco aumentado», «adiposidade central aumentada») mostrados ao aluno.
