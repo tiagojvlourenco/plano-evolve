@@ -11,7 +11,7 @@
      RUN.go(name, params)   muda de vista e volta a desenhar o separador (só se o separador «Corrida» estiver aberto)
      RUN.screen(sv)      HTML do separador (delega em RUN.liveScreen(sv) na vista «live»)      RUN.wire(s, el)   eventos (idem RUN.liveWire)
      RUN.proTab(s, el)   separador «Corridas» da ficha do profissional
-     RUN.consentVersion()  versão do aviso de privacidade (run_consents.version). Continua a 1: o texto único (RUN_UI_NOTICE) descreve TODOS os usos
+     RUN.consentVersion()  versão do aviso de privacidade (run_consents.version). Está na 2 (a 1 não falava de bicicleta, treinos guiados nem do mapa opcional): o texto único (RUN_UI_NOTICE) descreve TODOS os usos
                            (importar, à mão e gravar com GPS); se um uso novo mudar o que se recolhe, o texto e a versão sobem juntos (testes 137 a 140 do corrida-browser)
      RUN.ensureConsent(s, cb)  lê o consentimento no servidor; só chama cb() se o aluno aceitou (ou aceita agora) a versão atual. Só quando a leitura
                            falha por rede aceita o recibo local do gravador (RUN.consentCacheGet/Set/Clear, se existirem); o servidor decide sempre ao guardar
@@ -576,14 +576,14 @@ function runUiGuideHtml(){
     RUN_UI_GUIDE.map(function(g){ return '<li><b>' + escapeHtml(g[0]) + ':</b> ' + escapeHtml(g[1]) + '</li>'; }).join("") +
     '</ul><p class="muted-p">Se não conseguires, usa «Registar à mão».</p></details>';
 }
-// O aviso de privacidade é UM só (versão 1) e descreve todos os usos da Corrida: o que se aceita é o mesmo qualquer que seja o modo que o profissional
+// O aviso de privacidade é UM só (versão 2) e descreve todos os usos da Corrida: o que se aceita é o mesmo qualquer que seja o modo que o profissional
 // ligue depois. Se um uso novo mudar o que se recolhe ou quem vê, este texto e RUN.consentVersion() sobem juntos (os testes 137 a 140 do corrida-browser prendem o texto às colunas
 // que se gravam e às funcionalidades que existem). O consentimento e «Privacidade e dados» mostram estes mesmos parágrafos.
 var RUN_UI_NOTICE = [
-  "Podes trazer uma corrida de três maneiras: escolhes um ficheiro (GPX ou TCX) do relógio ou de outra app, registas a corrida à mão ou, se o teu profissional ligar essa opção, gravas aqui com o GPS do telemóvel. A EVOLVE lê o ficheiro no teu telemóvel e não o guarda.",
+  "O separador Cardio serve para corridas e passeios de bicicleta. Podes trazer um treino de três maneiras: escolhes um ficheiro (GPX ou TCX) do relógio ou de outra app, registas à mão ou, se o teu profissional ligar essa opção, gravas aqui com o GPS do telemóvel, também seguindo um treino guiado (por exemplo, intervalos ou «Melhorar tempo»), em que a app só te avisa do ritmo ou da distância no ecrã e por som. A EVOLVE lê o ficheiro no teu telemóvel e não o guarda.",
   "O GPS do telemóvel só liga depois de carregares em «Gravar com GPS» e em «Preparar GPS», e só enquanto a EVOLVE está aberta a gravar. Enquanto gravas, as posições ficam num rascunho neste telemóvel até guardares ou descartares a corrida. Com o ecrã bloqueado ou noutra aplicação o registo pode falhar e deixar lacunas.",
-  "Fica guardado no servidor: a data e a hora de início, a origem (ficheiro GPX ou TCX, à mão ou GPS), a distância, o tempo total e o tempo em movimento (o ritmo calcula-se a partir deles), o tempo de cada quilómetro, as lacunas sem sinal, o tempo com a app em segundo plano, o esforço (1 a 10), as notas que escreveres e a versão deste aviso. O percurso só fica guardado se escolheres partilhá-lo, sem, pelo menos, os metros do início e do fim que escolheres esconder.",
-  "Quem vê: tu e os profissionais da EVOLVE. As notas são texto livre: não escrevas moradas. Os dados ficam no serviço de alojamento da EVOLVE (Supabase). Não usamos mapas nem serviços de terceiros e não guardamos a frequência cardíaca.",
+  "Fica guardado no servidor: a data e a hora de início, o tipo (corrida ou bicicleta), a origem (ficheiro GPX ou TCX, à mão ou GPS), a distância, o tempo total e o tempo em movimento (o ritmo calcula-se a partir deles), o tempo de cada quilómetro, as lacunas sem sinal, o tempo com a app em segundo plano, o esforço (1 a 10), as notas que escreveres e a versão deste aviso. O percurso só fica guardado se escolheres partilhá-lo, sem, pelo menos, os metros do início e do fim que escolheres esconder.",
+  "Quem vê: tu e os profissionais da EVOLVE. As notas são texto livre: não escrevas moradas. Os dados ficam no serviço de alojamento da EVOLVE (Supabase). Não guardamos a frequência cardíaca. O mapa do percurso é opcional e só aparece se o ligares: nesse caso o teu telemóvel pede os quadrados do mapa ao OpenStreetMap (serviço de terceiros), que fica a saber o teu endereço IP e a zona aproximada que vês, mas não recebe os teus dados da EVOLVE nem o percurso completo.",
   "Podes apagar uma corrida, só o percurso ou todas, quando quiseres, mesmo que o teu profissional desligue a Corrida. Se retirares este consentimento, apagamos todas as tuas corridas."
 ];
 function runUiNoticeHtml(cls){
@@ -1059,7 +1059,7 @@ function runUiWireConsent(s, el){
     });
   });
 }
-RUN.consentVersion = function(){ return 1; };
+RUN.consentVersion = function(){ return 2; };
 RUN.ensureConsent = function(s, cb){
   try {
     if (!s || authRole !== "student" || typeof cb !== "function" || runUiConsentBusy) return;
