@@ -451,3 +451,7 @@ Os exercícios do livro ganham um alias em português (`exercisePtAlias`, dicion
 ## 8ah. Verificação de segurança J-B (27/10/2026)
 
 O bloco J-B de `supabase/verify_security.sql` correu no Supabase real (projeto «Nutrição EVOLVE»): **40 ok, 0 falhas**, sem gravar nada (rollback final confirmado: sem utilizadores, consentimentos ou corridas novas). Como só havia 1 aluno com conta, o aluno B foi criado **dentro da transação** (linha em `auth.users` + `students.auth_user_id`) e desfeito com ela. Não prova o caminho real de login (GoTrue/PostgREST): isso é o J-C, que continua pendente e precisa de uma 2.ª conta de aluno real.
+
+## 8ai. Imagens em falta (Turkish Get Up, Windmill)
+
+Os 2 exercícios em formato EMF/WMF foram convertidos com o LibreOffice (`soffice --headless --convert-to png`) e recortados; são uma folha com vários passos, não uma animação. Mesma origem (Google) e mesma situação de licença do §8ag. Sobram 7 sem imagem por nome repetido ou diferente no Excel; continuam a ligar à pesquisa de vídeo.
