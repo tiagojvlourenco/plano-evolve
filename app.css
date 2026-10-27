@@ -546,6 +546,14 @@
   .playlist-row .btn{min-height:44px; text-decoration:none; display:inline-flex; align-items:center;}
   .wl-progress{display:flex; flex-direction:column; gap:10px;}
   .prog-day{border-top:1px solid var(--line); padding-top:12px; margin-top:12px;}
+  .prog-day > summary{list-style:none; cursor:pointer;}
+  .prog-day > summary::-webkit-details-marker{display:none;}
+  .prog-day > summary .pd-meta::after{content:" ▾"; color:var(--accent-strong);}
+  .prog-day[open] > summary .pd-meta::after{content:" ▴";}
+  .today-workout.rest .tw-rest{display:flex; flex-direction:column; align-items:flex-start; gap:10px;}
+  .today-workout.rest .btn{min-height:44px;}
+  .evolve-link{display:flex; align-items:center; justify-content:space-between; gap:14px; color:inherit; text-decoration:none;}
+  .evolve-link .btn{min-height:44px; min-width:84px; display:inline-flex; align-items:center; justify-content:center;}
   .pd-row{display:flex; align-items:center; justify-content:space-between; gap:12px;}
   .pd-name{font-weight:700;} .pd-meta{font-size:0.78rem; color:var(--muted);}
   .pd-ex{margin:6px 0 0; padding-left:18px; font-size:0.84rem; color:var(--muted);}

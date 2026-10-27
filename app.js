@@ -7732,9 +7732,9 @@ function tplTodayWorkout(s){
       `<button type="button" class="btn" id="startWorkout" ${dayAttr}>Registar outro treino</button></div>`;
   }
   if (isTrainingDayToday(s) === false){
-    return `<div class="card today-workout rest"><div class="eyebrow">Hoje</div><div class="tw-name">Dia de descanso</div>` +
-      `<p class="muted-p">Hoje não tens treino marcado. Recupera bem. Próximo treino: <b>${escapeHtml(day.name)}</b>.</p>` +
-      `<button type="button" class="btn" id="startWorkout" ${dayAttr}>Treinar mesmo assim</button></div>`;
+    return `<div class="card today-workout rest"><div class="tw-rest"><div><div class="eyebrow">Hoje · descanso</div>` +
+      `<p class="muted-p">Recupera bem. Próximo treino: <b>${escapeHtml(day.name)}</b>.</p></div>` +
+      `<button type="button" class="btn btn-sm" id="startWorkout" ${dayAttr}>Treinar mesmo assim</button></div></div>`;
   }
   var time = s.trainingTime && s.trainingTime !== "—" ? escapeHtml(s.trainingTime) : "";
   return `<div class="card today-workout"><div class="eyebrow">Treino de hoje${time ? " · " + time : ""}</div>` +
@@ -7866,7 +7866,7 @@ function tplTreinoHome(s){
         "<div class=\"pd-meta\">" + escapeHtml(fmtDatePt(l.date)) + " · " + plural(sets, "série", "séries") + (l.rpe ? " · esforço " + l.rpe + "/10" : "") + "</div></div></div></div>";
     }).join("") + "</div>";
   }
-  html += "<a class=\"btn ghost help-link\" id=\"goEvolveApp\" href=\"index.html\">Alimentação e avaliações → app EVOLVE</a>";
+  html += "<a class=\"card evolve-link\" id=\"goEvolveApp\" href=\"index.html\"><div><div class=\"eyebrow\">Alimentação e avaliações</div><p class=\"muted-p\" style=\"margin:4px 0 0;\">Plano alimentar, medidas e fotos estão na app EVOLVE.</p></div><span class=\"btn btn-sm\">Abrir</span></a>";
   return html;
 }
 // o treino e a corrida têm app própria: aqui fica só um atalho
@@ -8586,9 +8586,9 @@ function tplTrainingProgramCard(s){
   return "<div class=\"card\"><div class=\"eyebrow\">Programa de treino</div>" +
     (hasDays ? "<div class=\"week-chips\">" + [1,2,3,4,5,6,0].map(function(d){ return "<div class=\"week-chip" + (s.trainingDays.indexOf(d) !== -1 ? " on" : "") + "\">" + names[d] + "<i></i></div>"; }).join("") + "</div>" : "") +
     days.map(function(d){
-      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(d.name) + "</div><div class=\"pd-meta\">" + plural(d.exercises.length, "exercício", "exercícios") + " · " + plural(workoutSetCount(d), "série", "séries") + "</div></div>" +
-        "<button type=\"button\" class=\"btn btn-sm\" data-start-day=\"" + escapeHtml(d.id) + "\">Iniciar</button></div>" +
-        "<details class=\"soft-details\"><summary>Ver exercícios</summary><ul class=\"pd-ex\">" + d.exercises.map(function(e){ return "<li><button type=\"button\" class=\"wl-info\" data-ex-info=\"" + escapeHtml(e.id) + "\">" + escapeHtml(e.name) + " <span aria-hidden=\"true\">ⓘ</span></button> <span class=\"num\">" + escapeHtml(String(e.sets)) + " × " + escapeHtml(String(e.reps)) + "</span></li>"; }).join("") + "</ul></details></div>";
+      return "<details class=\"prog-day\"><summary class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(d.name) + "</div><div class=\"pd-meta\">" + plural(d.exercises.length, "exercício", "exercícios") + " · " + plural(workoutSetCount(d), "série", "séries") + " · toca para ver</div></div>" +
+        "<button type=\"button\" class=\"btn btn-sm\" data-start-day=\"" + escapeHtml(d.id) + "\">Iniciar</button></summary>" +
+        "<ul class=\"pd-ex\">" + d.exercises.map(function(e){ return "<li><button type=\"button\" class=\"wl-info\" data-ex-info=\"" + escapeHtml(e.id) + "\">" + escapeHtml(e.name) + " <span aria-hidden=\"true\">ⓘ</span></button> <span class=\"num\">" + escapeHtml(String(e.sets)) + " × " + escapeHtml(String(e.reps)) + "</span></li>"; }).join("") + "</ul></details>";
     }).join("") + "</div>";
 }
 
