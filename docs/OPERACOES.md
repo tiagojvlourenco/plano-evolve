@@ -441,3 +441,9 @@ O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu 
 ## 8af. Nomes em português do livro (pesquisa)
 
 Os exercícios do livro ganham um alias em português (`exercisePtAlias`, dicionário `EXERCISE_PT_WORDS` em app.js), usado só na pesquisa da biblioteca. É tradução palavra a palavra, **por rever** por um profissional (ex.: «Push Up» → «flexão»). Para corrigir um nome, edita o exercício na biblioteca (o alias próprio tem prioridade) ou o dicionário. As 9 imagens em falta continuam por fazer: o Excel original já não está disponível; precisa de ser carregado de novo para `scripts/build-book-media.py`.
+
+## 8ag. Imagens do livro: origem e licença
+
+- 72 exercícios do livro passaram a usar animações feitas com o Free Exercise DB (domínio público, 2 fotogramas), onde o nome coincide exatamente. Podem ficar.
+- **As restantes ~475 imagens do livro vieram de pesquisa no Google (marca de água WorkoutLabs): são de terceiros, sem licença, e estão num site público.** Decisão pendente do dono: retirá-las (os exercícios mantêm-se, com pesquisa de vídeo) ou obter licença. Alternativa recomendada: vídeos curtos próprios, ligados a cada exercício na biblioteca.
+- Aviso «Leaked password protection»: indisponível no plano Free do Supabase, aceite. O registo livre (signUp) tem de ficar ligado porque o convite do profissional funciona por signUp + `claim_student_row`.
