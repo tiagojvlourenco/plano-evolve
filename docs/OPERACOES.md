@@ -455,3 +455,7 @@ O bloco J-B de `supabase/verify_security.sql` correu no Supabase real (projeto �
 ## 8ai. Imagens em falta (Turkish Get Up, Windmill)
 
 Os 2 exercícios em formato EMF/WMF foram convertidos com o LibreOffice (`soffice --headless --convert-to png`) e recortados; são uma folha com vários passos, não uma animação. Mesma origem (Google) e mesma situação de licença do §8ag. Sobram 7 sem imagem por nome repetido ou diferente no Excel; continuam a ligar à pesquisa de vídeo.
+
+## 8aj. Aluno «só treino» (sem nutrição)
+
+O interruptor «Não faz nutrição comigo» é também o «só treino». Na app EVOLVE o aluno vê agora Hoje e Progresso (sem o separador Plano): o Hoje tem um cartão grande para a app EVOLVE Treino e um atalho para o Progresso (medidas, avaliações, fotos). Não há redirecionamento automático porque a evolução só existe na app EVOLVE. Ideia futura: levar o Progresso para a app Treino e então redirecionar.

@@ -31,4 +31,6 @@ check.check("9. Sem nutrição não há revisões de plano nem motivos de contac
 // check-in semanal retirado
 check.check("10. O Progresso do aluno já não pede o check-in semanal e o painel não o conta", WEEKLY_CHECKIN_ENABLED === false && !/id="submitCheckin"/.test(tplEvolucaoAluno(studentView(off), {editable: false})) && !contactReasonsFor(off, localTodayISO()).some(function(r){ return r.key === "sem-checkin"; }));
 check.check("11. O «Pulso do estúdio» saiu do painel", STUDIO_PULSE_ENABLED === false);
+check.check("11. O Hoje do aluno só treino tem o cartão grande da app EVOLVE Treino e o acesso ao Progresso (sem refeições); o normal não tem o cartão «O teu treino»", /treino\.html/.test(hoje) && /data-goto-tab="evolucao"/.test(hoje) && /Abrir a app EVOLVE Treino/.test(hoje) && !/Alimentação|refeição/i.test(hoje) && !/O teu treino/.test(hojeOff));
+check.check("12. A barra do aluno só treino não tem o separador Plano (e o normal tem)", (function(){ var src = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8"); return /noNutritionOf\(s\) \? "" : "<button data-tab=\\"plano\\"/.test(src) && /state\.alunoTab==="plano" && noNutritionOf\(s\)/.test(src); })());
 check.summarize();
