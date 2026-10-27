@@ -153,14 +153,14 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var fake = function(pg, fn, arg){ return pg.evaluate(fn, arg); };
   var writes = function(pg){ return pg.evaluate(function(){ return window.__fake.writes; }); };
   var tables = function(pg){ return pg.evaluate(function(){ return JSON.parse(JSON.stringify(window.__fake.tables)); }); };
-  var seedConsent = function(pg, sid){ return pg.evaluate(function(id){ window.__fake.tables.run_consents.push({student_id: id, version: 1, accepted_at: "2026-10-01T10:00:00Z"}); }, sid); };
+  var seedConsent = function(pg, sid){ return pg.evaluate(function(id){ window.__fake.tables.run_consents.push({student_id: id, version: 2, accepted_at: "2026-10-01T10:00:00Z"}); }, sid); };
   var seedRuns = function(pg, list){ return pg.evaluate(function(l){ l.forEach(function(r){ window.__fake.tables.runs.push(r); }); }, list); };
   var seedTrack = function(pg, rec){ return pg.evaluate(function(r){ window.__fake.tables.run_tracks.push(r); }, rec); };
   function runRow(i, o){
     o = o || {};
     var started = new Date(Date.now() - (i + 1) * 86400000 - 3600000).toISOString();
     return Object.assign({id: uuid(i + 1), student_id: o.sid || "ana", created_by: "user-1", created_at: started, started_at: started, source: "gpx", duration_s: 1800, moving_s: 1780, distance_m: 5000 + i * 10,
-      gaps: 0, gap_s: 0, hidden_s: 0, splits_s: [360, 355, 350, 362, 358], rpe: 6, notes: null, consent_v: 1}, o.over || {});
+      gaps: 0, gap_s: 0, hidden_s: 0, splits_s: [360, 355, 350, 362, 358], rpe: 6, notes: null, consent_v: 2}, o.over || {});
   }
   async function goCorrida(pg){
     await pg.waitForSelector("#startWorkout");
@@ -236,7 +236,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await B.pg.click("#runCsAccept");
   await B.pg.waitForSelector("#runManual");
   var tb = await tables(B.pg), wb = (await writes(B.pg)).filter(function(w){ return w.table === "run_consents"; });
-  ck("15. Aceitar grava UMA linha em run_consents (aluno e versão 1, só essas colunas; a data é do servidor) e segue para o que se pediu (Registar à mão)", tb.run_consents.length === 1 && tb.run_consents[0].student_id === "ana" && tb.run_consents[0].version === 1 && wb.length === 1 && wb[0].cols.sort().join() === "student_id,version");
+  ck("15. Aceitar grava UMA linha em run_consents (aluno e versão 2, só essas colunas; a data é do servidor) e segue para o que se pediu (Registar à mão)", tb.run_consents.length === 1 && tb.run_consents[0].student_id === "ana" && tb.run_consents[0].version === 2 && wb.length === 1 && wb[0].cols.sort().join() === "student_id,version");
   await B.pg.click("#runBack"); await B.pg.waitForSelector("#runGoImport");
   await B.pg.click("#runGoImport");
   await B.pg.waitForSelector("#runFile", {state: "attached"});
@@ -267,7 +267,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var B2 = await student({consent: false});
   var denied = await B2.pg.evaluate(async function(){
     var T = window.__T, s = T.findStudent("ana");
-    var row = T.runBuildInsert({id: T.runUuid(), studentId: "ana", source: "gpx", startedAtMs: Date.now() - 86400000, durationS: 1800, movingS: 1790, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 1}, Date.now());
+    var row = T.runBuildInsert({id: T.runUuid(), studentId: "ana", source: "gpx", startedAtMs: Date.now() - 86400000, durationS: 1800, movingS: 1790, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 2}, Date.now());
     var res = await T.RUN.submitRun(s, {row: row, track: null});
     return {res: res, runs: window.__fake.tables.runs.length};
   });
@@ -300,7 +300,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var wr = (await writes(Cc.pg)).filter(function(w){ return /^runs?$|run_tracks/.test(w.table) && w.op === "insert"; });
   var tc = await tables(Cc.pg), saved = tc.runs[0];
   ck("25. Guardar sem partilhar escreve SÓ em «runs» (nenhum pedido a run_tracks) e a linha tem exatamente as colunas esperadas", wr.length === 1 && wr[0].table === "runs" && wr[0].cols.slice().sort().join() === EXPECTED_COLS.join() && tc.run_tracks.length === 0);
-  ck("26. A linha tem a origem gpx, a versão do consentimento, esforço 7, a nota e os números do núcleo; id uuid; sem created_by/created_at do telemóvel; sem NENHUMA coordenada", saved.source === "gpx" && saved.consent_v === 1 && saved.rpe === 7 && saved.notes === "Boa sessão <b>negrito</b>" && saved.distance_m === EXP5K.distM && saved.duration_s === EXP5K.durationS && /^[0-9a-f-]{36}$/.test(saved.id) && !NOCOORD.test(JSON.stringify(wr[0].payload)) && Object.keys(wr[0].payload).indexOf("created_by") < 0);
+  ck("26. A linha tem a origem gpx, a versão do consentimento, esforço 7, a nota e os números do núcleo; id uuid; sem created_by/created_at do telemóvel; sem NENHUMA coordenada", saved.source === "gpx" && saved.consent_v === 2 && saved.rpe === 7 && saved.notes === "Boa sessão <b>negrito</b>" && saved.distance_m === EXP5K.distM && saved.duration_s === EXP5K.durationS && /^[0-9a-f-]{36}$/.test(saved.id) && !NOCOORD.test(JSON.stringify(wr[0].payload)) && Object.keys(wr[0].payload).indexOf("created_by") < 0);
   ck("27. O nome do ficheiro e o nome da atividade não ficam em lado nenhum (nem na linha, nem no ecrã, nem no armazenamento)", JSON.stringify(tc).indexOf("NOMESECRETO") < 0 && JSON.stringify(tc).indexOf("Nome secreto") < 0 && (await tabText(Cc.pg)).indexOf("NOMESECRETO") < 0 && (await Cc.pg.evaluate(function(){ return JSON.stringify(Object.keys(localStorage).map(function(k){ return localStorage.getItem(k); })); })).indexOf("NOMESECRETO") < 0);
   var home = await tabText(Cc.pg);
   ck("28. Depois de guardar: aviso «Corrida guardada.», a lista mostra a corrida (distância, origem) e os totais das últimas 8 semanas contam-na", /Corrida guardada\./.test(await toast(Cc.pg)) && home.indexOf(C.runDistStr(EXP5K.distM)) >= 0 && /Últimas 8 semanas/i.test(home) && /As minhas corridas/i.test(home) && (await Cc.pg.locator(".run-row").count()) === 1 && (await Cc.pg.locator(".run-weeks .kpi").first().innerText()).replace(/\s+/g, " ").indexOf("1") >= 0);
@@ -631,7 +631,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await proCorridas(P.pg, "b");
   await P.pg.waitForSelector(".run-row");
   var ptb = (await P.pg.locator("#proTabContent").innerText()).replace(/\s+/g, " ");
-  ck("92. Aluno com corridas: estado do consentimento «Aceitou o aviso em dd/mm/aaaa (versão 2)», totais e lista leve (2 corridas)", /Aceitou o aviso em 01\/10\/2026 \(versão 1\)/.test(ptb) && (await P.pg.locator(".run-row").count()) === 2 && /Últimas 8 semanas/i.test(ptb) && /Importar e registar à mão/.test(ptb));
+  ck("92. Aluno com corridas: estado do consentimento «Aceitou o aviso em dd/mm/aaaa (versão 2)», totais e lista leve (2 corridas)", /Aceitou o aviso em 01\/10\/2026 \(versão 2\)/.test(ptb) && (await P.pg.locator(".run-row").count()) === 2 && /Últimas 8 semanas/i.test(ptb) && /Importar e registar à mão/.test(ptb));
   ck("93. A lista do profissional não lê percursos nem usa «*»", (await P.pg.evaluate(function(){ return window.__fake.selectCols.filter(function(x){ return x.table === "runs"; }).every(function(x){ return x.cols !== "*" && !/points/.test(x.cols); }) && window.__fake.selects.indexOf("run_tracks") < 0; })));
   await P.pg.click('.run-row[data-prun="' + uuid(22) + '"]');
   await P.pg.waitForSelector(".run-detail");
@@ -737,7 +737,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("110. Se a resposta se perde depois de a corrida entrar, tentar outra vez reutiliza o mesmo identificador: o servidor responde «já existe» (23505), confirma-se e NÃO há corrida duplicada", mid === 2 && (await tables(I.pg)).runs.length === 2);
   var sub = await I.pg.evaluate(async function(){
     var T = window.__T, s = T.findStudent("ana"), out = {};
-    var mk = function(extra){ return T.runBuildInsert(Object.assign({id: T.runUuid(), studentId: "ana", source: "manual", startedAtMs: Date.now() - 86400000 * 9, durationS: 1800, movingS: 1800, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 1}, extra || {}), Date.now()); };
+    var mk = function(extra){ return T.runBuildInsert(Object.assign({id: T.runUuid(), studentId: "ana", source: "manual", startedAtMs: Date.now() - 86400000 * 9, durationS: 1800, movingS: 1800, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 2}, extra || {}), Date.now()); };
     var row1 = mk();
     out.first = await T.RUN.submitRun(s, {row: row1, track: null});
     out.again = await T.RUN.submitRun(s, {row: row1, track: null});
@@ -970,7 +970,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   ck("137. O aviso de consentimento é o MESMO nos dois modos (importar e gravar com GPS) e está na versão 2: quem aceita no modo «importar» aceitou o que diz sobre o GPS", noticeImport === noticeLive && accV.join() === "2" && noticeParas.length >= 4);
   var liveSrc = fs.readFileSync(path.join(root, "corrida-live.js"), "utf8"), mig = fs.readFileSync(path.join(root, "supabase/migrations/0032_corrida.sql"), "utf8");
   var prepLabel = (/runLivePrepare[\\"']*>([^<]+)</.exec(liveSrc) || [])[1];
-  ck("138. O aviso descreve os três usos (ficheiro GPX/TCX, à mão, GPS), o que o GPS faz («" + liveBtn + "» e «" + prepLabel + "», só com a EVOLVE aberta, rascunho neste telemóvel) e que o ecrã bloqueado pode falhar", !!prepLabel && noticeLive.indexOf("«" + liveBtn + "»") >= 0 && noticeLive.indexOf("«" + prepLabel + "»") >= 0 && /ficheiro \(GPX ou TCX\)/.test(noticeLive) && /registas a corrida à mão/.test(noticeLive) && /gravas aqui com o GPS do telemóvel/.test(noticeLive) && /só enquanto a EVOLVE está aberta a gravar/.test(noticeLive) && /rascunho neste telemóvel até guardares ou descartares/.test(noticeLive) && /ecrã bloqueado ou noutra aplicação o registo pode falhar/.test(noticeLive) && /\bRUN_DRAFT_KEY\b/.test(liveSrc));
+  ck("138. O aviso descreve os três usos (ficheiro GPX/TCX, à mão, GPS), o que o GPS faz («" + liveBtn + "» e «" + prepLabel + "», só com a EVOLVE aberta, rascunho neste telemóvel) e que o ecrã bloqueado pode falhar", !!prepLabel && noticeLive.indexOf("«" + liveBtn + "»") >= 0 && noticeLive.indexOf("«" + prepLabel + "»") >= 0 && /ficheiro \(GPX ou TCX\)/.test(noticeLive) && /registas à mão/.test(noticeLive) && /gravas aqui com o GPS do telemóvel/.test(noticeLive) && /só enquanto a EVOLVE está aberta a gravar/.test(noticeLive) && /rascunho neste telemóvel até guardares ou descartares/.test(noticeLive) && /ecrã bloqueado ou noutra aplicação o registo pode falhar/.test(noticeLive) && /\bRUN_DRAFT_KEY\b/.test(liveSrc));
   // cada coluna que se grava tem a sua menção: quem acrescentar uma coluna a EXPECTED_COLS (e ao insert) tem de dizer aqui, e no aviso, o que ela é
   var COL_TERMS = {id: true, student_id: true, consent_v: /versão deste aviso/, started_at: /data e a hora de início/, source: /a origem \(ficheiro GPX ou TCX, à mão ou GPS\)/, duration_s: /tempo total/, moving_s: /tempo em movimento/,
     distance_m: /a distância/, gaps: /lacunas sem sinal/, gap_s: /lacunas sem sinal/, hidden_s: /segundo plano/, splits_s: /tempo de cada quilómetro/, rpe: /esforço \(1 a 10\)/, notes: /as notas que escreveres/};
@@ -1016,7 +1016,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await OF.ctx.close();
 
   var wipeSeed2 = {}; wipeSeed2["evolve_run_draft_v1"] = JSON.stringify({uid: "user-1", segs: []}); wipeSeed2["evolve_runs_outbox_v1"] = JSON.stringify([{uid: "user-1", id: "x", state: "failed"}]);
-  var OW = await student({mode: "off", consent: true, wait: "#runOffData", settle: false, seed: wipeSeed2, init: function(){ window.__cache = {ana: 1}; }, runs: [runRow(0, {over: {id: uuid(93)}})]});
+  var OW = await student({mode: "off", consent: true, wait: "#runOffData", settle: false, seed: wipeSeed2, init: function(){ window.__cache = {ana: 2}; }, runs: [runRow(0, {over: {id: uuid(93)}})]});
   await OW.pg.click("#runOffData"); await OW.pg.waitForSelector(".run-row");
   await OW.pg.click("#runWithdraw");
   await OW.pg.waitForSelector("#runEmpty");
@@ -1046,13 +1046,13 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await PT.ctx.close();
 
   // (11/16/21) começar sem rede, ao ar livre: o recibo local do consentimento (só quando a leitura falha por rede); o servidor decide sempre
-  var RC1 = await student({consent: true, init: function(){ window.__cache = {ana: 1}; }});
+  var RC1 = await student({consent: true, init: function(){ window.__cache = {ana: 2}; }});
   await RC1.ctx.setOffline(true);
   await RC1.pg.click("#runGoManual");
   await RC1.pg.waitForSelector("#runManual");
   ck("155. Sem rede, com o recibo local do consentimento da versão atual, «Registar à mão» abre (a app abriu com rede mas esta sessão ainda não tinha lido o consentimento)", (await RC1.pg.locator("#runConsent").count()) === 0 && !(await RC1.pg.evaluate(function(){ return window.__toasts.some(function(t){ return /Não consegui verificar o teu consentimento/.test(t); }); })));
   await RC1.ctx.setOffline(false); await RC1.ctx.close();
-  var RC2 = await student({mode: "live", consent: true, init: function(){ window.__cache = {ana: 1}; }});
+  var RC2 = await student({mode: "live", consent: true, init: function(){ window.__cache = {ana: 2}; }});
   await RC2.ctx.setOffline(true);
   await RC2.pg.click("#runGoLive");
   await RC2.pg.waitForSelector("#fakeLive");
@@ -1064,26 +1064,26 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await RC3.pg.waitForFunction(function(){ return (window.__toasts || []).some(function(t){ return /Sem ligação\. Não consegui verificar o teu consentimento/.test(t); }); });
   ck("157. Um recibo de OUTRA versão não serve: sem rede avisa «Não consegui verificar o teu consentimento» e não abre nada", (await RC3.pg.locator("#runFile, #runConsent").count()) === 0);
   await RC3.ctx.setOffline(false); await RC3.ctx.close();
-  var RC4 = await student({consent: false, init: function(){ window.__cache = {ana: 1}; }});
+  var RC4 = await student({consent: false, init: function(){ window.__cache = {ana: 2}; }});
   await RC4.pg.click("#runGoImport");
   await RC4.pg.waitForSelector("#runConsent");
   ck("158. Com rede quem decide é o servidor: sem consentimento no servidor mostra-se o aviso mesmo com um recibo local, e o recibo é apagado", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === undefined && (await RC4.pg.evaluate(function(){ return window.__cacheLog.map(function(x){ return x[0]; }).join(); })) === "clear");
   await RC4.pg.click("#runCsAccept"); await RC4.pg.waitForSelector("#runFile", {state: "attached"});
-  ck("159. Aceitar o aviso guarda o recibo (versão 2)", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  ck("159. Aceitar o aviso guarda o recibo (versão 2)", (await RC4.pg.evaluate(function(){ return window.__cache.ana; })) === 2);
   await RC4.ctx.close();
   var RC5 = await student({consent: true});
   await RC5.pg.click("#runGoImport"); await RC5.pg.waitForSelector("#runFile", {state: "attached"});
-  ck("160. Ler o consentimento no servidor e ver que existe guarda o recibo (versão 2)", (await RC5.pg.evaluate(function(){ return window.__cache.ana; })) === 1);
+  ck("160. Ler o consentimento no servidor e ver que existe guarda o recibo (versão 2)", (await RC5.pg.evaluate(function(){ return window.__cache.ana; })) === 2);
   var lost = await RC5.pg.evaluate(async function(){
     var T = window.__T, s = T.findStudent("ana");
     window.__fake.tables.run_consents.length = 0;   // o consentimento foi retirado noutro aparelho
-    var row = T.runBuildInsert({id: T.runUuid(), studentId: "ana", source: "gpx", startedAtMs: Date.now() - 86400000, durationS: 1800, movingS: 1790, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 1}, Date.now());
+    var row = T.runBuildInsert({id: T.runUuid(), studentId: "ana", source: "gpx", startedAtMs: Date.now() - 86400000, durationS: 1800, movingS: 1790, distM: 5000, gaps: 0, gapS: 0, splitsS: [], hiddenS: 0, rpe: null, notes: "", consentV: 2}, Date.now());
     var res = await T.RUN.submitRun(s, {row: row, track: null});
     return {ok: res.ok, permanent: res.permanent, cache: window.__cache.ana};
   });
   ck("161. Se o servidor recusar a corrida por falta de consentimento, o recibo local é apagado (próxima vez sem rede já não deixa começar)", lost.ok === false && lost.permanent === true && lost.cache === undefined);
   await RC5.ctx.close();
-  var RC6 = await student({consent: true, cache: false, init: function(){ window.__cache = {ana: 1}; }});
+  var RC6 = await student({consent: true, cache: false, init: function(){ window.__cache = {ana: 2}; }});
   await RC6.ctx.setOffline(true);
   await RC6.pg.click("#runGoImport");
   await RC6.pg.waitForFunction(function(){ return (window.__toasts || []).some(function(t){ return /Não consegui verificar o teu consentimento/.test(t); }); });
@@ -1147,7 +1147,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
 
   // rede fraca (pedido pendurado): com o recibo não se espera os 15 s habituais
   var RW = await student({consent: true, init: function(){
-    window.__cache = {ana: 1};
+    window.__cache = {ana: 2};
     var cl = window.supabase.createClient(), of = cl.from.bind(cl);
     cl.from = function(t){
       var b = of(t);
@@ -1169,7 +1169,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
     var RR = await student({realLive: true, mode: "live", consent: true});
     await RR.pg.click("#runGoImport"); await RR.pg.waitForSelector("#runFile", {state: "attached"});
     var rcpt = await RR.pg.evaluate(function(){ try { return JSON.parse(localStorage.getItem("evolve_run_consent_v1")); } catch (e) { return null; } });
-    check.check("R1. [gravador real] Ler o consentimento no servidor deixa o recibo local (evolve_run_consent_v1: conta, aluno e versão 1)", !!rcpt && rcpt.uid === "user-1" && rcpt.studentId === "ana" && rcpt.version === 1);
+    check.check("R1. [gravador real] Ler o consentimento no servidor deixa o recibo local (evolve_run_consent_v1: conta, aluno e versão 2)", !!rcpt && rcpt.uid === "user-1" && rcpt.studentId === "ana" && rcpt.version === 2);
     await RR.pg.click("#runBack"); await RR.pg.waitForSelector("#runGoManual");
     await RR.pg.evaluate(function(){ window.__T.RUN.uiReset(); });   // como numa abertura nova: a memória esqueceu-se de tudo, o recibo fica no telemóvel
     await RR.ctx.setOffline(true);

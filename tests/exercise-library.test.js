@@ -20,7 +20,7 @@ var all = exerciseLibraryMerged([]);
 check.check("8. Filtrar por grupo mostra só esse grupo", exerciseLibraryFilter(all, "Costas", "").length > 5 && exerciseLibraryFilter(all, "Costas", "").every(function(e){ return e.group === "Costas"; }));
 check.check("9. Pesquisar 'gemeos' encontra 'Gémeos' sem acentos", exerciseLibraryFilter(all, "", "gemeos").length >= 3);
 check.check("10. Pesquisar por equipamento funciona (cabo)", exerciseLibraryFilter(all, "", "cabo").length >= 8);
-check.check("11. Grupo + pesquisa combinam", exerciseLibraryFilter(all, "Ombros", "lateral").every(function(e){ return e.group === "Ombros" && /lateral/i.test(e.name); }) && exerciseLibraryFilter(all, "Ombros", "lateral").length >= 2);
+check.check("11. Grupo + pesquisa combinam", exerciseLibraryFilter(all, "Ombros", "lateral").every(function(e){ return e.group === "Ombros" && /lateral/i.test(e.name + " " + (e.alias || "")); }) && exerciseLibraryFilter(all, "Ombros", "lateral").length >= 2);
 check.check("12. Pesquisa sem resultados devolve lista vazia", exerciseLibraryFilter(all, "", "xyzzy").length === 0);
 check.check("13. A lista vem ordenada por grupo (Peito primeiro, Cardio no fim)", all[0].group === "Peito" && all[all.length - 1].group === "Cardio");
 

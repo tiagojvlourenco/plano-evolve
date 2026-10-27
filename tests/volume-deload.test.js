@@ -12,7 +12,7 @@ check.check("2. O nome em português também serve (alias)", exerciseGroupFor("S
 check.check("3. Nomes escritos à mão são adivinhados pelas palavras", exerciseGroupFor("Rosca martelo com corda") === "Bíceps" && exerciseGroupFor("Extensão de tríceps em V") === "Tríceps" && exerciseGroupFor("Press de ombros Arnold") === "Ombros" && exerciseGroupFor("Curl femoral unilateral") === "Posteriores");
 check.check("4. Um nome desconhecido fica sem grupo", exerciseGroupFor("Xpto especial") === "" && exerciseGroupFor("") === "");
 var wrong = [];
-exerciseSeedList().forEach(function(e){ [e.name, e.alias].forEach(function(n){ if (n && exerciseGroupFor(n) !== e.group) wrong.push(n); }); });
+exerciseSeedList().forEach(function(e){ [e.name, e.book ? "" : e.alias].forEach(function(n){ if (n && exerciseGroupFor(n) !== e.group) wrong.push(n); }); });
 check.check("5. Todos os exercícios e alias da lista base dão o grupo certo", wrong.length === 0);
 check.check("6. O grupo escolhido à mão tem prioridade sobre o adivinhado", exerciseGroupOf({name: "Barbell Bench Press", group: "Tríceps"}) === "Tríceps" && exerciseGroupOf({name: "Barbell Bench Press"}) === "Peito");
 

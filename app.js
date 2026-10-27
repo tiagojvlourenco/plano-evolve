@@ -9123,7 +9123,7 @@ function exerciseGroupIndex(){
   var custom = typeof exLibCustomCache !== "undefined" ? exLibCustomCache : null;
   if (groupIndexCache && groupIndexCache.custom === custom) return groupIndexCache.map;
   var map = {};
-  exerciseLibraryMerged(custom || []).forEach(function(e){ map[exLibFold(e.name)] = e.group; if (e.alias) map[exLibFold(e.alias)] = e.group; });
+  exerciseLibraryMerged(custom || []).forEach(function(e){ map[exLibFold(e.name)] = e.group; if (e.alias && !e.book) map[exLibFold(e.alias)] = e.group; });
   groupIndexCache = {custom: custom, map: map};
   return map;
 }
@@ -9784,6 +9784,18 @@ var EXERCISE_BOOK = {
 function exLibFold(s){ return String(s == null ? "" : s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
 function exerciseSearchUrl(name){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent(String(name) + " exercise proper form").replace(/'/g, "%27"); }
 function exerciseMediaUrl(name){ return EXERCISE_MEDIA_BASE + slug(name) + ".webp"; }
+// Nomes em português dos exercícios do livro, SÓ para pesquisa (alias): tradução palavra a palavra, por rever. Palavras sem entrada ficam como estão.
+var EXERCISE_PT_WORDS = {squat:"agachamento",squats:"agachamentos",lunge:"avanço",press:"press",push:"flexão",up:"",pull:"puxada",row:"remada",curl:"rosca",tricep:"tríceps",bicep:"bíceps",dumbbell:"halter",kettlebell:"kettlebell",leg:"perna",extension:"extensão",cable:"cabo",jump:"salto",jumps:"saltos",fly:"abertura",reverse:"inverso",lateral:"lateral",plank:"prancha",side:"lateral",raise:"elevação",single:"unilateral",arm:"braço",one:"um",grip:"pegada",step:"step",incline:"inclinado",decline:"declinado",twist:"rotação",bar:"barra",knee:"joelho",chest:"peito",bench:"banco",shoulder:"ombro",close:"fechada",crunch:"abdominal",kick:"pontapé",kicks:"pontapés",kickback:"extensão de perna",low:"baixo",high:"alto",ball:"bola",clean:"arranque",standing:"em pé",pulldown:"puxada",sit:"sentado",power:"explosivo",front:"frontal",box:"caixa",bicepcurl:"rosca",overhead:"acima da cabeça",lying:"deitado",back:"costas",swing:"balanço",wall:"parede",rope:"corda",forward:"à frente",alternating:"alternado",walk:"caminhada",upright:"remada alta",bent:"curvado",over:"sobre",deadlift:"peso morto",hammer:"martelo",floor:"chão",seated:"sentado",pose:"pose",jumping:"saltitar",jacks:"jacks",double:"duplo",jerk:"jerk",cross:"cruzado",crossover:"cruzamento",sumo:"sumo",body:"corpo",crab:"caranguejo",hop:"salto",half:"meio",triangle:"triângulo",renegade:"renegade",prisoner:"mãos atrás da cabeça",lift:"elevação",isometric:"isométrico",bridge:"ponte",romanian:"romeno",machine:"máquina",chin:"barra supinada",lat:"dorsal",preacher:"scott",dip:"mergulho",dips:"mergulhos",climber:"escalador",mountain:"montanha",skipping:"skipping",rotation:"rotação",long:"longo",shuffle:"deslocamento",hang:"suspenso",thrust:"elevação de anca",hip:"anca",russian:"russo",narrow:"estreito",shrug:"encolhimento",band:"elástico",pushdown:"extensão no cabo",skull:"crânio",crusher:"crusher",chain:"corrente",abs:"abdominais",prone:"deitado de barriga para baixo",hollow:"hollow",skater:"patinador",medicine:"medicine",snatch:"arranque",split:"afundo",walking:"caminhando",thruster:"thruster",military:"militar",haltere:"halter",halteres:"halteres",barra:"barra",cabo:"cabo",out:"para fora",anti:"anti",rotator:"rotadores",cuff:"manguito",ski:"ski",frog:"rã",diagonal:"diagonal",weight:"peso",pass:"passe",assisted:"assistido",heel:"calcanhar",donkey:"coice",swiss:"bola suíça",superman:"superman",pike:"pike",burpee:"burpee",twist:"rotação",wide:"larga",flutter:"tesoura",bird:"pássaro",dog:"cão",glute:"glúteo",calf:"gémeos",raises:"elevações",shrugs:"encolhimentos",face:"face",bridge:"ponte",good:"bom",morning:"dia",inverted:"invertido",rear:"posterior",delt:"deltoide",reverse:"inverso"};
+function exercisePtAlias(name){
+  var base = String(name).replace(/\(.*?\)/g, " "), out = [];
+  base.split(/[^A-Za-z]+/).forEach(function(w){
+    if (!w) return;
+    var k = w.toLowerCase(), t = Object.prototype.hasOwnProperty.call(EXERCISE_PT_WORDS, k) ? EXERCISE_PT_WORDS[k] : w;
+    if (t) out.push(t);
+  });
+  var a = out.join(" "), n = exLibFold(name);
+  return exLibFold(a) === n ? "" : a;
+}
 function exerciseSeedList(){
   var out = [];
   EXERCISE_GROUPS.forEach(function(g){
@@ -9792,7 +9804,7 @@ function exerciseSeedList(){
     });
     (EXERCISE_BOOK[g] || []).forEach(function(t){
       var p = t.split("|");
-      out.push({name: p[0], group: g, equipment: p[1] || "", cues: [], note: "", alias: "", media: p[2] === "1", demo: p[2] === "1" ? exerciseMediaUrl(p[0]) : exerciseSearchUrl(p[0]), ownDemo: false, seed: true, book: true, id: null});
+      out.push({name: p[0], group: g, equipment: p[1] || "", cues: [], note: "", alias: exercisePtAlias(p[0]), media: p[2] === "1", demo: p[2] === "1" ? exerciseMediaUrl(p[0]) : exerciseSearchUrl(p[0]), ownDemo: false, seed: true, book: true, id: null});
     });
   });
   return out;
