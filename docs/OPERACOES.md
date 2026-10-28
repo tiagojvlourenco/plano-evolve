@@ -491,3 +491,7 @@ Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar
 - A alternativa vem do mesmo grupo (marca própria da loja e genéricos), com a quantidade recalculada para as mesmas calorias, ordenada pela semelhança. A troca vale **só para a lista de compras, por aluno e por loja** (neste telemóvel, `evolve_shop_alt_v1:<aluno>:<loja>`); «↺ Repor» desfaz. Fica registada em `adaptationHistory` como «troca_loja» (resumo do profissional: «Trocas na lista de compras»).
 - **O plano alimentar não muda**: o aluno não o pode escrever (regra do servidor); quem o altera é o profissional. Se um dia se quiser aplicar a troca ao plano, é uma função do lado do profissional.
 - **Dias:** além de 3 / 5 / 7 há «Personalizar»: − / número / + de 1 a 30. A lista, o título e o texto copiado usam esse número.
+
+## 8aq. Refeição ignorada ou reagendada por engano
+
+Apanhado no varrimento dos botões: depois de «Não vou fazer esta refeição» não havia como voltar atrás (e concluí-la deixava-a «feita» mas fora da conta, com «ignorada» na linha). Agora há **«↺ Voltar a incluir esta refeição»**, e concluir uma refeição ignorada (no detalhe ou no círculo) volta a incluí-la primeiro. Para as reagendadas há **«↺ Repor o horário original»**. As duas funções (`unskipMeal`, `unrescheduleMeal`) tiram do registo de hoje a ocorrência dessa refeição; o histórico de outros dias nunca é apagado. Nota: uma refeição reagendada muda de lugar na lista (ordenada pela hora nova).

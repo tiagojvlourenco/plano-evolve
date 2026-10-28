@@ -1782,6 +1782,21 @@ function skipMeal(s, meal, reason){
   logAdaptation(s, meal, "refeicao_ignorada", {reason: reason || ""});
 }
 
+// volta a incluir uma refeição ignorada por engano (e tira o registo de hoje, para o resumo do profissional não a contar)
+function unskipMeal(s, meal){
+  if (!meal || meal.status !== "skipped") return;
+  meal.status = meal.rescheduledTime ? "rescheduled" : "planned";
+  var today = todayISO();
+  s.adaptationHistory = (s.adaptationHistory || []).filter(function(e){ return !(e && e.type === "refeicao_ignorada" && e.date === today && e.meal === meal.name); });
+}
+// repõe o horário original de uma refeição reagendada
+function unrescheduleMeal(s, meal){
+  if (!meal || !meal.rescheduledTime) return;
+  meal.rescheduledTime = null;
+  if (meal.status === "rescheduled") meal.status = "planned";
+  var today = todayISO();
+  s.adaptationHistory = (s.adaptationHistory || []).filter(function(e){ return !(e && e.type === "reagendamento" && e.date === today && e.meal === meal.name); });
+}
 function rescheduleMeal(s, meal, newTime){
   logAdaptation(s, meal, "reagendamento", {from: meal.time, to: newTime});
   meal.rescheduledTime = newTime;
@@ -7189,6 +7204,8 @@ function openMealDetail(s, idx){
         (profile.freeMealEnabled ? "<button type=\"button\" class=\"btn\" id=\"mdAdapt\"" + (m.adapted?" disabled":"") + ">🍴 " + (m.adapted ? "Refeição já adaptada" : "Adaptar refeição") + "</button>" : "") +
         (!m.done ? "<button type=\"button\" class=\"btn\" id=\"mdReschedule\">🕐 Alterar horário</button>" : "") +
         (!m.done && m.status !== "skipped" ? "<button type=\"button\" class=\"btn\" id=\"mdSkip\">○ Não vou fazer esta refeição</button>" : "") +
+        (m.status === "skipped" ? "<button type=\"button\" class=\"btn\" id=\"mdUnskip\">↺ Voltar a incluir esta refeição</button>" : "") +
+        (m.rescheduledTime && m.status !== "skipped" ? "<button type=\"button\" class=\"btn\" id=\"mdUnreschedule\">↺ Repor o horário original</button>" : "") +
         (mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdRevert\">↺ Repor plano original</button>" : "") +
         (m.adapted && !mealHasRevertible(m) ? "<button type=\"button\" class=\"btn\" id=\"mdUndoAdapt\">↺ Desfazer adaptação</button>" : "") +
       "</div>";
@@ -7203,6 +7220,7 @@ function openMealDetail(s, idx){
     });
     var completeBtn = sheet.querySelector("#mdComplete");
     if (completeBtn) completeBtn.addEventListener("click", function(){
+      if (m.status === "skipped" && !m.done) unskipMeal(s, m); // concluir uma refeição ignorada volta a incluí-la (senão ficava «feita» mas fora da conta)
       m.done = !m.done;
       var wasCompleted = m.done;
       commitMealView(s, m);
@@ -7237,6 +7255,26 @@ function openMealDetail(s, idx){
     var skipBtn = sheet.querySelector("#mdSkip");
     if (skipBtn) skipBtn.addEventListener("click", function(){ openSkipMeal(s, m, idx); });
     var revertBtn = sheet.querySelector("#mdRevert");
+    var unskipBtn = sheet.querySelector("#mdUnskip");
+    if (unskipBtn) unskipBtn.addEventListener("click", function(){
+      unskipMeal(s, m);
+      commitMealView(s, m);
+      render();
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast(m.name + " voltou ao plano");
+      closeModal();
+    });
+    var unresBtn = sheet.querySelector("#mdUnreschedule");
+    if (unresBtn) unresBtn.addEventListener("click", function(){
+      unrescheduleMeal(s, m);
+      commitMealView(s, m);
+      render();
+      renderAlunoTab(s);
+      persistStudent(s);
+      showToast("Horário original reposto");
+      closeModal();
+    });
     var undoAdaptBtn = sheet.querySelector("#mdUndoAdapt");
     if (undoAdaptBtn) undoAdaptBtn.addEventListener("click", function(){
       undoMealAdaptation(s, m);
@@ -11603,6 +11641,7 @@ function wireAlunoTab(s){
       if (Date.now() < uiTapGuardUntil) return;
       var idx = parseInt(c.getAttribute("data-circle"),10);
       var m = resolveMealsForToday(s)[idx];
+      if (m.status === "skipped" && !m.done) unskipMeal(s, m);
       m.done = !m.done;
       commitMealView(s, m);
       renderAlunoTab(s);
