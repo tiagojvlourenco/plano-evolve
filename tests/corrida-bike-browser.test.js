@@ -200,6 +200,9 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   n = 0;
   var BIKE_GPX = '<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><type>cycling</type><trkseg>' + (function(){ var o = "", i; for (i = 0; i < 120; i++) o += '<trkpt lat="' + (38.7 + i * 0.00018) + '" lon="-9.1"><time>' + new Date(Date.UTC(2026, 9, 10, 8, 0, 0) + i * 5000).toISOString().replace(".000", "") + '</time></trkpt>'; return o; })() + '</trkseg></trk></gpx>';
   var todayIso = new Date().toISOString().slice(0, 10);
+  // hora de hoje alguns minutos atrás (nunca no futuro, mesmo logo depois da meia-noite): o registo à mão recusa corridas que ainda não aconteceram
+  var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  var hmAgo = function(off){ var t = Math.max(0, nowMin - off); return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); };
 
   var B = await student({});
   ck("1. O ecrã da Corrida tem a escolha «Corrida | Bicicleta», com Corrida ativa", (await B.pg.locator("#runActRun").getAttribute("aria-pressed")) === "true" && (await B.pg.locator("#runActBike").getAttribute("aria-pressed")) === "false");
@@ -227,13 +230,13 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   await B.pg.click("#runActRun");
   await B.pg.click("#runGoManual");
   await B.pg.waitForSelector("#runManNext");
-  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "00:10"); await B.pg.fill("#runManKm", "5"); await B.pg.fill("#runManDur", "28:00");
+  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", hmAgo(6)); await B.pg.fill("#runManKm", "5"); await B.pg.fill("#runManDur", "28:00");
   await B.pg.click("#runManNext"); await B.pg.waitForSelector("#runSave"); await B.pg.click("#runSvSave");
   await B.pg.waitForSelector(".run-row");
   var tb2 = await tables(B.pg), manual = tb2.runs.filter(function(r){ return r.source === "manual"; })[0];
   ck("8. Uma corrida normal continua a gravar-se SEM o campo activity (funciona antes de correr a migração 0033)", manual && !("activity" in manual));
   await B.pg.click("#runActBike"); await B.pg.click("#runGoManual"); await B.pg.waitForSelector("#runManNext");
-  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", "00:20"); await B.pg.fill("#runManKm", "40"); await B.pg.fill("#runManDur", "1:20:00");
+  await B.pg.fill("#runManDate", todayIso); await B.pg.fill("#runManTime", hmAgo(3)); await B.pg.fill("#runManKm", "40"); await B.pg.fill("#runManDur", "1:20:00");
   await B.pg.click("#runManNext"); await B.pg.waitForSelector("#runSave");
   ck("9. À mão como Bicicleta: 40 km em 1:20 passa e mostra 30 km/h (e «Guardar corrida» sem aviso de ritmo)", /30 km\/h/i.test(await B.pg.locator("#runSave").innerText()));
   await B.ctx.close();
@@ -255,7 +258,7 @@ var NOCOORD = /38\.7\d{2}|-9\.1\d{2}/;   // as coordenadas das nossas pistas
   var NC = await student({init: NOCOL, runs: [runRow(0)]});
   ck("11. Sem a coluna activity no servidor, a lista de corridas lê-se na mesma (sem erro)", (await NC.pg.locator(".run-row").count()) === 1 && (await NC.pg.locator("#runLoadErr").count()) === 0);
   await NC.pg.click("#runActBike"); await NC.pg.click("#runGoManual"); await NC.pg.waitForSelector("#runManNext");
-  await NC.pg.fill("#runManDate", todayIso); await NC.pg.fill("#runManTime", "00:20"); await NC.pg.fill("#runManKm", "30"); await NC.pg.fill("#runManDur", "1:00:00");
+  await NC.pg.fill("#runManDate", todayIso); await NC.pg.fill("#runManTime", hmAgo(3)); await NC.pg.fill("#runManKm", "30"); await NC.pg.fill("#runManDur", "1:00:00");
   await NC.pg.click("#runManNext"); await NC.pg.waitForSelector("#runSave"); await NC.pg.click("#runSvSave");
   await NC.pg.waitForFunction(function(){ var e = document.getElementById("runSvErr"); return e && e.textContent.length > 0; });
   ck("12. Guardar uma bicicleta sem a migração 0033 diz «falta correr a migração 0033» e não guarda nada", /migração 0033/.test(await NC.pg.locator("#runSvErr").innerText()) && (await tables(NC.pg)).runs.length === 1);

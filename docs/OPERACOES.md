@@ -484,3 +484,10 @@ Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar
 
 - O aluno pode **desfazer** uma adaptação de refeição feita por engano: «Desfazer adaptação» (adaptação sem trocas) ou «Repor plano original» (com trocas). Ambos usam `undoMealAdaptation`: repõem os alimentos, tiram a marca e retiram do registo **de hoje** as trocas e adaptações dessa refeição (para os resumos do profissional não contarem o que não aconteceu). O histórico de dias anteriores nunca é apagado.
 - Na ficha do aluno (profissional) o separador e o título passaram de «Corridas» a **«Cardio»** («Cardio neste aluno»), como na app do aluno.
+
+## 8ap. Lista de compras: produtos que não há na loja e dias personalizados
+
+- Com um supermercado escolhido, um produto de **marca** (último parêntese com maiúscula, ex. «Pão clássico (The Rustik Bakery)») que não se confirma nessa loja mostra «⚠ Não confirmado no <loja>» com **«Escolher alternativa»**. Os que só existem noutra loja e não têm equivalente também o oferecem; os que têm sugestão ganham «Usar».
+- A alternativa vem do mesmo grupo (marca própria da loja e genéricos), com a quantidade recalculada para as mesmas calorias, ordenada pela semelhança. A troca vale **só para a lista de compras, por aluno e por loja** (neste telemóvel, `evolve_shop_alt_v1:<aluno>:<loja>`); «↺ Repor» desfaz. Fica registada em `adaptationHistory` como «troca_loja» (resumo do profissional: «Trocas na lista de compras»).
+- **O plano alimentar não muda**: o aluno não o pode escrever (regra do servidor); quem o altera é o profissional. Se um dia se quiser aplicar a troca ao plano, é uma função do lado do profissional.
+- **Dias:** além de 3 / 5 / 7 há «Personalizar»: − / número / + de 1 a 30. A lista, o título e o texto copiado usam esse número.

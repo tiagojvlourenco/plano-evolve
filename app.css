@@ -963,3 +963,14 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .pick-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--accent); border-radius:12px; background:var(--accent-soft);}
 .pick-name{min-width:0; font-size:0.95rem;}
 .pick-row .btn{min-height:40px; flex:0 0 auto;}
+
+.shop-sub .shop-alt-btn{min-height:36px; margin-left:6px; vertical-align:middle;}
+.shop-sub.shop-warn{color:var(--critical, #ff6b5b);}
+.shop-custom{display:flex; align-items:center; justify-content:center; gap:10px; margin:0 0 10px;}
+.shop-custom .btn{min-width:48px; min-height:44px;}
+.shop-custom-n{display:flex; align-items:center; gap:6px; font-weight:600;}
+.shop-custom-n input{width:72px; min-height:44px; text-align:center; font-family:var(--mono); font-size:1.1rem; font-weight:700; border:1px solid var(--line-strong); border-radius:12px; background:var(--bg); color:var(--ink);}
+.shop-alt-opt{padding:10px 12px;}
+.shop-alt-opt{text-transform:none; letter-spacing:0; font-size:0.95rem; line-height:1.3;}
+.seg button[data-shop-custom]{font-size:0.78rem; padding-inline:4px; white-space:nowrap;}
+.shop-custom .btn{font-size:1.4rem; line-height:1;}
