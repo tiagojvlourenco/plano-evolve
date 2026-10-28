@@ -15546,7 +15546,7 @@ function wireProTab(s){
   var addNote = el.querySelector("#addDatedNote");
   if (addNote) addNote.addEventListener("click", function(){
     var text = el.querySelector("#proNoteNew").value.trim();
-    if (!text) return;
+    if (!text){ showToast("Escreve primeiro a nota"); try { el.querySelector("#proNoteNew").focus(); } catch (e) {} return; }
     var area = el.querySelector("#proNotes");
     if (area) s.notes = area.value; // não perde o que já estava escrito e ainda não guardado
     s.notes = prependDatedNote(s.notes, text);
