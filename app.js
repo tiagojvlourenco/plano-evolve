@@ -8119,6 +8119,8 @@ var STORE_BRANDS = {
   "Intermarché": ["intermarche", "paturages", "chabrior", "top budget", "marque repere"]
 };
 function offWords(text){ return " " + String(text == null ? "" : text).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim() + " "; }
+// marca = o último parêntese começa por maiúscula («(Barilla)», «(The Rustik Bakery)»); «(cozido)» ou «(peito)» é só um pormenor do alimento
+function shopHasBrand(name){ var b = shopBrandOf(name); return /^[A-ZÀ-ÝÇ0-9]/.test(b); }
 function shopBrandOf(name){ var m = String(name).replace(/\s·\s[^·]+$/, "").match(/\(([^()]+)\)\s*$/); return m ? m[1] : ""; }
 // onde se compra este alimento: {kind: "explicit"|"own"|"any", stores: [...]}  ("any" = genérico ou marca nacional)
 function storesOfFood(name){
@@ -8186,13 +8188,55 @@ function shopStoreInfo(store, it){
   if (st.kind !== "any") return st.stores.indexOf(store) >= 0 ? {status: "here"} : {status: "other", only: st.stores.join(", "), suggestion: storeSuggestion(store, it)};
   if (CATALOG_MERGED[it.name]) return {status: "here"}; // marca nacional do catálogo: há em todo o lado
   var sg = storeSuggestion(store, it);
-  return sg ? {status: "generic", suggestion: sg} : {status: "generic"};
+  if (sg) return {status: "generic", suggestion: sg};
+  return shopHasBrand(it.name) ? {status: "unknown"} : {status: "generic"}; // produto de marca que não sabemos se há nesta loja: avisa-se
+}
+
+/* Troca por loja (só na lista de compras, neste telemóvel): o aluno escolhe, para um produto que não há na loja, um equivalente que lá exista.
+   Guarda-se {nomeOriginal: nomeEscolhido} por aluno e loja; o plano alimentar do profissional não muda (o aluno não o pode escrever). */
+function shopAltKey(s, store){ return "evolve_shop_alt_v1:" + s.id + ":" + store; }
+function shopAltGet(s, store){
+  if (!store) return {};
+  try { var v = JSON.parse(localStorage.getItem(shopAltKey(s, store)) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
+}
+function shopAltSet(s, store, map){
+  try { if (Object.keys(map).length) localStorage.setItem(shopAltKey(s, store), JSON.stringify(map)); else localStorage.removeItem(shopAltKey(s, store)); } catch (e) {}
+}
+// quantidade do equivalente que dá as mesmas calorias que o alimento pedido
+function shopAltQty(it, altName){
+  var amount = it.grams > 0 ? it.grams : (it.ml > 0 ? it.ml : 0), db = FOOD_DB[it.name], cdb = FOOD_DB[altName];
+  if (!(amount > 0) || !db || !cdb || !(db.kcal > 0) || !(cdb.kcal > 0)) return null;
+  var scaled = amount * db.kcal / cdb.kcal, liquid = !(it.grams > 0);
+  return shopLine({name: altName, grams: liquid ? 0 : scaled, ml: liquid ? scaled : 0, units: 0, free: false});
+}
+// equivalentes que existem nesta loja: marca própria da loja e produtos genéricos (sem marca) do mesmo grupo, os mais parecidos primeiro
+function shopAltCandidates(store, it){
+  var db = FOOD_DB[it.name], group = resolveGroup(it.group || groupOfFood(it.name));
+  if (!db || !(db.kcal > 0)) return [];
+  var seen = {}, out = [];
+  function add(name){
+    if (seen[name] || name === it.name) return;
+    var cdb = FOOD_DB[name]; if (!cdb || cdb.per !== "100g" || !(cdb.kcal > 0)) return;
+    var qty = shopAltQty(it, name); if (!qty) return;
+    var dist = substitutionDistance({name: it.name, qty: "100 g"}, {name: name, qty: Math.round(100 * db.kcal / cdb.kcal) + " g"});
+    seen[name] = 1; out.push({name: name, qty: qty, dist: dist});
+  }
+  storeIndexFor(store).forEach(function(c){ if (c.group === group) add(c.name); });
+  Object.keys(FOOD_DB).forEach(function(name){ // genéricos do mesmo grupo (sem marca, há em qualquer loja)
+    if (storesOfFood(name).kind !== "any" || shopHasBrand(name)) return;
+    if (resolveGroup(groupOfFood(name)) === group) add(name);
+  });
+  out.sort(function(a, b){ return a.dist - b.dist; });
+  return out.slice(0, 12);
 }
 
 /* ---------- Lista de compras semanal ----------
    Soma, por alimento, o que o plano ativo pede em N dias (o plano repete-se todos os dias) e arredonda a embalagens inteiras quando se
    conhece o tamanho. Usa o plano e não a troca do dia (f.original). Os "comprados" ficam guardados neste telemóvel e recomeçam a cada semana. */
 var SHOP_DAY_CHOICES = [3, 5, 7];
+var SHOP_DAYS_MAX = 30;
+// dias da lista: os atalhos 3 / 5 / 7 ou qualquer número inteiro de 1 a 30 («Personalizar»)
+function shopDaysOf(){ var d = Math.round(Number(state.shopDays)); return d >= 1 && d <= SHOP_DAYS_MAX ? d : 7; }
 function shopWeekKey(){
   var d = new Date(); d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // segunda-feira desta semana
@@ -8243,7 +8287,9 @@ function shoppingListText(s, days, store){
     lines.push("", g.label.toUpperCase());
     g.items.forEach(function(it){
       var sg = it.info && it.info.suggestion;
-      if (sg && it.info.status === "other") lines.push("- " + sg.name + ": " + sg.qty + " (em vez de " + it.name + ")");
+      if (it.replaces) lines.push("- " + it.name + ": " + it.qty + " (em vez de " + it.replaces + ")");
+      else if (it.info && it.info.status === "unknown") lines.push("- " + it.name + ": " + it.qty + " (não confirmado no " + store + ")");
+      else if (sg && it.info.status === "other") lines.push("- " + sg.name + ": " + sg.qty + " (em vez de " + it.name + ")");
       else if (sg) lines.push("- " + it.name + ": " + it.qty + " → sugestão " + store + ": " + sg.name + ", " + sg.qty);
       else lines.push("- " + it.name + ": " + it.qty);
     });
@@ -8282,15 +8328,20 @@ function shoppingListFor(s, days, store){
     else it.grams += a.value * days;
   }); });
   var cmp = FOOD_COLLATOR ? FOOD_COLLATOR.compare : function(a, b){ return a.localeCompare(b, "pt"); };
+  var alts = store ? shopAltGet(s, store) : {};
   var groups = {};
   Object.keys(map).forEach(function(n){ (groups[map[n].group] = groups[map[n].group] || []).push(map[n]); });
   var order = Object.keys(FOOD_GROUPS).filter(function(g){ return groups[g]; }).concat(Object.keys(groups).filter(function(g){ return !FOOD_GROUPS[g]; }));
   return order.map(function(g){
-    return {group: g, label: groupLabel(g), items: groups[g].sort(function(a, b){ return cmp(a.name, b.name); }).map(function(it){ return {name: it.name, qty: shopLine(it), info: store ? shopStoreInfo(store, it) : null}; })};
+    return {group: g, label: groupLabel(g), items: groups[g].sort(function(a, b){ return cmp(a.name, b.name); }).map(function(it){
+      var alt = store ? alts[it.name] : null, altQty = alt ? shopAltQty(it, alt) : null;
+      if (alt && altQty) return {name: alt, qty: altQty, info: {status: "here"}, replaces: it.name, replacesQty: shopLine(it)}; // trocado por um equivalente desta loja
+      return {name: it.name, qty: shopLine(it), info: store ? shopStoreInfo(store, it) : null, base: it};
+    })};
   });
 }
 function tplShoppingList(s){
-  var days = SHOP_DAY_CHOICES.indexOf(state.shopDays) >= 0 ? state.shopDays : 7;
+  var days = shopDaysOf();
   var store = shopStoreGet(s);
   var list = shoppingListFor(s, days, store);
   var html = tabHead("Lista de compras", "Para " + days + " dias, com base no teu plano de alimentação atual" + (store ? " · " + store : ""));
@@ -8302,16 +8353,24 @@ function tplShoppingList(s){
   html += "<div class=\"checkin-field\"><label for=\"shopStore\">Onde vais comprar?</label><select id=\"shopStore\" class=\"mini-select\" style=\"width:100%;\"><option value=\"\">Qualquer supermercado</option>" +
     SHOP_STORES.map(function(n){ return "<option value=\"" + escapeHtml(n) + "\"" + (n === store ? " selected" : "") + ">" + escapeHtml(n) + "</option>"; }).join("") + "</select>" +
     (store ? "<p class=\"muted-p\" style=\"margin-top:6px;\">" + withProduct + (withProduct === 1 ? " item encontrado" : " itens encontrados") + " nesta loja" + (without ? " · " + without + (without === 1 ? " sem equivalente (só existe noutra loja)" : " sem equivalente (só existem noutra loja)") : "") + ". As sugestões são produtos de marca própria parecidos — confirma na prateleira.</p>" : "") + "</div>";
+  var customDays = SHOP_DAY_CHOICES.indexOf(days) < 0 || !!state.shopCustom;
   html += "<div class=\"seg\" style=\"margin-bottom:10px;\">" + SHOP_DAY_CHOICES.map(function(d){
-    return "<button type=\"button\" data-shop-days=\"" + d + "\" aria-pressed=\"" + (d === days) + "\" class=\"" + (d === days ? "on" : "") + "\">" + d + " dias</button>";
-  }).join("") + "</div>" +
+    var on = d === days && !customDays;
+    return "<button type=\"button\" data-shop-days=\"" + d + "\" aria-pressed=\"" + on + "\" class=\"" + (on ? "on" : "") + "\">" + d + " dias</button>";
+  }).join("") + "<button type=\"button\" data-shop-custom aria-pressed=\"" + customDays + "\" class=\"" + (customDays ? "on" : "") + "\">Personalizar</button></div>" +
+    (customDays ? "<div class=\"shop-custom\" role=\"group\" aria-label=\"Número de dias\"><button type=\"button\" class=\"btn btn-sm\" data-shop-step=\"-1\" aria-label=\"Menos um dia\"" + (days <= 1 ? " disabled" : "") + ">−</button>" +
+      "<label class=\"shop-custom-n\"><input type=\"number\" inputmode=\"numeric\" min=\"1\" max=\"" + SHOP_DAYS_MAX + "\" step=\"1\" id=\"shopDaysCustom\" value=\"" + days + "\" aria-label=\"Número de dias\"> dias</label>" +
+      "<button type=\"button\" class=\"btn btn-sm\" data-shop-step=\"1\" aria-label=\"Mais um dia\"" + (days >= SHOP_DAYS_MAX ? " disabled" : "") + ">+</button></div>" : "") +
     "<div style=\"display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;\"><span class=\"muted-p\" id=\"shopProgress\">" + done + " de " + total + " comprados</span>" +
     "<span style=\"display:flex; gap:6px;\"><button type=\"button\" class=\"btn btn-sm\" id=\"shopCopy\">📋 Copiar</button><button type=\"button\" class=\"btn btn-sm\" id=\"shopClear\">Limpar</button></span></div>";
   list.forEach(function(g){
     html += "<div class=\"card\" style=\"margin-bottom:10px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">" + escapeHtml(g.label) + "</div>" + g.items.map(function(it){
       var inf = it.info, sub = "";
-      if (inf && inf.status === "other") sub = "<span class=\"shop-sub\">Só no " + escapeHtml(inf.only) + (inf.suggestion ? " — no " + escapeHtml(store) + ": <b>" + escapeHtml(inf.suggestion.name) + "</b>, " + escapeHtml(inf.suggestion.qty) : " — sem equivalente no " + escapeHtml(store)) + "</span>";
-      else if (inf && inf.status === "generic" && inf.suggestion) sub = "<span class=\"shop-sub\">Sugestão " + escapeHtml(store) + ": <b>" + escapeHtml(inf.suggestion.name) + "</b>, " + escapeHtml(inf.suggestion.qty) + "</span>";
+      var altBtn = function(label){ return " <button type=\"button\" class=\"btn btn-sm shop-alt-btn\" data-shop-alt=\"" + escapeHtml(it.name) + "\">" + label + "</button>"; };
+      if (it.replaces) sub = "<span class=\"shop-sub\">No " + escapeHtml(store) + ", em vez de <b>" + escapeHtml(it.replaces) + "</b> (" + escapeHtml(it.replacesQty) + ") <button type=\"button\" class=\"btn btn-sm shop-alt-btn\" data-shop-alt-undo=\"" + escapeHtml(it.replaces) + "\">↺ Repor</button></span>";
+      else if (inf && inf.status === "unknown") sub = "<span class=\"shop-sub shop-warn\">⚠ Não confirmado no " + escapeHtml(store) + "." + altBtn("Escolher alternativa") + "</span>";
+      else if (inf && inf.status === "other") sub = "<span class=\"shop-sub\">Só no " + escapeHtml(inf.only) + (inf.suggestion ? " — no " + escapeHtml(store) + ": <b>" + escapeHtml(inf.suggestion.name) + "</b>, " + escapeHtml(inf.suggestion.qty) : " — sem equivalente no " + escapeHtml(store)) + "." + altBtn("Escolher alternativa") + "</span>";
+      else if (inf && inf.status === "generic" && inf.suggestion) sub = "<span class=\"shop-sub\">Sugestão " + escapeHtml(store) + ": <b>" + escapeHtml(inf.suggestion.name) + "</b>, " + escapeHtml(inf.suggestion.qty) + " <button type=\"button\" class=\"btn btn-sm shop-alt-btn\" data-shop-alt=\"" + escapeHtml(it.name) + "\" data-shop-use=\"" + escapeHtml(inf.suggestion.name) + "\">Usar</button></span>";
       return "<label class=\"food-item shop-item" + (checked[it.name] ? " done" : "") + "\"><span class=\"fname\"><input type=\"checkbox\" data-shop=\"" + escapeHtml(it.name) + "\"" + (checked[it.name] ? " checked" : "") + "> " + escapeHtml(it.name) + "</span><span class=\"fqty\">" + escapeHtml(it.qty) + "</span>" + sub + "</label>";
     }).join("") + "</div>";
   });
@@ -8658,7 +8717,7 @@ function wireTrainingNav(s, el){
     b.addEventListener("click", function(){ state.planoSection = b.getAttribute("data-plano-sec"); renderAlunoTab(s); });
   });
   el.querySelectorAll("[data-shop-days]").forEach(function(b){
-    b.addEventListener("click", function(){ state.shopDays = parseInt(b.getAttribute("data-shop-days"), 10); renderAlunoTab(s); });
+    b.addEventListener("click", function(){ state.shopCustom = false; state.shopDays = parseInt(b.getAttribute("data-shop-days"), 10); renderAlunoTab(s); });
   });
   function shopRefreshProgress(){
     var boxes = el.querySelectorAll("[data-shop]"), n = 0;
@@ -8676,13 +8735,55 @@ function wireTrainingNav(s, el){
       shopRefreshProgress();
     });
   });
+  // dias da lista: «Personalizar» abre − / número / + (1 a 30)
+  function shopSetDays(n){ state.shopDays = Math.min(SHOP_DAYS_MAX, Math.max(1, Math.round(Number(n)) || 7)); renderAlunoTab(s); }
+  var customBtn = el.querySelector("[data-shop-custom]");
+  if (customBtn) customBtn.addEventListener("click", function(){ state.shopCustom = true; renderAlunoTab(s); });
+  el.querySelectorAll("[data-shop-step]").forEach(function(b){ b.addEventListener("click", function(){ state.shopCustom = true; shopSetDays(shopDaysOf() + parseInt(b.getAttribute("data-shop-step"), 10)); }); });
+  var customIn = el.querySelector("#shopDaysCustom");
+  if (customIn) customIn.addEventListener("change", function(){ var v = customIn.value; state.shopCustom = true; setTimeout(function(){ shopSetDays(v); }, 0); }); // fora do evento: voltar a desenhar o campo com o foco nele dá erro no Safari
+  // trocar um produto que não há na loja por um equivalente que lá exista (só na lista, neste telemóvel)
+  function shopApplyAlt(origName, altName){
+    var store = shopStoreGet(s), map = shopAltGet(s, store);
+    map[origName] = altName; shopAltSet(s, store, map);
+    logAdaptation(s, null, "troca_loja", {store: store, from: origName, to: altName});
+    persistStudent(s);
+    renderAlunoTab(s);
+    showToast("✓ Trocado na lista (" + store + ")");
+  }
+  el.querySelectorAll("[data-shop-alt-undo]").forEach(function(b){
+    b.addEventListener("click", function(ev){
+      ev.preventDefault();
+      var store = shopStoreGet(s), map = shopAltGet(s, store);
+      delete map[b.getAttribute("data-shop-alt-undo")]; shopAltSet(s, store, map);
+      renderAlunoTab(s);
+      showToast("Produto original reposto na lista");
+    });
+  });
+  el.querySelectorAll("[data-shop-alt]").forEach(function(b){
+    b.addEventListener("click", function(ev){
+      ev.preventDefault();
+      var name = b.getAttribute("data-shop-alt"), store = shopStoreGet(s), use = b.getAttribute("data-shop-use");
+      if (use){ shopApplyAlt(name, use); return; }
+      var days = shopDaysOf(), base = null;
+      shoppingListFor(s, days, store).forEach(function(g){ g.items.forEach(function(it){ if (it.name === name && it.base) base = it.base; }); });
+      if (!base) return;
+      var cands = shopAltCandidates(store, base);
+      var html = "<div class=\"mtitle\">Alternativa para " + escapeHtml(name) + "</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Produtos parecidos que existem no " + escapeHtml(store) + ", com a quantidade para as mesmas calorias. A troca fica só na tua lista de compras: o plano continua o do teu profissional.</p>" +
+        (cands.length ? cands.map(function(c, i){ return "<button type=\"button\" class=\"btn shop-alt-opt\" data-alt-pick=\"" + i + "\" style=\"width:100%; text-align:left; margin-bottom:8px;\"><b>" + escapeHtml(c.name) + "</b><br><span class=\"muted-p\">" + escapeHtml(c.qty) + "</span></button>"; }).join("") : "<p class=\"muted-p\">Não encontrámos equivalentes para este produto. Fala com o teu profissional no próximo treino.</p>");
+      var sheet = openModal(html);
+      sheet.querySelectorAll("[data-alt-pick]").forEach(function(o){
+        o.addEventListener("click", function(){ var c = cands[parseInt(o.getAttribute("data-alt-pick"), 10)]; closeModal(); if (c) shopApplyAlt(name, c.name); });
+      });
+    });
+  });
   var shopStoreSel = el.querySelector("#shopStore");
   if (shopStoreSel) shopStoreSel.addEventListener("change", function(){ shopStoreSet(s, shopStoreSel.value); renderAlunoTab(s); });
   var pdfBtn = el.querySelector("#exportPlanPdf");
   if (pdfBtn) pdfBtn.addEventListener("click", function(){ exportPlanPdf(s); });
   var shopCopy = el.querySelector("#shopCopy");
   if (shopCopy) shopCopy.addEventListener("click", function(){
-    var text = shoppingListText(s, SHOP_DAY_CHOICES.indexOf(state.shopDays) >= 0 ? state.shopDays : 7, shopStoreGet(s));
+    var text = shoppingListText(s, shopDaysOf(), shopStoreGet(s));
     var done = function(){ showToast("✓ Lista copiada"); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function(){ showToast("⚠ Não foi possível copiar"); });
     else showToast("⚠ O teu browser não deixa copiar");
@@ -13573,7 +13674,7 @@ function wireProPedidos(s, reqs){
 var ADAPTATION_TYPE_LABEL = {
   substituicao: "Substituições", adaptacao: "Refeições adaptadas",
   refeicao_flexivel: "Refeições flexíveis", refeicao_ignorada: "Refeições ignoradas",
-  reagendamento: "Refeições reagendadas", pedido_profissional: "Pedidos de ajuda ao profissional"
+  reagendamento: "Refeições reagendadas", troca_loja: "Trocas na lista de compras", pedido_profissional: "Pedidos de ajuda ao profissional"
 };
 
 function computeAdaptationSummary(s, days){
