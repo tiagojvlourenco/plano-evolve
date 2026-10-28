@@ -9815,8 +9815,22 @@ function wireWorkoutLogger(s, el, rerender){
   if (!save) return;
   var rpeInput = el.querySelector("#wlRpe");
   if (rpeInput) rpeInput.addEventListener("input", function(){ rpeInput.setAttribute("data-manual", "1"); var dr = dayId ? wlDraftGet(s, dayId) : null; if (dr){ dr.rpeManual = true; wlDraftSave(dr); } el.querySelector("#wlRpeVal").textContent = rpeInput.value; rpeInput.style.setProperty("--p", rangeFill(rpeInput.value) + "%"); });
+  var finishConfirmed = false;
   save.addEventListener("click", function(){
     var err = el.querySelector("#wlError");
+    // um treino guardado só o profissional o apaga (o aluno só acrescenta): se há séries por marcar, pergunta antes de terminar
+    if (!finishConfirmed){
+      var allBoxes = el.querySelectorAll("[data-wl-done]"), ticked = 0;
+      allBoxes.forEach(function(b){ if (b.checked) ticked++; });
+      if (ticked > 0 && ticked < allBoxes.length && typeof openModal === "function" && modalRoot){
+        var ask = openModal("<div class=\"mtitle\">Terminar o treino?</div><p class=\"muted-p\" style=\"margin-bottom:14px;\">Marcaste " + ticked + " de " + allBoxes.length + " séries. As que ficaram por marcar não são registadas, e um treino guardado só o teu profissional o pode apagar.</p>" +
+          "<button type=\"button\" class=\"btn primary\" id=\"wlFinishYes\" style=\"width:100%; margin-bottom:8px;\">Terminar mesmo assim</button>" +
+          "<button type=\"button\" class=\"btn\" id=\"wlFinishNo\" style=\"width:100%;\">Continuar a treinar</button>");
+        ask.querySelector("#wlFinishYes").addEventListener("click", function(){ closeModal(); finishConfirmed = true; save.click(); finishConfirmed = false; });
+        ask.querySelector("#wlFinishNo").addEventListener("click", closeModal);
+        return;
+      }
+    }
     if (wlSaving[s.id]){ err.textContent = "A guardar o treino… aguarda um instante."; err.style.display = "block"; return; } // duplo toque / formulário reconstruído durante o pedido
     var day = trainingProgramOf(s).days.filter(function(d){ return d.id === daySel.value; })[0];
     if (!day) return;

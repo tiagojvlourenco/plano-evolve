@@ -495,3 +495,7 @@ Dia de descanso: cartão curto («Hoje · descanso», próximo treino, «Treinar
 ## 8aq. Refeição ignorada ou reagendada por engano
 
 Apanhado no varrimento dos botões: depois de «Não vou fazer esta refeição» não havia como voltar atrás (e concluí-la deixava-a «feita» mas fora da conta, com «ignorada» na linha). Agora há **«↺ Voltar a incluir esta refeição»**, e concluir uma refeição ignorada (no detalhe ou no círculo) volta a incluí-la primeiro. Para as reagendadas há **«↺ Repor o horário original»**. As duas funções (`unskipMeal`, `unrescheduleMeal`) tiram do registo de hoje a ocorrência dessa refeição; o histórico de outros dias nunca é apagado. Nota: uma refeição reagendada muda de lugar na lista (ordenada pela hora nova).
+
+## 8ar. Terminar o treino com séries por marcar
+
+Se o aluno toca em «Terminar treino» com algumas (mas não todas) as séries marcadas, aparece «Terminar o treino?» com «Terminar mesmo assim» e «Continuar a treinar»: um treino guardado só o profissional o pode apagar. Com todas as séries marcadas guarda logo; sem nenhuma continua a avisar que falta marcar pelo menos uma.
