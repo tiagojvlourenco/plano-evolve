@@ -540,3 +540,27 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 - Testes: `tests/treino-registo-evolucao.test.js` (35 verificações, em Node e Chromium).
 - **Não verificado em telemóvel real:** toque, teclado numérico, ecrã apagado a meio do treino, rascunho depois de o iOS fechar a app em segundo plano.
 
+## 8av. EVOLVE Treino: ecrã de treino, histórico, resumo da semana, sincronização e conforto
+
+**Ecrã de treino**
+- **Barra fixa em baixo** (por cima do separador, ao alcance do polegar): exercício, «Série n de N», carga × repetições da série atual e o botão **«✓ Feita»**. Só marca quando tocas (nunca sozinho); no fim passa a «Treino completo» + «Terminar treino».
+- **Cronómetro de descanso compacto** no ecrã de treino (≈ 140 px em vez de ≈ 235): mesmos botões (pausa, ±15 s, reiniciar) e mesmo comportamento. O som ao acabar liga-se em «Conforto».
+- **Ecrã ligado durante todo o treino** (Wake Lock), não só durante o descanso; liberta-se ao sair do ecrã de treino (se não houver descanso a correr) e volta a pedir-se ao regressar à app. Sem suporte do browser, nada acontece.
+- **Conforto** (guardado só no telemóvel, `evolve_wl_comfort_v1`): *Controlos grandes* (campos e botões ≥ 56 px, um por linha), *Mão esquerda* («Feita» à esquerda, na série e na barra) e *Som ao acabar o descanso*.
+- Letra das etiquetas maior (≥ 0,72 rem) e cada marcação é anunciada a leitores de ecrã («Série 1 de … feita. Faltam n séries.»).
+
+**Histórico** (separador Treino → «Ver todo o histórico»): todos os treinos com séries válidas, por mês, com **pesquisa** (nome do treino ou do exercício, sem acentos nem maiúsculas) e período (4 semanas, 12 semanas, tudo). Tocar num treino abre o detalhe (cada série com carga × repetições e RIR, esforço, notas e se já está sincronizado). A lista dos «Últimos treinos» em «Hoje» também abre o detalhe.
+
+**Resumo da semana** (cartão «Esta semana» em «Hoje»): dias de segunda a domingo com os treinos feitos, treinos feitos vs previstos (`trainingDays`), séries e volume, e a semana passada. Corrida e bicicleta (só se a Corrida estiver ligada): atividades, distância, duração e ritmo médio (só das corridas) da semana. **As corridas só são lidas quando o aluno toca em «Ver esta semana»** (ou depois de abrir o Cardio): a Corrida continua a não pedir nada antes disso (`RUN.weekSummary(s, onChange, load)` em `corrida.js`, aditivo).
+
+**Sincronização** (linha de estado em «Hoje», no histórico e no ecrã de treino):
+- *Tudo sincronizado* (com a hora do último envio), *por enviar* (guardado neste telemóvel), *sem ligação* (segue sozinho quando houver rede), *a enviar…*, *erro* (quantas tentativas; o treino continua guardado no telemóvel; botão «Enviar agora») e recusa do servidor (visível 30 min).
+- Os treinos por enviar ficam registados à parte (`evolve_wl_unsent_v1`, por aluno) até o servidor confirmar a lista (`outboxAcked`) ou a recusar; no histórico levam a marca «⏳ por enviar». O envio em si (fila, tentativas, junção de listas) **não mudou**.
+- O profissional que pré-visualiza o ecrã do aluno não vê este estado.
+
+**Limites**
+- Não testado em telemóvel real: uso com uma mão, toque, Wake Lock de verdade (simulado nos testes) e iOS a fechar a app em segundo plano. O Wake Lock só existe em browsers recentes (iOS ≥ 16.4).
+- O resumo da semana não tem calorias nem frequência cardíaca (não são recolhidas). O cronómetro de descanso continua a não sobreviver a recarregar a página.
+- Sem alterações a schema, migrações, RLS ou Supabase.
+- Testes: `tests/treino-conforto-historico.test.js` (45 verificações, Node + Chromium).
+
