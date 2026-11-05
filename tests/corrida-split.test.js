@@ -88,7 +88,7 @@ ck("30. O ficheiro não deixa a escolha de partilhar por omissão: a forma inici
 
 // ---- carregamento, service worker, CSS ----
 var swShell = sw.slice(sw.indexOf("var SHELL = ["), sw.indexOf("];", sw.indexOf("var SHELL = [")));
-ck("31. O service worker serve corrida.js com rede primeiro (como o resto da app) e não o põe no SHELL: a Corrida só se guarda quando alguém a usa", swShell.length > 20 && !/corrida/.test(swShell) && /\(gestao\|corrida\|corrida-core\|corrida-live\|app\)\\\.\(js\|css\)/.test(sw));
+ck("31. O service worker serve corrida.js com rede primeiro (como o resto da app) e não o põe no SHELL: a Corrida só se guarda quando alguém a usa", swShell.length > 20 && !/corrida/.test(swShell) && /\(gestao\|corrida\|corrida-core\|corrida-live\|alimentos\|app\)\\\.\(js\|css\)/.test(sw));
 ck("32. app.js só pede os ficheiros da Corrida dentro de loadCorrida (a lista é fixa: corrida-core.js, corrida.js, corrida-live.js, por esta ordem)", /\["corrida-core\.js", "corrida\.js", "corrida-live\.js"\]\.map\(function\(f\)\{ return fetch\(f/.test(app) && !/fetch\(\s*["']corrida/.test(app));
 // os blocos de CSS de corrida.js (cada um começa com «/* ---- Corrida (corrida.js)...» e acaba no cabeçalho seguinte; o gravador tem o seu)
 var cssParts = css.split(/\/\* ---- /).slice(1).filter(function(b){ return /^Corrida \(corrida\.js\)/.test(b); });

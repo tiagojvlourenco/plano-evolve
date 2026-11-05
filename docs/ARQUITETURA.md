@@ -6,7 +6,7 @@
 
 | Camada | Tecnologia |
 |---|---|
-| Front-end | Três PWAs no mesmo site: `index.html` (EVOLVE: alimentação e avaliações), `treino.html` (EVOLVE Treino: musculação e Corrida) e `gestao.html` (EVOLVE Gestão), com `app.js` + `app.css` partilhados, `gestao.js` só para a Gestão e `corrida-*.js` só para a Corrida (`manifest.json`, ícones `icon-*.png`) |
+| Front-end | Três PWAs no mesmo site: `index.html` (EVOLVE: alimentação e avaliações), `treino.html` (EVOLVE Treino: musculação e Corrida) e `gestao.html` (EVOLVE Gestão), com `app.js` + `app.css` partilhados, `gestao.js` só para a Gestão, `alimentos.js` (tabelas de alimentos) só para as apps com alimentação e `corrida-*.js` só para a Corrida (`manifest.json`, ícones `icon-*.png`) |
 | Backend | Supabase (Auth + Postgres com RLS + Storage `progress-photos`) |
 | Dados de catálogo | SQL gerado offline em `scripts/` e corrido à mão no SQL Editor |
 | Testes | `node tests/run-all.js` (avalia a app em Node com um DOM falso, `tests/extract-app.js`) |
@@ -31,7 +31,7 @@ Não há router: o estado vive em `var state = {...}` (≈ linha 6126) e cada "e
 - **Indicador** `#syncPill`: "Sem ligação · N alterações guardadas" / "⏳ N por enviar".
 - **Cópia da ficha do aluno** (`evolve_snapshot_v1`): atualizada em cada leitura e em cada alteração; apagada, com a fila, ao terminar sessão (`offlineDataWipe`).
 - **Dados frescos do profissional**: `proRefreshAndRender()` (ao voltar à app, no máximo de minuto a minuto, e botão "↻ Atualizar") atualiza **no próprio objeto** só as fichas sem alterações por enviar e que não estão abertas; não corre com uma janela aberta nem se houve alterações locais durante a leitura.
-- **`sw.js`**: pré-cache das duas páginas, de `app.js`/`app.css`, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; `app.js`, `app.css` e `gestao.js` com rede primeiro (e `gestao.js` fora do pré-cache: os alunos não o descarregam); cada página tem a sua cópia guardada; restantes ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
+- **`sw.js`**: pré-cache das duas páginas, de `app.js`/`alimentos.js`/`app.css`, `vendor/supabase.js`, fontes e ícones; navegação com rede primeiro (`no-cache`) e cache como reserva; `app.js`, `app.css` e `gestao.js` com rede primeiro (e `gestao.js` fora do pré-cache: os alunos não o descarregam); cada página tem a sua cópia guardada; restantes ficheiros do site cache-first; **nada de outros servidores** (Supabase, OFF, YouTube) passa pela cache. Subir `VERSION` ao mudar `vendor/`, `fonts/` ou ícones.
 
 ### 1.2 Aluno — `renderAlunoShell()` / `renderAlunoTab()` (`state.alunoTab`)
 **App EVOLVE Treino (`treino.html`, `APP_MODE === "treino"`)**: barra com 2 separadores — **Treino** (`hoje`; `tplTreinoHome` = aviso de corrida pendente + `tplTodayWorkout` + `tplTrainingProgramCard` + últimos treinos) e **Corrida** (`corrida`; `tplCorridaTab` → `RUN.screen`, módulo carregado sob pedido por `loadCorrida()`); o ecrã cheio `treino` (`tplTreinoScreen`/`tplWorkoutLogger`) conta como «Treino». Um profissional em `treino.html` só pré-visualiza (seletor de aluno).
@@ -144,7 +144,7 @@ RLS: o aluno só vê `verified`; o profissional vê todos.
 ### 3.1 Fontes de alimentos e carregamento
 Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** (`per`: `"100g" | "unit" | "fixed"`), mais **`FOOD_GROUPS`** (grupo → lista `{name, qty}`) e **`FOOD_PACKS[nome]`** (tamanho da embalagem).
 
-1. **Embutidos no código**: `FOOD_DB` (≈ linha 2848) e `FOOD_GROUPS` (≈ linha 785) — INSA e alimentos curados.
+1. **Embutidos no código**: `FOOD_DB` e `FOOD_GROUPS` — INSA e alimentos curados. Vivem em `alimentos.js` (carregado antes do `app.js` por `index.html` e `gestao.html`; o `treino.html` não o carrega e o `app.js` fica com as duas tabelas vazias).
 2. **`custom_foods`** → `loadCustomFoods()` → `mergeCustomFood()`.
 3. **`food_products` (só `verified`)** → `loadFoodProducts()` → `fetchAllFoodProductPages()` (páginas de 1000, ordenadas por `id`) → `mergeFoodProduct(row, retailers)`:
    - nome final `Nome (Marca)`, com `· Retalhista` só se houver exatamente 1 retalhista;

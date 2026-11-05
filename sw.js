@@ -1,6 +1,6 @@
 /* EVOLVE — service worker: a app abre sem rede.
    - Navegação (index.html): rede primeiro (sempre a versão mais recente quando há ligação), cache como reserva.
-   - app.js, app.css, gestao.js, corrida.js, corrida-core.js e corrida-live.js (o código): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
+   - app.js, alimentos.js, app.css, gestao.js, corrida.js, corrida-core.js e corrida-live.js (o código): rede primeiro, cache como reserva — nunca fica uma versão antiga a mandar.
    - Três apps no mesmo site: index.html (Acompanhamento: alimentação e avaliações), treino.html (EVOLVE Treino: musculação e corrida) e
      gestao.html (Gestão, só o profissional); cada uma guarda a sua página.
    - Ficheiros do próprio site (fontes, ícones, Supabase local, animações dos exercícios): cache primeiro.
@@ -11,7 +11,7 @@
    deixava a Gestão no lugar do EVOLVE. Mudar o nome apaga essa cache e a cópia antiga de index.html (script inline). */
 var VERSION = "evolve-v5";
 var SHELL = [
-  "./", "index.html", "gestao.html", "treino.html", "app.css", "app.js", "manifest.json", "manifest-gestao.json", "manifest-treino.json",
+  "./", "index.html", "gestao.html", "treino.html", "app.css", "alimentos.js", "app.js", "manifest.json", "manifest-gestao.json", "manifest-treino.json",
   "vendor/supabase.js",
   "fonts/manrope-latin-wght-normal.woff2", "fonts/jura-latin-400-normal.woff2", "fonts/jura-latin-500-normal.woff2",
   "fonts/jura-latin-600-normal.woff2", "fonts/jura-latin-700-normal.woff2", "fonts/jura-latin-300-normal.woff2",
@@ -123,6 +123,6 @@ self.addEventListener("fetch", function(event){
   var sameSite = url.origin === self.location.origin;
   if (!sameSite) return;
   if (req.mode === "navigate"){ event.respondWith(networkFirst(event)); return; }
-  if (/\/(gestao|corrida|corrida-core|corrida-live|app)\.(js|css)$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
+  if (/\/(gestao|corrida|corrida-core|corrida-live|alimentos|app)\.(js|css)$/.test(url.pathname)){ event.respondWith(networkFirstFile(event)); return; }
   event.respondWith(cacheFirst(event).catch(function(){ return Response.error(); }));
 });

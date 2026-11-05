@@ -510,3 +510,12 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 - **Contraste:** o texto vermelho passa a `--critical-text` (#FF7B72, ≥ 5,3:1 em todas as superfícies); o `--critical` antigo ficava a 4,1:1 sobre `--surface-2`.
 - **Foco e movimento:** contorno `:focus-visible` global e, com «reduzir movimento» ligado, animações e transições praticamente instantâneas.
 - Testado em `tests/treino-a11y.test.js`. **Não se mexeu** em schema, RLS, migrações nem Supabase. Ideias que ficaram de fora por não compensarem: `content-visibility` nos exercícios (sem ganho medido) e barra de progresso fixa no registo (colide com o cronómetro de descanso).
+
+## 8at. Tabelas de alimentos num ficheiro à parte (`alimentos.js`)
+
+- **O quê:** `FOOD_GROUPS` e `FOOD_DB` (≈ 200 KB, 19% do `app.js`) passaram para `alimentos.js`, que define `window.EVOLVE_FOOD = {groups, db}`. O texto das tabelas é o mesmo (conferido: 8 grupos, 1516 alimentos, mesmo hash do conteúdo).
+- **Quem o carrega:** `index.html` e `gestao.html`, com `<script src="alimentos.js">` mesmo antes do `app.js`. O `treino.html` **não** o carrega: o EVOLVE Treino não mostra alimentação e o `app.js` fica com as duas tabelas vazias (`{}`), sem erros.
+- **Service worker:** `alimentos.js` está no pré-cache e é servido com rede primeiro, como o resto do código (por isso as apps de alimentação abrem sem rede).
+- **Para mexer nas tabelas:** editar `alimentos.js` (já não está no `app.js`). Os testes leem-no pelo `tests/extract-app.js` e `tests/helpers/app-text.js`. Os catálogos vindos do Supabase continuam a juntar-se a `FOOD_DB` em memória.
+- **Teste:** `tests/alimentos-ficheiro.test.js` (10 verificações, incluindo o treino a abrir sem pedir o ficheiro).
+- **Não medido num telemóvel real:** o ganho de tempo/descarga esperado é de cerca de 200 KB de código a menos para interpretar no EVOLVE Treino (≈ 37 KB comprimidos); só se confirma em iPhone/Android com rede móvel.

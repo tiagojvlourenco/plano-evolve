@@ -12,7 +12,7 @@ function read(f){ return fs.readFileSync(path.join(root, f), "utf8"); }
 // ---- ficheiros ----
 var pages = ["index.html", "treino.html", "gestao.html"].map(read);
 check.check("1. As três páginas têm zona principal (role=main), região viva (#liveRegion) e estados anunciados (carregar = status, erros = alert)", pages.every(function(h){ return /id="alunoApp" class="hidden" role="main"/.test(h) && /id="proApp" class="hidden" role="main"/.test(h) && /id="liveRegion" class="sr-only" role="status" aria-live="polite"/.test(h) && /id="appLoadingText" role="status"/.test(h) && /id="authError" role="alert"/.test(h) && /id="connectionErrorScreen" role="alert"/.test(h); }));
-var bodyOf = function(h){ return h.slice(h.indexOf("<body>")); };
+var bodyOf = function(h){ return h.slice(h.indexOf("<body>")).replace('<script src="alimentos.js"></script>\n', ""); }; // alimentos.js só é carregado pelas apps com alimentação (não pelo treino.html)
 check.check("2. O corpo continua igual nas três páginas (só muda o cabeçalho)", bodyOf(pages[0]) === bodyOf(pages[1]) && bodyOf(pages[1]) === bodyOf(pages[2]));
 var css = read("app.css");
 check.check("3. O CSS tem foco visível global, texto vermelho com contraste (--critical-text) e regra para quem pede menos movimento", /:focus-visible\{outline:2px solid/.test(css) && /--critical-text:#FF7B72/.test(css) && /@media \(prefers-reduced-motion:reduce\)\{\s*\*, \*::before/.test(css));

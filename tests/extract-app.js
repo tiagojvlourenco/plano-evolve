@@ -35,11 +35,13 @@ function extractApp(){
     const p = path.join(__dirname, "..", f);
     return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
   }).join("\n");
+  // as tabelas de alimentos (alimentos.js) são carregadas antes do app.js nas apps com alimentação: aqui entram à frente do código, no mesmo eval
+  const alimentos = fs.existsSync(path.join(__dirname, "..", "alimentos.js")) ? fs.readFileSync(path.join(__dirname, "..", "alimentos.js"), "utf8") + "\n" : "";
   const extra = gestao + "\n" + corrida;
   const bootAt = inner.lastIndexOf("\nboot();");
   inner = bootAt >= 0 ? inner.slice(0, bootAt) + "\n" + extra + "\n" + inner.slice(bootAt) : inner + "\n" + extra + "\n";
   inner = inner.replace("boot();", "/* boot() suprimido nos testes: liga-se ao Supabase real e mexe no DOM da app */");
-  return inner;
+  return alimentos + inner;
 }
 
 module.exports = extractApp;
