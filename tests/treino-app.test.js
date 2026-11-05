@@ -8,7 +8,7 @@ var root = path.join(__dirname, "..");
 function read(f){ return fs.readFileSync(path.join(root, f), "utf8"); }
 
 var treinoHtml = read("treino.html"), indexHtml = read("index.html"), gestaoHtml = read("gestao.html"), sw = read("sw.js"), app = read("app.js");
-var bodyOf = function(h){ return h.slice(h.indexOf("<body>")); };
+var bodyOf = function(h){ return h.slice(h.indexOf("<body>")).replace('<script src="alimentos.js"></script>\n', ""); }; // alimentos.js só é carregado pelas apps com alimentação (não pelo treino.html)
 var manifest = JSON.parse(read("manifest-treino.json"));
 
 // ---- ficheiros ----
