@@ -1,0 +1,35 @@
+# Mantém o projeto Supabase acordado: no plano gratuito o Supabase PAUSA o projeto depois de cerca de 7 dias sem pedidos
+# (e sem o projeto ligado ninguém consegue entrar na app). Este trabalho faz uma consulta mínima de leitura de 3 em 3 dias.
+# A chave usada é a chave PÚBLICA «anon» que já está no app.js (não é um segredo; a segurança está nas regras RLS da base de dados).
+# Se a consulta falhar (projeto pausado ou em baixo) o trabalho falha e o GitHub avisa por email.
+name: Manter Supabase ativo
+
+on:
+  schedule:
+    - cron: "17 8 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consulta mínima à base de dados
+        run: |
+          set -euo pipefail
+          URL=$(grep -oE 'SUPABASE_URL *= *"[^"]+"' app.js | head -1 | sed -E 's/.*"([^"]+)"/\1/')
+          KEY=$(grep -oE 'SUPABASE_ANON_KEY *= *"[^"]+"' app.js | head -1 | sed -E 's/.*"([^"]+)"/\1/')
+          test -n "$URL" && test -n "$KEY"
+          for tentativa in 1 2 3; do
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+              -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+              "$URL/rest/v1/professionals?select=user_id&limit=1" || echo 000)
+            echo "tentativa $tentativa: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::error::O Supabase não respondeu bem (HTTP $CODE). O projeto pode estar pausado: abre o painel do Supabase e restaura-o."
+          exit 1
