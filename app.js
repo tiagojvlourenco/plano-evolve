@@ -2333,6 +2333,7 @@ function syncPillUpdate(){
   else if (n) text = outboxFlushPromise ? "A enviar…" : "⏳ " + n + (n === 1 ? " alteração por enviar" : " alterações por enviar");
   el.textContent = text;
   el.classList.toggle("hidden", !text || !sbReady);
+  syncUiRefresh();
 }
 
 function outboxErrorIsTransient(res){
@@ -2393,7 +2394,87 @@ function outboxAcked(id, cols){
     Object.keys(cols).forEach(function(k){ if (k in entry.cols && jsonOf(entry.cols[k]) === jsonOf(cols[k])) delete entry.cols[k]; });
     if (!Object.keys(entry.cols).length) delete ob[id];
   }
+  syncNoteOk();
+  if ("workout_logs" in cols) unsentAck(id, cols.workout_logs);
   outboxWrite();
+}
+
+/* ---------- Estado de sincronização dos treinos (o que o aluno vê) ----------
+   Fonte única: a fila de envio (outbox) e a «linha de base» do que o servidor já confirmou (s._sync.workout_logs).
+   Um treino está «por enviar» se o seu id ainda não está na versão confirmada pelo servidor (ou se há workout_logs na fila).
+   Estados: local (sem Supabase: demonstração), synced, pending (por enviar), offline (por enviar e sem rede), sending, error (tentativas falhadas ou recusa). */
+var syncLast = {okAt: 0, failAt: 0, fails: 0, rejectedAt: 0};
+/* Treinos feitos neste telemóvel e ainda não confirmados pelo servidor: {idAluno: [idsDosTreinos]}. Guarda-se à parte (e sobrevive a fechar a app) porque
+   a linha de base de sincronização pode ser criada já com o treino lá dentro. Sai daqui quando o servidor confirma a lista (outboxAcked) ou recusa. */
+var WL_UNSENT_KEY = "evolve_wl_unsent_v1";
+function unsentRead(){ try { var v = JSON.parse(window.localStorage.getItem(WL_UNSENT_KEY) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } }
+function unsentWrite(v){ try { window.localStorage.setItem(WL_UNSENT_KEY, JSON.stringify(v)); } catch (e) {} }
+function unsentAdd(sid, logId){ var v = unsentRead(), a = Array.isArray(v[sid]) ? v[sid] : []; if (a.indexOf(logId) < 0) a.push(logId); v[sid] = a; unsentWrite(v); }
+function unsentAck(sid, logs){
+  var v = unsentRead(), a = Array.isArray(v[sid]) ? v[sid] : [], have = {};
+  (Array.isArray(logs) ? logs : []).forEach(function(l){ if (l && l.id) have[l.id] = true; });
+  var rest = a.filter(function(id){ return !have[id]; });
+  if (rest.length) v[sid] = rest; else delete v[sid];
+  unsentWrite(v);
+}
+function unsentClear(sid){ var v = unsentRead(); delete v[sid]; unsentWrite(v); }
+function unsentHas(sid, logId){ var a = unsentRead()[sid]; return Array.isArray(a) && a.indexOf(logId) >= 0; }
+var SYNC_REJECT_SHOW_MS = 30 * 60 * 1000;
+function syncNoteOk(){ syncLast.okAt = Date.now(); syncLast.fails = 0; }
+function syncNoteFail(){ syncLast.failAt = Date.now(); syncLast.fails++; }
+function syncNoteRejected(){ syncLast.rejectedAt = Date.now(); }
+function workoutSyncedIds(s){
+  var raw = s && s._sync ? s._sync.workout_logs : null, out = {};
+  if (raw == null) return null;
+  try { var a = JSON.parse(raw); if (!Array.isArray(a)) return null; a.forEach(function(l){ if (l && l.id) out[l.id] = true; }); } catch (e) { return null; }
+  return out;
+}
+function workoutLogPending(s, log, synced){
+  if (!log || !log.id || authRole !== "student" || !sbReady) return false;
+  if (unsentHas(s.id, log.id)) return true;
+  var ids = synced === undefined ? workoutSyncedIds(s) : synced;
+  return !!ids && !ids[log.id];
+}
+function workoutSyncInfo(s){
+  if (!s || authRole !== "student") return {state: "none", text: "", pending: 0, canRetry: false};
+  if (!sbReady) return {state: "local", text: "Modo local: os treinos ficam guardados só neste telemóvel.", pending: 0, canRetry: false};
+  var synced = workoutSyncedIds(s), pend = 0;
+  workoutLogsForWrite(s).forEach(function(l){ if (workoutLogPending(s, l, synced)) pend++; });
+  var ob = outboxRead()[s.id], n = Math.max(pend, ob && ob.cols && ob.cols.workout_logs ? 1 : 0);
+  var offline = typeof navigator !== "undefined" && navigator.onLine === false, what = plural(n, "treino guardado", "treinos guardados");
+  if (n && offline) return {state: "offline", pending: n, canRetry: false, text: "Sem ligação: " + what + " neste telemóvel. Seguem sozinhos quando houver rede."};
+  if (n && outboxFlushPromise) return {state: "sending", pending: n, canRetry: false, text: "A enviar " + plural(n, "treino", "treinos") + "…"};
+  if (n && syncLast.fails > 0) return {state: "error", pending: n, canRetry: true, text: "⚠ Não foi possível enviar (" + plural(syncLast.fails, "tentativa", "tentativas") + "). " + (n === 1 ? "O treino continua guardado" : "Os " + n + " treinos continuam guardados") + " neste telemóvel e vamos tentar outra vez."};
+  if (n) return {state: "pending", pending: n, canRetry: true, text: "⏳ " + what.charAt(0).toUpperCase() + what.slice(1) + " neste telemóvel, por enviar."};
+  if (Date.now() - syncLast.rejectedAt < SYNC_REJECT_SHOW_MS && syncLast.rejectedAt) return {state: "error", pending: 0, canRetry: false, text: "⚠ O servidor recusou uma alteração e a ficha foi atualizada com a versão dele. Confirma no histórico se o teu último treino está lá."};
+  return {state: "synced", pending: 0, canRetry: false, text: "✓ Tudo sincronizado" + (syncLast.okAt ? " · último envio às " + wlHHMM(syncLast.okAt) : "")};
+}
+var syncUiSid = null;
+function tplSyncLine(s){
+  var i = workoutSyncInfo(s);
+  if (i.state === "none") return "";
+  syncUiSid = s.id;
+  return "<div class=\"sync-line " + i.state + "\" id=\"syncLine\" role=\"status\"><span class=\"sync-text\">" + escapeHtml(i.text) + "</span>" + (i.canRetry ? "<button type=\"button\" class=\"btn btn-sm\" id=\"syncNow\">Enviar agora</button>" : "") + "</div>";
+}
+function wireSyncLine(el){
+  var b = el.querySelector("#syncNow");
+  if (b) b.addEventListener("click", function(){ b.disabled = true; syncLast.fails = 0; outboxFlush().then(function(){ syncUiRefresh(); }, function(){ syncUiRefresh(); }); syncUiRefresh(); });
+}
+// o indicador de sincronização do ecrã acompanha o que muda em segundo plano (rede, envio, erro) sem redesenhar o ecrã todo
+function syncUiRefresh(){
+  try {
+    var s = syncUiSid ? findStudent(syncUiSid) : null;
+    if (!s) return;
+    var el = document.getElementById("syncLine");
+    if (el){
+      var i = workoutSyncInfo(s);
+      el.className = "sync-line " + i.state;
+      el.innerHTML = "<span class=\"sync-text\">" + escapeHtml(i.text) + "</span>" + (i.canRetry ? "<button type=\"button\" class=\"btn btn-sm\" id=\"syncNow\">Enviar agora</button>" : "");
+      wireSyncLine(el);
+    }
+    var st = document.getElementById("wlStatus"), dayId = st && st.getAttribute("data-day");
+    if (st && dayId){ var info = wlStatusInfo(s, dayId); st.textContent = info.text; if (st.classList) st.classList.toggle("bad", !!info.bad); }
+  } catch (e) {}
 }
 
 // depois de a ficha mudar por causa do servidor, o ecrã atual mostra a versão certa (sem tocar numa janela aberta)
@@ -2434,6 +2515,7 @@ function mergeWorkoutLogsAndResend(id){
       if (s){ s.workoutLogsRaw = merged.slice(); s.workoutLogs = normalizeWorkoutLogs(merged); if (!s._sync) ensureSyncBaseline(s); else s._sync.workout_logs = jsonOf(merged); }
       var e = outboxRead()[id];
       if (e){ delete e.cols.workout_logs; if (!Object.keys(e.cols).length) delete outboxRead()[id]; outboxWrite(); }
+      unsentAck(id, merged);
       snapshotApplyPatch(id, {workout_logs: merged});
       redrawAfterSync();
       return true;
@@ -2476,7 +2558,7 @@ function outboxSendCols(id, cols){
       showToast("⚠ A fase nutricional ainda não pode ser guardada: falta correr a migração 0029 no Supabase. O resto foi guardado.");
       return outboxSendOne(id);
     }
-    if (outboxErrorIsTransient(res)) return false;
+    if (outboxErrorIsTransient(res)){ syncNoteFail(); return false; }
     var keys = Object.keys(cols);
     if (keys.length > 1){
       // uma coluna recusada não pode levar as outras consigo: reenvia-se uma a uma
@@ -2492,10 +2574,11 @@ function outboxSendCols(id, cols){
       console.error("Supabase: gravação recusada", id, col, msg);
       var e = outboxRead()[id];
       if (e){ delete e.cols[col]; if (!Object.keys(e.cols).length) delete outboxRead()[id]; outboxWrite(); }
+      syncNoteRejected(); unsentClear(id);
       showToast("⚠ Uma alteração não foi aceite pelo servidor (" + (msg || "recusada") + "). A ficha foi atualizada com a versão do servidor.");
       return reconcileStudentFromServer(id).then(function(){ return true; });
     });
-  }, function(){ return false; });
+  }, function(){ syncNoteFail(); return false; });
 }
 function outboxSendOne(id){
   var entry = outboxRead()[id];
@@ -4373,7 +4456,7 @@ function renderAlunoShell(){
   var dateLine = "";
   try { dateLine = new Date().toLocaleDateString("pt-PT", {weekday: "long", day: "numeric", month: "long"}); dateLine = dateLine.charAt(0).toUpperCase() + dateLine.slice(1); } catch (e) { dateLine = ""; }
   // o ecrã de treino é uma etapa de "Hoje": o separador Hoje fica aceso
-  var activeTab = state.alunoTab === "treino" ? "hoje" : state.alunoTab;
+  var activeTab = state.alunoTab === "treino" || state.alunoTab === "historico" ? "hoje" : state.alunoTab;
   var treinoApp = APP_MODE === "treino";
   var icon = function(paths){ return "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" + paths + "</svg>"; };
   alunoRoot.innerHTML =
@@ -4442,10 +4525,13 @@ function renderAlunoTab(s){
   if (APP_MODE === "treino"){
     if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
     else if (state.alunoTab === "evolucao") el.innerHTML = tplTreinoEvolucao(sv);
+    else if (state.alunoTab === "historico") el.innerHTML = tplTreinoHistorico(sv);
     else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
     else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
     restoreTabUi(el, keep);
     wireAlunoTab(s);
+    wlWakeSync();
+    renderRestTimer(); // o cronómetro fica compacto no ecrã de treino
     return;
   }
   if (state.alunoTab==="plano" && noNutritionOf(s)) state.alunoTab = "hoje"; // sem nutrição não há Plano
@@ -5044,21 +5130,139 @@ function wireTreinoEvolucao(s, el){
   if (sel) sel.addEventListener("change", function(){ state.evoExercise = sel.value; renderAlunoTab(s); });
 }
 
+/* ---------- EVOLVE Treino: resumo da semana e histórico ---------- */
+var WEEK_DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"], WEEK_DAY_LONG = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"];
+function isoOfLocalDate(d){ return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+// os 7 dias (segunda a domingo) da semana de `now`, deslocada `back` semanas para trás
+function weekDaysIso(now, back){
+  var d0 = new Date(now), dow = (d0.getDay() + 6) % 7, out = [];
+  for (var i = 0; i < 7; i++) out.push(isoOfLocalDate(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - dow - 7 * (back || 0) + i)));
+  return out;
+}
+function strengthWeek(s, days){
+  var w = {sessions: 0, sets: 0, volume: 0, byDay: {}};
+  (s.workoutLogs || []).forEach(function(l){
+    if (!l || days.indexOf(l.date) < 0) return;
+    var sets = 0, vol = 0;
+    (l.entries || []).forEach(function(en){ var st = workoutEntryStats(en); sets += st.sets; vol += st.volume; });
+    if (!sets) return;
+    w.sessions++; w.sets += sets; w.volume += vol; w.byDay[l.date] = (w.byDay[l.date] || 0) + 1;
+  });
+  return w;
+}
+function tplSemanaResumo(s){
+  var now = Date.now(), days = weekDaysIso(now, 0), today = isoOfLocalDate(new Date(now)), w = strengthWeek(s, days), prev = strengthWeek(s, weekDaysIso(now, 1));
+  var planned = {}; (s.trainingDays || []).forEach(function(d){ planned[days[(d + 6) % 7]] = true; });
+  var nPlanned = Object.keys(planned).length;
+  var html = "<div class=\"card\" id=\"weekCard\"><div class=\"eyebrow\">Esta semana</div><div class=\"wk-days\" role=\"list\">" + days.map(function(iso, i){
+    var done = !!w.byDay[iso], isToday = iso === today, plan = !!planned[iso];
+    var label = WEEK_DAY_LONG[i] + (done ? ": treino feito" : plan ? (iso < today ? ": previsto, não feito" : ": treino previsto") : ": sem treino");
+    return "<div class=\"wk-day" + (done ? " done" : "") + (plan && !done ? " plan" : "") + (isToday ? " today" : "") + "\" role=\"listitem\" aria-label=\"" + label + "\"><span>" + WEEK_DAY_NAMES[i] + "</span><i aria-hidden=\"true\">" + (done ? "✓" : "") + "</i></div>";
+  }).join("") + "</div>";
+  html += "<div class=\"wk-line\" id=\"weekStrength\"><b>Musculação</b> " + (w.sessions ? plural(w.sessions, "treino", "treinos") + (nPlanned ? " (de " + nPlanned + " previstos)" : "") + " · " + plural(w.sets, "série", "séries") + (w.volume > 0 ? " · " + fmtInt(w.volume) + " kg de volume" : "") : "ainda sem treinos" + (nPlanned ? " (" + nPlanned + " previstos)" : "")) + "</div>";
+  html += "<div class=\"wk-sub\">Semana passada: " + (prev.sessions ? plural(prev.sessions, "treino", "treinos") + " · " + plural(prev.sets, "série", "séries") : "sem treinos registados") + ".</div>";
+  if (corridaModeOf(s) !== "off") html += "<div class=\"wk-line\" id=\"weekRun\"><b>Corrida e bicicleta</b> " + weekRunText(s) + "</div>";
+  return html + "</div>";
+}
+function weekRunText(s){
+  var redraw = function(){ if (APP_MODE === "treino" && state.alunoTab === "hoje" && String(state.alunoStudentId) === String(s.id) && !(modalRoot && modalRoot.firstChild)) renderAlunoTab(s); };
+  if (authRole !== "student") return "<span class=\"muted-p\">visível para o aluno.</span>";
+  var ask = "<button type=\"button\" class=\"btn btn-sm\" id=\"weekRunLoad\">Ver esta semana</button>"; // as corridas só são lidas quando o aluno o pede (ou abre o Cardio)
+  if (!corridaHas("weekSummary")){
+    if (RUN.failed) return "<span class=\"muted-p\">não foi possível abrir a Corrida. Abre o separador Cardio.</span>";
+    if (state.weekRunWant){ loadCorrida().then(function(ok){ if (!ok) RUN.failed = true; redraw(); }); return "<span class=\"muted-p\">a ler…</span>"; }
+    return ask;
+  }
+  var r = RUN.weekSummary(s, redraw, !!state.weekRunWant);
+  if (r.state === "idle") return ask;
+  if (r.state === "loading") return "<span class=\"muted-p\">a ler…</span>";
+  if (r.state === "error") return "<span class=\"muted-p\">não foi possível ler agora. Abre o separador Cardio para tentar outra vez.</span>";
+  if (r.state !== "ok") return "";
+  if (!r.n) return "ainda sem atividades";
+  return plural(r.n, "atividade", "atividades") + " · " + escapeHtml(r.distStr) + " · " + escapeHtml(r.durStr) + (r.hasPace ? " · ritmo médio " + escapeHtml(r.paceStr) + "/km" + (r.nBike ? " (só das corridas)" : "") : "");
+}
+// ----- histórico de sessões: lista completa, pesquisa e detalhe -----
+var HIST_PERIODS = [{id: "4", days: 28, label: "4 semanas"}, {id: "12", days: 84, label: "12 semanas"}, {id: "all", days: null, label: "Tudo"}];
+function histPlain(t){ t = String(t == null ? "" : t).toLowerCase(); try { t = t.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) {} return t; }
+function fmtWeekdayDatePt(iso){ try { return new Date(iso + "T00:00:00").toLocaleDateString("pt-PT", {weekday: "short", day: "2-digit", month: "short"}).replace(/\./g, ""); } catch (e) { return fmtDatePt(iso); } }
+function logTotals(l){
+  var sets = 0, vol = 0;
+  (l.entries || []).forEach(function(en){ var st = workoutEntryStats(en); sets += st.sets; vol += st.volume; });
+  return {sets: sets, volume: vol};
+}
+function histFiltered(s){
+  var q = histPlain(state.histQ || "").trim(), per = HIST_PERIODS.filter(function(p){ return p.id === (state.histPeriod || "all"); })[0] || HIST_PERIODS[2];
+  return (s.workoutLogs || []).filter(function(l){
+    if (!l || !l.date || !logTotals(l).sets) return false;
+    if (per.days){ var d = daysSinceDate(l.date); if (d == null || d >= per.days) return false; }
+    if (!q) return true;
+    return histPlain(l.dayName).indexOf(q) >= 0 || (l.entries || []).some(function(en){ return histPlain(en && en.name).indexOf(q) >= 0; });
+  }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? 1 : -1); });
+}
+function histRowHtml(s, l, synced){
+  var t = logTotals(l), pend = workoutLogPending(s, l, synced);
+  return "<button type=\"button\" class=\"hist-row\" data-hist=\"" + escapeHtml(l.id) + "\"><span class=\"hist-top\"><span class=\"hist-date\">" + escapeHtml(fmtWeekdayDatePt(l.date)) + "</span>" +
+    (pend ? "<span class=\"hist-badge\">⏳ por enviar</span>" : "") + "</span><span class=\"hist-name\">" + escapeHtml(l.dayName || "Treino") + "</span>" +
+    "<span class=\"hist-sub\">" + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + " kg" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + "</span></button>";
+}
+function histListHtml(s){
+  var list = histFiltered(s), synced = authRole === "student" && sbReady ? workoutSyncedIds(s) : null;
+  if (!list.length){
+    var any = (s.workoutLogs || []).some(function(l){ return l && logTotals(l).sets; });
+    return any ? "<p class=\"muted-p\" id=\"histNone\">Nenhum treino corresponde à pesquisa neste período.</p><button type=\"button\" class=\"btn btn-sm\" id=\"histClear\">Limpar pesquisa e filtros</button>"
+      : "<p class=\"muted-p\" id=\"histEmpty\">Ainda não há treinos registados. Depois do primeiro treino terminado, ficam aqui para os rever.</p>";
+  }
+  var html = "<p class=\"muted-p\" id=\"histCount\" style=\"margin-bottom:6px;\">" + plural(list.length, "treino", "treinos") + "</p>", month = "";
+  list.forEach(function(l){
+    var m = ""; try { m = new Date(l.date + "T00:00:00").toLocaleDateString("pt-PT", {month: "long", year: "numeric"}); } catch (e) { m = l.date.slice(0, 7); }
+    if (m !== month){ month = m; html += "<div class=\"hist-month\">" + escapeHtml(m.charAt(0).toUpperCase() + m.slice(1)) + "</div>"; }
+    html += histRowHtml(s, l, synced);
+  });
+  return html;
+}
+function tplTreinoHistorico(s){
+  var per = state.histPeriod || "all";
+  return "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Histórico</div></div>" +
+    "<div class=\"card\" id=\"histCard\"><div class=\"checkin-field\"><label for=\"histQ\">Pesquisar</label><input type=\"search\" id=\"histQ\" class=\"mini-select\" style=\"width:100%;\" placeholder=\"Nome do treino ou do exercício\" autocomplete=\"off\" value=\"" + escapeHtml(state.histQ || "") + "\"></div>" +
+    "<div class=\"evo-chips\" role=\"group\" aria-label=\"Período\">" + HIST_PERIODS.map(function(p){ var on = p.id === per; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-hist-period=\"" + p.id + "\" aria-pressed=\"" + on + "\">" + p.label + "</button>"; }).join("") + "</div>" +
+    tplSyncLine(s) + "<div id=\"histList\" style=\"margin-top:10px;\">" + histListHtml(s) + "</div></div>";
+}
+function workoutDetailHtml(s, l){
+  var t = logTotals(l), info = authRole === "student" && sbReady ? (workoutLogPending(s, l) ? "⏳ Por enviar: guardado neste telemóvel" : "✓ Sincronizado") : "";
+  var html = "<div class=\"mtitle\">" + escapeHtml(l.dayName || "Treino") + "</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(fmtWeekdayDatePt(l.date)) + " · " + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + " kg de volume" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + (info ? "<br>" + escapeHtml(info) : "") + "</p>";
+  (l.entries || []).forEach(function(en){
+    var sets = ((en && en.sets) || []).filter(function(x){ return x && x.reps > 0; });
+    if (!sets.length) return;
+    html += "<div class=\"hist-ex\"><div class=\"hist-ex-name\">" + escapeHtml(en.name || "Exercício") + "</div>" + sets.map(function(x, i){ return "<div class=\"history-row\"><div class=\"hlabel\">Série " + (i + 1) + "</div><div class=\"hval\">" + escapeHtml(fmtSetDetail(x)) + "</div></div>"; }).join("") + "</div>";
+  });
+  if (l.notes) html += "<div class=\"eyebrow\" style=\"margin:12px 0 4px;\">Notas</div><p class=\"muted-p\">" + escapeHtml(l.notes) + "</p>";
+  return html;
+}
+function openWorkoutDetail(s, id){
+  var l = (s.workoutLogs || []).filter(function(x){ return x && String(x.id) === String(id); })[0];
+  return l ? openModal(workoutDetailHtml(s, l)) : null;
+}
+function wireHistorico(s, el){
+  function wireRows(){ el.querySelectorAll("[data-hist]").forEach(function(b){ b.addEventListener("click", function(){ openWorkoutDetail(s, b.getAttribute("data-hist")); }); }); var c = el.querySelector("#histClear"); if (c) c.addEventListener("click", function(){ state.histQ = ""; state.histPeriod = "all"; renderAlunoTab(s); }); }
+  var q = el.querySelector("#histQ");
+  if (q) q.addEventListener("input", function(){ state.histQ = q.value; var box = el.querySelector("#histList"); if (box){ box.innerHTML = histListHtml(s); wireRows(); } }); // só a lista: redesenhar o ecrã fecharia o teclado
+  el.querySelectorAll("[data-hist-period]").forEach(function(b){ b.addEventListener("click", function(){ state.histPeriod = b.getAttribute("data-hist-period"); renderAlunoTab(s); }); });
+  wireRows();
+}
+
 // separador «Treino» da app EVOLVE Treino: o treino de hoje, o programa e os últimos treinos
 function tplTreinoHome(s){
   var html = "";
   if (corridaModeOf(s) !== "off" && runPendingCount() > 0){ // uma gravação interrompida ou corridas por enviar: o aluno não pode deixá-las esquecidas
     html += "<div class=\"card\" id=\"runPendingCard\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin:6px 0 10px;\">Tens uma corrida por terminar ou por enviar neste telemóvel.</p><button type=\"button\" class=\"btn primary\" id=\"openRunsPending\">Abrir a Corrida</button></div>";
   }
-  html += tplTodayWorkout(s);
+  html += tplTodayWorkout(s) + tplSyncLine(s) + tplSemanaResumo(s);
   if (workoutDaysWithExercises(s).length) html += tplTrainingProgramCard(s);
-  var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 5);
+  var allLogs = (s.workoutLogs || []).filter(function(l){ return l && l.date && logTotals(l).sets; });
+  var logs = allLogs.slice().sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }).slice(0, 5), synced = authRole === "student" && sbReady ? workoutSyncedIds(s) : null;
   if (logs.length){
-    html += "<div class=\"card\"><div class=\"eyebrow\">Últimos treinos</div>" + logs.map(function(l){
-      var sets = (l.entries || []).reduce(function(a, e){ return a + ((e && e.sets) || []).length; }, 0);
-      return "<div class=\"prog-day\"><div class=\"pd-row\"><div class=\"pd-info\"><div class=\"pd-name\">" + escapeHtml(l.dayName || "Treino") + "</div>" +
-        "<div class=\"pd-meta\">" + escapeHtml(fmtDatePt(l.date)) + " · " + plural(sets, "série", "séries") + (l.rpe ? " · esforço " + l.rpe + "/10" : "") + "</div></div></div></div>";
-    }).join("") + "</div>";
+    html += "<div class=\"card\" id=\"recentCard\"><div class=\"eyebrow\">Últimos treinos</div>" + logs.map(function(l){ return histRowHtml(s, l, synced); }).join("") +
+      "<button type=\"button\" class=\"btn btn-sm\" id=\"openHistorico\" style=\"margin-top:10px;\">Ver todo o histórico (" + allLogs.length + ")</button></div>";
   }
   html += "<a class=\"card evolve-link\" id=\"goEvolveApp\" href=\"index.html\"><div><div class=\"eyebrow\">Alimentação e avaliações</div><p class=\"muted-p\" style=\"margin:4px 0 0;\">Plano alimentar, medidas e fotos estão na app EVOLVE.</p></div><span class=\"btn btn-sm\">Abrir</span></a>";
   return html;
@@ -5865,8 +6069,9 @@ function tplTreinoScreen(s){
   return head + restored + "<div class=\"wl-progress\"><div class=\"tw-name\">" + escapeHtml(day.name) + "</div>" +
     "<div class=\"tw-progress\"><div class=\"bar-track\"><div class=\"bar-fill\" id=\"wlProgressFill\" style=\"width:" + (total ? Math.round(done / total * 100) : 0) + "%\"></div></div><span class=\"num\" id=\"wlProgressText\">" + done + "/" + total + " séries</span></div>" +
     "<p class=\"wl-remain\" id=\"wlRemain\">" + (done >= total ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + (total - done) + (total - done === 1 ? " série" : " séries") + ".") + "</p>" +
-    "<p class=\"wl-status" + (st.bad ? " bad" : "") + "\" id=\"wlStatus\" role=\"status\">" + escapeHtml(st.text) + "</p></div>" +
-    tplWorkoutLogger(s);
+    "<p class=\"wl-status" + (st.bad ? " bad" : "") + "\" id=\"wlStatus\" role=\"status\" data-day=\"" + escapeHtml(day.id) + "\">" + escapeHtml(st.text) + "</p></div>" +
+    tplWorkoutLogger(s) +
+    "<div class=\"wl-dock\" id=\"wlDock\" hidden><div class=\"wl-dock-info\"><div class=\"wl-dock-ex\" id=\"wlDockEx\"></div><div class=\"wl-dock-set\" id=\"wlDockSet\"></div></div><button type=\"button\" class=\"btn primary\" id=\"wlDockBtn\" data-mode=\"set\">✓ Feita</button></div>";
 }
 
 // ligações entre "Hoje", "Plano" e o ecrã de treino
@@ -5884,6 +6089,12 @@ function wireTrainingNav(s, el){
     if (corridaHas("liveBusy") && RUN.liveBusy() && !window.confirm("Tens uma corrida a decorrer e ela pára se saíres desta app. Sair mesmo assim?")) e.preventDefault();
   });
   el.querySelectorAll("[data-goto-tab]").forEach(function(b){ b.addEventListener("click", function(){ go(b.getAttribute("data-goto-tab")); }); });
+  var weekRunBtn = el.querySelector("#weekRunLoad");
+  if (weekRunBtn) weekRunBtn.addEventListener("click", function(){ state.weekRunWant = true; renderAlunoTab(s); });
+  var openHist = el.querySelector("#openHistorico");
+  if (openHist) openHist.addEventListener("click", function(){ go("historico"); });
+  el.querySelectorAll("#recentCard [data-hist]").forEach(function(b){ b.addEventListener("click", function(){ openWorkoutDetail(s, b.getAttribute("data-hist")); }); });
+  wireSyncLine(el);
   var openRunsPending = el.querySelector("#openRunsPending");
   if (openRunsPending) openRunsPending.addEventListener("click", function(){ go("corrida"); });
   el.querySelectorAll("[data-start-day]").forEach(function(b){ b.addEventListener("click", function(){ go("treino", b.getAttribute("data-start-day")); }); });
@@ -6089,6 +6300,7 @@ function logWorkout(s, data){
   if (!s.workoutLogs) s.workoutLogs = [];
   s.workoutLogs.push(log);
   if (Array.isArray(s.workoutLogsRaw)) s.workoutLogsRaw.push(log); // o que se grava é o original + as sessões novas
+  if (authRole === "student" && sbReady) unsentAdd(s.id, log.id); // por enviar até o servidor confirmar (ver «Estado de sincronização»)
   return log;
 }
 // Profissional a registar um treino (pré-visualização / o próprio profissional que treina): nunca envia a lista da sua cópia —
@@ -6182,9 +6394,14 @@ function restTimerRestart(now){
   if (!restTimer) return;
   restTimerStart(restTimer.base || restTimer.total, restTimer.label, now); // volta ao descanso pré-definido, mesmo depois de −15/+15
 }
+// ecrã de treino aberto → ecrã ligado; ao sair (ou terminar) e sem descanso a correr, volta ao normal
+function wlWakeSync(){
+  wlScreenOn = APP_MODE === "treino" && state.alunoTab === "treino" && state.mode === "aluno";
+  if (wlScreenOn) restWakeAcquire(); else if (!restTimer) restWakeRelease();
+}
 function restTimerStop(){
   restTimer = null;
-  restWakeRelease();
+  if (!wlScreenOn) restWakeRelease();
   if (restTimerInterval){ clearInterval(restTimerInterval); restTimerInterval = null; }
   renderRestTimer();
 }
@@ -6206,11 +6423,12 @@ function restSoundOn(){ try { return !(window.localStorage && window.localStorag
 function restSoundSet(on){ try { window.localStorage && window.localStorage.setItem(REST_SOUND_KEY, on ? "1" : "0"); } catch (e) {} }
 // ecrã ligado enquanto o descanso corre (o iPhone bloqueava o ecrã a meio e o aluno deixava de ver o tempo); sem suporte, nada acontece
 var restWakeLock = null;
+var wlScreenOn = false; // o ecrã de treino está aberto: o ecrã também fica ligado entre séries (não só durante o descanso)
 function restWakeAcquire(){
   try {
     if (!navigator.wakeLock || restWakeLock) return;
     navigator.wakeLock.request("screen").then(function(l){
-      if (!restTimer){ try { l.release(); } catch (e) {} return; }
+      if (!restTimer && !wlScreenOn){ try { l.release(); } catch (e) {} return; }
       restWakeLock = l;
       l.addEventListener("release", function(){ if (restWakeLock === l) restWakeLock = null; });
     }).catch(function(){});
@@ -6268,7 +6486,9 @@ function renderRestTimer(now){
   var app = document.getElementById("alunoApp");
   var visible = !!restTimer && state.mode === "aluno" && !(app && app.classList.contains("hidden")) && !(APP_MODE === "treino" && state.alunoTab === "corrida"); // na Corrida não tapa o ecrã de gravação
   el.classList.toggle("hidden", !visible);
-  if (app) app.classList.toggle("rt-open", visible);
+  var compact = visible && APP_MODE === "treino" && state.alunoTab === "treino"; // no ecrã de treino o descanso ocupa pouco: as séries ficam à vista
+  el.classList.toggle("compact", compact);
+  if (app){ app.classList.toggle("rt-open", visible); app.classList.toggle("rt-compact", compact); }
   if (!visible){ el.innerHTML = ""; el._rtKey = null; return; }
   now = now == null ? Date.now() : now;
   var left = restTimerLeftMs(restTimer, now), over = left < 0, paused = restTimer.pausedLeft != null;
@@ -6299,8 +6519,8 @@ function renderRestTimer(now){
   });
   // ao voltar ao ecrã (desbloquear, mudar de app): recupera o som, o ecrã ligado e o tempo certo sem esperar pelo próximo tick
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState !== "visible" || !restTimer) return;
-    unlockRestAudio(); restWakeAcquire(); restTimerTick(Date.now());
+    if (document.visibilityState !== "visible" || (!restTimer && !wlScreenOn)) return;
+    unlockRestAudio(); restWakeAcquire(); if (restTimer) restTimerTick(Date.now());
   });
 })();
 
@@ -6339,8 +6559,9 @@ function wlHHMM(ms){ var d = new Date(ms); return ("0" + d.getHours()).slice(-2)
 function wlStatusInfo(s, dayId){
   var d = dayId ? wlDraftGet(s, dayId) : null;
   if (!wlDraftOk) return {bad: true, text: "⚠ Este telemóvel não deixou guardar o treino em curso. Não fechem a app antes de terminar."};
-  if (d && d.savedAt) return {bad: false, text: "Treino em curso guardado neste telemóvel às " + wlHHMM(d.savedAt) + ": se fechares a app, retomas daqui."};
-  return {bad: false, text: ""};
+  var off = typeof navigator !== "undefined" && navigator.onLine === false ? " Sem ligação: ao terminar, o treino fica guardado neste telemóvel e segue quando houver rede." : "";
+  if (d && d.savedAt) return {bad: false, text: "Treino em curso guardado neste telemóvel às " + wlHHMM(d.savedAt) + ": se fechares a app, retomas daqui." + off};
+  return {bad: false, text: off.trim()};
 }
 function wlDraftClear(s, dayId){ delete wlDraftStore()[wlDraftKey(s, dayId)]; wlDraftSave(); }
 function wlDraftWipe(){ state.wlDraft = {}; try { window.localStorage && window.localStorage.removeItem(WL_DRAFT_KEY); } catch (e) {} }
@@ -6774,6 +6995,12 @@ function tplWorkoutLogger(s){
       days.map(function(d){ return `<option value="${escapeHtml(d.id)}"${d.id === selected.id ? " selected" : ""}>${escapeHtml(d.name)}</option>`; }).join("") +
     `</select></div>` +
     tplPerioStudentBanner(s) +
+    `<details class="soft-details wl-comfort" id="wlComfort"><summary>Conforto</summary><div class="wl-comfort-body">` +
+      `<label class="wl-opt"><input type="checkbox" data-comfort="big"><span>Controlos grandes: campos e botões maiores, um por linha</span></label>` +
+      `<label class="wl-opt"><input type="checkbox" data-comfort="lefty"><span>Uso com a mão esquerda: «Feita» fica à esquerda</span></label>` +
+      `<label class="wl-opt"><input type="checkbox" data-comfort="sound"><span>Som ao acabar o descanso</span></label>` +
+      `<p class="muted-p" style="margin:6px 0 0;">O ecrã fica ligado enquanto o treino está aberto. Estas opções ficam só neste telemóvel.</p>` +
+    `</div></details>` +
     `<details class="soft-details wl-help" id="wlHelp"><summary>Como registar</summary><div class="wl-help-body">` +
       `<p>Toca em <b>✓</b> ao acabar cada série: o descanso começa sozinho.</p>` +
       (rirMode === "off" ? "" : `<p><b>RIR = repetições em reserva.</b> Quantas repetições ainda conseguias fazer no fim da série, antes de não conseguires mais.</p>` +
@@ -6784,7 +7011,7 @@ function tplWorkoutLogger(s){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
     var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
     var exDone = 0; for (var q = 0; q < e.sets; q++){ var dq = draft.sets[e.id + ":" + q]; if (dq && dq.done) exDone++; }
-    html += `<div class="wl-ex${exDone && exDone >= e.sets ? " complete" : ""}" data-ex="${escapeHtml(e.id)}">` +
+    html += `<div class="wl-ex${exDone && exDone >= e.sets ? " complete" : ""}" data-ex="${escapeHtml(e.id)}" data-name="${escapeHtml(e.name)}">` +
       `<div class="wl-ex-head"><div class="wl-ex-name"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}" aria-label="Ver demonstração de ${escapeHtml(e.name)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button></div>` +
       `<span class="wl-ex-count" data-ex-count="${escapeHtml(e.id)}" aria-label="${exDone} de ${e.sets} séries feitas">${exDone}/${e.sets}</span></div>` +
       `<div class="muted-p wl-ex-presc">${presc}</div>` +
@@ -6875,7 +7102,28 @@ function wlSuggestSessionRpe(el, recordDraft){
   rpe.style.setProperty("--p", rangeFill(rpe.value) + "%");
   recordDraft(rpe);
 }
+var WL_COMFORT_KEY = "evolve_wl_comfort_v1";
+function wlComfortRead(){ try { var c = JSON.parse(window.localStorage.getItem(WL_COMFORT_KEY) || "{}"); return c && typeof c === "object" ? {big: !!c.big, lefty: !!c.lefty} : {big: false, lefty: false}; } catch (e) { return {big: false, lefty: false}; } }
+function wlComfortWrite(c){ try { window.localStorage.setItem(WL_COMFORT_KEY, JSON.stringify({big: !!c.big, lefty: !!c.lefty})); } catch (e) {} }
 function wireWorkoutLogger(s, el, rerender){
+  var appEl = document.getElementById && document.getElementById("alunoApp");
+  var dock = el.querySelector("#wlDock");
+  function applyComfort(){
+    var c = wlComfortRead(), on = !!dock;
+    try {
+      if (appEl && appEl.classList){ appEl.classList.toggle("wl-big", on && c.big); appEl.classList.toggle("wl-lefty", on && c.lefty); appEl.classList.toggle("has-dock", on); }
+      if (document.body && document.body.classList) document.body.classList.toggle("wl-dock-on", on);
+    } catch (e) {}
+  }
+  applyComfort(); // fora do ecrã de treino tira as classes
+  el.querySelectorAll("[data-comfort]").forEach(function(cb){
+    var k = cb.getAttribute("data-comfort");
+    cb.checked = k === "sound" ? restSoundOn() : !!wlComfortRead()[k];
+    cb.addEventListener("change", function(){
+      if (k === "sound"){ restSoundSet(cb.checked); if (cb.checked) unlockRestAudio(); renderRestTimer(); return; }
+      var c = wlComfortRead(); c[k] = cb.checked; wlComfortWrite(c); applyComfort();
+    });
+  });
   var daySel = el.querySelector("#wlDay");
   if (daySel) daySel.addEventListener("change", function(){ state.workoutDayId = daySel.value; rerender(); });
   wireExerciseInfo(s, el);
@@ -6896,6 +7144,22 @@ function wireWorkoutLogger(s, el, rerender){
     if (state.wlRestored) delete state.wlRestored[wlDraftKey(s, dayId)]; // a partir do primeiro toque o treino já não é «retomado»
     var rb = el.querySelector("#wlRestored"); if (rb && rb.parentNode) rb.parentNode.removeChild(rb);
     showDraftStatus();
+    if (dock) updateDock(el.querySelector(".wl-set.current"));
+  }
+  // barra fixa em baixo (ao alcance do polegar): série atual com carga e repetições, e o «✓ Feita» (só marca quando tocas)
+  function updateDock(cur){
+    if (!dock) return;
+    var ex = dock.querySelector("#wlDockEx"), st = dock.querySelector("#wlDockSet"), btn = dock.querySelector("#wlDockBtn");
+    dock.hidden = false;
+    if (!cur){
+      ex.textContent = "Treino completo"; st.textContent = "Todas as séries marcadas"; btn.textContent = "Terminar treino"; btn.setAttribute("data-mode", "finish");
+      return;
+    }
+    var exBox = cur.closest ? cur.closest(".wl-ex") : null, box = cur.querySelector("[data-wl-done]"), m = /:(\d+)$/.exec(box ? box.getAttribute("data-wl-done") : "");
+    var load = (cur.querySelector("[data-wl-load]") || {}).value, reps = (cur.querySelector("[data-wl-reps]") || {}).value;
+    ex.textContent = exBox ? exBox.getAttribute("data-name") || "" : "";
+    st.textContent = "Série " + (m ? parseInt(m[1], 10) + 1 : "?") + " de " + (exBox ? exBox.querySelectorAll(".wl-set").length : "?") + " · " + (parseFloat(load) > 0 ? String(load).replace(".", ",") + " kg" : "sem carga") + " × " + (reps || "?") + " reps";
+    btn.textContent = "✓ Feita"; btn.setAttribute("data-mode", "set");
   }
   function showDraftStatus(){
     var st = el.querySelector("#wlStatus"); if (!st || !dayId) return;
@@ -6978,6 +7242,7 @@ function wireWorkoutLogger(s, el, rerender){
       var left = boxes.length - n;
       rem.textContent = !boxes.length ? "" : left <= 0 ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + left + (left === 1 ? " série." : " séries.");
     }
+    updateDock(currentSet);
     return currentSet;
   }
   // uma série marcada sem repetições não é registada ao terminar: fica assinalada (a marca nunca se desfaz sozinha)
@@ -7006,6 +7271,10 @@ function wireWorkoutLogger(s, el, rerender){
         if (repsInput && repsInput.focus) repsInput.focus();
       }
       var cur = updateProgress();
+      try {
+        var exBox2 = box.closest ? box.closest(".wl-ex") : null, mm = /:(\d+)$/.exec(box.getAttribute("data-wl-done") || ""), left2 = el.querySelectorAll("[data-wl-done]").length - el.querySelectorAll("[data-wl-done]:checked").length;
+        announce("Série " + (mm ? parseInt(mm[1], 10) + 1 : "") + (exBox2 ? " de " + exBox2.getAttribute("data-name") : "") + (box.checked ? " feita. " : " desmarcada. ") + (left2 ? "Faltam " + left2 + (left2 === 1 ? " série." : " séries.") : "Todas as séries marcadas."));
+      } catch (e) {}
       if (!box.checked) return;
       if (!missingReps && cur && cur.scrollIntoView){ try { cur.scrollIntoView({block: "nearest"}); } catch (e) {} } // a série atual fica à vista (sem saltos se já se vê)
       wlCopyToNextSet(el, box, recordDraft);
@@ -7020,6 +7289,12 @@ function wireWorkoutLogger(s, el, rerender){
   updateProgress();
   el.querySelectorAll("[data-wl-done]").forEach(function(b){ if (b.checked) flagMissingReps(b); });
   showDraftStatus();
+  var dockBtn = el.querySelector("#wlDockBtn");
+  if (dockBtn) dockBtn.addEventListener("click", function(){
+    if (dockBtn.getAttribute("data-mode") === "finish"){ if (save) save.click(); return; }
+    var b = el.querySelector(".wl-set.current [data-wl-done]");
+    if (b) b.click(); // toque do aluno: marca a série atual com os valores que estão nos campos
+  });
   var restart = el.querySelector("#wlRestart");
   if (restart && dayId) restart.addEventListener("click", function(){
     var ask = openModal("<div class=\"mtitle\">Recomeçar este treino?</div><p class=\"muted-p\" style=\"margin-bottom:14px;\">As séries marcadas e os valores já escritos são apagados deste telemóvel. Os treinos já terminados e guardados não mudam.</p>" +
@@ -8860,6 +9135,7 @@ function wireAlunoTab(s){
   wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
   wireTrainingNav(s, el);
   if (APP_MODE === "treino" && state.alunoTab === "evolucao") wireTreinoEvolucao(s, el);
+  if (APP_MODE === "treino" && state.alunoTab === "historico") wireHistorico(s, el);
   if (APP_MODE === "treino" && state.alunoTab === "corrida"){
     var retry = el.querySelector("#corridaRetry");
     if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderAlunoTab(s); });

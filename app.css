@@ -1024,3 +1024,73 @@ html[data-app="gestao"] .muted-p{font-weight:300;}
 .evo-bar.now i{background:var(--accent);}
 .evo-bar small{font-size:0.6rem; color:var(--muted); white-space:nowrap;}
 #evoTotals .kpi:nth-child(3){grid-column:1 / -1;}
+
+/* ---- EVOLVE Treino: resumo da semana, histórico e estado de sincronização ---- */
+.wk-days{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; margin:10px 0 12px;}
+.wk-day{display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 0; border:1px solid var(--line); border-radius:12px; font-size:0.72rem; color:var(--muted);}
+.wk-day i{display:grid; place-items:center; width:22px; height:22px; border-radius:50%; border:1px dashed var(--line-strong); font-style:normal; font-size:0.78rem; font-weight:700; color:var(--accent-ink);}
+.wk-day.plan{border-color:var(--line-strong);}
+.wk-day.done{border-color:var(--accent); background:var(--accent-soft); color:var(--ink);}
+.wk-day.done i{background:var(--accent); border:none;}
+.wk-day.today{box-shadow:0 0 0 2px var(--accent-strong);}
+.wk-line{font-size:0.92rem; margin-top:6px; line-height:1.4;}
+.wk-sub{font-size:0.78rem; color:var(--muted); margin-top:6px;}
+.sync-line{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px solid var(--line); border-radius:14px; font-size:0.84rem; background:var(--surface-2);}
+.sync-line .btn{min-height:44px;}
+.sync-line.synced{color:var(--muted);}
+.sync-line.pending,.sync-line.offline,.sync-line.sending{border-color:var(--accent);}
+.sync-line.error{border-color:var(--critical); color:var(--critical-text);}
+.hist-month{margin:14px 0 4px; font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);}
+.hist-row{display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; min-height:56px; margin-top:8px; padding:10px 12px; text-align:left; border:1px solid var(--line); border-radius:14px; background:var(--surface-2); color:var(--ink); font:inherit; cursor:pointer; touch-action:manipulation;}
+.hist-row:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
+.hist-top{display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%;}
+.hist-date{font-size:0.78rem; color:var(--muted);}
+.hist-badge{font-size:0.72rem; font-weight:700; color:var(--accent-strong); white-space:nowrap;}
+.hist-name{font-family:var(--display); font-weight:700; font-size:1.02rem;}
+.hist-sub{font-size:0.8rem; color:var(--muted);}
+.hist-ex{margin-top:12px;}
+.hist-ex-name{font-family:var(--display); font-weight:700; font-size:0.98rem; margin-bottom:2px;}
+#histQ{min-height:44px; font-size:1rem;}
+
+/* ---- EVOLVE Treino: cronómetro compacto, barra da série atual, conforto (controlos grandes, mão esquerda), letra maior ---- */
+#restTimer.compact{padding:8px 12px 10px;}
+#restTimer.compact .rt-time{font-size:2.1rem; margin:0 0 4px;}
+#restTimer.compact .rt-bar{height:4px;}
+#restTimer.compact .rt-status{min-height:0; margin-top:2px;}
+#restTimer.compact .rt-status:empty{display:none;}
+#restTimer.compact .rt-sound{display:none;} /* o som liga-se e desliga-se em «Conforto» */
+#restTimer.compact .rt-actions{margin-top:6px;}
+#alunoApp.rt-open.rt-compact .aluno-tabs{padding-top:140px;}
+.wl-dock{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(86px + env(safe-area-inset-bottom, 0px)); width:min(398px, calc(100% - 32px)); z-index:24; display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; background:var(--surface-2); border:1px solid var(--accent); border-radius:16px; box-shadow:0 12px 28px -10px rgba(0,0,0,0.6);}
+.wl-dock[hidden]{display:none;}
+.wl-dock-info{flex:1; min-width:0;}
+.wl-dock-ex{font-family:var(--display); font-weight:700; font-size:0.98rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.wl-dock-set{font-size:0.8rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.wl-dock .btn{min-height:52px; min-width:112px; font-size:1rem; touch-action:manipulation;}
+@media (min-width:760px){ .wl-dock{width:min(560px, calc(100% - 32px));} }
+#alunoApp.has-dock .aluno-tabs{padding-bottom:160px;}
+body.wl-dock-on .sync-pill{bottom:calc(env(safe-area-inset-bottom,0px) + 156px);}
+.wl-comfort-body{display:flex; flex-direction:column; gap:2px; padding-top:6px;}
+.wl-opt{display:flex; align-items:center; gap:12px; min-height:48px; font-size:0.9rem; cursor:pointer;}
+.wl-opt input{width:24px; height:24px; flex:none; accent-color:var(--accent);}
+#alunoApp.wl-lefty .wl-set{grid-template-columns:62px minmax(0,1fr);}
+#alunoApp.wl-lefty .wl-set .wl-done{order:-1;}
+#alunoApp.wl-lefty .wl-set .wl-warn{order:3;}
+#alunoApp.wl-lefty .wl-dock{flex-direction:row-reverse; padding:8px 14px 8px 8px;}
+#alunoApp.wl-lefty .wl-dock-info{text-align:right;}
+#alunoApp.wl-big .wl-set{grid-template-columns:minmax(0,1fr) 74px;}
+#alunoApp.wl-big.wl-lefty .wl-set{grid-template-columns:74px minmax(0,1fr);}
+#alunoApp.wl-big .wl-row{grid-template-columns:1fr; gap:10px;}
+#alunoApp.wl-big .wl-ctl{grid-template-columns:60px minmax(0,1fr) 60px; gap:6px;}
+#alunoApp.wl-big .wl-ctl .wl-step{grid-row:auto; min-height:60px; min-width:60px; font-size:1.9rem;}
+#alunoApp.wl-big .wl-ctl input[type=number]{grid-column:auto; grid-row:auto; min-height:60px !important; font-size:1.6rem !important;}
+#alunoApp.wl-big .wl-done{min-height:96px;}
+#alunoApp.wl-big .wl-tick{width:56px; height:56px;}
+#alunoApp.wl-big .wl-chip{min-height:52px; min-width:60px; font-size:1rem;}
+/* letra maior no ecrã de treino: as etiquetas pequenas eram difíceis de ler a meio de um exercício */
+#alunoApp .wl-lbl{font-size:0.78rem;}
+#alunoApp .wl-done small{font-size:0.72rem;}
+#alunoApp .wl-ex-presc{font-size:0.86rem;}
+#alunoApp .wl-ex-last{font-size:0.86rem;}
+#alunoApp .wl-ex-count{font-size:0.86rem;}
+#alunoApp .wl-status, #alunoApp .wl-remain{font-size:0.82rem;}

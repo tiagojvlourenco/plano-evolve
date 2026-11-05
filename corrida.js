@@ -1502,6 +1502,27 @@ RUN.go = function(name, params){
 };
 // a vista «live» só é do aluno com o gravador ligado; mas uma gravação em curso (GPS ligado) não se esconde se o profissional mudar o modo entretanto:
 // o ecrã do gravador decide o que mostrar (o aluno tem de a poder terminar ou descartar)
+/* Resumo da semana atual (segunda a domingo) para o separador «Treino» da app: devolve já formatado o que está em memória e, se ainda não leu as
+   corridas deste aluno, só lê se load === true (o aluno pediu: tocou em «Ver esta semana»); então usa o mesmo pedido do ecrã Cardio e chama onChange() no
+   fim. Sem load nunca pede nada à rede: a Corrida só lê dados quando o aluno a abre ou o pede. Só para o aluno: a pré-visualização do profissional não
+   lê nada. Nunca lança. Estados: «preview», «idle» (ainda por ler), «loading», «error» (err: net|missing|other), «ok». O ritmo médio é só das corridas. */
+RUN.weekSummary = function(s, onChange, load){
+  try {
+    if (!s || authRole !== "student") return {state: "preview"};
+    runUiSync(s.id);
+    var d = runUiData;
+    if (load === true && !d.loading && (!d.loaded || (Date.now() - d.loadedAt > RUN_UI_STALE_MS && d.raw <= RUN_UI_PAGE))){
+      runUiLoad(d, s.id, false, function(){ if (typeof onChange === "function") onChange(); });
+    }
+    if (!d.loaded) return {state: d.loading ? "loading" : "idle"};
+    if (d.err) return {state: "error", err: d.err};
+    var rows = d.weekRuns || d.runs, w = runUiWeeks(rows, Date.now())[0], days = {};
+    rows.forEach(function(r){ if (r.startedAtMs >= w.start) days[runUiIsoDay(r.startedAtMs)] = true; });
+    var pace = runPaceOf(w.runDistM, w.runMovingS);
+    return {state: "ok", n: w.n, nBike: w.nBike, nRun: w.n - w.nBike, days: Object.keys(days),
+      distStr: runDistStr(w.distM), durStr: runDurStr(w.durationS), paceStr: pace ? runPaceStr(pace) : "", hasPace: !!pace};
+  } catch (e) { return {state: "error", err: "other"}; }
+};
 function runUiLiveView(s){
   if (authRole !== "student") return false;
   if (s.runsMode === "live") return typeof RUN.liveScreen === "function";
