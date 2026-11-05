@@ -519,3 +519,24 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 - **Para mexer nas tabelas:** editar `alimentos.js` (já não está no `app.js`). Os testes leem-no pelo `tests/extract-app.js` e `tests/helpers/app-text.js`. Os catálogos vindos do Supabase continuam a juntar-se a `FOOD_DB` em memória.
 - **Teste:** `tests/alimentos-ficheiro.test.js` (10 verificações, incluindo o treino a abrir sem pedir o ficheiro).
 - **Não medido num telemóvel real:** o ganho de tempo/descarga esperado é de cerca de 200 KB de código a menos para interpretar no EVOLVE Treino (≈ 37 KB comprimidos); só se confirma em iPhone/Android com rede móvel.
+
+## 8au. EVOLVE Treino: registo de séries mais simples e separador «Evolução»
+
+**Registo (separador Treino, ecrã de treino)** — o que já existia ficou como estava (botões −/+, RIR por toque, cronómetro de descanso, rascunho no telemóvel, «Terminar treino» com confirmação). Acrescentou-se:
+- **Série atual:** a primeira série por marcar tem a etiqueta «Agora» e `aria-current="step"`; cada exercício mostra `feitas/total` (e ✓ quando completo); por baixo da barra diz quantas séries faltam. Ao marcar ✓ a série seguinte passa a atual e fica à vista (sem saltos se já se vê).
+- **Valores da série anterior:** a série seguinte herda carga, **repetições** (novo) e RIR da que acabaste de marcar, a não ser que já a tenhas mexido. Marcar ✓ nunca é automático.
+- **Série marcada sem repetições:** fica assinalada a vermelho, a marca não se desfaz e a série não é registada ao terminar; a pergunta de «Terminar treino» diz quantas são.
+- **Retoma:** se a app for fechada ou recarregada com séries marcadas, «Hoje» mostra «Treino em curso» e o ecrã de treino mostra «Retomaste o treino em curso» (com «Recomeçar», que pede confirmação). O aviso sai no primeiro toque.
+- **Estado do rascunho:** linha «Treino em curso guardado neste telemóvel às HH:MM». Se o telemóvel não deixar guardar (sem espaço, modo privado) avisa para não fechar a app. Sincronização e «sem ligação» continuam no indicador que já existia.
+- Continua a valer: o rascunho expira ao fim de 12 h; o treino terminado fica na fila de envio se não houver rede.
+
+**Separador «Evolução» (EVOLVE Treino: Treino | Evolução | Cardio)** — só com o que está registado em `workout_logs`:
+- Período (4 semanas, 12 semanas, tudo): treinos, séries e volume, com a diferença para o período anterior do mesmo tamanho.
+- Exercício (lista dos registados, do mais frequente): recordes pessoais de sempre (carga máxima, 1RM estimado, mais repetições, maior volume numa sessão, com a data da primeira vez e 🏆 se foi na última sessão); última sessão vs anterior; gráfico de 1RM estimado; volume das últimas 8 sessões. Exercícios de peso do corpo mostram só repetições.
+- **O que é medido e o que é estimado:** volume = repetições × carga (séries sem carga não somam); o 1RM é uma **estimativa** (Epley, até 12 repetições), com o aviso no ecrã. Nada é projetado nem extrapolado.
+- Estados vazios: sem treinos; período sem treinos; menos de 2 sessões (não mostra gráfico).
+- **Corrida/bicicleta:** o separador Cardio já tinha distância, duração, ritmo médio e quilómetros por semana (corrida.js, não foi alterado); a Evolução tem só o atalho para lá.
+- Sem alterações a schema, migrações, RLS ou Supabase.
+- Testes: `tests/treino-registo-evolucao.test.js` (35 verificações, em Node e Chromium).
+- **Não verificado em telemóvel real:** toque, teclado numérico, ecrã apagado a meio do treino, rascunho depois de o iOS fechar a app em segundo plano.
+
