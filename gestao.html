@@ -50,7 +50,7 @@
 
   <div id="appLoading" class="card" style="max-width:430px; margin:60px auto; text-align:center;">
     <div class="eyebrow" style="margin-bottom:8px;" id="appLoadingBrand">EVOLVE</div>
-    <p class="muted-p" id="appLoadingText">A carregar...</p>
+    <p class="muted-p" id="appLoadingText" role="status">A carregar...</p>
   </div>
 
   <div id="authScreen" class="hidden" style="max-width:380px; margin:40px auto;">
@@ -66,7 +66,7 @@
           <label for="authPassword">Password</label>
           <input type="password" id="authPassword" name="password" autocomplete="current-password" minlength="6" required>
         </div>
-        <p class="muted-p" id="authError" style="display:none; margin-bottom:10px;"></p>
+        <p class="muted-p" id="authError" role="alert" style="display:none; margin-bottom:10px;"></p>
         <button type="submit" class="btn primary" id="authSubmit" style="width:100%;">Entrar</button>
       </form>
       <p class="muted-p" style="margin-top:14px; text-align:center;">
@@ -87,13 +87,13 @@
           <label for="recoveryPassword">Nova password</label>
           <input type="password" id="recoveryPassword" name="password" autocomplete="new-password" minlength="6" required>
         </div>
-        <p class="muted-p" id="recoveryError" style="display:none; margin-bottom:10px;"></p>
+        <p class="muted-p" id="recoveryError" role="alert" style="display:none; margin-bottom:10px;"></p>
         <button type="submit" class="btn primary" id="recoverySubmit" style="width:100%;">Guardar nova password</button>
       </form>
     </div>
   </div>
 
-  <div id="connectionErrorScreen" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
+  <div id="connectionErrorScreen" role="alert" class="hidden card" style="max-width:380px; margin:60px auto; text-align:center;">
     <div class="eyebrow" style="margin-bottom:8px;">Sem ligação</div>
     <p class="muted-p">Não foi possível ligar ao servidor. Verifica a tua ligação à internet.</p>
     <button type="button" class="btn primary" id="connectionRetry" style="margin-top:14px;">Tentar novamente</button>
@@ -105,12 +105,13 @@
     <button type="button" class="btn" id="noStudentSignOut" style="margin-top:14px;">Sair</button>
   </div>
 
-  <div id="alunoApp" class="hidden"></div>
-  <div id="proApp" class="hidden"></div>
+  <div id="alunoApp" class="hidden" role="main"></div>
+  <div id="proApp" class="hidden" role="main"></div>
 </div>
 
 <div id="restTimer" class="hidden" role="region" aria-label="Cronómetro de descanso"></div>
 <div id="modalRoot"></div>
+<div id="liveRegion" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="app.js"></script>
 </body>

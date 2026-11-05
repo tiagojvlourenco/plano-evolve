@@ -85,7 +85,7 @@ function rowWith(mode){
     return {h: h, inp: inp, chipH: chipH, firstSet: firstSet, over: document.documentElement.scrollWidth > window.innerWidth, n: sets.length};
   });
   check.check("12. Os campos e as pastilhas são fáceis de tocar (≥ 40 px) e a página não tem scroll horizontal", m.inp >= 40 && m.chipH >= 40 && !m.over);
-  check.check("13. Uma série sem RIR ocupa menos de 100 px (antes eram cerca de 190) e 9 séries cabem em menos de 2300 px de página (antes 2850)", m.firstSet < 100 && m.h < 2300);
+  check.check("13. Uma série sem RIR ocupa menos de 100 px (antes eram cerca de 190) e 9 séries cabem em menos de 2500 px de página (antes 2850; com as áreas de toque de 44 px)", m.firstSet < 100 && m.h < 2500);
   await A.ctx.close();
 
   // largura de 320 px (iPhone SE antigo)

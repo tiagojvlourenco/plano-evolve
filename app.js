@@ -1942,10 +1942,18 @@ function isTrainingDayToday(s){
 // caixa também deixou de ser "nowrap": num ecrã estreito, uma mensagem
 // comprida centrada sem quebra de linha esticava para lá dos dois lados
 // do ecrã (ver .toast, agora com max-width e quebra de linha normal).
+function announce(msg){
+  var r = document.getElementById && document.getElementById("liveRegion");
+  if (!r) return;
+  r.textContent = "";   // limpar primeiro: a mesma mensagem duas vezes seguidas também é lida
+  setTimeout(function(){ r.textContent = String(msg == null ? "" : msg); }, 60);
+}
 function showToast(msg){
   var t = document.createElement("div");
   t.className = "toast" + (typeof modalRoot !== "undefined" && modalRoot && modalRoot.firstChild ? " toast-top" : "");   // com uma janela aberta, não tapa os botões dela
   t.textContent = msg;
+  if (t.setAttribute) t.setAttribute("aria-hidden", "true");   // quem usa leitor de ecrã ouve-o na região viva (#liveRegion), não duas vezes
+  announce(msg);
   document.body.appendChild(t);
   requestAnimationFrame(function(){ t.classList.add("show"); });
   var duration = Math.max(1800, Math.min(6000, msg.length * 60));
@@ -6714,19 +6722,52 @@ var currentAuthUserId = null;
 
 /* ===================== MODAL ===================== */
 var modalRoot = document.getElementById("modalRoot");
-function closeModal(){ modalRoot.innerHTML=""; }
+/* Janelas (modais): papel de diálogo, foco para dentro ao abrir, Esc fecha, Tab não escapa para trás da janela e, ao fechar, o foco volta ao botão de onde se abriu. */
+var modalOpener = null, modalSeq = 0;
+function closeModal(){
+  var opener = modalOpener; modalOpener = null;
+  modalRoot.innerHTML = "";
+  if (opener && opener.focus) setTimeout(function(){ try { if (opener.isConnected && !modalRoot.firstChild) opener.focus({preventScroll: true}); } catch (e) {} }, 0);
+}
+function modalFocusables(sheet){
+  return Array.prototype.filter.call(sheet.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'), function(el){ return el.getClientRects().length > 0; });
+}
+document.addEventListener("keydown", function(e){
+  var sheet = modalRoot && modalRoot.querySelector(".modal-sheet");
+  if (!sheet) return;
+  if (e.key === "Escape"){ e.preventDefault(); closeModal(); return; }
+  if (e.key !== "Tab") return;
+  var f = modalFocusables(sheet);
+  if (!f.length){ e.preventDefault(); sheet.focus(); return; }
+  var first = f[0], last = f[f.length - 1], cur = document.activeElement;
+  if (!sheet.contains(cur)){ e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && (cur === first || cur === sheet)){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && cur === last){ e.preventDefault(); first.focus(); }
+});
 function openModal(innerHtml, opts){
   opts = opts || {};
+  if (!modalRoot.firstChild){ var a = document.activeElement; modalOpener = a && a !== document.body && !modalRoot.contains(a) ? a : null; }   // o que a abriu, para devolver o foco
   var overlay = document.createElement("div");
   overlay.className = "modal-overlay" + (opts.centered ? " centered" : "");
   overlay.addEventListener("click", function(e){ if (e.target===overlay) closeModal(); });
   var sheet = document.createElement("div");
   sheet.className = "modal-sheet";
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-modal", "true");
+  sheet.setAttribute("tabindex", "-1");
   sheet.innerHTML = "<div class=\"mclose\"><button type=\"button\" aria-label=\"Fechar\">✕</button></div>" + innerHtml;
   sheet.querySelector(".mclose button").addEventListener("click", closeModal);
   overlay.appendChild(sheet);
   modalRoot.innerHTML = "";
   modalRoot.appendChild(overlay);
+  var n = ++modalSeq;
+  requestAnimationFrame(function(){   // alguns ecrãs preenchem a janela logo a seguir a abri-la: o título e o foco resolvem-se depois
+    if (n !== modalSeq || !sheet.isConnected) return;
+    var ttl = sheet.querySelector(".mtitle");
+    if (ttl){ ttl.id = ttl.id || "modalTitle" + n; sheet.setAttribute("aria-labelledby", ttl.id); sheet.removeAttribute("aria-label"); }
+    else sheet.setAttribute("aria-label", "Janela");
+    if (!sheet.contains(document.activeElement)) sheet.focus({preventScroll: true});
+  });
   return sheet;
 }
 
@@ -7401,11 +7442,11 @@ function renderAlunoShell(){
   alunoRoot.innerHTML =
     (showSwitcher ? previewBannerHtml(s) : "") +
     "<div class=\"phone-header\">" +
-      "<div><div class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</div>" + (dateLine ? "<div class=\"sub\">" + escapeHtml(dateLine) + "</div>" : "") + "</div>" +
+      "<div><h1 class=\"greet\">Olá, " + escapeHtml(s.name.split(" ")[0]) + "</h1>" + (dateLine ? "<div class=\"sub\">" + escapeHtml(dateLine) + "</div>" : "") + "</div>" +
       (showSwitcher ? "<select class=\"student-switch\" id=\"alunoStudentSwitch\" aria-label=\"Pré-visualizar como\">" + optsHtml + "</select>" : "") +
     "</div>" +
     "<div class=\"aluno-tabs\" id=\"alunoTabContent\"></div>" +
-    "<div class=\"tabbar\">" +
+    "<div class=\"tabbar\" role=\"navigation\" aria-label=\"Navegação principal\">" +
     (treinoApp ?
       "<button data-tab=\"hoje\" aria-label=\"Treino\">" + icon("<path d=\"M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11\"/>") + "<span>Treino</span></button>" +
       "<button data-tab=\"corrida\" aria-label=\"Cardio: corrida e bicicleta\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Cardio</span></button>"
@@ -7419,7 +7460,7 @@ function renderAlunoShell(){
     state.alunoStudentId = e.target.value; renderAlunoShell();
   });
   alunoRoot.querySelectorAll(".tabbar button").forEach(function(btn){
-    if (btn.getAttribute("data-tab")===activeTab) btn.classList.add("active");
+    if (btn.getAttribute("data-tab")===activeTab){ btn.classList.add("active"); btn.setAttribute("aria-current", "page"); }
     btn.addEventListener("click", function(){
       state.alunoTab = btn.getAttribute("data-tab");
       state.ciOpen = false;
