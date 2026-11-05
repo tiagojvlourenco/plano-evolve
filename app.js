@@ -4386,6 +4386,7 @@ function renderAlunoShell(){
     "<div class=\"tabbar\" role=\"navigation\" aria-label=\"Navegação principal\">" +
     (treinoApp ?
       "<button data-tab=\"hoje\" aria-label=\"Treino\">" + icon("<path d=\"M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11\"/>") + "<span>Treino</span></button>" +
+      "<button data-tab=\"evolucao\" aria-label=\"Evolução: cargas, volume e recordes\">" + icon("<path d=\"M3 17l6-6 4 4 8-8\"/><path d=\"M15 7h6v6\"/>") + "<span>Evolução</span></button>" +
       "<button data-tab=\"corrida\" aria-label=\"Cardio: corrida e bicicleta\">" + icon("<circle cx=\"14.5\" cy=\"4.5\" r=\"1.8\"/><path d=\"M9 21l2.5-5.5L9 13l2-4 4 2.5 3 .5M12 8.5L8.5 10l-1 3\"/>") + "<span>Cardio</span></button>"
     :
       "<button data-tab=\"hoje\" aria-label=\"Hoje\">" + icon("<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.5\"/>") + "<span>Hoje</span></button>" +
@@ -4440,6 +4441,7 @@ function renderAlunoTab(s){
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
   if (APP_MODE === "treino"){
     if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
+    else if (state.alunoTab === "evolucao") el.innerHTML = tplTreinoEvolucao(sv);
     else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
     else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
     restoreTabUi(el, keep);
@@ -4888,6 +4890,160 @@ function tplCorridaTab(sv, s){
   return "<div class=\"card\" style=\"text-align:center;\"><div class=\"eyebrow\">Corrida</div><p class=\"muted-p\" style=\"margin-top:8px;\">Não foi possível abrir a Corrida. Verifica a ligação e tenta outra vez.</p>" +
     "<button type=\"button\" class=\"btn\" id=\"corridaRetry\" style=\"margin-top:10px;\">Tentar outra vez</button></div>";
 }
+/* ---------- EVOLVE Treino: separador «Evolução» ----------
+   Só usa o que o aluno registou (workout_logs: data, exercício, séries com repetições e carga, RIR). Nada é inventado:
+   - volume = soma de repetições × carga (séries sem carga não somam kg);
+   - 1RM é uma ESTIMATIVA (fórmula de Epley, até 12 repetições), nunca uma carga medida;
+   - recordes = melhores valores de sempre do próprio aluno, com a data em que apareceram pela primeira vez.
+   Filtros: período (4 semanas, 12 semanas, tudo) e exercício. Em memória: state.evoPeriod, state.evoExercise. */
+var EVO_PERIODS = [{id: "4", days: 28, label: "4 semanas"}, {id: "12", days: 84, label: "12 semanas"}, {id: "all", days: null, label: "Tudo"}];
+var EVO_BARS_MAX = 8; // barras por sessão que cabem num telemóvel; o gráfico de linha mostra todas as do período
+function evoPeriod(){ var id = state.evoPeriod || "12"; return EVO_PERIODS.filter(function(p){ return p.id === id; })[0] || EVO_PERIODS[1]; }
+function fmtInt(n){ return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+function evoNameKey(name){ return String(name || "").trim().toLowerCase(); }
+// exercícios com pelo menos uma série válida registada: nome, nº de sessões e data da última
+function evoExerciseList(s){
+  var map = {};
+  (s.workoutLogs || []).forEach(function(l){
+    (l.entries || []).forEach(function(en){
+      var key = evoNameKey(en && en.name);
+      if (!key || !workoutEntryStats(en).sets) return;
+      var m = map[key] = map[key] || {key: key, name: String(en.name).trim(), id: en.exerciseId || "", n: 0, last: ""};
+      m.n++; if (l.date > m.last){ m.last = l.date; m.name = String(en.name).trim(); m.id = en.exerciseId || m.id; }
+    });
+  });
+  return Object.keys(map).map(function(k){ return map[k]; }).sort(function(a, b){ return b.n - a.n || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0) || (a.name < b.name ? -1 : 1); });
+}
+// sessões de um exercício, da mais antiga para a mais recente, com as séries e as contas feitas sobre elas
+function evoSessions(s, ex){
+  var out = [];
+  (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function(l){
+    var en = (l.entries || []).filter(function(x){ return x && evoNameKey(x.name) === ex.key; })[0];
+    if (!en) return;
+    var st = workoutEntryStats(en);
+    if (!st.sets) return;
+    var sets = (en.sets || []).filter(function(x){ return x && x.reps > 0; });
+    st.date = l.date; st.setList = sets;
+    st.totalReps = sets.reduce(function(a, x){ return a + x.reps; }, 0);
+    out.push(st);
+  });
+  return out;
+}
+function evoInPeriod(date, period, offset){ // offset 0 = período atual, 1 = o período anterior do mesmo tamanho
+  var d = daysSinceDate(date);
+  if (d == null) return false;
+  if (!period.days) return offset ? false : true;
+  return offset ? (d >= period.days && d < period.days * 2) : d < period.days;
+}
+function evoTotals(s, period, offset){
+  var t = {sessions: 0, sets: 0, volume: 0};
+  (s.workoutLogs || []).forEach(function(l){
+    if (!evoInPeriod(l.date, period, offset)) return;
+    var sets = 0, vol = 0;
+    (l.entries || []).forEach(function(en){ var st = workoutEntryStats(en); sets += st.sets; vol += st.volume; });
+    if (!sets) return;
+    t.sessions++; t.sets += sets; t.volume += vol;
+  });
+  return t;
+}
+function evoDelta(cur, prev, unit){
+  if (!(prev > 0) || cur == null) return "";
+  var d = cur - prev;
+  if (Math.abs(d) < 0.0001) return "<span class=\"evo-delta\">= igual</span>";
+  var pct = Math.round(d / prev * 100);
+  return "<span class=\"evo-delta\">" + (d > 0 ? "▲ +" : "▼ −") + (unit === " kg" && Math.abs(d) < 100 ? fmtKg(Math.abs(d)) : fmtInt(Math.abs(d))) + unit + (pct ? " (" + (d > 0 ? "+" : "−") + Math.abs(pct) + "%)" : "") + "</span>";
+}
+function evoKpi(label, value, note){ return "<div class=\"kpi\"><div class=\"l\">" + escapeHtml(label) + "</div><div class=\"v num\">" + value + "</div>" + (note ? "<div class=\"evo-note\">" + note + "</div>" : "") + "</div>"; }
+// o melhor valor de uma métrica ao longo das sessões: a primeira vez que apareceu (as repetições dessa marca não "roubam" a data)
+function evoBest(sessions, pick){
+  var best = null;
+  sessions.forEach(function(x){ var v = pick(x); if (v > 0 && (!best || v > best.v)) best = {v: v, date: x.date}; });
+  return best;
+}
+function evoBarsHtml(items, fmt, label){
+  var max = Math.max.apply(null, items.map(function(i){ return i.v; }));
+  if (!(max > 0)) return "";
+  return "<div class=\"evo-bars\" role=\"img\" aria-label=\"" + escapeHtml(label) + "\">" + items.map(function(i, idx){
+    var pct = Math.max(6, Math.round(i.v / max * 100)), last = idx === items.length - 1;
+    return "<div class=\"evo-bar" + (last ? " now" : "") + "\"><span class=\"num\">" + escapeHtml(fmt(i.v)) + "</span><i style=\"height:" + pct + "%\"></i><small>" + escapeHtml(fmtDatePt(i.date)) + "</small></div>";
+  }).join("") + "</div>";
+}
+function tplTreinoEvolucao(s){
+  var head = tabHead("Evolução", "Cargas, repetições, volume e recordes, só com o que registaste.");
+  var list = evoExerciseList(s);
+  if (!list.length){
+    return head + "<div class=\"card\" id=\"evoEmpty\"><div class=\"eyebrow\">Evolução</div><p class=\"muted-p\" style=\"margin-top:6px;\">Ainda não há treinos registados. Depois do primeiro treino terminado, aqui vês as cargas, o volume e os recordes de cada exercício.</p></div>" + tplEvoCardioLink(s);
+  }
+  var period = evoPeriod(), cur = evoTotals(s, period, 0), prev = period.days ? evoTotals(s, period, 1) : null;
+  var html = head + "<div class=\"card\"><div class=\"eyebrow\">Período</div><div class=\"evo-chips\" role=\"group\" aria-label=\"Período\">" +
+    EVO_PERIODS.map(function(p){ var on = p.id === period.id; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-evo-period=\"" + p.id + "\" aria-pressed=\"" + on + "\">" + p.label + "</button>"; }).join("") + "</div>";
+  if (!cur.sessions){
+    html += "<p class=\"muted-p\" id=\"evoNoPeriod\" style=\"margin-top:10px;\">Sem treinos registados " + (period.days ? "nas últimas " + period.label : "") + ". Escolhe um período maior para veres o histórico.</p></div>";
+  } else {
+    var cmp = prev && prev.sessions ? " vs " + period.label + " anteriores" : "";
+    html += "<div class=\"kpi-grid evo-kpis\" id=\"evoTotals\">" +
+      evoKpi("Treinos", String(cur.sessions), prev && prev.sessions ? evoDelta(cur.sessions, prev.sessions, "") : "") +
+      evoKpi("Séries", String(cur.sets), prev && prev.sessions ? evoDelta(cur.sets, prev.sets, "") : "") +
+      evoKpi("Volume", fmtInt(cur.volume) + "<small>kg</small>", prev && prev.sessions ? evoDelta(cur.volume, prev.volume, " kg") : "") + "</div>" +
+      "<p class=\"muted-p evo-foot\">" + (cmp ? "Comparação" + escapeHtml(cmp) + ". " : "") + "Volume = repetições × carga, só das séries com carga.</p></div>";
+  }
+  // exercício escolhido (por omissão o mais registado)
+  var chosen = list.filter(function(x){ return x.key === state.evoExercise; })[0] || list[0];
+  html += "<div class=\"card\" id=\"evoExercise\"><div class=\"checkin-field\"><label for=\"evoExSel\">Exercício</label><select id=\"evoExSel\" class=\"mini-select\" style=\"width:100%;\">" +
+    list.map(function(x){ return "<option value=\"" + escapeHtml(x.key) + "\"" + (x.key === chosen.key ? " selected" : "") + ">" + escapeHtml(x.name) + " (" + x.n + ")</option>"; }).join("") + "</select></div>";
+  var all = evoSessions(s, chosen), kind = all.length ? all[all.length - 1].kind : "load";
+  all = all.filter(function(x){ return x.kind === kind; }); // nunca mistura kg com repetições
+  var inP = all.filter(function(x){ return evoInPeriod(x.date, period, 0); });
+  var lastS = all[all.length - 1], prevS = all[all.length - 2];
+  // recordes de sempre
+  html += "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">Recordes pessoais</div><div class=\"kpi-grid evo-kpis\" id=\"evoRecords\">";
+  var recs = kind === "load" ? [
+    ["Carga máxima", evoBest(all, function(x){ return x.topLoad; }), function(v){ return fmtKg(v) + "<small>kg</small>"; }, ""],
+    ["1RM estimado", evoBest(all, function(x){ return x.est1RM; }), function(v){ return fmtKg(v) + "<small>kg</small>"; }, "estimativa, não medido"],
+    ["Mais repetições", evoBest(all, function(x){ return x.topReps; }), function(v){ return String(v); }, "numa série"],
+    ["Maior volume", evoBest(all, function(x){ return x.volume; }), function(v){ return fmtInt(v) + "<small>kg</small>"; }, "numa sessão"]
+  ] : [
+    ["Mais repetições", evoBest(all, function(x){ return x.topReps; }), function(v){ return String(v); }, "numa série"],
+    ["Mais no total", evoBest(all, function(x){ return x.totalReps; }), function(v){ return String(v); }, "repetições numa sessão"]
+  ];
+  recs.forEach(function(r){
+    var fresh = r[1] && lastS && all.length > 1 && r[1].date === lastS.date;
+    html += evoKpi(r[0], r[1] ? r[2](r[1].v) : "—", r[1] ? escapeHtml(fmtDateFullPt(r[1].date)) + (fresh ? " · 🏆 na última sessão" : "") + (r[3] ? "<br>" + r[3] : "") : "");
+  });
+  html += "</div>";
+  // última sessão vs anterior
+  html += "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">Última sessão</div>";
+  if (!lastS) html += "<p class=\"muted-p\">Sem sessões deste exercício.</p>";
+  else {
+    html += "<p class=\"muted-p\" style=\"margin-bottom:6px;\">" + escapeHtml(fmtDateFullPt(lastS.date)) + ": " + lastS.setList.map(function(x){ return escapeHtml(fmtSetDetail(x)); }).join(" · ") + "</p>";
+    if (!prevS) html += "<p class=\"muted-p\" id=\"evoOneSession\">Só há uma sessão deste exercício. Na seguinte já podes comparar.</p>";
+    else html += "<div class=\"evo-cmp\" id=\"evoCompare\"><span>vs " + escapeHtml(fmtDateFullPt(prevS.date)) + ":</span> " +
+      (kind === "load" ? "<span>carga de topo " + evoDelta(lastS.topLoad, prevS.topLoad, " kg") + "</span> <span>1RM est. " + evoDelta(lastS.est1RM, prevS.est1RM, " kg") + "</span> <span>volume " + evoDelta(lastS.volume, prevS.volume, " kg") + "</span>"
+        : "<span>repetições (máx. numa série) " + evoDelta(lastS.topReps, prevS.topReps, "") + "</span> <span>total " + evoDelta(lastS.totalReps, prevS.totalReps, "") + "</span>") + "</div>";
+  }
+  // gráficos no período
+  html += "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">" + (kind === "load" ? "1RM estimado (kg)" : "Repetições máximas numa série") + "</div>";
+  if (inP.length < 2) html += "<p class=\"muted-p\" id=\"evoNoChart\">" + (all.length < 2 ? "São precisas pelo menos 2 sessões deste exercício para mostrar a evolução." : "Menos de 2 sessões neste período. Escolhe um período maior.") + "</p>";
+  else html += "<div class=\"weight-chart-wrap\">" + weightSvg(inP.map(function(x){ return {date: x.date, w: kind === "load" ? x.est1RM : x.topReps}; })) + "</div>" +
+    (kind === "load" ? "<p class=\"muted-p evo-foot\">Estimativa pela fórmula de Epley a partir da melhor série de cada sessão (até 12 repetições).</p>" : "");
+  if (inP.length >= 1){
+    var barItems = inP.slice(-EVO_BARS_MAX).map(function(x){ return {date: x.date, v: kind === "load" ? x.volume : x.totalReps}; });
+    var bars = evoBarsHtml(barItems, function(v){ return fmtInt(v); }, (kind === "load" ? "Volume por sessão, em kg" : "Repetições por sessão") + ", das mais antigas para a mais recente");
+    if (bars) html += "<div class=\"eyebrow\" style=\"margin:14px 0 6px;\">" + (kind === "load" ? "Volume por sessão (kg)" : "Repetições por sessão") + (inP.length > EVO_BARS_MAX ? " · últimas " + EVO_BARS_MAX : "") + "</div>" + bars;
+  }
+  html += "</div>";
+  return html + tplEvoCardioLink(s);
+}
+function tplEvoCardioLink(s){
+  if (corridaModeOf(s) === "off") return "";
+  return "<div class=\"card\" id=\"evoCardio\"><div class=\"eyebrow\">Corrida e bicicleta</div><p class=\"muted-p\" style=\"margin:6px 0 10px;\">A distância, a duração e o ritmo por semana, e cada atividade, estão no separador Cardio.</p><button type=\"button\" class=\"btn btn-sm\" data-goto-tab=\"corrida\">Abrir o Cardio</button></div>";
+}
+function wireTreinoEvolucao(s, el){
+  el.querySelectorAll("[data-evo-period]").forEach(function(b){ b.addEventListener("click", function(){ state.evoPeriod = b.getAttribute("data-evo-period"); renderAlunoTab(s); }); });
+  var sel = el.querySelector("#evoExSel");
+  if (sel) sel.addEventListener("change", function(){ state.evoExercise = sel.value; renderAlunoTab(s); });
+}
+
 // separador «Treino» da app EVOLVE Treino: o treino de hoje, o programa e os últimos treinos
 function tplTreinoHome(s){
   var html = "";
@@ -5703,8 +5859,13 @@ function tplTreinoScreen(s){
   var day = workoutDayFor(s);
   if (!day) return head + tplWorkoutLogger(s);
   var total = workoutSetCount(day), done = workoutDraftDone(s, day);
-  return head + "<div class=\"wl-progress\"><div class=\"tw-name\">" + escapeHtml(day.name) + "</div>" +
-    "<div class=\"tw-progress\"><div class=\"bar-track\"><div class=\"bar-fill\" id=\"wlProgressFill\" style=\"width:" + (total ? Math.round(done / total * 100) : 0) + "%\"></div></div><span class=\"num\" id=\"wlProgressText\">" + done + "/" + total + " séries</span></div></div>" +
+  var dk = wlDraftKey(s, day.id), draftAt = wlDraftGet(s, day.id).savedAt, st = wlStatusInfo(s, day.id);
+  var restored = state.wlRestored && state.wlRestored[dk] && done > 0 ?
+    "<div class=\"wl-restored\" id=\"wlRestored\"><span>Retomaste o treino em curso: <b>" + done + " de " + total + " séries</b> já marcadas" + (draftAt ? " (guardado às " + wlHHMM(draftAt) + ")" : "") + ".</span><button type=\"button\" class=\"btn btn-sm\" id=\"wlRestart\">Recomeçar</button></div>" : "";
+  return head + restored + "<div class=\"wl-progress\"><div class=\"tw-name\">" + escapeHtml(day.name) + "</div>" +
+    "<div class=\"tw-progress\"><div class=\"bar-track\"><div class=\"bar-fill\" id=\"wlProgressFill\" style=\"width:" + (total ? Math.round(done / total * 100) : 0) + "%\"></div></div><span class=\"num\" id=\"wlProgressText\">" + done + "/" + total + " séries</span></div>" +
+    "<p class=\"wl-remain\" id=\"wlRemain\">" + (done >= total ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + (total - done) + (total - done === 1 ? " série" : " séries") + ".") + "</p>" +
+    "<p class=\"wl-status" + (st.bad ? " bad" : "") + "\" id=\"wlStatus\" role=\"status\">" + escapeHtml(st.text) + "</p></div>" +
     tplWorkoutLogger(s);
 }
 
@@ -6152,7 +6313,12 @@ function wlDraftStore(){
     state.wlDraft = {};
     try { var raw = window.localStorage && window.localStorage.getItem(WL_DRAFT_KEY); if (raw) state.wlDraft = JSON.parse(raw) || {}; } catch (e) { state.wlDraft = {}; }
     // rascunhos de há mais de 12 h (ou sem data) são de um treino abandonado: não reaparecem como "séries feitas"
-    Object.keys(state.wlDraft).forEach(function(k){ var d = state.wlDraft[k]; if (!d || !(Date.now() - d.savedAt < WL_DRAFT_MAX_AGE_MS)) delete state.wlDraft[k]; });
+    state.wlRestored = {}; // rascunhos com séries feitas que vieram do telemóvel (a app foi fechada ou recarregada): o ecrã de treino avisa que retomou
+    Object.keys(state.wlDraft).forEach(function(k){
+      var d = state.wlDraft[k];
+      if (!d || !(Date.now() - d.savedAt < WL_DRAFT_MAX_AGE_MS)) delete state.wlDraft[k];
+      else if (d.sets && Object.keys(d.sets).some(function(x){ return d.sets[x] && d.sets[x].done; })) state.wlRestored[k] = true;
+    });
   }
   return state.wlDraft;
 }
@@ -6163,7 +6329,19 @@ function wlDraftGet(s, dayId){
   if (!all[k]) all[k] = {sets: {}, rpe: null, notes: ""};
   return all[k];
 }
-function wlDraftSave(dayDraft){ if (dayDraft) dayDraft.savedAt = Date.now(); try { window.localStorage && window.localStorage.setItem(WL_DRAFT_KEY, JSON.stringify(wlDraftStore())); } catch (e) {} }
+var wlDraftOk = true; // falso se o telemóvel não deixou guardar o rascunho (sem espaço, modo privado): o ecrã avisa para não fechar a app
+function wlDraftSave(dayDraft){
+  if (dayDraft) dayDraft.savedAt = Date.now();
+  try { if (window.localStorage){ window.localStorage.setItem(WL_DRAFT_KEY, JSON.stringify(wlDraftStore())); wlDraftOk = true; } else wlDraftOk = false; } catch (e) { wlDraftOk = false; }
+}
+function wlHHMM(ms){ var d = new Date(ms); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+// linha de estado do rascunho: onde está guardado o treino em curso (ou o aviso se não ficou guardado)
+function wlStatusInfo(s, dayId){
+  var d = dayId ? wlDraftGet(s, dayId) : null;
+  if (!wlDraftOk) return {bad: true, text: "⚠ Este telemóvel não deixou guardar o treino em curso. Não fechem a app antes de terminar."};
+  if (d && d.savedAt) return {bad: false, text: "Treino em curso guardado neste telemóvel às " + wlHHMM(d.savedAt) + ": se fechares a app, retomas daqui."};
+  return {bad: false, text: ""};
+}
 function wlDraftClear(s, dayId){ delete wlDraftStore()[wlDraftKey(s, dayId)]; wlDraftSave(); }
 function wlDraftWipe(){ state.wlDraft = {}; try { window.localStorage && window.localStorage.removeItem(WL_DRAFT_KEY); } catch (e) {} }
 
@@ -6605,8 +6783,10 @@ function tplWorkoutLogger(s){
   selected.exercises.forEach(function(e){
     var hist = exerciseHistory(s, e.id, e.name), last = hist[hist.length - 1];
     var presc = e.sets + " × " + escapeHtml(e.reps) + (e.rpe ? " · RPE " + e.rpe : "") + (e.rest != null ? " · descanso " + e.rest + " s" : "");
-    html += `<div class="wl-ex" data-ex="${escapeHtml(e.id)}">` +
-      `<div class="wl-ex-name"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}" aria-label="Ver demonstração de ${escapeHtml(e.name)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button></div>` +
+    var exDone = 0; for (var q = 0; q < e.sets; q++){ var dq = draft.sets[e.id + ":" + q]; if (dq && dq.done) exDone++; }
+    html += `<div class="wl-ex${exDone && exDone >= e.sets ? " complete" : ""}" data-ex="${escapeHtml(e.id)}">` +
+      `<div class="wl-ex-head"><div class="wl-ex-name"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}" aria-label="Ver demonstração de ${escapeHtml(e.name)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button></div>` +
+      `<span class="wl-ex-count" data-ex-count="${escapeHtml(e.id)}" aria-label="${exDone} de ${e.sets} séries feitas">${exDone}/${e.sets}</span></div>` +
       `<div class="muted-p wl-ex-presc">${presc}</div>` +
       (e.notes ? `<div class="muted-p wl-ex-note">${escapeHtml(e.notes)}</div>` : "") +
       (last ? `<div class="wl-ex-last">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
@@ -6625,7 +6805,7 @@ function tplWorkoutLogger(s){
           var on = c[0] === 3 ? rirNum >= 3 : rirNum === c[0];
           return `<button type="button" class="wl-chip${on ? " on" : ""}" data-rir-pick="${key}" data-rir-val="${c[0]}" aria-pressed="${on}">${c[1]}</button>`;
         }).join("") + `</div>` : "";
-      html += `<div class="wl-set${d.done ? " done" : ""}">` +
+      html += `<div class="wl-set${d.done ? " done" : ""}"><span class="wl-now" aria-hidden="true">Agora</span>` +
         `<div class="wl-fields">` +
           `<div class="wl-row">` +
             `<div class="wl-field"><span class="wl-lbl">kg</span><div class="wl-ctl">` + step("load", -2.5, "Menos 2,5 kg") +
@@ -6639,6 +6819,7 @@ function tplWorkoutLogger(s){
           `<input type="hidden" data-wl-rir="${key}" value="${escapeHtml(rirVal)}">` +
         `</div>` +
         `<label class="wl-done"><input type="checkbox" data-wl-done="${key}" data-rest-start="${restSec}" data-rest-label="${escapeHtml(e.name)}" aria-label="Série ${i + 1} feita"${d.done ? " checked" : ""}><span class="wl-tick" aria-hidden="true">✓</span><small>Série ${i + 1}</small></label>` +
+        `<p class="wl-warn" role="alert">Indica as repetições: sem elas esta série não fica registada.</p>` +
       `</div>`;
     }
     html += `</div>`;
@@ -6655,14 +6836,14 @@ function tplWorkoutLogger(s){
 
 var uiTapGuardUntil = 0; // depois de terminar o treino ignora toques rápidos que cairiam em 'Hoje'
 var wlSaving = {}; // alunos com uma gravação de treino em curso (id → true): impede duplo toque enquanto o pedido está a meio
-// próxima série do mesmo exercício: herda a carga e o RIR da que acabou de ser feita, se ainda não foram tocados nem feita
+// próxima série do mesmo exercício: herda a carga, as repetições e o RIR da que acabou de ser feita, se ainda não foram tocados nem feita
 function wlCopyToNextSet(el, box, recordDraft){
   var m = /^(.*):(\d+)$/.exec(box.getAttribute("data-wl-done") || "");
   if (!m) return;
   var nextKey = m[1] + ":" + (parseInt(m[2], 10) + 1);
   var nextBox = el.querySelector('[data-wl-done="' + nextKey + '"]');
   if (!nextBox || nextBox.checked) return;
-  ["load", "rir"].forEach(function(kind){
+  ["load", "reps", "rir"].forEach(function(kind){
     var from = el.querySelector('[data-wl-' + kind + '="' + box.getAttribute("data-wl-done") + '"]'), to = el.querySelector('[data-wl-' + kind + '="' + nextKey + '"]');
     if (!from || !to || from.value === "" || to.getAttribute("data-touched") === "1") return;
     to.value = from.value;
@@ -6712,12 +6893,21 @@ function wireWorkoutLogger(s, el, rerender){
     else if (target.id === "wlRpe") draft.rpe = parseInt(target.value, 10) || null;
     else if (target.id === "wlNotes") draft.notes = target.value;
     wlDraftSave(draft);
+    if (state.wlRestored) delete state.wlRestored[wlDraftKey(s, dayId)]; // a partir do primeiro toque o treino já não é «retomado»
+    var rb = el.querySelector("#wlRestored"); if (rb && rb.parentNode) rb.parentNode.removeChild(rb);
+    showDraftStatus();
+  }
+  function showDraftStatus(){
+    var st = el.querySelector("#wlStatus"); if (!st || !dayId) return;
+    var info = wlStatusInfo(s, dayId);
+    st.textContent = info.text;
+    if (st.classList) st.classList.toggle("bad", !!info.bad);
   }
   // ligado a cada campo (o contentor #alunoTabContent é reutilizado entre desenhos: um listener nele acumular-se-ia)
-  el.querySelectorAll("[data-wl-load], [data-wl-rir]").forEach(function(f){
-    var d0 = dayId ? wlDraftGet(s, dayId).sets[f.getAttribute("data-wl-load") || f.getAttribute("data-wl-rir")] : null;
+  el.querySelectorAll("[data-wl-load], [data-wl-reps], [data-wl-rir]").forEach(function(f){
+    var d0 = dayId ? wlDraftGet(s, dayId).sets[f.getAttribute("data-wl-load") || f.getAttribute("data-wl-reps") || f.getAttribute("data-wl-rir")] : null;
     f.addEventListener("input", function(){ f.setAttribute("data-touched", "1"); });
-    if (d0 && ((f.hasAttribute("data-wl-load") && d0.load !== undefined) || (f.hasAttribute("data-wl-rir") && d0.rir !== undefined))) f.setAttribute("data-touched", "1");
+    if (d0 && ((f.hasAttribute("data-wl-load") && d0.load !== undefined) || (f.hasAttribute("data-wl-reps") && d0.reps !== undefined) || (f.hasAttribute("data-wl-rir") && d0.rir !== undefined))) f.setAttribute("data-touched", "1");
   });
   el.querySelectorAll("[data-wl-reps], [data-wl-load], [data-wl-rir], [data-wl-done], #wlRpe, #wlNotes").forEach(function(field){
     ["input", "change"].forEach(function(evt){ field.addEventListener(evt, function(){ recordDraft(field); }); });
@@ -6763,18 +6953,61 @@ function wireWorkoutLogger(s, el, rerender){
   });
   // ✓ numa série: marca-a, avança o progresso e começa sozinho o descanso prescrito (desmarcar não faz nada)
   function updateProgress(){
-    var boxes = el.querySelectorAll("[data-wl-done]"), n = 0;
-    boxes.forEach(function(b){ if (b.checked) n++; });
-    var fill = el.querySelector("#wlProgressFill"), txt = el.querySelector("#wlProgressText");
+    var boxes = el.querySelectorAll("[data-wl-done]"), n = 0, currentSet = null;
+    boxes.forEach(function(b){
+      if (b.checked) n++;
+      var row = b.closest ? b.closest(".wl-set") : null;
+      if (!row) return;
+      var isCur = !b.checked && !currentSet;
+      if (isCur) currentSet = row;
+      if (row.classList) row.classList.toggle("current", isCur);
+      if (isCur) row.setAttribute("aria-current", "step"); else if (row.removeAttribute) row.removeAttribute("aria-current");
+    });
+    // contador por exercício (feitas/total) e exercício completo
+    el.querySelectorAll(".wl-ex").forEach(function(ex){
+      var all = ex.querySelectorAll("[data-wl-done]"), d = 0;
+      all.forEach(function(b){ if (b.checked) d++; });
+      var c = ex.querySelector("[data-ex-count]");
+      if (c){ c.textContent = d + "/" + all.length; c.setAttribute("aria-label", d + " de " + all.length + " séries feitas"); }
+      if (ex.classList) ex.classList.toggle("complete", all.length > 0 && d === all.length);
+    });
+    var fill = el.querySelector("#wlProgressFill"), txt = el.querySelector("#wlProgressText"), rem = el.querySelector("#wlRemain");
     if (fill) fill.style.width = (boxes.length ? Math.round(n / boxes.length * 100) : 0) + "%";
     if (txt) txt.textContent = n + "/" + boxes.length + " séries";
+    if (rem){
+      var left = boxes.length - n;
+      rem.textContent = !boxes.length ? "" : left <= 0 ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + left + (left === 1 ? " série." : " séries.");
+    }
+    return currentSet;
   }
+  // uma série marcada sem repetições não é registada ao terminar: fica assinalada (a marca nunca se desfaz sozinha)
+  function flagMissingReps(box){
+    var row = box.closest ? box.closest(".wl-set") : null, reps = el.querySelector('[data-wl-reps="' + box.getAttribute("data-wl-done") + '"]');
+    if (!row || !reps) return false;
+    var missing = box.checked && !(parseFloat(reps.value) > 0);
+    if (row.classList) row.classList.toggle("needs-reps", missing);
+    if (missing) reps.setAttribute("aria-invalid", "true"); else reps.removeAttribute("aria-invalid");
+    return missing;
+  }
+  el.querySelectorAll("[data-wl-reps]").forEach(function(f){
+    f.addEventListener("input", function(){
+      var key = f.getAttribute("data-wl-reps"), box = el.querySelector('[data-wl-done="' + key + '"]');
+      if (box) flagMissingReps(box);
+    });
+  });
   el.querySelectorAll("[data-wl-done]").forEach(function(box){
     box.addEventListener("change", function(){
       var row = box.closest ? box.closest(".wl-set") : null;
       if (row) row.classList.toggle("done", !!box.checked);
-      updateProgress();
+      var missingReps = flagMissingReps(box);
+      if (missingReps){
+        var repsInput = el.querySelector('[data-wl-reps="' + box.getAttribute("data-wl-done") + '"]');
+        showToast("Indica as repetições desta série");
+        if (repsInput && repsInput.focus) repsInput.focus();
+      }
+      var cur = updateProgress();
       if (!box.checked) return;
+      if (!missingReps && cur && cur.scrollIntoView){ try { cur.scrollIntoView({block: "nearest"}); } catch (e) {} } // a série atual fica à vista (sem saltos se já se vê)
       wlCopyToNextSet(el, box, recordDraft);
       wlSuggestSessionRpe(el, recordDraft);
       var allBoxes = el.querySelectorAll("[data-wl-done]");
@@ -6782,6 +7015,18 @@ function wireWorkoutLogger(s, el, rerender){
       var secs = parseInt(box.getAttribute("data-rest-start"), 10);
       if (secs >= 5) restTimerStart(secs, box.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
     });
+  });
+  // estado inicial: série atual, contadores e estado do rascunho; séries já marcadas sem repetições ficam assinaladas
+  updateProgress();
+  el.querySelectorAll("[data-wl-done]").forEach(function(b){ if (b.checked) flagMissingReps(b); });
+  showDraftStatus();
+  var restart = el.querySelector("#wlRestart");
+  if (restart && dayId) restart.addEventListener("click", function(){
+    var ask = openModal("<div class=\"mtitle\">Recomeçar este treino?</div><p class=\"muted-p\" style=\"margin-bottom:14px;\">As séries marcadas e os valores já escritos são apagados deste telemóvel. Os treinos já terminados e guardados não mudam.</p>" +
+      "<button type=\"button\" class=\"btn primary\" id=\"wlRestartYes\" style=\"width:100%; margin-bottom:8px;\">Recomeçar do zero</button>" +
+      "<button type=\"button\" class=\"btn\" id=\"wlRestartNo\" style=\"width:100%;\">Manter o treino</button>");
+    ask.querySelector("#wlRestartYes").addEventListener("click", function(){ closeModal(); wlDraftClear(s, dayId); if (state.wlRestored) delete state.wlRestored[wlDraftKey(s, dayId)]; restTimerStop(); rerender(); });
+    ask.querySelector("#wlRestartNo").addEventListener("click", closeModal);
   });
   // atalhos do cronómetro livre (30 s a 3 min)
   el.querySelectorAll("button[data-rest-start]").forEach(function(b){
@@ -6798,10 +7043,12 @@ function wireWorkoutLogger(s, el, rerender){
     var err = el.querySelector("#wlError");
     // um treino guardado só o profissional o apaga (o aluno só acrescenta): se há séries por marcar, pergunta antes de terminar
     if (!finishConfirmed){
-      var allBoxes = el.querySelectorAll("[data-wl-done]"), ticked = 0;
-      allBoxes.forEach(function(b){ if (b.checked) ticked++; });
-      if (ticked > 0 && ticked < allBoxes.length && typeof openModal === "function" && modalRoot){
-        var ask = openModal("<div class=\"mtitle\">Terminar o treino?</div><p class=\"muted-p\" style=\"margin-bottom:14px;\">Marcaste " + ticked + " de " + allBoxes.length + " séries. As que ficaram por marcar não são registadas, e um treino guardado só o teu profissional o pode apagar.</p>" +
+      var allBoxes = el.querySelectorAll("[data-wl-done]"), ticked = 0, noReps = 0;
+      allBoxes.forEach(function(b){ if (b.checked){ ticked++; var r0 = el.querySelector('[data-wl-reps="' + b.getAttribute("data-wl-done") + '"]'); if (!r0 || !(parseFloat(r0.value) > 0)) noReps++; } });
+      if (ticked > 0 && (ticked < allBoxes.length || noReps > 0) && typeof openModal === "function" && modalRoot){
+        var ask = openModal("<div class=\"mtitle\">Terminar o treino?</div><p class=\"muted-p\" style=\"margin-bottom:14px;\">Marcaste " + ticked + " de " + allBoxes.length + " séries." +
+          (noReps ? " <b>" + plural(noReps, "série marcada está sem repetições e não é registada", "séries marcadas estão sem repetições e não são registadas") + ".</b>" : "") +
+          (ticked < allBoxes.length ? " As que ficaram por marcar não são registadas." : "") + " Um treino guardado só o teu profissional o pode apagar.</p>" +
           "<button type=\"button\" class=\"btn primary\" id=\"wlFinishYes\" style=\"width:100%; margin-bottom:8px;\">Terminar mesmo assim</button>" +
           "<button type=\"button\" class=\"btn\" id=\"wlFinishNo\" style=\"width:100%;\">Continuar a treinar</button>");
         ask.querySelector("#wlFinishYes").addEventListener("click", function(){ closeModal(); finishConfirmed = true; save.click(); finishConfirmed = false; });
@@ -8612,6 +8859,7 @@ function wireAlunoTab(s){
   var el = document.getElementById("alunoTabContent");
   wireWorkoutLogger(s, el, function(){ renderAlunoTab(s); });
   wireTrainingNav(s, el);
+  if (APP_MODE === "treino" && state.alunoTab === "evolucao") wireTreinoEvolucao(s, el);
   if (APP_MODE === "treino" && state.alunoTab === "corrida"){
     var retry = el.querySelector("#corridaRetry");
     if (retry) retry.addEventListener("click", function(){ RUN.failed = false; renderAlunoTab(s); });
