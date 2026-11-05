@@ -499,3 +499,14 @@ Apanhado no varrimento dos botões: depois de «Não vou fazer esta refeição»
 ## 8ar. Terminar o treino com séries por marcar
 
 Se o aluno toca em «Terminar treino» com algumas (mas não todas) as séries marcadas, aparece «Terminar o treino?» com «Terminar mesmo assim» e «Continuar a treinar»: um treino guardado só o profissional o pode apagar. Com todas as séries marcadas guarda logo; sem nenhuma continua a avisar que falta marcar pelo menos uma.
+
+## 8as. EVOLVE Treino: acessibilidade, áreas de toque e fiabilidade (auditoria de 05/11/2026)
+
+Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma interação demora mais de ~70 ms; o offline (aviso «Sem ligação · 1 alteração guardada neste telemóvel», fila local e envio ao voltar a rede) e o service worker (rede primeiro, cópia só sem rede) já estavam certos e não foram tocados. O que se corrigiu:
+- **Estrutura:** `#alunoApp`/`#proApp` com `role="main"`; a saudação é o `h1`; a barra de baixo é `role="navigation"` com nome e `aria-current="page"` no separador ativo; carregar = `role="status"`, erros de entrada e de ligação = `role="alert"`.
+- **Janelas (`openModal`):** `role="dialog"` + `aria-modal`, título/nome, o foco entra na janela, Tab/Shift+Tab não saem dela, Esc fecha, e ao fechar o foco volta ao botão de onde abriu (`closeModal`).
+- **Avisos:** `showToast` anuncia-se numa região viva persistente (`#liveRegion`, `announce()`); a bolha visual fica `aria-hidden` para não repetir.
+- **Toque:** `#alunoApp` e «Sair» com mínimo de 44 px (botões pequenos, cabeçalhos de secção, seletores, campos, nomes dos exercícios, pastilhas e «?» do RIR). Os − / + das cargas e repetições ficam com 34 × 44 px (acima dos 24 px do WCAG 2.2; 44 de largura não cabe duas colunas num ecrã de 390 px).
+- **Contraste:** o texto vermelho passa a `--critical-text` (#FF7B72, ≥ 5,3:1 em todas as superfícies); o `--critical` antigo ficava a 4,1:1 sobre `--surface-2`.
+- **Foco e movimento:** contorno `:focus-visible` global e, com «reduzir movimento» ligado, animações e transições praticamente instantâneas.
+- Testado em `tests/treino-a11y.test.js`. **Não se mexeu** em schema, RLS, migrações nem Supabase. Ideias que ficaram de fora por não compensarem: `content-visibility` nos exercícios (sem ganho medido) e barra de progresso fixa no registo (colide com o cronómetro de descanso).
