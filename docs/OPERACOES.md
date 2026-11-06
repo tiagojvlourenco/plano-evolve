@@ -564,3 +564,29 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 - Sem alterações a schema, migrações, RLS ou Supabase.
 - Testes: `tests/treino-conforto-historico.test.js` (45 verificações, Node + Chromium).
 
+## 8aw. EVOLVE Treino: revisão abrangente (arranque, calendário, pesquisa, ecrãs, erros)
+
+**O que mudou**
+- **Arranque:** «Hoje» mostra o treino previsto, a linha «Último treino: … · há N dias» e o botão para começar. Sem programa, o cartão explica o estado («quando houver treinos no programa, o de hoje aparece aqui») e mostra o último treino feito.
+- **Calendário de atividade** (Histórico → Calendário): mês a mês (nunca meses futuros), um ponto por tipo (musculação, corrida/bicicleta), tocar num dia abre o resumo do dia (treinos com detalhe; corridas com «Abrir no Cardio»). **Resumo do mês:** treinos, dias com treino, séries e volume; corridas só depois de o aluno tocar em «Ver corridas do mês» (`RUN.monthSummary`, aditivo, igual ao resumo da semana: sem leituras antes de o aluno pedir). Se a lista de corridas lida pode estar incompleta, o ecrã diz.
+- **Pesquisa no histórico:** treino, exercício, **notas, data** (05/11, 05/11/2026, 2026-11-05, «quinta», «novembro», «nov») e várias palavras em conjunto (todas têm de aparecer). Linhas com nota dizem «com nota».
+- **Orientações:** os pontos-chave do exercício (até 3) aparecem no próprio exercício, em «Pontos-chave»; o «ⓘ» continua com a demonstração e o histórico de cargas.
+- **Descanso:** o ajuste do descanso (−15 s/+15 s) vale também para as séries seguintes **do mesmo exercício** nessa sessão (repõe-se ao terminar; «Reiniciar» volta ao valor do programa).
+- **Notas:** a caixa «Como correu?» abre sozinha quando todas as séries estão marcadas; a nota aparece no detalhe do treino e na pesquisa.
+- **Feedback:** além de «✓ Treino guardado…», aparece «✓ Treino sincronizado» quando o servidor confirma um treino que estava por enviar.
+- **Objetivo semanal:** barra de progresso «x de y treinos previstos» (dias previstos do programa). **Não há meta de distância:** a app só tem distância prevista dentro do plano de corrida (já mostrado no Cardio).
+- **Erros:** se desenhar um separador falhar, aparece «Algo correu mal» com «Tentar outra vez» e «Voltar ao início» (os treinos e o treino em curso estão guardados à parte) em vez de um ecrã em branco.
+- **Ecrãs:** em altura ≤ 520 px (telemóvel na horizontal) o cronómetro fica numa só linha, a barra da série e o separador ficam mais finos (sobram ~220 px para o treino em vez de ~108); em ≥ 900 px o conteúdo tem largura máxima de 880 px e fica centrado.
+
+**Já existia e foi só confirmado:** retoma do treino (continuar/recomeçar, sem duplicar: o rascunho apaga-se ao terminar), pesquisa por treino e exercício, resumo da semana, estado de sincronização, descanso ajustável durante a sessão.
+
+**Só documentado (não alterado, por risco ou por falta de dados)**
+- **Distância/meta de corrida** semanal: não existe dado de meta fora do plano de corrida.
+- **Velocidade de arranque (módulos):** a Corrida (`corrida-core.js`, `corrida.js`, `corrida-live.js`) já só é pedida quando o aluno a usa; o `app.js` (~900 KB) continua num só ficheiro porque o projeto não tem passo de compilação e partir o núcleo em ficheiros muda a ordem de avaliação de tudo.
+- **Renderização:** marcar séries, escrever, pesquisar e o cronómetro já atualizam só o necessário; mudar de separador ou de filtro redesenha o separador (rápido, e mais seguro do que remendar o DOM).
+- **Acoplamento app.js ↔ Corrida:** é feito só pelo objeto `RUN` (contrato no cabeçalho de `corrida.js`): `go/screen/wire/submitRun/…` e, agora, `weekSummary` e `monthSummary` (só leitura, sem coordenadas). O que falta separar é o estado: `state.*` (separador, filtros, calendário), `wlDraft` (rascunho em localStorage), `outbox`/`syncLast`/`evolve_wl_unsent_v1` (envio) e `RUN.*` (Corrida) vivem em sítios diferentes; este mapa é o ponto de partida para um módulo de estado de treino, só com um passo de compilação.
+- **Consistência visual musculação/corrida:** os cartões da Corrida usam classes próprias (`run-*`) e os de treino as comuns (`card`, `btn`, `evo-*`); alinhar tudo exige tocar em `corrida.js` e nos seus testes.
+
+**Limites:** não testado em telemóvel real (horizontal, uma mão, toque); o calendário só mostra corridas já lidas (100 por pedido); a pesquisa por data não aceita intervalos. Sem alterações a schema, migrações, RLS ou Supabase.
+- Testes: `tests/treino-revisao.test.js` (34 verificações, Node + Chromium).
+

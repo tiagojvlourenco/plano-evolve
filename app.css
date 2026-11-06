@@ -1094,3 +1094,57 @@ body.wl-dock-on .sync-pill{bottom:calc(env(safe-area-inset-bottom,0px) + 156px);
 #alunoApp .wl-ex-last{font-size:0.86rem;}
 #alunoApp .wl-ex-count{font-size:0.86rem;}
 #alunoApp .wl-status, #alunoApp .wl-remain{font-size:0.82rem;}
+
+/* ---- EVOLVE Treino: ecrãs baixos e orientação horizontal (o cronómetro, a barra da série e o separador não podem comer o ecrã) ---- */
+@media (max-height:520px){
+  .tabbar{bottom:calc(6px + env(safe-area-inset-bottom, 0px));padding:3px;}
+  .tabbar button{min-height:44px; padding:4px 2px; flex-direction:row; gap:6px; font-size:0.78rem;}
+  .tabbar button svg{width:20px; height:20px;}
+  .aluno-tabs{padding-bottom:64px;}
+  #restTimer.compact{top:calc(4px + env(safe-area-inset-top, 0px)); padding:6px 10px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:2px 12px; width:min(720px, calc(100% - 32px));}
+  #restTimer.compact .rt-head{grid-column:1; grid-row:1; min-width:0;}
+  #restTimer.compact .rt-head button{margin:0;}
+  #restTimer.compact .rt-time{grid-column:2; grid-row:1; margin:0; font-size:1.6rem; text-align:left;}
+  #restTimer.compact .rt-bar{grid-column:1 / -1; grid-row:2; height:3px;}
+  #restTimer.compact .rt-actions{grid-column:3; grid-row:1; margin:0; grid-template-columns:repeat(4,auto);}
+  #restTimer.compact .rt-actions button{min-height:44px; padding:0 10px;}
+  #alunoApp.rt-open.rt-compact .aluno-tabs{padding-top:72px;}
+  .wl-dock{bottom:calc(60px + env(safe-area-inset-bottom, 0px)); padding:4px 6px 4px 12px; width:min(720px, calc(100% - 32px));}
+  .wl-dock .btn{min-height:44px;}
+  #alunoApp.has-dock .aluno-tabs{padding-bottom:128px;}
+  body.wl-dock-on .sync-pill{bottom:calc(env(safe-area-inset-bottom,0px) + 124px);}
+  .wl-now{top:-8px;}
+}
+@media (max-height:520px) and (orientation:landscape){
+  .aluno-tabs{padding-left:max(0px, env(safe-area-inset-left, 0px)); padding-right:max(0px, env(safe-area-inset-right, 0px));}
+  #alunoApp.wl-big .wl-row{grid-template-columns:repeat(2,minmax(0,1fr));} /* na horizontal há largura: carga e repetições lado a lado */
+}
+/* tablet e ecrã largo: os cartões de «Hoje» e da Evolução não esticam sem fim */
+@media (min-width:900px){
+  .aluno-tabs{max-width:880px; margin-left:auto; margin-right:auto;}
+}
+
+/* ---- EVOLVE Treino: calendário, objetivo semanal, pontos-chave, recuperação de erros ---- */
+.cal-nav{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
+.cal-nav .btn{min-width:48px; min-height:44px; font-size:1.2rem;}
+.cal-title{font-family:var(--display); font-weight:700; font-size:1.05rem; text-align:center; flex:1;}
+.cal-grid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px;}
+.cal-dow{font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; color:var(--muted); text-align:center; padding:2px 0;}
+.cal-cell{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:2px; min-height:46px; padding:4px 0; border:1px solid transparent; border-radius:12px; background:transparent; color:var(--ink); font:inherit; font-size:0.86rem;}
+.cal-cell.empty{visibility:hidden;}
+button.cal-cell{cursor:pointer; border-color:var(--line-strong); background:var(--surface-2); touch-action:manipulation; min-height:48px;}
+button.cal-cell:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
+.cal-cell.today{box-shadow:0 0 0 2px var(--accent-strong);}
+.cal-cell .dot,.cal-legend .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 1px;}
+.dot.s{background:var(--accent);}
+.dot.r{background:var(--ink); border:1px solid var(--line-strong);}
+.cal-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:0.78rem; color:var(--muted); margin:10px 0;}
+.cal-summary{margin-top:6px; padding-top:10px; border-top:1px solid var(--line);}
+.wk-goal{height:8px; border-radius:999px; background:var(--surface-3); overflow:hidden; margin-top:8px;}
+.wk-goal i{display:block; height:100%; background:var(--accent); border-radius:999px;}
+.tw-last{font-size:0.84rem; margin:6px 0 10px;}
+.wl-cues{margin-top:4px;}
+.wl-cues summary{min-height:44px; display:flex; align-items:center; font-size:0.84rem; color:var(--accent-strong); cursor:pointer;}
+.wl-cues .ex-cues{margin:0 0 6px 18px; padding:0; font-size:0.86rem; color:var(--muted);}
+#tabError .btn{margin-top:4px;}
+@media (max-width:340px){ .cal-cell{font-size:0.78rem; min-height:42px;} .cal-nav .btn{min-width:44px;} }
