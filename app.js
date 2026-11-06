@@ -2395,7 +2395,10 @@ function outboxAcked(id, cols){
     if (!Object.keys(entry.cols).length) delete ob[id];
   }
   syncNoteOk();
-  if ("workout_logs" in cols) unsentAck(id, cols.workout_logs);
+  if ("workout_logs" in cols){
+    var nSynced = unsentAck(id, cols.workout_logs);
+    if (nSynced > 0 && authRole === "student") showToast("✓ " + (nSynced === 1 ? "Treino sincronizado" : nSynced + " treinos sincronizados")); // só quando havia treinos por enviar
+  }
   outboxWrite();
 }
 
@@ -2416,6 +2419,7 @@ function unsentAck(sid, logs){
   var rest = a.filter(function(id){ return !have[id]; });
   if (rest.length) v[sid] = rest; else delete v[sid];
   unsentWrite(v);
+  return a.length - rest.length;
 }
 function unsentClear(sid){ var v = unsentRead(); delete v[sid]; unsentWrite(v); }
 function unsentHas(sid, logId){ var a = unsentRead()[sid]; return Array.isArray(a) && a.indexOf(logId) >= 0; }
@@ -4523,15 +4527,25 @@ function renderAlunoTab(s){
   var keep = captureTabUi(el);
   var sv = studentView(s); // leitura: meals já combinado com o estado do dia
   if (APP_MODE === "treino"){
-    if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
-    else if (state.alunoTab === "evolucao") el.innerHTML = tplTreinoEvolucao(sv);
-    else if (state.alunoTab === "historico") el.innerHTML = tplTreinoHistorico(sv);
-    else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
-    else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
-    restoreTabUi(el, keep);
-    wireAlunoTab(s);
-    wlWakeSync();
-    renderRestTimer(); // o cronómetro fica compacto no ecrã de treino
+    try {
+      if (state.alunoTab === "treino") el.innerHTML = tplTreinoScreen(sv);
+      else if (state.alunoTab === "evolucao") el.innerHTML = tplTreinoEvolucao(sv);
+      else if (state.alunoTab === "historico") el.innerHTML = tplTreinoHistorico(sv);
+      else if (state.alunoTab === "corrida") el.innerHTML = tplCorridaTab(sv, s);
+      else { state.alunoTab = "hoje"; el.innerHTML = tplTreinoHome(sv); }
+      restoreTabUi(el, keep);
+      wireAlunoTab(s);
+      wlWakeSync();
+      renderRestTimer(); // o cronómetro fica compacto no ecrã de treino
+    } catch (err) {
+      // um erro a desenhar um ecrã não pode deixar o aluno com o ecrã em branco: os registos e o treino em curso estão guardados à parte
+      try { console.error("EVOLVE Treino: erro a desenhar o separador", state.alunoTab, err && err.message); } catch (e2) {}
+      el.innerHTML = "<div class=\"card\" id=\"tabError\" role=\"alert\"><div class=\"eyebrow\">Algo correu mal</div><p class=\"muted-p\" style=\"margin:6px 0 12px;\">Não foi possível mostrar este ecrã. Os teus treinos e o treino em curso continuam guardados neste telemóvel.</p>" +
+        "<button type=\"button\" class=\"btn primary\" id=\"tabErrorRetry\">Tentar outra vez</button> <button type=\"button\" class=\"btn\" id=\"tabErrorHome\">Voltar ao início</button></div>";
+      var r1 = el.querySelector("#tabErrorRetry"), r2 = el.querySelector("#tabErrorHome");
+      if (r1) r1.addEventListener("click", function(){ renderAlunoTab(s); });
+      if (r2) r2.addEventListener("click", function(){ state.alunoTab = "hoje"; renderAlunoShell(); });
+    }
     return;
   }
   if (state.alunoTab==="plano" && noNutritionOf(s)) state.alunoTab = "hoje"; // sem nutrição não há Plano
@@ -4837,10 +4851,17 @@ function workoutInProgress(s){
 }
 function workoutLogsToday(s){ var t = todayISO(); return (s.workoutLogs || []).filter(function(l){ return l && l.date === t; }); }
 
+// «Último treino: Treino B — Pernas · há 3 dias» (só com treinos registados)
+function lastWorkoutLine(s){
+  var logs = (s.workoutLogs || []).filter(function(l){ return l && l.date && logTotals(l).sets; }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+  if (!logs.length) return "";
+  var l = logs[0], d = daysSinceDate(l.date), when = d === 0 ? "hoje" : d === 1 ? "ontem" : d != null ? "há " + d + " dias" : fmtDatePt(l.date);
+  return "<p class=\"muted-p tw-last\" id=\"lastWorkout\">Último treino: <b>" + escapeHtml(l.dayName || "Treino") + "</b> · " + escapeHtml(when) + " (" + escapeHtml(fmtDatePt(l.date)) + ")</p>";
+}
 function tplTodayWorkout(s){
   var inProg = workoutInProgress(s), day = inProg ? inProg.day : workoutDayFor(s);
   if (!day){
-    return `<div class="card"><div class="eyebrow">Treino</div><p class="muted-p" style="margin-top:6px;">O teu programa de treino ainda está a ser preparado pelo profissional.</p></div>`;
+    return `<div class="card" id="noPlan"><div class="eyebrow">Treino</div><p class="muted-p" style="margin-top:6px;">O teu programa de treino ainda está a ser preparado pelo profissional. Quando houver treinos no programa, o de hoje aparece aqui com o botão para começar. Entretanto vês o histórico e o Cardio.</p>${lastWorkoutLine(s)}</div>`;
   }
   var total = workoutSetCount(day), dayAttr = `data-day="${escapeHtml(day.id)}"`;
   if (inProg){
@@ -4859,13 +4880,13 @@ function tplTodayWorkout(s){
   }
   if (isTrainingDayToday(s) === false){
     return `<div class="card today-workout rest"><div class="tw-rest"><div><div class="eyebrow">Hoje · descanso</div>` +
-      `<p class="muted-p">Recupera bem. Próximo treino: <b>${escapeHtml(day.name)}</b>.</p></div>` +
+      `<p class="muted-p">Recupera bem. Próximo treino: <b>${escapeHtml(day.name)}</b>.</p>${lastWorkoutLine(s)}</div>` +
       `<button type="button" class="btn btn-sm" id="startWorkout" ${dayAttr}>Treinar mesmo assim</button></div></div>`;
   }
   var time = s.trainingTime && s.trainingTime !== "—" ? escapeHtml(s.trainingTime) : "";
   return `<div class="card today-workout"><div class="eyebrow">Treino de hoje${time ? " · " + time : ""}</div>` +
     `<div class="tw-name">${escapeHtml(day.name)}</div>` +
-    `<p class="muted-p">${plural(day.exercises.length, "exercício", "exercícios")} · ${plural(total, "série", "séries")}</p>` +
+    `<p class="muted-p">${plural(day.exercises.length, "exercício", "exercícios")} · ${plural(total, "série", "séries")}</p>${lastWorkoutLine(s)}` +
     `<button type="button" class="btn primary big" id="startWorkout" ${dayAttr}>Iniciar treino</button></div>`;
 }
 
@@ -5160,6 +5181,7 @@ function tplSemanaResumo(s){
     return "<div class=\"wk-day" + (done ? " done" : "") + (plan && !done ? " plan" : "") + (isToday ? " today" : "") + "\" role=\"listitem\" aria-label=\"" + label + "\"><span>" + WEEK_DAY_NAMES[i] + "</span><i aria-hidden=\"true\">" + (done ? "✓" : "") + "</i></div>";
   }).join("") + "</div>";
   html += "<div class=\"wk-line\" id=\"weekStrength\"><b>Musculação</b> " + (w.sessions ? plural(w.sessions, "treino", "treinos") + (nPlanned ? " (de " + nPlanned + " previstos)" : "") + " · " + plural(w.sets, "série", "séries") + (w.volume > 0 ? " · " + fmtInt(w.volume) + " kg de volume" : "") : "ainda sem treinos" + (nPlanned ? " (" + nPlanned + " previstos)" : "")) + "</div>";
+  if (nPlanned) html += "<div class=\"wk-goal\" role=\"progressbar\" aria-valuemin=\"0\" aria-valuemax=\"" + nPlanned + "\" aria-valuenow=\"" + Math.min(w.sessions, nPlanned) + "\" aria-label=\"Treinos desta semana: " + w.sessions + " de " + nPlanned + " previstos\"><i style=\"width:" + Math.min(100, Math.round(w.sessions / nPlanned * 100)) + "%\"></i></div>";
   html += "<div class=\"wk-sub\">Semana passada: " + (prev.sessions ? plural(prev.sessions, "treino", "treinos") + " · " + plural(prev.sets, "série", "séries") : "sem treinos registados") + ".</div>";
   if (corridaModeOf(s) !== "off") html += "<div class=\"wk-line\" id=\"weekRun\"><b>Corrida e bicicleta</b> " + weekRunText(s) + "</div>";
   return html + "</div>";
@@ -5190,20 +5212,27 @@ function logTotals(l){
   (l.entries || []).forEach(function(en){ var st = workoutEntryStats(en); sets += st.sets; vol += st.volume; });
   return {sets: sets, volume: vol};
 }
+// texto onde a pesquisa procura: nome do treino, exercícios, notas e a data de várias formas (05/11/2026, 05/11, 2026-11-05, quinta-feira, novembro, nov)
+function histHaystack(l){
+  var d = new Date(l.date + "T00:00:00"), dates = [fmtDateFullPt(l.date), l.date.slice(8) + "/" + l.date.slice(5, 7), l.date, l.date.slice(5, 7) + "/" + l.date.slice(0, 4)];
+  try { dates.push(d.toLocaleDateString("pt-PT", {weekday: "long", day: "numeric", month: "long", year: "numeric"})); dates.push(d.toLocaleDateString("pt-PT", {weekday: "short", month: "short"})); } catch (e) {}
+  return histPlain([l.dayName, l.notes].concat((l.entries || []).map(function(en){ return en && en.name; })).concat(dates).join(" | "));
+}
 function histFiltered(s){
   var q = histPlain(state.histQ || "").trim(), per = HIST_PERIODS.filter(function(p){ return p.id === (state.histPeriod || "all"); })[0] || HIST_PERIODS[2];
   return (s.workoutLogs || []).filter(function(l){
     if (!l || !l.date || !logTotals(l).sets) return false;
     if (per.days){ var d = daysSinceDate(l.date); if (d == null || d >= per.days) return false; }
     if (!q) return true;
-    return histPlain(l.dayName).indexOf(q) >= 0 || (l.entries || []).some(function(en){ return histPlain(en && en.name).indexOf(q) >= 0; });
+    var hay = histHaystack(l);
+    return q.split(/\s+/).every(function(tok){ return hay.indexOf(tok) >= 0; }); // todas as palavras têm de aparecer: «quinta pernas», «nov agachamento», «05/11»
   }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? 1 : -1); });
 }
 function histRowHtml(s, l, synced){
   var t = logTotals(l), pend = workoutLogPending(s, l, synced);
   return "<button type=\"button\" class=\"hist-row\" data-hist=\"" + escapeHtml(l.id) + "\"><span class=\"hist-top\"><span class=\"hist-date\">" + escapeHtml(fmtWeekdayDatePt(l.date)) + "</span>" +
     (pend ? "<span class=\"hist-badge\">⏳ por enviar</span>" : "") + "</span><span class=\"hist-name\">" + escapeHtml(l.dayName || "Treino") + "</span>" +
-    "<span class=\"hist-sub\">" + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + " kg" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + "</span></button>";
+    "<span class=\"hist-sub\">" + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + " kg" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + (l.notes ? " · com nota" : "") + "</span></button>";
 }
 function histListHtml(s){
   var list = histFiltered(s), synced = authRole === "student" && sbReady ? workoutSyncedIds(s) : null;
@@ -5220,10 +5249,93 @@ function histListHtml(s){
   });
   return html;
 }
+/* ---------- Calendário de atividade e resumo do mês ----------
+   Treinos de musculação: workout_logs (todos os registados). Corrida e bicicleta: só as que a Corrida já leu (RUN.monthSummary); se o aluno ainda não as pediu,
+   o calendário mostra só os treinos e oferece «Ver corridas do mês». Se a lista de corridas está incompleta (há mais páginas) diz-se. Nada é estimado. */
+var MONTH_NAMES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function calMonthKey(){ var k = state.calMonth; if (/^\d{4}-(0[1-9]|1[0-2])$/.test(k || "")) return k; var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); }
+function calShift(key, delta){ var y = parseInt(key.slice(0, 4), 10), m = parseInt(key.slice(5, 7), 10) - 1 + delta; var d = new Date(y, m, 1); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); }
+function calNowKey(){ var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); }
+// dados do mês: treinos por dia (workout_logs) e totais
+function calStrengthMonth(s, key){
+  var out = {byDay: {}, sessions: 0, sets: 0, volume: 0, days: 0};
+  (s.workoutLogs || []).forEach(function(l){
+    if (!l || !l.date || l.date.slice(0, 7) !== key) return;
+    var t = logTotals(l);
+    if (!t.sets) return;
+    (out.byDay[l.date] = out.byDay[l.date] || []).push(l);
+    out.sessions++; out.sets += t.sets; out.volume += t.volume;
+  });
+  out.days = Object.keys(out.byDay).length;
+  return out;
+}
+function calRunMonth(s, key){
+  if (corridaModeOf(s) === "off" || authRole !== "student") return {state: "off"};
+  var redraw = function(){ if (APP_MODE === "treino" && state.alunoTab === "historico" && String(state.alunoStudentId) === String(s.id) && !(modalRoot && modalRoot.firstChild)) renderAlunoTab(s); };
+  if (!corridaHas("monthSummary")){
+    if (RUN.failed) return {state: "failed"};
+    if (state.weekRunWant){ loadCorrida().then(function(ok){ if (!ok) RUN.failed = true; redraw(); }); return {state: "loading"}; }
+    return {state: "idle"};
+  }
+  return RUN.monthSummary(s, key, redraw, !!state.weekRunWant);
+}
+function tplCalendario(s){
+  var key = calMonthKey(), y = parseInt(key.slice(0, 4), 10), m = parseInt(key.slice(5, 7), 10) - 1;
+  var st = calStrengthMonth(s, key), rn = calRunMonth(s, key), first = new Date(y, m, 1), lead = (first.getDay() + 6) % 7, nDays = new Date(y, m + 1, 0).getDate();
+  var today = isoOfLocalDate(new Date()), runDays = rn.state === "ok" ? rn.byDay : {}, title = MONTH_NAMES_PT[m].charAt(0).toUpperCase() + MONTH_NAMES_PT[m].slice(1) + " de " + y;
+  var html = "<div class=\"cal-nav\"><button type=\"button\" class=\"btn btn-sm\" data-cal-nav=\"-1\" aria-label=\"Mês anterior\">‹</button><div class=\"cal-title\" id=\"calTitle\" role=\"heading\" aria-level=\"2\">" + escapeHtml(title) + "</div>" +
+    "<button type=\"button\" class=\"btn btn-sm\" data-cal-nav=\"1\" aria-label=\"Mês seguinte\"" + (key >= calNowKey() ? " disabled" : "") + ">›</button></div>";
+  html += "<div class=\"cal-grid\" role=\"grid\" aria-label=\"" + escapeHtml(title) + "\">" + WEEK_DAY_NAMES.map(function(n){ return "<div class=\"cal-dow\" role=\"columnheader\">" + n + "</div>"; }).join("");
+  for (var i = 0; i < lead; i++) html += "<div class=\"cal-cell empty\" role=\"gridcell\" aria-hidden=\"true\"></div>";
+  for (var d = 1; d <= nDays; d++){
+    var iso = key + "-" + ("0" + d).slice(-2), ns = (st.byDay[iso] || []).length, nr = (runDays[iso] || []).length;
+    var label = d + " de " + MONTH_NAMES_PT[m] + ": " + (ns || nr ? [ns ? plural(ns, "treino", "treinos") : "", nr ? plural(nr, "atividade de corrida ou bicicleta", "atividades de corrida ou bicicleta") : ""].filter(Boolean).join(" e ") : "sem atividade");
+    var dots = (ns ? "<i class=\"dot s\" aria-hidden=\"true\"></i>" : "") + (nr ? "<i class=\"dot r\" aria-hidden=\"true\"></i>" : "");
+    var cls = "cal-cell" + (iso === today ? " today" : "") + (ns || nr ? " has" : "");
+    html += (ns || nr) ? "<button type=\"button\" class=\"" + cls + "\" role=\"gridcell\" data-cal-day=\"" + iso + "\" aria-label=\"" + escapeHtml(label) + "\"><span>" + d + "</span>" + dots + "</button>"
+      : "<div class=\"" + cls + "\" role=\"gridcell\" aria-label=\"" + escapeHtml(label) + "\"><span>" + d + "</span></div>";
+  }
+  html += "</div><div class=\"cal-legend\"><span><i class=\"dot s\"></i> Musculação</span>" + (rn.state !== "off" ? "<span><i class=\"dot r\"></i> Corrida e bicicleta</span>" : "") + "</div>";
+  // resumo do mês
+  html += "<div class=\"cal-summary\" id=\"calSummary\"><div class=\"eyebrow\">Resumo de " + escapeHtml(MONTH_NAMES_PT[m]) + "</div>" +
+    "<div class=\"wk-line\"><b>Musculação</b> " + (st.sessions ? plural(st.sessions, "treino", "treinos") + " em " + plural(st.days, "dia", "dias") + " · " + plural(st.sets, "série", "séries") + (st.volume > 0 ? " · " + fmtInt(st.volume) + "\u00a0kg de volume" : "") : "sem treinos neste mês") + "</div>";
+  if (rn.state === "ok") html += "<div class=\"wk-line\"><b>Corrida e bicicleta</b> " + (rn.n ? plural(rn.n, "atividade", "atividades") + " · " + escapeHtml(rn.distStr) + " · " + escapeHtml(rn.durStr) + (rn.paceStr ? " · ritmo médio " + escapeHtml(rn.paceStr) + "/km" + (rn.nBike ? " (só das corridas)" : "") : "") : "sem atividades neste mês") + "</div>" +
+    (rn.more ? "<div class=\"wk-sub\">A lista de corridas lida pode estar incompleta: abre o Cardio e toca em «Ver mais» para as restantes.</div>" : "");
+  else if (rn.state === "idle") html += "<div class=\"wk-line\"><b>Corrida e bicicleta</b> <button type=\"button\" class=\"btn btn-sm\" id=\"calRunLoad\">Ver corridas do mês</button></div>";
+  else if (rn.state === "loading") html += "<div class=\"wk-line\"><b>Corrida e bicicleta</b> <span class=\"muted-p\">a ler…</span></div>";
+  else if (rn.state === "error" || rn.state === "failed") html += "<div class=\"wk-line\"><b>Corrida e bicicleta</b> <span class=\"muted-p\">não foi possível ler agora. Abre o separador Cardio.</span></div>";
+  return html + "</div>";
+}
+function openDaySummary(s, iso){
+  var rn = calRunMonth(s, iso.slice(0, 7)), logs = ((calStrengthMonth(s, iso.slice(0, 7)).byDay)[iso] || []), runs = rn.state === "ok" ? (rn.byDay[iso] || []) : [];
+  var html = "<div class=\"mtitle\">" + escapeHtml(fmtWeekdayDatePt(iso)) + "</div>";
+  if (logs.length){
+    html += "<div class=\"eyebrow\" style=\"margin:8px 0 4px;\">Musculação</div>" + logs.map(function(l){ var t = logTotals(l); return "<button type=\"button\" class=\"hist-row\" data-day-log=\"" + escapeHtml(l.id) + "\"><span class=\"hist-name\">" + escapeHtml(l.dayName || "Treino") + "</span><span class=\"hist-sub\">" + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + "\u00a0kg" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + "</span></button>"; }).join("");
+  }
+  if (runs.length) html += "<div class=\"eyebrow\" style=\"margin:12px 0 4px;\">Corrida e bicicleta</div>" + runs.map(function(r){ return "<button type=\"button\" class=\"hist-row\" data-day-run=\"" + escapeHtml(r.id) + "\"><span class=\"hist-name\">" + escapeHtml(r.text) + "</span><span class=\"hist-sub\">Abrir no Cardio</span></button>"; }).join("");
+  if (!logs.length && !runs.length) html += "<p class=\"muted-p\">Sem atividade registada neste dia.</p>";
+  var box = openModal(html);
+  box.querySelectorAll("[data-day-log]").forEach(function(b){ b.addEventListener("click", function(){ var id = b.getAttribute("data-day-log"); closeModal(); openWorkoutDetail(s, id); }); });
+  box.querySelectorAll("[data-day-run]").forEach(function(b){ b.addEventListener("click", function(){
+    var id = b.getAttribute("data-day-run"); closeModal();
+    state.alunoTab = "corrida"; renderAlunoShell();
+    if (corridaHas("go")) RUN.go("detail", {id: id});
+  }); });
+  return box;
+}
+function wireCalendario(s, el){
+  el.querySelectorAll("[data-cal-nav]").forEach(function(b){ b.addEventListener("click", function(){ state.calMonth = calShift(calMonthKey(), parseInt(b.getAttribute("data-cal-nav"), 10)); if (state.calMonth > calNowKey()) state.calMonth = calNowKey(); renderAlunoTab(s); }); });
+  el.querySelectorAll("[data-cal-day]").forEach(function(b){ b.addEventListener("click", function(){ openDaySummary(s, b.getAttribute("data-cal-day")); }); });
+  var load = el.querySelector("#calRunLoad");
+  if (load) load.addEventListener("click", function(){ state.weekRunWant = true; renderAlunoTab(s); });
+}
 function tplTreinoHistorico(s){
-  var per = state.histPeriod || "all";
-  return "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Histórico</div></div>" +
-    "<div class=\"card\" id=\"histCard\"><div class=\"checkin-field\"><label for=\"histQ\">Pesquisar</label><input type=\"search\" id=\"histQ\" class=\"mini-select\" style=\"width:100%;\" placeholder=\"Nome do treino ou do exercício\" autocomplete=\"off\" value=\"" + escapeHtml(state.histQ || "") + "\"></div>" +
+  var per = state.histPeriod || "all", cal = state.histView === "cal";
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Histórico</div></div>" +
+    "<div class=\"card\" id=\"histCard\"><div class=\"evo-chips\" role=\"group\" aria-label=\"Vista\" style=\"margin:0 0 10px;\">" +
+    [["list", "Lista"], ["cal", "Calendário"]].map(function(v){ var on = (v[0] === "cal") === cal; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-hist-view=\"" + v[0] + "\" aria-pressed=\"" + on + "\">" + v[1] + "</button>"; }).join("") + "</div>";
+  if (cal) return head + tplSyncLine(s) + tplCalendario(s) + "</div>";
+  return head + "<div class=\"checkin-field\"><label for=\"histQ\">Pesquisar</label><input type=\"search\" id=\"histQ\" class=\"mini-select\" style=\"width:100%;\" placeholder=\"Treino, exercício, data ou nota (ex.: quinta pernas, 05/11, nov)\" autocomplete=\"off\" value=\"" + escapeHtml(state.histQ || "") + "\"></div>" +
     "<div class=\"evo-chips\" role=\"group\" aria-label=\"Período\">" + HIST_PERIODS.map(function(p){ var on = p.id === per; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-hist-period=\"" + p.id + "\" aria-pressed=\"" + on + "\">" + p.label + "</button>"; }).join("") + "</div>" +
     tplSyncLine(s) + "<div id=\"histList\" style=\"margin-top:10px;\">" + histListHtml(s) + "</div></div>";
 }
@@ -5243,6 +5355,8 @@ function openWorkoutDetail(s, id){
   return l ? openModal(workoutDetailHtml(s, l)) : null;
 }
 function wireHistorico(s, el){
+  el.querySelectorAll("[data-hist-view]").forEach(function(b){ b.addEventListener("click", function(){ state.histView = b.getAttribute("data-hist-view"); renderAlunoTab(s); }); });
+  if (state.histView === "cal"){ wireCalendario(s, el); return; }
   function wireRows(){ el.querySelectorAll("[data-hist]").forEach(function(b){ b.addEventListener("click", function(){ openWorkoutDetail(s, b.getAttribute("data-hist")); }); }); var c = el.querySelector("#histClear"); if (c) c.addEventListener("click", function(){ state.histQ = ""; state.histPeriod = "all"; renderAlunoTab(s); }); }
   var q = el.querySelector("#histQ");
   if (q) q.addEventListener("input", function(){ state.histQ = q.value; var box = el.querySelector("#histList"); if (box){ box.innerHTML = histListHtml(s); wireRows(); } }); // só a lista: redesenhar o ecrã fecharia o teclado
@@ -6360,6 +6474,7 @@ var REST_PRESETS = [30, 45, 60, 90, 120, 180];
 var REST_DEFAULT_SECONDS = 90;
 var REST_AUTO_CLOSE_MS = 10 * 60 * 1000;
 var restTimer = null; // {total, endsAt, label, pausedLeft, notified}
+var wlRestCtx = null; // {s, dayId} do ecrã de treino aberto (para guardar o descanso ajustado no rascunho do dia)
 var restTimerInterval = null;
 var restAudioCtx = null;
 function fmtClock(sec){ sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2); }
@@ -6380,6 +6495,9 @@ function restTimerAdjust(deltaSec, now){
   if (restTimer.pausedLeft != null) restTimer.pausedLeft = Math.max(0, restTimer.pausedLeft + deltaSec * 1000);
   else restTimer.endsAt += deltaSec * 1000;
   restTimer.total = Math.max(5, restTimer.total + deltaSec);
+  if (restTimer.label && restTimer.label !== "Descanso" && wlRestCtx && wlRestCtx.dayId){ // as séries seguintes deste exercício usam o descanso que ajustaste (guardado com o rascunho: acaba com o treino)
+    var rdr = wlDraftGet(wlRestCtx.s, wlRestCtx.dayId); rdr.restOverride = rdr.restOverride || {}; rdr.restOverride[restTimer.label] = restTimer.total; wlDraftSave(rdr);
+  }
   if (restTimerLeftMs(restTimer, now) > 0) restTimer.notified = false;
   renderRestTimer(now);
 }
@@ -7016,6 +7134,7 @@ function tplWorkoutLogger(s){
       `<span class="wl-ex-count" data-ex-count="${escapeHtml(e.id)}" aria-label="${exDone} de ${e.sets} séries feitas">${exDone}/${e.sets}</span></div>` +
       `<div class="muted-p wl-ex-presc">${presc}</div>` +
       (e.notes ? `<div class="muted-p wl-ex-note">${escapeHtml(e.notes)}</div>` : "") +
+      (parseCues(e.cues).length ? `<details class="wl-cues"><summary>Pontos-chave</summary><ol class="ex-cues">${parseCues(e.cues).map(function(c){ return "<li>" + escapeHtml(c) + "</li>"; }).join("")}</ol></details>` : "") +
       (last ? `<div class="wl-ex-last">Última vez (${fmtDatePt(last.date)}): ${escapeHtml(fmtLoadSet(last.topSet))}</div>` : "");
     var overload = overloadSuggestion(s, e);
     if (overload) html += `<div class="wl-ex-overload">${overloadBadgeHtml(overload)}</div>`;
@@ -7055,7 +7174,7 @@ function tplWorkoutLogger(s){
       REST_PRESETS.map(function(sec){ return `<button type="button" data-rest-start="${sec}" data-rest-label="Descanso">${sec >= 60 && sec % 60 === 0 ? (sec / 60) + " min" : sec + " s"}</button>`; }).join("") +
     `</div></details>` +
     `<div style="margin-top:18px;">` + rangeField("wlRpe", "Esforço da sessão (RPE 1-10)", draft.rpe || 7).replace('id="wlRpe"', 'id="wlRpe"' + (draft.rpeManual ? ' data-manual="1"' : "")) + `</div>` +
-    `<details class="soft-details"${draft.notes ? " open" : ""}><summary>Como correu? (opcional)</summary><div class="checkin-field" style="margin-top:8px;"><label for="wlNotes" class="sr-only">Como correu?</label><textarea id="wlNotes" maxlength="500" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div></details>` +
+    `<details class="soft-details" id="wlNotesBox"${draft.notes ? " open" : ""}><summary>Como correu? (opcional)</summary><div class="checkin-field" style="margin-top:8px;"><label for="wlNotes" class="sr-only">Como correu?</label><textarea id="wlNotes" maxlength="500" placeholder="Dores, sensações, o que mudar...">${escapeHtml(draft.notes || "")}</textarea></div></details>` +
     `<p class="muted-p" id="wlError" style="color:var(--critical); display:none; margin-bottom:10px;"></p>` +
     `<button type="button" class="btn primary big" id="wlSave">Terminar treino</button></div>`;
   return html;
@@ -7129,6 +7248,7 @@ function wireWorkoutLogger(s, el, rerender){
   wireExerciseInfo(s, el);
   var save = el.querySelector("#wlSave");
   var dayId = daySel ? daySel.value : null;
+  wlRestCtx = dayId ? {s: s, dayId: dayId} : null;
   // cada alteração fica no rascunho (séries, esforço, notas) — sobrevive a mudar de separador
   function recordDraft(target){
     if (!dayId) return;
@@ -7243,6 +7363,8 @@ function wireWorkoutLogger(s, el, rerender){
       rem.textContent = !boxes.length ? "" : left <= 0 ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + left + (left === 1 ? " série." : " séries.");
     }
     updateDock(currentSet);
+    var notesBox = el.querySelector("#wlNotesBox");
+    if (notesBox && boxes.length && n === boxes.length && !notesBox.open) notesBox.open = true; // treino completo: a nota aparece sem ter de a procurar
     return currentSet;
   }
   // uma série marcada sem repetições não é registada ao terminar: fica assinalada (a marca nunca se desfaz sozinha)
@@ -7282,6 +7404,8 @@ function wireWorkoutLogger(s, el, rerender){
       var allBoxes = el.querySelectorAll("[data-wl-done]");
       if (allBoxes[allBoxes.length - 1] === box){ restTimerStop(); return; } // última série do treino: não há mais descanso
       var secs = parseInt(box.getAttribute("data-rest-start"), 10);
+      var rdr2 = dayId ? wlDraftGet(s, dayId) : null, adj = rdr2 && rdr2.restOverride ? rdr2.restOverride[box.getAttribute("data-rest-label")] : 0;
+      if (secs >= 5 && adj >= 5) secs = adj; // o descanso que ajustaste para este exercício
       if (secs >= 5) restTimerStart(secs, box.getAttribute("data-rest-label")); // descanso 0 s: só marca a série como feita
     });
   });

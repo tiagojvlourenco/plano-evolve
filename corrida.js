@@ -1523,6 +1523,32 @@ RUN.weekSummary = function(s, onChange, load){
       distStr: runDistStr(w.distM), durStr: runDurStr(w.durationS), paceStr: pace ? runPaceStr(pace) : "", hasPace: !!pace};
   } catch (e) { return {state: "error", err: "other"}; }
 };
+/* Atividades de um mês (formato «AAAA-MM») para o calendário da app: o que já está em memória e, só se load === true (o aluno pediu), lê a lista com o mesmo
+   pedido do ecrã Cardio. Devolve texto já formatado por dia (nunca coordenadas nem notas). «more» = a lista em memória pode estar incompleta (há mais páginas).
+   Nunca lança. Estados: «preview», «idle», «loading», «error», «ok». */
+RUN.monthSummary = function(s, monthKey, onChange, load){
+  try {
+    if (!s || authRole !== "student") return {state: "preview"};
+    runUiSync(s.id);
+    var d = runUiData;
+    if (load === true && !d.loading && (!d.loaded || (Date.now() - d.loadedAt > RUN_UI_STALE_MS && d.raw <= RUN_UI_PAGE))){
+      runUiLoad(d, s.id, false, function(){ if (typeof onChange === "function") onChange(); });
+    }
+    if (!d.loaded) return {state: d.loading ? "loading" : "idle"};
+    if (d.err) return {state: "error", err: d.err};
+    var byDay = {}, n = 0, nBike = 0, distM = 0, durS = 0, runDistM = 0, runMovS = 0;
+    d.runs.forEach(function(r){
+      var day = runUiIsoDay(r.startedAtMs);
+      if (day.slice(0, 7) !== monthKey) return;
+      var pace = runPaceOf(r.distM, r.movingS), bike = r.activity === "bike";
+      (byDay[day] = byDay[day] || []).push({id: r.id, text: (bike ? "Bicicleta " : "Corrida ") + runDistStr(r.distM) + " · " + runDurStr(r.durationS) + (!bike && pace ? " · " + runPaceStr(pace) + "/km" : "")});
+      n++; if (bike) nBike++; distM += r.distM; durS += r.durationS;
+      if (!bike){ runDistM += r.distM; runMovS += r.movingS; }
+    });
+    var avg = runPaceOf(runDistM, runMovS);
+    return {state: "ok", more: !!d.more, byDay: byDay, n: n, nBike: nBike, distStr: runDistStr(distM), durStr: runDurStr(durS), paceStr: avg ? runPaceStr(avg) : ""};
+  } catch (e) { return {state: "error", err: "other"}; }
+};
 function runUiLiveView(s){
   if (authRole !== "student") return false;
   if (s.runsMode === "live") return typeof RUN.liveScreen === "function";
