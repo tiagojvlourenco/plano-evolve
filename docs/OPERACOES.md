@@ -608,3 +608,15 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 **Limites:** medido em Chromium; não visto num iPhone/Android reais. Há classes com nome antigo em `corrida.js` (`run-btn`, `run-h`, `run-state`) que se mantêm para não mexer nos testes da Corrida; a camada comum alinha-as por CSS.
 - Testes: `tests/treino-consistencia-visual.test.js` (15 verificações em Chromium).
 
+## 8ay. EVOLVE Treino: ronda de qualidade (desempenho com muitos treinos, acessibilidade do calendário, mudança de hora)
+
+Medido com 800 treinos registados e o processador 4× mais lento (≈ telemóvel): abrir a lista do histórico levava 736 ms e **cada tecla da pesquisa 778 ms** (a lista inteira, 800 linhas e 211 KB de HTML, era reconstruída).
+- **Histórico paginado:** 40 linhas por página e «Mostrar mais (n treinos por ver)». O total e a pesquisa contam todos os resultados. Com 800 treinos: abrir a lista **170 ms**, cada tecla **35 ms**. A pesquisa espera 120 ms de pausa na escrita; o estado «por enviar» lê-se uma vez por lista (antes, uma vez por linha).
+- **Calendário acessível:** deixou de usar `role="grid"`/`gridcell` sem linhas (ARIA inválido). É um grupo com nome («Novembro de 2026: dias com atividade»), os dias sem atividade ficam fora da leitura por voz e só os dias com treino ou corrida são botões com rótulo («2 de novembro: 1 treino»).
+- **Mudança de hora:** `daysSinceDate` contava múltiplos de 24 h, por isso, na primeira hora do dia a seguir ao «avanço» de hora (dia de 23 h) «há 2 dias» aparecia como «há 1 dia» e, na última hora do dia de 25 h, o contrário. Passou a contar dias de calendário (afeta só esses dois dias do ano; é a única alteração fora da app de treino, partilhada porque a função é comum).
+- **Por enviar:** os identificadores de treinos que já não existem na ficha (ex.: reposta pelo servidor) são esquecidos em vez de ficarem «por enviar» para sempre.
+- A barra da série atual passa a ser uma região com nome («Série atual»).
+- **Pré-visualização do profissional:** confirmado por teste que todos os separadores (incluindo histórico e calendário) abrem sem erros e sem o estado de sincronização do aluno.
+- **Limites:** o desempenho foi medido com CPU simulada em Chromium; a lista de corridas (Cardio) não foi medida com centenas de corridas.
+- Testes: `tests/treino-qualidade.test.js` (18 verificações, com fuso de Lisboa).
+
