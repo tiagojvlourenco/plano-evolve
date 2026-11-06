@@ -80,6 +80,7 @@
   .btn-file:focus-within{outline:2px solid var(--accent-strong); outline-offset:2px;}
   .btn:disabled{opacity:0.5; cursor:default;}
   .btn-sm{padding:6px 12px; font-size:0.78rem; border-radius:9px;}
+  :where(html[data-app="treino"]) .btn, :where(html[data-app="treino"]) .run-btn, :where(html[data-app="treino"]) .btn-file{min-height:44px; touch-action:manipulation;} /* mínimo para tocar no treino; qualquer regra de contexto mais abaixo manda */
   a.linklike{color:var(--accent-strong); text-decoration:underline; cursor:pointer; font-weight:600;}
 
   /* progress bar */
@@ -1148,3 +1149,53 @@ button.cal-cell:focus-visible{outline:2px solid var(--accent-strong); outline-of
 .wl-cues .ex-cues{margin:0 0 6px 18px; padding:0; font-size:0.86rem; color:var(--muted);}
 #tabError .btn{margin-top:4px;}
 @media (max-width:340px){ .cal-cell{font-size:0.78rem; min-height:42px;} .cal-nav .btn{min-width:44px;} }
+
+/* =====================================================================================================================
+   EVOLVE Treino — linguagem visual comum (musculação e corrida)
+   Tudo restrito a html[data-app="treino"]: as outras duas apps (EVOLVE e Gestão) ficam exatamente como estavam.
+   Escala: controlos (botões, chips, campos) 12 px · superfícies interiores (kpi, linhas, avisos) 14 px · cartões 20 px.
+   Botões: normal 44 px · principal 56 px (iniciar, terminar, importar). Campos de texto 16 px (o iPhone não amplia o ecrã).
+   Títulos: ecrã 1,5 rem · secção 1,1 rem · etiqueta de campo 0,76 rem. Estados: vazio, erro e aviso com o mesmo desenho.
+   ===================================================================================================================== */
+html[data-app="treino"]{--ctl-r:12px; --surf-r:14px; --focus-ring:2px solid var(--accent-strong);}
+
+/* --- botões: tamanhos e cantos --- */
+html[data-app="treino"] .btn, html[data-app="treino"] .run-btn, html[data-app="treino"] .btn-file{border-radius:var(--ctl-r); font-size:0.82rem;}
+html[data-app="treino"] .btn-sm{border-radius:var(--ctl-r); font-size:0.8rem; padding:8px 14px;}
+html[data-app="treino"] .btn.big, html[data-app="treino"] .btn.primary.big, html[data-app="treino"] .run-btn.primary{min-height:56px; font-size:0.95rem; border-radius:var(--ctl-r);}
+:where(html[data-app="treino"]) .run-btn{min-height:52px;} /* sem força: o gravador (.run-live) pede 56 px e continua a mandar */
+html[data-app="treino"] .run-live-btn{min-height:56px; border-radius:var(--ctl-r);}
+html[data-app="treino"] .run-live-banner .run-live-btn{min-height:48px;}
+html[data-app="treino"] .wl-dock .btn{min-height:52px; min-width:112px; font-size:0.95rem; border-radius:var(--ctl-r);}
+html[data-app="treino"] .wl-chip, html[data-app="treino"] .wl-step{border-radius:var(--ctl-r);}
+/* --- botões: estados (carregar, desativado, premido, foco) --- */
+html[data-app="treino"] .btn:active:not(:disabled), html[data-app="treino"] .run-btn:active:not(:disabled), html[data-app="treino"] .wl-chip:active{transform:translateY(1px); filter:brightness(0.93);}
+html[data-app="treino"] .btn:disabled, html[data-app="treino"] .run-btn:disabled, html[data-app="treino"] .btn[aria-disabled="true"]{opacity:0.5; cursor:not-allowed; filter:none; transform:none;}
+html[data-app="treino"] [aria-busy="true"]{position:relative; pointer-events:none; opacity:0.75;}
+html[data-app="treino"] .btn[aria-busy="true"]::before, html[data-app="treino"] .run-btn[aria-busy="true"]::before{content:""; display:inline-block; width:0.9em; height:0.9em; margin-right:8px; vertical-align:-0.12em; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:evoSpin 0.8s linear infinite;}
+@keyframes evoSpin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce){ html[data-app="treino"] .btn[aria-busy="true"]::before, html[data-app="treino"] .run-btn[aria-busy="true"]::before{animation:none; border-right-color:currentColor; opacity:0.5;} }
+html[data-app="treino"] :is(.btn, .run-btn, .btn-file, .wl-chip, .wl-step, .hist-row, .cal-cell, .run-row, .run-mode, .tabbar button, summary, select, input, textarea, .wl-info, .wl-q):focus-visible{outline:var(--focus-ring); outline-offset:2px;}
+
+/* --- campos e etiquetas --- */
+html[data-app="treino"] :is(select, textarea, .mini-select, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=file]):not([data-wl-load]):not([data-wl-reps])){border-radius:var(--ctl-r); font-size:1rem; padding:9px 12px;}
+html[data-app="treino"] :is(.checkin-field, .run-field, .assess-form-grid .f) > label{font-size:0.76rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted);} /* só etiquetas de campo: as de caixas de seleção ficam como estão */
+
+/* --- títulos --- */
+html[data-app="treino"] .tab-head h2, html[data-app="treino"] .today-workout .tw-name, html[data-app="treino"] .wl-progress .tw-name{font-size:1.5rem; font-weight:700; letter-spacing:-0.01em; line-height:1.15;}
+html[data-app="treino"] .run-h, html[data-app="treino"] .cal-title, html[data-app="treino"] .modal-sheet .mtitle{font-size:1.1rem; font-weight:700; line-height:1.25;}
+html[data-app="treino"] .hist-name, html[data-app="treino"] .hist-ex-name{font-size:1rem;}
+
+/* --- superfícies interiores --- */
+html[data-app="treino"] :is(.kpi, .hist-row, .sync-line, .wl-restored, .run-svg-wrap, .wl-set){border-radius:var(--surf-r);}
+html[data-app="treino"] .wk-day, html[data-app="treino"] .week-chip{border-radius:var(--ctl-r);}
+
+/* --- mensagens de estado: vazio, erro, aviso, sincronização --- */
+html[data-app="treino"] :is(#noPlan, #evoEmpty, #tabError, .run-state){text-align:center;}
+html[data-app="treino"] :is(#noPlan, #evoEmpty, #tabError, .run-state) .muted-p{margin:6px 0 0; font-size:0.9rem; line-height:1.5;}
+html[data-app="treino"] :is(#histEmpty, #histNone, #evoNoPeriod, #evoNoChart, #evoOneSession){font-size:0.9rem; line-height:1.5;}
+html[data-app="treino"] :is(#tabError, #runLoadErr){border-color:var(--critical);}
+html[data-app="treino"] :is(#tabError .eyebrow, #runLoadErr .muted-p){color:var(--critical-text);}
+html[data-app="treino"] :is(.run-err, .run-msg.run-err, #wlError, .wl-warn){color:var(--critical-text); font-size:0.84rem; font-weight:600; line-height:1.4;}
+html[data-app="treino"] .sync-line{font-size:0.84rem; line-height:1.4;}
+html[data-app="treino"] .evo-chips + .sync-line{margin-top:10px;}

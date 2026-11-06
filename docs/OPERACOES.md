@@ -590,3 +590,21 @@ Medido em Chromium (390 px, CPU 4× mais lento): a app abre em ~0,7 s e nenhuma 
 **Limites:** não testado em telemóvel real (horizontal, uma mão, toque); o calendário só mostra corridas já lidas (100 por pedido); a pesquisa por data não aceita intervalos. Sem alterações a schema, migrações, RLS ou Supabase.
 - Testes: `tests/treino-revisao.test.js` (34 verificações, Node + Chromium).
 
+## 8ax. EVOLVE Treino: linguagem visual comum (musculação e corrida)
+
+**Âmbito:** uma camada no fim de `app.css` («EVOLVE Treino — linguagem visual comum»), com todas as regras sob `html[data-app="treino"]`. O EVOLVE (`index.html`) e a Gestão não mudam (teste 14 do `treino-consistencia-visual`). A Corrida (`corrida.js`) não foi alterada: usa as mesmas classes, só passam a ter o mesmo desenho.
+
+**O que estava inconsistente (medido em 390 px)** → **o que ficou**
+- Botões com 4 cantos (9, 11, 14 px) e 4 tamanhos de letra (12,2 a 16 px) → canto único **12 px**; normal 44 px; **principal 56 px** com a mesma letra (Iniciar treino, Terminar treino, Importar ficheiro); secundário da corrida 52 px; barra da série 52 px.
+- Estados de botão só em parte → **premido** (desce 1 px e escurece), **desativado** (50% e cursor «não permitido»), **a carregar** (`aria-busy="true"`: indicador a rodar, sem toques; com «reduzir movimento» fica parado) e **foco** de teclado (anel de 2 px) em botões, pastilhas, linhas, células do calendário, resumos, listas e campos. «Terminar treino» (modo profissional) e «Enviar agora» passam a mostrar o estado a carregar.
+- Campos de texto com 13 a 14,4 px (o iPhone ampliava o ecrã ao tocar) e cantos de 8 a 10 px → **16 px** e canto **12 px** em todos (as caixas de carga e repetições do treino mantêm o tamanho grande próprio).
+- Etiquetas de campo (formulários do treino, da pesquisa e da corrida) com 10,4 e 12,2 px → **12,2 px** (0,76 rem) em todos os ecrãs; as etiquetas de caixas de seleção ficam como estavam.
+- Títulos: 27,2 px (nome do treino), 24 px (separadores), 19,2 px (secções da corrida) → **ecrã 24 px**, **secção 17,6 px** (corrida, calendário, janelas). O «Histórico» passa a ter título de ecrã como a Evolução e o Cardio.
+- Cantos: controlos 12 px, superfícies interiores (kpi, linhas, avisos) 14 px, cartões 20 px.
+- Estados: vazio, sem programa, sem corridas e erro ao desenhar usam o mesmo cartão centrado; erros (corrida, «Algo correu mal», avisos) usam todos o vermelho de texto acessível, 13,4 px e negrito; a linha de sincronização tem o mesmo tamanho de texto e canto.
+
+**Mantido de propósito (contextos diferentes):** caixas de carga/repetições grandes (o treino) e barras de quilómetros (a corrida); cartão denso do registo (14 px de margem) vs cartões normais (22 px); letras e números da corrida (distância em destaque).
+
+**Limites:** medido em Chromium; não visto num iPhone/Android reais. Há classes com nome antigo em `corrida.js` (`run-btn`, `run-h`, `run-state`) que se mantêm para não mexer nos testes da Corrida; a camada comum alinha-as por CSS.
+- Testes: `tests/treino-consistencia-visual.test.js` (15 verificações em Chromium).
+

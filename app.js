@@ -2462,7 +2462,7 @@ function tplSyncLine(s){
 }
 function wireSyncLine(el){
   var b = el.querySelector("#syncNow");
-  if (b) b.addEventListener("click", function(){ b.disabled = true; syncLast.fails = 0; outboxFlush().then(function(){ syncUiRefresh(); }, function(){ syncUiRefresh(); }); syncUiRefresh(); });
+  if (b) b.addEventListener("click", function(){ b.disabled = true; b.setAttribute("aria-busy", "true"); syncLast.fails = 0; outboxFlush().then(function(){ syncUiRefresh(); }, function(){ syncUiRefresh(); }); syncUiRefresh(); });
 }
 // o indicador de sincronização do ecrã acompanha o que muda em segundo plano (rede, envio, erro) sem redesenhar o ecrã todo
 function syncUiRefresh(){
@@ -5331,11 +5331,11 @@ function wireCalendario(s, el){
 }
 function tplTreinoHistorico(s){
   var per = state.histPeriod || "all", cal = state.histView === "cal";
-  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button><div class=\"eyebrow\">Histórico</div></div>" +
+  var head = "<div class=\"treino-head\"><button type=\"button\" class=\"btn btn-sm\" id=\"backToHoje\">← Treino</button></div>" + tabHead("Histórico", "Todos os treinos guardados, por lista ou calendário.") +
     "<div class=\"card\" id=\"histCard\"><div class=\"evo-chips\" role=\"group\" aria-label=\"Vista\" style=\"margin:0 0 10px;\">" +
     [["list", "Lista"], ["cal", "Calendário"]].map(function(v){ var on = (v[0] === "cal") === cal; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-hist-view=\"" + v[0] + "\" aria-pressed=\"" + on + "\">" + v[1] + "</button>"; }).join("") + "</div>";
   if (cal) return head + tplSyncLine(s) + tplCalendario(s) + "</div>";
-  return head + "<div class=\"checkin-field\"><label for=\"histQ\">Pesquisar</label><input type=\"search\" id=\"histQ\" class=\"mini-select\" style=\"width:100%;\" placeholder=\"Treino, exercício, data ou nota (ex.: quinta pernas, 05/11, nov)\" autocomplete=\"off\" value=\"" + escapeHtml(state.histQ || "") + "\"></div>" +
+  return head + "<div class=\"checkin-field\"><label for=\"histQ\">Pesquisar</label><input type=\"search\" id=\"histQ\" class=\"mini-select\" style=\"width:100%;\" placeholder=\"Treino, exercício, data ou nota\" autocomplete=\"off\" value=\"" + escapeHtml(state.histQ || "") + "\"></div>" +
     "<div class=\"evo-chips\" role=\"group\" aria-label=\"Período\">" + HIST_PERIODS.map(function(p){ var on = p.id === per; return "<button type=\"button\" class=\"wl-chip" + (on ? " on" : "") + "\" data-hist-period=\"" + p.id + "\" aria-pressed=\"" + on + "\">" + p.label + "</button>"; }).join("") + "</div>" +
     tplSyncLine(s) + "<div id=\"histList\" style=\"margin-top:10px;\">" + histListHtml(s) + "</div></div>";
 }
@@ -7494,7 +7494,7 @@ function wireWorkoutLogger(s, el, rerender){
     if (authRole === "professional" && sbReady){
       // só se dá como guardado (e só se apaga o rascunho) depois de o servidor aceitar; se falhar, desfaz-se e o rascunho fica
       var idleLabel = save.textContent;
-      wlSaving[s.id] = true; save.disabled = true; save.textContent = "A guardar…";
+      wlSaving[s.id] = true; save.disabled = true; if (save.setAttribute) save.setAttribute("aria-busy", "true"); save.textContent = "A guardar…";
       Promise.resolve().then(function(){ return appendWorkoutLogAsPro(s, log); }).then(function(ok){
         if (!ok) throw new Error("columns");
         delete wlSaving[s.id];
@@ -7502,7 +7502,7 @@ function wireWorkoutLogger(s, el, rerender){
       }).catch(function(e){
         delete wlSaving[s.id];
         undoWorkoutLog(s, log);
-        save.disabled = false; save.textContent = idleLabel;
+        save.disabled = false; if (save.removeAttribute) save.removeAttribute("aria-busy"); save.textContent = idleLabel;
         showToast(e && e.message === "columns" ? "⚠ O treino ainda não pode ser guardado: falta correr a migração 0019 no Supabase." : "⚠ Não foi possível guardar o treino — verifica a tua ligação");
       });
       return;
