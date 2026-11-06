@@ -2433,15 +2433,21 @@ function workoutSyncedIds(s){
   try { var a = JSON.parse(raw); if (!Array.isArray(a)) return null; a.forEach(function(l){ if (l && l.id) out[l.id] = true; }); } catch (e) { return null; }
   return out;
 }
-function workoutLogPending(s, log, synced){
+function workoutLogPending(s, log, synced, unsent){
   if (!log || !log.id || authRole !== "student" || !sbReady) return false;
-  if (unsentHas(s.id, log.id)) return true;
+  if (unsent !== undefined ? (Array.isArray(unsent) && unsent.indexOf(log.id) >= 0) : unsentHas(s.id, log.id)) return true;
   var ids = synced === undefined ? workoutSyncedIds(s) : synced;
   return !!ids && !ids[log.id];
 }
 function workoutSyncInfo(s){
   if (!s || authRole !== "student") return {state: "none", text: "", pending: 0, canRetry: false};
   if (!sbReady) return {state: "local", text: "Modo local: os treinos ficam guardados só neste telemóvel.", pending: 0, canRetry: false};
+  var mine = unsentRead()[s.id];
+  if (Array.isArray(mine) && mine.length){ // ids de treinos que já não existem na ficha (ex.: a ficha foi reposta pelo servidor) não ficam «por enviar» para sempre
+    var have = {}; (s.workoutLogs || []).forEach(function(l){ if (l && l.id) have[l.id] = true; });
+    var keep = mine.filter(function(id){ return have[id]; });
+    if (keep.length !== mine.length){ var all = unsentRead(); if (keep.length) all[s.id] = keep; else delete all[s.id]; unsentWrite(all); }
+  }
   var synced = workoutSyncedIds(s), pend = 0;
   workoutLogsForWrite(s).forEach(function(l){ if (workoutLogPending(s, l, synced)) pend++; });
   var ob = outboxRead()[s.id], n = Math.max(pend, ob && ob.cols && ob.cols.workout_logs ? 1 : 0);
@@ -5228,25 +5234,28 @@ function histFiltered(s){
     return q.split(/\s+/).every(function(tok){ return hay.indexOf(tok) >= 0; }); // todas as palavras têm de aparecer: «quinta pernas», «nov agachamento», «05/11»
   }).sort(function(a, b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.id < b.id ? 1 : -1); });
 }
-function histRowHtml(s, l, synced){
-  var t = logTotals(l), pend = workoutLogPending(s, l, synced);
+function histRowHtml(s, l, synced, unsent){
+  var t = logTotals(l), pend = workoutLogPending(s, l, synced, unsent);
   return "<button type=\"button\" class=\"hist-row\" data-hist=\"" + escapeHtml(l.id) + "\"><span class=\"hist-top\"><span class=\"hist-date\">" + escapeHtml(fmtWeekdayDatePt(l.date)) + "</span>" +
     (pend ? "<span class=\"hist-badge\">⏳ por enviar</span>" : "") + "</span><span class=\"hist-name\">" + escapeHtml(l.dayName || "Treino") + "</span>" +
     "<span class=\"hist-sub\">" + plural(t.sets, "série", "séries") + (t.volume > 0 ? " · " + fmtInt(t.volume) + " kg" : "") + (l.rpe ? " · esforço " + escapeHtml(String(l.rpe)) + "/10" : "") + (l.notes ? " · com nota" : "") + "</span></button>";
 }
+var HIST_PAGE = 40; // linhas por página: com anos de treinos a lista inteira tornava a pesquisa lenta (≈ 0,8 s por tecla com 800 treinos)
 function histListHtml(s){
-  var list = histFiltered(s), synced = authRole === "student" && sbReady ? workoutSyncedIds(s) : null;
+  var list = histFiltered(s), synced = authRole === "student" && sbReady ? workoutSyncedIds(s) : null, unsent = authRole === "student" && sbReady ? (unsentRead()[s.id] || []) : [];
+  var limit = Math.max(HIST_PAGE, state.histLimit || HIST_PAGE), shown = list.slice(0, limit);
   if (!list.length){
     var any = (s.workoutLogs || []).some(function(l){ return l && logTotals(l).sets; });
     return any ? "<p class=\"muted-p\" id=\"histNone\">Nenhum treino corresponde à pesquisa neste período.</p><button type=\"button\" class=\"btn btn-sm\" id=\"histClear\">Limpar pesquisa e filtros</button>"
       : "<p class=\"muted-p\" id=\"histEmpty\">Ainda não há treinos registados. Depois do primeiro treino terminado, ficam aqui para os rever.</p>";
   }
   var html = "<p class=\"muted-p\" id=\"histCount\" style=\"margin-bottom:6px;\">" + plural(list.length, "treino", "treinos") + "</p>", month = "";
-  list.forEach(function(l){
+  shown.forEach(function(l){
     var m = ""; try { m = new Date(l.date + "T00:00:00").toLocaleDateString("pt-PT", {month: "long", year: "numeric"}); } catch (e) { m = l.date.slice(0, 7); }
     if (m !== month){ month = m; html += "<div class=\"hist-month\">" + escapeHtml(m.charAt(0).toUpperCase() + m.slice(1)) + "</div>"; }
-    html += histRowHtml(s, l, synced);
+    html += histRowHtml(s, l, synced, unsent);
   });
+  if (list.length > shown.length) html += "<button type=\"button\" class=\"btn btn-sm\" id=\"histMore\" style=\"margin-top:12px; width:100%;\">Mostrar mais (" + plural(list.length - shown.length, "treino", "treinos") + " por ver)</button>";
   return html;
 }
 /* ---------- Calendário de atividade e resumo do mês ----------
@@ -5285,15 +5294,15 @@ function tplCalendario(s){
   var today = isoOfLocalDate(new Date()), runDays = rn.state === "ok" ? rn.byDay : {}, title = MONTH_NAMES_PT[m].charAt(0).toUpperCase() + MONTH_NAMES_PT[m].slice(1) + " de " + y;
   var html = "<div class=\"cal-nav\"><button type=\"button\" class=\"btn btn-sm\" data-cal-nav=\"-1\" aria-label=\"Mês anterior\">‹</button><div class=\"cal-title\" id=\"calTitle\" role=\"heading\" aria-level=\"2\">" + escapeHtml(title) + "</div>" +
     "<button type=\"button\" class=\"btn btn-sm\" data-cal-nav=\"1\" aria-label=\"Mês seguinte\"" + (key >= calNowKey() ? " disabled" : "") + ">›</button></div>";
-  html += "<div class=\"cal-grid\" role=\"grid\" aria-label=\"" + escapeHtml(title) + "\">" + WEEK_DAY_NAMES.map(function(n){ return "<div class=\"cal-dow\" role=\"columnheader\">" + n + "</div>"; }).join("");
-  for (var i = 0; i < lead; i++) html += "<div class=\"cal-cell empty\" role=\"gridcell\" aria-hidden=\"true\"></div>";
+  html += "<div class=\"cal-grid\" role=\"group\" aria-label=\"" + escapeHtml(title) + ": dias com atividade\">" + WEEK_DAY_NAMES.map(function(n){ return "<div class=\"cal-dow\" aria-hidden=\"true\">" + n + "</div>"; }).join("");
+  for (var i = 0; i < lead; i++) html += "<div class=\"cal-cell empty\" aria-hidden=\"true\"></div>";
   for (var d = 1; d <= nDays; d++){
     var iso = key + "-" + ("0" + d).slice(-2), ns = (st.byDay[iso] || []).length, nr = (runDays[iso] || []).length;
     var label = d + " de " + MONTH_NAMES_PT[m] + ": " + (ns || nr ? [ns ? plural(ns, "treino", "treinos") : "", nr ? plural(nr, "atividade de corrida ou bicicleta", "atividades de corrida ou bicicleta") : ""].filter(Boolean).join(" e ") : "sem atividade");
     var dots = (ns ? "<i class=\"dot s\" aria-hidden=\"true\"></i>" : "") + (nr ? "<i class=\"dot r\" aria-hidden=\"true\"></i>" : "");
     var cls = "cal-cell" + (iso === today ? " today" : "") + (ns || nr ? " has" : "");
-    html += (ns || nr) ? "<button type=\"button\" class=\"" + cls + "\" role=\"gridcell\" data-cal-day=\"" + iso + "\" aria-label=\"" + escapeHtml(label) + "\"><span>" + d + "</span>" + dots + "</button>"
-      : "<div class=\"" + cls + "\" role=\"gridcell\" aria-label=\"" + escapeHtml(label) + "\"><span>" + d + "</span></div>";
+    html += (ns || nr) ? "<button type=\"button\" class=\"" + cls + "\" data-cal-day=\"" + iso + "\" aria-label=\"" + escapeHtml(label) + "\"><span>" + d + "</span>" + dots + "</button>"
+      : "<div class=\"" + cls + "\" aria-hidden=\"true\"><span>" + d + "</span></div>"; // dias sem atividade não entram na leitura por voz: só os botões dos dias com treino ou corrida
   }
   html += "</div><div class=\"cal-legend\"><span><i class=\"dot s\"></i> Musculação</span>" + (rn.state !== "off" ? "<span><i class=\"dot r\"></i> Corrida e bicicleta</span>" : "") + "</div>";
   // resumo do mês
@@ -5357,10 +5366,16 @@ function openWorkoutDetail(s, id){
 function wireHistorico(s, el){
   el.querySelectorAll("[data-hist-view]").forEach(function(b){ b.addEventListener("click", function(){ state.histView = b.getAttribute("data-hist-view"); renderAlunoTab(s); }); });
   if (state.histView === "cal"){ wireCalendario(s, el); return; }
-  function wireRows(){ el.querySelectorAll("[data-hist]").forEach(function(b){ b.addEventListener("click", function(){ openWorkoutDetail(s, b.getAttribute("data-hist")); }); }); var c = el.querySelector("#histClear"); if (c) c.addEventListener("click", function(){ state.histQ = ""; state.histPeriod = "all"; renderAlunoTab(s); }); }
+  function paint(){ var box = el.querySelector("#histList"); if (box){ box.innerHTML = histListHtml(s); wireRows(); } }
+  function wireRows(){
+    el.querySelectorAll("[data-hist]").forEach(function(b){ b.addEventListener("click", function(){ openWorkoutDetail(s, b.getAttribute("data-hist")); }); });
+    var c = el.querySelector("#histClear"); if (c) c.addEventListener("click", function(){ state.histQ = ""; state.histPeriod = "all"; state.histLimit = HIST_PAGE; renderAlunoTab(s); });
+    var more = el.querySelector("#histMore"); if (more) more.addEventListener("click", function(){ state.histLimit = (state.histLimit || HIST_PAGE) + HIST_PAGE; paint(); });
+  }
+  var histTimer = null;
   var q = el.querySelector("#histQ");
-  if (q) q.addEventListener("input", function(){ state.histQ = q.value; var box = el.querySelector("#histList"); if (box){ box.innerHTML = histListHtml(s); wireRows(); } }); // só a lista: redesenhar o ecrã fecharia o teclado
-  el.querySelectorAll("[data-hist-period]").forEach(function(b){ b.addEventListener("click", function(){ state.histPeriod = b.getAttribute("data-hist-period"); renderAlunoTab(s); }); });
+  if (q) q.addEventListener("input", function(){ state.histQ = q.value; state.histLimit = HIST_PAGE; clearTimeout(histTimer); histTimer = setTimeout(paint, 120); }); // só a lista, depois de uma pausa na escrita: redesenhar o ecrã fecharia o teclado
+  el.querySelectorAll("[data-hist-period]").forEach(function(b){ b.addEventListener("click", function(){ state.histPeriod = b.getAttribute("data-hist-period"); state.histLimit = HIST_PAGE; renderAlunoTab(s); }); });
   wireRows();
 }
 
@@ -6185,7 +6200,7 @@ function tplTreinoScreen(s){
     "<p class=\"wl-remain\" id=\"wlRemain\">" + (done >= total ? "Todas as séries marcadas: toca em «Terminar treino» no fim." : "Faltam " + (total - done) + (total - done === 1 ? " série" : " séries") + ".") + "</p>" +
     "<p class=\"wl-status" + (st.bad ? " bad" : "") + "\" id=\"wlStatus\" role=\"status\" data-day=\"" + escapeHtml(day.id) + "\">" + escapeHtml(st.text) + "</p></div>" +
     tplWorkoutLogger(s) +
-    "<div class=\"wl-dock\" id=\"wlDock\" hidden><div class=\"wl-dock-info\"><div class=\"wl-dock-ex\" id=\"wlDockEx\"></div><div class=\"wl-dock-set\" id=\"wlDockSet\"></div></div><button type=\"button\" class=\"btn primary\" id=\"wlDockBtn\" data-mode=\"set\">✓ Feita</button></div>";
+    "<div class=\"wl-dock\" id=\"wlDock\" role=\"region\" aria-label=\"Série atual\" hidden><div class=\"wl-dock-info\"><div class=\"wl-dock-ex\" id=\"wlDockEx\"></div><div class=\"wl-dock-set\" id=\"wlDockSet\"></div></div><button type=\"button\" class=\"btn primary\" id=\"wlDockBtn\" data-mode=\"set\">✓ Feita</button></div>";
 }
 
 // ligações entre "Hoje", "Plano" e o ecrã de treino
@@ -11523,7 +11538,8 @@ function daysSinceDate(iso){
   if (!iso) return null;
   var d = new Date(iso + "T00:00:00");
   if (isNaN(d.getTime())) return null;
-  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  var n = new Date(); // dias de calendário, não múltiplos de 24 h: a mudança de hora (23 h ou 25 h) não desloca «ontem» durante uma hora
+  return Math.max(0, Math.round((Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000));
 }
 function signalPesagem(s){
   var p = weightProgress(s);

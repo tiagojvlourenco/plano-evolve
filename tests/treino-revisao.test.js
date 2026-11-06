@@ -139,6 +139,7 @@ function rowAna(opts){
   await W.pg.waitForSelector("#openHistorico");
   await W.pg.locator("#openHistorico").click(); await W.pg.waitForSelector("#histQ");
   await W.pg.fill("#histQ", "bem hoje");
+  await W.pg.waitForFunction(function(){ var e = document.getElementById("histCount"); return e && /^1 treino/.test(e.innerText); }); // a pesquisa espera uma pausa na escrita
   check.check("24. A nota escrita encontra-se na pesquisa do histórico, e a linha diz «com nota»", /com nota/.test(await W.pg.locator("#histList").innerText()) && /1 treino/.test(await W.pg.locator("#histCount").innerText()));
   await W.ctx.close();
 
