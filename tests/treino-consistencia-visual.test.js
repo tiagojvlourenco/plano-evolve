@@ -26,6 +26,7 @@ function rowAna(o){
   authRole = "professional";
   var s = buildFullDemoStudent(); s.id = "ana"; s.name = "Ana Treina"; s.isDemo = false; s.active = true; s.photos = []; s.nutritionPhase = null;
   var day = s.trainingProgram.days[0];
+  s.trainingDays = [0, 1, 2, 3, 4, 5, 6]; // todos os dias são de treino: senão, num dia de descanso, o botão é «Treinar mesmo assim» (pequeno, de propósito) e o teste dependia do dia da semana
   if (o.noPlan) s.trainingProgram.days = [];
   var r = JSON.parse(JSON.stringify(studentToRow(s)));
   r.workout_logs = o.noPlan ? [] : [0, 1, 2].map(function(i){ return {id: "h" + i, date: iso(2 + i * 7), dayId: day.id, dayName: day.name, rpe: 7, notes: "", entries: day.exercises.map(function(e){ return {exerciseId: e.id, name: e.name, sets: [{reps: 8, load: 40 + i}, {reps: 8, load: 40 + i}]}; })}; });

@@ -620,3 +620,15 @@ Medido com 800 treinos registados e o processador 4× mais lento (≈ telemóvel
 - **Limites:** o desempenho foi medido com CPU simulada em Chromium; a lista de corridas (Cardio) não foi medida com centenas de corridas.
 - Testes: `tests/treino-qualidade.test.js` (18 verificações, com fuso de Lisboa).
 
+## 8az. EVOLVE Treino: robustez (dados estragados no telemóvel) e offline de ponta a ponta
+
+Ronda de verificação por ângulos ainda não testados. Resultado: **dois defeitos reais corrigidos** e o resto confirmado.
+- **Rascunho estragado (corrigido):** se o armazenamento tivesse um número ou um texto no lugar do rascunho do treino (outra versão da app, edição à mão), a primeira escrita falhava e «Hoje» nem desenhava (aluno sem conseguir treinar). O rascunho lido passa por `wlDraftClean`: só se aceita a forma certa, campo a campo.
+- **Fila de envio estragada (corrigido):** uma entrada mal formada (`{ana: "x"}`, `cols` nulo, lista de treinos que não é lista) fazia o mesmo e bloqueava o envio das restantes. A fila lida passa por `outboxClean`: entradas inválidas caem, as boas ficam.
+- **Saída do cartão «Algo correu mal»:** passa a ter «Continua a falhar?» → «Apagar o rascunho local» (apaga só o treino em curso e as opções de Conforto; os treinos guardados e os por enviar não são tocados).
+- **Offline de ponta a ponta (confirmado, sem alterações):** com o service worker a sério — abre sem rede (29 ficheiros em cache, 0 pedidos falhados), regista e termina o treino («Sem ligação: 1 treino guardado neste telemóvel»), sobrevive a recarregar (3 treinos, 1 «por enviar») e ao voltar a rede sincroniza sozinho (3 treinos no servidor, sem duplicar).
+- **Cardio com 400 corridas (confirmado):** 100 por página, abre em ~0,3 s com a CPU 4× mais lenta; a abrir uma corrida ~0,13 s. Sem alterações.
+- **Já robustos:** cópia local (snapshot) estragada, «por enviar» e «conforto» com formas erradas.
+- **Limites:** não testa o iOS a limpar o armazenamento, o Wi-Fi a falhar a meio de um pedido nem o disco realmente cheio (o aviso de rascunho não guardado já existia).
+- Testes: `tests/treino-robustez.test.js` (12 verificações, incluindo 8 casos de armazenamento estragado e o offline real).
+

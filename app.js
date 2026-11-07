@@ -2271,9 +2271,22 @@ function rowPatch(row, baseline){
   return p;
 }
 
+// a fila lida do telemóvel só aceita a forma certa ({idAluno: {cols: {coluna: valor}, full, ts}}): uma entrada estragada nunca pode impedir a app de abrir nem o envio das outras
+function outboxClean(v){
+  var out = {}, isObj = function(x){ return !!x && typeof x === "object" && !Array.isArray(x); };
+  if (!isObj(v)) return out;
+  Object.keys(v).forEach(function(id){
+    var e = v[id];
+    if (!isObj(e) || !isObj(e.cols)) return;
+    var cols = {};
+    Object.keys(e.cols).forEach(function(k){ if (k === "workout_logs" && !Array.isArray(e.cols[k])) return; cols[k] = e.cols[k]; });
+    if (Object.keys(cols).length) out[id] = {cols: cols, full: !!e.full, ts: typeof e.ts === "number" ? e.ts : Date.now()};
+  });
+  return out;
+}
 function outboxRead(){
   if (outboxMem) return outboxMem;
-  try { var v = JSON.parse(localStorage.getItem(OUTBOX_KEY) || "{}"); outboxMem = v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { outboxMem = {}; }
+  try { outboxMem = outboxClean(JSON.parse(localStorage.getItem(OUTBOX_KEY) || "{}")); } catch (e) { outboxMem = {}; }
   return outboxMem;
 }
 var outboxStorageOk = true; // falso se o telemóvel não deixou guardar a fila (sem espaço / modo privado): as alterações só existem em memória
@@ -4547,10 +4560,13 @@ function renderAlunoTab(s){
       // um erro a desenhar um ecrã não pode deixar o aluno com o ecrã em branco: os registos e o treino em curso estão guardados à parte
       try { console.error("EVOLVE Treino: erro a desenhar o separador", state.alunoTab, err && err.message); } catch (e2) {}
       el.innerHTML = "<div class=\"card\" id=\"tabError\" role=\"alert\"><div class=\"eyebrow\">Algo correu mal</div><p class=\"muted-p\" style=\"margin:6px 0 12px;\">Não foi possível mostrar este ecrã. Os teus treinos e o treino em curso continuam guardados neste telemóvel.</p>" +
-        "<button type=\"button\" class=\"btn primary\" id=\"tabErrorRetry\">Tentar outra vez</button> <button type=\"button\" class=\"btn\" id=\"tabErrorHome\">Voltar ao início</button></div>";
+        "<button type=\"button\" class=\"btn primary\" id=\"tabErrorRetry\">Tentar outra vez</button> <button type=\"button\" class=\"btn\" id=\"tabErrorHome\">Voltar ao início</button>" +
+        "<details class=\"soft-details\" style=\"margin-top:10px; text-align:left;\"><summary>Continua a falhar?</summary><p class=\"muted-p\" style=\"margin:6px 0 10px;\">Pode haver dados locais estragados neste telemóvel. Isto apaga só o treino <b>em curso</b> (rascunho) e as opções de Conforto; os treinos já guardados e os que estão por enviar não são tocados.</p><button type=\"button\" class=\"btn\" id=\"tabErrorReset\">Apagar o rascunho local</button></details></div>";
       var r1 = el.querySelector("#tabErrorRetry"), r2 = el.querySelector("#tabErrorHome");
       if (r1) r1.addEventListener("click", function(){ renderAlunoTab(s); });
       if (r2) r2.addEventListener("click", function(){ state.alunoTab = "hoje"; renderAlunoShell(); });
+      var r3 = el.querySelector("#tabErrorReset");
+      if (r3) r3.addEventListener("click", function(){ try { wlDraftWipe(); window.localStorage.removeItem(WL_COMFORT_KEY); } catch (e3) {} state.wlRestored = {}; state.alunoTab = "hoje"; renderAlunoShell(); });
     }
     return;
   }
@@ -6661,10 +6677,35 @@ function renderRestTimer(now){
 // Rascunho do treino em curso: sobrevive a mudar de separador/re-desenhar e (se o browser deixar) a recarregar a página
 var WL_DRAFT_KEY = "evolve_wl_draft_v1";
 var WL_DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// o que vem do armazenamento do telemóvel pode estar estragado (outra versão da app, edição à mão, disco cheio a meio de uma escrita): só se aceita a forma
+// certa, campo a campo. Um número ou um texto no lugar do objeto fazia a primeira escrita falhar e deixava o aluno sem conseguir abrir «Hoje».
+function wlDraftClean(raw){
+  var out = {}, isObj = function(v){ return !!v && typeof v === "object" && !Array.isArray(v); };
+  if (!isObj(raw)) return out;
+  Object.keys(raw).forEach(function(k){
+    var d = raw[k];
+    if (!isObj(d)) return;
+    var clean = {sets: {}, rpe: typeof d.rpe === "number" && isFinite(d.rpe) ? d.rpe : null, notes: typeof d.notes === "string" ? d.notes.slice(0, 500) : "", savedAt: typeof d.savedAt === "number" && isFinite(d.savedAt) ? d.savedAt : 0};
+    if (d.rpeManual === true) clean.rpeManual = true;
+    if (isObj(d.restOverride)){ clean.restOverride = {}; Object.keys(d.restOverride).forEach(function(n){ var v = d.restOverride[n]; if (typeof v === "number" && v >= 5 && v <= 3600) clean.restOverride[n] = v; }); }
+    if (isObj(d.sets)) Object.keys(d.sets).forEach(function(sk){
+      var st = d.sets[sk];
+      if (!isObj(st)) return;
+      var c = {}, num = function(v){ return typeof v === "string" || (typeof v === "number" && isFinite(v)); };
+      if (num(st.reps)) c.reps = st.reps;
+      if (num(st.load)) c.load = st.load;
+      if (num(st.rir)) c.rir = st.rir;
+      if (st.done === true) c.done = true;
+      clean.sets[sk] = c;
+    });
+    out[k] = clean;
+  });
+  return out;
+}
 function wlDraftStore(){
   if (!state.wlDraft){
     state.wlDraft = {};
-    try { var raw = window.localStorage && window.localStorage.getItem(WL_DRAFT_KEY); if (raw) state.wlDraft = JSON.parse(raw) || {}; } catch (e) { state.wlDraft = {}; }
+    try { var raw = window.localStorage && window.localStorage.getItem(WL_DRAFT_KEY); if (raw) state.wlDraft = wlDraftClean(JSON.parse(raw)); } catch (e) { state.wlDraft = {}; }
     // rascunhos de há mais de 12 h (ou sem data) são de um treino abandonado: não reaparecem como "séries feitas"
     state.wlRestored = {}; // rascunhos com séries feitas que vieram do telemóvel (a app foi fechada ou recarregada): o ecrã de treino avisa que retomou
     Object.keys(state.wlDraft).forEach(function(k){
