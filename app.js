@@ -11480,13 +11480,28 @@ var FLEX_OVERRIDE_CHECKBOXES = [
 ];
 
 
+var CHECKINS_VISIBLE = 6;
+function checkinRowHtml(c){
+  return "<div class=\"history-row\"><div><div class=\"hlabel\">" + fmtDatePt(c.date) + "</div>" +
+    (c.notes ? "<div class=\"muted-p\">" + escapeHtml(c.notes) + "</div>" : "") + "</div>" +
+    "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + (c.sleepHours > 0 ? " · sono " + String(c.sleepHours).replace(".", ",") + "h" : "") + (c.stress > 0 ? " · stress " + c.stress : "") + (c.recovery > 0 ? " · recuperação " + c.recovery : "") + (c.sleepQuality > 0 ? " · qualidade do sono " + c.sleepQuality : "") + (c.digestion > 0 ? " · digestão " + c.digestion : "") + "</span></div></div>";
+}
+// Fase 38: um resumo no topo (quantos, o último e as médias das últimas 4 semanas) e só os mais recentes à vista; os anteriores recolhem-se
+function checkinsSummary(s){
+  var all = s.checkins || [];
+  if (!all.length) return "";
+  var last = all[all.length - 1], recent = all.slice(-4), days = daysSinceDate(last.date);
+  function avg(k){ var v = recent.map(function(c){ return Number(c[k]); }).filter(function(n){ return n > 0; }); return v.length ? ptNum(v.reduce(function(a, b){ return a + b; }, 0) / v.length, 1) : "—"; }
+  return "<div class=\"card\" style=\"margin-bottom:12px;\"><div class=\"muted-p\">" + plural(all.length, "check-in", "check-ins") + " · o último " + (days == null ? fmtDatePt(last.date) : daysAgoLabel(days)) + "</div>" +
+    "<div class=\"muted-p\" style=\"margin-top:4px;\">Média dos últimos " + recent.length + ": adesão <span class=\"num\">" + avg("adherence") + "</span> · energia <span class=\"num\">" + avg("energy") + "</span> · fome <span class=\"num\">" + avg("hunger") + "</span></div></div>";
+}
 function tplProCheckins(s){
-  var html = "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de check-ins</div>";
-  s.checkins.slice().reverse().forEach(function(c){
-    html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + fmtDatePt(c.date) + "</div>" +
-      (c.notes ? "<div class=\"muted-p\">" + escapeHtml(c.notes) + "</div>" : "") + "</div>" +
-      "<div class=\"hval\">" + c.weight + " kg<br><span style=\"color:var(--muted); font-size:0.75rem;\">fome " + c.hunger + " · energia " + c.energy + " · adesão " + c.adherence + (c.sleepHours > 0 ? " · sono " + String(c.sleepHours).replace(".", ",") + "h" : "") + (c.stress > 0 ? " · stress " + c.stress : "") + (c.recovery > 0 ? " · recuperação " + c.recovery : "") + (c.sleepQuality > 0 ? " · qualidade do sono " + c.sleepQuality : "") + (c.digestion > 0 ? " · digestão " + c.digestion : "") + "</span></div></div>";
-  });
+  var html = checkinsSummary(s) + "<div class=\"eyebrow\" style=\"margin-bottom:8px;\">Histórico de check-ins</div>";
+  var rows = s.checkins.slice().reverse();
+  rows.slice(0, CHECKINS_VISIBLE).forEach(function(c){ html += checkinRowHtml(c); });
+  if (rows.length > CHECKINS_VISIBLE){
+    html += proFold("checkinsAntigos", "Anteriores", plural(rows.length - CHECKINS_VISIBLE, "check-in", "check-ins"), rows.slice(CHECKINS_VISIBLE).map(checkinRowHtml).join(""));
+  }
   if (!s.checkins.length) html += "<p class=\"muted-p\">Sem check-ins registados.</p>";
   return html;
 }

@@ -663,3 +663,7 @@ Também recolhíveis (`proFold`, estado em `PRO_FOLD_OPEN`, lembrado durante a s
 ## 8bd. Avaliação do profissional: secções recolhíveis
 
 No separador Avaliação (só na vista do profissional; o aluno vê tudo como antes) ficam sempre visíveis o peso, os indicadores de composição e a tabela de avaliações. Recolhidos (`proFold`, estado lembrado na sessão): **Nova avaliação** (formulário + importar pesagens), **Perímetros**, **Pregas cutâneas** e **Fotografias de progresso**, cada um com o essencial no resumo (nº de avaliações, nº de fotos). Os testes de browser abrem os blocos antes de os ler.
+
+## 8be. Check-ins do profissional: resumo e histórico curto
+
+`tplProCheckins` abre com um resumo (quantos check-ins, quando foi o último e a média de adesão, energia e fome dos últimos 4) e mostra só os 6 mais recentes; os anteriores ficam num bloco recolhido «Anteriores» (`proFold`). As linhas são as mesmas de antes (todos os campos). Teste: `tests/pro-checkins.test.js`.
