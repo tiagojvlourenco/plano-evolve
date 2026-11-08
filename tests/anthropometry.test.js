@@ -171,7 +171,7 @@ function near(a, b, tol){ return a != null && Math.abs(a - b) <= tol; }
   var t = tplAssessTable({assessments: [{date: "2026-09-15", weight: 0, waist: 80}, {date: "2026-09-16", weight: 0, skinfolds: {triceps: 10}}, {date: "2026-09-17", weight: 60, bodyFat: 20}]}, true);
   check.check("7. A tabela de avaliações indica quando uma visita tem perímetros ou pregas, numa segunda linha (não alarga a coluna da data)", /<br><span class="atime">perímetros<\/span>/.test(t) && /<br><span class="atime">pregas<\/span>/.test(t) && (t.match(/perímetros/g) || []).length === 1);
   check.check("7. Uma visita com perímetros e pregas junta as duas etiquetas na mesma linha", /<br><span class="atime">perímetros · pregas<\/span>/.test(tplAssessTable({assessments: [{date: "2026-09-15", weight: 0, waist: 80, skinfolds: {triceps: 10}}]}, true)));
-  check.check("7. Os cartões entram no separador de avaliação do profissional e do aluno", /html \+= tplPerimetersCard\(s\);\s*html \+= tplSkinfoldsCard\(s, opts\);/.test(appSource));
+  check.check("7. Os cartões entram no separador de avaliação do profissional e do aluno", /tplPerimetersCard\(s\)[\s\S]{0,200}tplSkinfoldsCard\(s, opts\)[\s\S]{0,400}foldIf\("perimetros"[\s\S]{0,200}foldIf\("pregas"/.test(appSource));
 })();
 
 // ---- 8. Várias leituras por local (ISAK): média de 2, mediana de 3 ----

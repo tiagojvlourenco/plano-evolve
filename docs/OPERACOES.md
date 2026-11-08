@@ -659,3 +659,7 @@ Resultado da auditoria (`auditoria-evolve.md`). O que mudou:
 Cada refeição do plano (`tplPlanoMealEditor`) é um `<details class="pm-details">`: fechada mostra uma linha (nome, hora, kcal, nº de alimentos); aberta mostra o que já existia (nome, horário, remover, alimentos, «+ Adicionar alimento», macros). O estado aberto/fechado guarda-se por refeição (`PRO_MEAL_OPEN`, um `WeakSet` pela referência da refeição), por isso sobrevive aos redesenhos e à reordenação por horário; a refeição nova abre-se sozinha. Nenhuma lógica de edição mudou (os campos continuam no DOM). Teste: `tests/pro-refeicoes.test.js`.
 
 Também recolhíveis (`proFold`, estado em `PRO_FOLD_OPEN`, lembrado durante a sessão): **Alvos nutricionais**, **Fase e objetivo de peso** e **Suplementação (creatina)**. Fechados mostram o essencial (ex.: «1800 kcal · P 140 · H 180 · G 55», «Cut», «creatina 4 g/dia»). Os testes de browser que clicam nestes cartões abrem-nos primeiro (`.pro-fold` → `open`).
+
+## 8bd. Avaliação do profissional: secções recolhíveis
+
+No separador Avaliação (só na vista do profissional; o aluno vê tudo como antes) ficam sempre visíveis o peso, os indicadores de composição e a tabela de avaliações. Recolhidos (`proFold`, estado lembrado na sessão): **Nova avaliação** (formulário + importar pesagens), **Perímetros**, **Pregas cutâneas** e **Fotografias de progresso**, cada um com o essencial no resumo (nº de avaliações, nº de fotos). Os testes de browser abrem os blocos antes de os ler.

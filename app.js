@@ -8361,14 +8361,18 @@ function tplEvolucaoAluno(s, opts){
 
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
-    (opts.editable ? tplAssessForm(s) + tplImportWeighIns(s) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
+    (opts.editable ? proFold("novaAval", "Nova avaliação", "registar medidas e importar pesagens", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessTable(s, opts.editable) +
   "</div>";
 
-  html += tplPerimetersCard(s);
-  html += tplSkinfoldsCard(s, opts);
-
-  html += tplPhotosSection(s, opts);
+  // Fase 38: no ecrã do profissional, perímetros, pregas e fotografias vêm recolhidos, com o essencial no resumo
+  var nAv = (s.assessments || []).length;
+  function foldIf(key, title, summary, inner){ return !inner ? "" : opts.editable ? proFold(key, title, summary, inner, true) : inner; }
+  var perimHtml = tplPerimetersCard(s), skinHtml = tplSkinfoldsCard(s, opts);
+  html += foldIf("perimetros", "Perímetros", plural(nAv, "avaliação", "avaliações"), perimHtml);
+  html += foldIf("pregas", "Pregas cutâneas", plural(nAv, "avaliação", "avaliações"), skinHtml);
+  var nPh = (s.photos || []).length;
+  html += foldIf("fotos", "Fotografias de progresso", nPh ? plural(nPh, "foto", "fotos") : "sem fotos", tplPhotosSection(s, opts));
 
   html += tplAdherenceChart(s);
   return html;
@@ -10509,8 +10513,9 @@ function tplQuestionnaireCopy(s){
 
 var PRO_FOLD_OPEN = {};
 // bloco recolhível do ecrã de Nutrição: o título do próprio bloco (a «eyebrow» inicial) passa para o resumo
-function proFold(key, title, summary, inner){
+function proFold(key, title, summary, inner, stripInner){
   inner = String(inner).replace(/^<div class="eyebrow[^>]*>[^<]*<\/div>/, "");
+  if (stripInner) inner = inner.replace(/<div class="eyebrow">[^<]*<\/div>/, ""); // o título do cartão de dentro passa para o resumo
   return "<details class=\"pro-fold\" data-fold=\"" + key + "\"" + (PRO_FOLD_OPEN[key] ? " open" : "") + "><summary class=\"pm-summary\"><span class=\"pm-sum-name eyebrow\">" + escapeHtml(title) + "</span>" +
     "<span class=\"pm-sum-meta\">" + escapeHtml(summary) + "</span></summary><div style=\"margin-top:8px;\">" + inner + "</div></details>";
 }

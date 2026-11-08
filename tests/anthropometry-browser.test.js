@@ -25,11 +25,12 @@ if (!pw || !chromiumPath){
   await page.click('[data-stat-key="active"]').catch(function(){});
   await page.click("[data-open]");
   await page.click('#proApp .pro-nav-item[data-t="evolucao"]');
+  await page.evaluate(function(){ document.querySelectorAll(".pro-fold").forEach(function(d){ d.open = true; }); }); // perímetros, pregas, fotos e nova avaliação vêm recolhidos
   async function openSections(){
     await page.evaluate(function(){ document.querySelectorAll("details.assess-extra").forEach(function(d){ d.open = true; }); });
   }
   // títulos dos cartões visíveis num contentor (o cabeçalho do formulário também diz "Perímetros", por isso não serve procurar no texto todo)
-  async function cardTitles(scope){ return page.evaluate(function(sel){ return Array.prototype.map.call(document.querySelectorAll(sel + " .card > .eyebrow"), function(e){ return e.textContent.trim(); }); }, scope); }
+  async function cardTitles(scope){ return page.evaluate(function(sel){ return Array.prototype.map.call(document.querySelectorAll(sel + " .card > .eyebrow, " + sel + " .pro-fold > summary .pm-sum-name"), function(e){ return e.textContent.trim(); }); }, scope); }
   async function fillAll(map){ for (var id in map) await page.fill("#" + id, String(map[id])); }
   async function clearAll(ids){ for (var i = 0; i < ids.length; i++) await page.fill("#" + ids[i], ""); }
   await openSections();
@@ -75,6 +76,7 @@ if (!pw || !chromiumPath){
   // 5. guardar: aparecem os cartões e a linha na tabela, sem criar peso
   await page.click("#addAssessment");
   await page.waitForTimeout(200);
+  await page.evaluate(function(){ document.querySelectorAll(".pro-fold").forEach(function(d){ d.open = true; }); }); // os cartões novos (perímetros, pregas) vêm recolhidos
   var body = await page.locator("#proTabContent").innerText();
   var titles5 = await cardTitles("#proTabContent");
   check.check("5. Aparece o cartão de perímetros com as zonas e a diferença D/E", titles5.indexOf("Perímetros") >= 0 && /Pescoço/.test(body) && /Braço relaxado \(D\)/.test(body) && /Diferença entre o lado direito e o esquerdo/.test(body));
@@ -103,6 +105,7 @@ if (!pw || !chromiumPath){
   // 8. apagar a visita
   await page.click('#modeSwitch button[data-mode="pro"]');
   await page.click('#proApp .pro-nav-item[data-t="evolucao"]');
+  await page.evaluate(function(){ document.querySelectorAll(".pro-fold").forEach(function(d){ d.open = true; }); }); // perímetros, pregas, fotos e nova avaliação vêm recolhidos
   var proRows = page.locator("#proTabContent table.assess-table tbody tr").filter({hasText: "perímetros · pregas"});
   var dels = await page.locator("#proTabContent .assess-del").count();
   var rowText = await proRows.first().innerText();

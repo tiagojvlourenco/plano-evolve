@@ -115,7 +115,7 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   check.check("4. O nome do texto é escapado", tplImportPreview(s, xss, {full:0, weightOnly:1, duplicates:0}).indexOf("<img src=x>") === -1);
   var ui = tplImportWeighIns(s);
   check.check("4. A secção tem a caixa de texto e o botão de pré-visualização", /id="importWeighText"/.test(ui) && /id="importWeighPreview"/.test(ui));
-  check.check("4. A secção aparece só na vista do profissional", /opts\.editable \? tplAssessForm\(s\) \+ tplImportWeighIns\(s\)/.test(appSource));
+  check.check("4. A secção aparece só na vista do profissional", /opts\.editable \? proFold\("novaAval"[^;]{0,200}tplAssessForm\(s\) \+ tplImportWeighIns\(s\)/.test(appSource));
   check.check("4. Gravar chama persistStudent depois de juntar", /mergeWeighIns\(s, parsed\.entries, true\)[\s\S]{0,300}persistStudent\(s\)/.test(appSource));
 })();
 
