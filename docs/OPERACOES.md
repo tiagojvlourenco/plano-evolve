@@ -645,3 +645,11 @@ Resultado da auditoria (`auditoria-evolve.md`). O que mudou:
 - **Aluno:** o ecrã Hoje mostra as refeições antes do atalho para o Treino; o gráfico de adesão antigo só aparece com o check-in semanal ativo.
 - **Testes:** `tests/run-all.js` conta os ficheiros ignorados (sem Playwright/Postgres) e falha com `EVOLVE_REQUIRE_BROWSER=1`; 48 ficheiros que liam o código com janelas de tamanho fixo passaram a fatias por função; o falso Supabase já não deixa o aluno escrever `weights`/`weight_current` (migração 0031).
 - **Por fazer (decisão do profissional):** versões otimistas (Y1: nova migração + mudança na sincronização, alto risco, não validável sem a base real); aplicar 0020 (`plan_templates`) e 0026 (`studio_only`), que a produção ainda não tem; confirmar 0031 com a consulta no fim do ficheiro.
+
+## 8bb. Y1: versão otimista da ficha (migração 0035)
+
+- **Problema:** o profissional com a app em dois aparelhos (ou o aluno a gravar enquanto o profissional edita) podia sobrescrever, sem aviso, uma coluna que o outro acabou de mudar.
+- **Como funciona:** `students.rev` (bigint) sobe em cada UPDATE (gatilho `zz_students_bump_rev`, que corre depois da verificação de permissões do aluno). O profissional envia `update … where rev = <a que leu>` (`outboxSendCols`). Se não alterar nenhuma linha, `resolveRevConflict` lê a ficha: as colunas que o servidor não mudou seguem com a versão nova (sem perguntar); se outro aparelho mudou mesmo uma coluna que vais gravar, pergunta (OK = manter as tuas, Cancelar = usar a do servidor, que atualiza a ficha local). Máximo de 3 tentativas; depois a alteração fica na fila.
+- **Só o profissional** usa o filtro. O aluno grava como antes. Sem a coluna (migração por aplicar) a app grava como antes (`revColumnAvailable`).
+- **Testes:** `tests/ficha-versao.test.js` (16 verificações: dois aparelhos, mesma coluna, colunas diferentes, mesmo valor, conflito misto, aluno, sem migração, ficha que não pára de mudar). A migração foi ensaiada na base real dentro de uma transação desfeita: o aluno continua a gravar as suas colunas, o contador sobe e as colunas do plano continuam recusadas.
+- `tests/offline-browser.test.js` já não fica preso: fecha as ligações keep-alive do Chromium ao parar o servidor.

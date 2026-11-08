@@ -88,7 +88,7 @@ function fixtureRow(id, name){
 
   // voltar a abrir sem rede: servidor de ficheiros parado de verdade, a página vem do service worker
   await page.close();
-  await new Promise(function(r){ srv.server.close(r); });
+  await new Promise(function(r){ srv.server.close(r); if (srv.server.closeAllConnections) srv.server.closeAllConnections(); }); // sem isto, ligações keep-alive do Chromium seguravam o fecho e o teste ficava preso
   var page2 = await st.ctx.newPage();
   page2.setDefaultTimeout(6000);
   page2.on("pageerror", function(e){ errors.push(e.message); });

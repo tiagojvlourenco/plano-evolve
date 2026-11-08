@@ -2217,7 +2217,11 @@ function studentToRow(s){
 }
 var trainingColumnsAvailable = true;
 
-function rowToStudent(r){
+// versão otimista da ficha (migração 0035): contador que o servidor sobe em cada alteração; não enumerável para nunca entrar em cópias nem em comparações
+function revOf(r){ return r && r.rev != null && isFinite(Number(r.rev)) ? Number(r.rev) : null; }
+function setRev(s, v){ try { Object.defineProperty(s, "_rev", {value: v, writable: true, configurable: true, enumerable: false}); } catch (e) {} }
+function rowToStudent(r){ var o = rowToStudentBase(r); setRev(o, revOf(r)); return o; }
+function rowToStudentBase(r){
   return {
     id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
     birthDate: r.birth_date || null,
@@ -2284,6 +2288,7 @@ var contactColumnsAvailable = true; // migração 0022 (telefone e registo de co
 var studioOnlyColumnAvailable = true; // migração 0026 (aluno só de estúdio)
 var noNutritionColumnAvailable = true; // migração 0030 (aluno sem nutrição)
 var phaseColumnAvailable = true; // migração 0029 (fase nutricional bulk/cut)
+var revColumnAvailable = true; // migração 0035 (versão otimista da ficha)
 var outboxMem = null;
 var persistTimers = {}, persistStudents = {};
 var outboxFlushPromise = null, outboxRetryTimer = null;
@@ -2543,7 +2548,7 @@ function reconcileStudentFromServer(id){
     var row = res && res.data;
     var s = findStudent(id);
     if (!row || !s) return false;
-    Object.assign(s, rowToStudent(row));
+    Object.assign(s, rowToStudent(row)); setRev(s, revOf(row));
     setSyncBaseline(s, rowBaseline(studentToRow(s)));
     snapshotApplyPatch(id, row);
     redrawAfterSync();
@@ -2576,15 +2581,64 @@ function mergeWorkoutLogsAndResend(id){
 }
 
 // envia as colunas pendentes de um aluno; resolve com true se ficou tudo enviado ou descartado e false se foi só um problema de ligação
-function outboxSendCols(id, cols){
+/* Versão otimista (Y1, migração 0035): o profissional só grava se a ficha ainda estiver na versão (`rev`) que leu.
+   Se não estiver, lê-se a ficha: as colunas que o servidor não mudou seguem (reenvio com a versão nova); as que outro aparelho
+   mudou de facto perguntam antes de substituir. Sem a coluna `rev` (migração por aplicar) tudo funciona como antes. */
+var REV_MAX_TRIES = 3;
+function resolveRevConflict(id, cols, tries){
+  var s = findStudent(id);
+  return Promise.resolve(sb.from("students").select("*").eq("id", id).maybeSingle()).then(function(res){
+    var row = res && res.data;
+    if (res && res.error){ syncNoteFail(); return false; }
+    if (!row || !s) return "missing";
+    if (tries >= REV_MAX_TRIES){ syncNoteFail(); return false; } // a ficha não pára de mudar: tenta mais tarde, sem perder nada
+    var base = s._sync || {}, theirs;
+    try { theirs = studentToRow(rowToStudent(row)); } catch (e) { theirs = row; }
+    var clash = [], free = {};
+    Object.keys(cols).forEach(function(k){
+      var srv = jsonOf(theirs[k]);
+      if (srv !== (base[k] === undefined ? srv : base[k]) && srv !== jsonOf(cols[k])) clash.push(k); else free[k] = cols[k];
+    });
+    setRev(s, revOf(row));
+    if (!clash.length) return outboxSendCols(id, cols, tries + 1);
+    var keep = window.confirm("A ficha de " + (s.name || "este aluno") + " foi alterada noutro aparelho (" + clash.join(", ") + ") depois de a abrires.\n\nOK = manter as tuas alterações (substitui as do outro aparelho).\nCancelar = usar a versão que já está guardada.");
+    if (keep){
+      clash.forEach(function(k){ if (s._sync) s._sync[k] = jsonOf(theirs[k]); });
+      return outboxSendCols(id, cols, tries + 1);
+    }
+    var ob = outboxRead(), e = ob[id];
+    if (e){ clash.forEach(function(k){ delete e.cols[k]; }); if (!Object.keys(e.cols).length) delete ob[id]; outboxWrite(); }
+    showToast("A ficha de " + (s.name || "aluno") + " ficou com a versão guardada no servidor.");
+    var rest = Object.keys(free).length ? outboxSendCols(id, free, tries + 1) : Promise.resolve(true);
+    return rest.then(function(){ return reconcileStudentFromServer(id); }).then(function(){ return true; });
+  }, function(){ syncNoteFail(); return false; });
+}
+function outboxSendCols(id, cols, tries){
   if (!Object.keys(cols).length) return Promise.resolve(true);
-  return Promise.resolve(sb.from("students").update(cols).eq("id", id).select("id")).then(function(res){
+  tries = tries || 0;
+  var cur = findStudent(id);
+  var guarded = authRole === "professional" && revColumnAvailable && !!cur && cur._rev != null;
+  var q = sb.from("students").update(cols).eq("id", id);
+  if (guarded) q = q.eq("rev", cur._rev);
+  return Promise.resolve(q.select(guarded ? "id,rev" : "id")).then(function handle(res){
     if (res && !res.error && Array.isArray(res.data) && res.data.length === 0){
+      if (guarded){
+        return resolveRevConflict(id, cols, tries).then(function(out){
+          return out === "missing" ? handle({error: {message: "ficha não encontrada ou sem permissão", code: "0"}, status: 400}) : out;
+        });
+      }
       // o servidor não alterou nenhuma linha (sem permissão ou ficha inexistente): não se pode dar como enviado
       res = {error: {message: "ficha não encontrada ou sem permissão", code: "0"}, status: 400};
     }
-    if (!res || !res.error){ outboxAcked(id, cols); return true; }
+    if (!res || !res.error){
+      if (guarded && Array.isArray(res.data) && res.data[0] && revOf(res.data[0]) != null) setRev(cur, revOf(res.data[0]));
+      outboxAcked(id, cols); return true;
+    }
     var msg = String(res.error.message || "");
+    if (revColumnAvailable && /\brev\b/.test(msg) && /column|schema|does not exist/i.test(msg)){
+      revColumnAvailable = false; // migração 0035 por aplicar: grava como antes
+      return outboxSendCols(id, cols, tries);
+    }
     if (trainingColumnsAvailable && /training_program|workout_logs/.test(msg) && /column|schema|does not exist/i.test(msg)){
       // a migração 0019 ainda não foi aplicada: grava tudo o resto e avisa, em vez de perder as outras alterações
       trainingColumnsAvailable = false;
@@ -2697,7 +2751,7 @@ function proRefreshStudents(force){
       var cur = byId[r.id];
       if (!cur) return rowToStudent(r);
       if (persistStudents[r.id] || ob[r.id] || state.proSelectedId === r.id) return cur;
-      Object.assign(cur, rowToStudent(r));
+      Object.assign(cur, rowToStudent(r)); setRev(cur, revOf(r));
       setSyncBaseline(cur, null); // volta a tirar-se a versão de partida quando for aberta
       return cur;
     });
