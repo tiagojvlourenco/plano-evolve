@@ -679,3 +679,7 @@ As secções do Perfil continuam recolhidas por omissão e pela mesma ordem; cad
 - **Progresso do aluno:** Perímetros e Pregas cutâneas passam a blocos recolhíveis (as fotografias e o peso ficam à vista).
 - **Testes:** `pack-repair-browser` (20b) esperava pelo redesenho com leitura imediata e falhava às vezes; passou a esperar pelo texto.
 - **Instável sob carga:** `offline-browser` 15/16 (avisos de sincronização com tempos curtos) falha às vezes quando a bateria corre em paralelo e passa sempre sozinho.
+
+## 8bh. Plano do aluno: refeições recolhíveis
+
+No separador Plano do aluno, cada refeição é um `<details class="pl-meal">` com nome, hora e kcal no resumo; abre-se para ver os alimentos, trocar e ver as macros. O estado lembra-se enquanto a app está aberta (`state.planMealOpen`). O ecrã Hoje não mudou (já mostra as refeições do dia). Gestão e a app Treino não foram alteradas: a Gestão já esconde por omissão os pacotes sem nada a tratar («Mostrar todos») e o Treino é o ecrã de uso durante o treino.

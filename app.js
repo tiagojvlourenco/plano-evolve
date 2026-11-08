@@ -5559,14 +5559,15 @@ function tplPlano(s){
   s.meals.forEach(function(m, idx){
     if (!m.foods.length) return; // refeição ainda vazia: só o profissional a vê
     var totals = resolvedMealTotals(s, m);
-    html += "<div class=\"card plano-meal-card\">" +
-      "<div class=\"plano-meal-head\"><span class=\"mname\">" + escapeHtml(m.name) + "</span><span class=\"mtime\">" + escapeHtml(m.time) + "</span></div>";
+    // Fase 38: cada refeição é recolhível (nome, hora e kcal no resumo); o estado lembra-se enquanto a app está aberta
+    html += "<div class=\"card plano-meal-card\"><details class=\"pl-meal\" data-midx=\"" + idx + "\"" + (state.planMealOpen && state.planMealOpen[idx] ? " open" : "") + ">" +
+      "<summary class=\"pm-summary plano-meal-head\"><span class=\"mname pm-sum-name\">" + escapeHtml(m.name) + "</span><span class=\"mtime pm-sum-meta\">" + escapeHtml(m.time) + " · " + Math.round(totals.kcal) + " kcal</span></summary>";
     if (profile.mealBuilderEnabled) html += tplMealBuilder(m, idx, s, true);
     else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
     else html += tplMealChoice(m, idx, s, true);
     if (idx === creatineIdx) html += creatineLineHtml(s);
     html += "<div class=\"plano-meal-macros\">" + Math.round(totals.kcal) + " kcal · P " + Math.round(totals.p) + "g · H " + Math.round(totals.c) + "g · G " + Math.round(totals.f) + "g</div>";
-    html += "</div>";
+    html += "</details></div>";
   });
   return html;
 }
@@ -9502,6 +9503,12 @@ function wireAlunoTab(s){
       commitMealView(s, m);
       renderAlunoTab(s);
       persistStudent(s);
+    });
+  });
+  el.querySelectorAll(".pl-meal").forEach(function(d){
+    d.addEventListener("toggle", function(){
+      state.planMealOpen = state.planMealOpen || {};
+      state.planMealOpen[d.getAttribute("data-midx")] = d.open;
     });
   });
   el.querySelectorAll("[data-open-group]").forEach(function(btn){

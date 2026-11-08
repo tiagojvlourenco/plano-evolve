@@ -44,6 +44,7 @@ function fixtureRow(id, name, extra){
   await pg.click('.tabbar button:nth-child(2)');
   await pg.waitForSelector(".plano-meal-card");
   check.check("1. O plano do aluno tem o botão «Plano em PDF»", (await pg.locator("#exportPlanPdf").count()) === 1);
+  await pg.evaluate(function(){ document.querySelectorAll(".pl-meal").forEach(function(d){ d.open = true; }); }); // as refeições do plano vêm recolhidas
   var plano = await pg.locator("#alunoTabContent").innerText();
   check.check("2. E mostra a creatina mono-hidratada no pequeno-almoço, com a dose e a nota do horário", /Creatina mono-hidratada/.test(plano) && /4 g/.test(plano) && /Pode ser tomada em qualquer altura do dia/.test(plano));
   var card = await pg.locator(".plano-meal-card").first().innerText();

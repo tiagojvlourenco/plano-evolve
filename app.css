@@ -236,6 +236,7 @@
   .pro-fold + .pro-fold{margin-top:6px;}
   .pm-summary{display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:44px; cursor:pointer; list-style:none; user-select:none;}
   .pm-summary::-webkit-details-marker{display:none;}
+  .pl-meal[open] > .pm-summary{margin-bottom:10px;}
   .pm-summary::after{content:"▾"; color:var(--muted); transition:transform .15s;}
   .pm-details[open] > .pm-summary::after{transform:rotate(180deg);}
   .pm-sum-name{font-weight:600; flex:1; min-width:0;}

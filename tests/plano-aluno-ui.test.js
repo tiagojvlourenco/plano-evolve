@@ -25,6 +25,7 @@ var startStaticServer = require("./helpers/static-server");
   await pg.goto(srv.url + "index.html");
   await pg.waitForSelector('.tabbar [data-tab="plano"]');
   await pg.click('.tabbar [data-tab="plano"]');
+  await pg.evaluate(function(){ document.querySelectorAll(".pl-meal").forEach(function(d){ d.open = true; }); }); // as refeições do plano vêm recolhidas
   await pg.waitForSelector(".plano-meal-card");
   var m = await pg.evaluate(function(){ return {h: document.documentElement.scrollHeight, picks: document.querySelectorAll(".builder-group.pick").length, opts: document.querySelectorAll(".builder-opt").length, over: document.documentElement.scrollWidth > window.innerWidth}; });
   check.check("1. Por omissão cada grupo está recolhido (opção escolhida + «Trocar») e não há listas de alternativas abertas", m.picks >= 5 && m.opts === 0);
