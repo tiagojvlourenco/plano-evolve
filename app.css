@@ -232,6 +232,12 @@
   .plano-meal-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
   .plano-meal-head .mname{font-family:var(--display); font-weight:700; font-size:1.02rem;}
   .plano-meal-head .mtime{font-family:var(--mono); font-size:0.78rem; color:var(--muted);}
+  .pm-summary{display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:44px; cursor:pointer; list-style:none; user-select:none;}
+  .pm-summary::-webkit-details-marker{display:none;}
+  .pm-summary::after{content:"▾"; color:var(--muted); transition:transform .15s;}
+  .pm-details[open] > .pm-summary::after{transform:rotate(180deg);}
+  .pm-sum-name{font-weight:600; flex:1; min-width:0;}
+  .pm-sum-meta{color:var(--muted); font-size:0.78rem; font-family:var(--mono); white-space:nowrap;}
   .plano-meal-macros{font-size:0.72rem; color:var(--muted); margin-top:6px; font-family:var(--mono);}
 
   .builder-group{margin-bottom:14px;}

@@ -653,3 +653,7 @@ Resultado da auditoria (`auditoria-evolve.md`). O que mudou:
 - **Só o profissional** usa o filtro. O aluno grava como antes. Sem a coluna (migração por aplicar) a app grava como antes (`revColumnAvailable`).
 - **Testes:** `tests/ficha-versao.test.js` (16 verificações: dois aparelhos, mesma coluna, colunas diferentes, mesmo valor, conflito misto, aluno, sem migração, ficha que não pára de mudar). A migração foi ensaiada na base real dentro de uma transação desfeita: o aluno continua a gravar as suas colunas, o contador sobe e as colunas do plano continuam recusadas.
 - `tests/offline-browser.test.js` já não fica preso: fecha as ligações keep-alive do Chromium ao parar o servidor.
+
+## 8bc. Nutrição do profissional: refeições recolhíveis
+
+Cada refeição do plano (`tplPlanoMealEditor`) é um `<details class="pm-details">`: fechada mostra uma linha (nome, hora, kcal, nº de alimentos); aberta mostra o que já existia (nome, horário, remover, alimentos, «+ Adicionar alimento», macros). O estado aberto/fechado guarda-se por refeição (`PRO_MEAL_OPEN`, um `WeakSet` pela referência da refeição), por isso sobrevive aos redesenhos e à reordenação por horário; a refeição nova abre-se sozinha. Nenhuma lógica de edição mudou (os campos continuam no DOM). Teste: `tests/pro-refeicoes.test.js`.

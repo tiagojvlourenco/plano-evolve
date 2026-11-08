@@ -10571,8 +10571,14 @@ function tplPlanoMealEditor(m, midx){
   // várias refeições, era difícil perceber onde uma acaba e a outra
   // começa. O horário e as macros no topo/fundo do cartão ajudam a
   // identificar cada refeição sem teres de abrir nada.
+  // Fase 38: cada refeição é recolhível; fechada mostra uma linha (nome, hora, kcal, nº de alimentos) e com 5-6 refeições o plano cabe no ecrã.
+  // O estado aberto/fechado guarda-se por refeição (a mesma referência sobrevive aos redesenhos e à reordenação por horário).
+  var nF = m.foods.length;
   var html = "<div class=\"plano-meal-card card\" style=\"margin-bottom:14px;\">" +
-    "<div class=\"onb-row\" style=\"align-items:end; margin-bottom:8px;\">" +
+    "<details class=\"pm-details\" data-midx=\"" + midx + "\"" + (PRO_MEAL_OPEN.has(m) ? " open" : "") + ">" +
+    "<summary class=\"pm-summary\"><span class=\"pm-sum-name\">" + escapeHtml(m.name) + "</span>" +
+      "<span class=\"pm-sum-meta\">" + escapeHtml(m.time || "") + " · " + Math.round(totals.kcal) + " kcal · " + (nF === 1 ? "1 alimento" : nF + " alimentos") + "</span></summary>" +
+    "<div class=\"onb-row\" style=\"align-items:end; margin:10px 0 8px;\">" +
       "<div class=\"onb-field\" style=\"margin-bottom:0;\"><label>Nome da refeição</label>" +
         "<select class=\"pm-name\" data-midx=\"" + midx + "\">" +
           PLAN_SKELETON_MEALS.map(function(pair){
@@ -10613,9 +10619,10 @@ function tplPlanoMealEditor(m, midx){
   // alterações.
   html += "<details class=\"add-food-details\"><summary class=\"btn btn-sm\">+ Adicionar alimento</summary>" + tplAddFoodForm(midx) + "</details>";
   html += "<div class=\"plano-meal-macros\" style=\"margin-top:10px;\">" + Math.round(totals.kcal) + " kcal · P " + ptDec(totals.p) + "g · H " + ptDec(totals.c) + "g · G " + ptDec(totals.f) + "g</div>";
-  html += "</div>";
+  html += "</details></div>";
   return html;
 }
+var PRO_MEAL_OPEN = new WeakSet();
 
 var PRO_PLAN_GROUPS = ["cereais","laticinios","carnes","fruta","vegetais","gorduras","bebidas","snacks"];
 
@@ -12802,6 +12809,7 @@ function wireProTab(s){
   if (addMealBtn) addMealBtn.addEventListener("click", function(){
     var newMeal = addMealToPlan(s);
     logMealAdded(s, newMeal);
+    if (newMeal && typeof newMeal === "object") PRO_MEAL_OPEN.add(newMeal); // a refeição nova abre-se para ser preenchida
     renderProTabContent(s);
     persistStudent(s);
     showToast("Refeição adicionada");
@@ -13094,6 +13102,14 @@ function wireProTab(s){
       renderProTabContent(s);
       persistStudent(s);
       showToast("Alimento adicionado");
+    });
+  });
+
+  el.querySelectorAll(".pm-details").forEach(function(details){
+    details.addEventListener("toggle", function(){
+      var m = s.meals[parseInt(details.getAttribute("data-midx"), 10)];
+      if (!m) return;
+      if (details.open) PRO_MEAL_OPEN.add(m); else PRO_MEAL_OPEN.delete(m);
     });
   });
 
