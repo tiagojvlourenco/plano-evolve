@@ -671,3 +671,11 @@ No separador Avaliação (só na vista do profissional; o aluno vê tudo como an
 ## 8bf. Perfil do profissional: resumo em cada secção
 
 As secções do Perfil continuam recolhidas por omissão e pela mesma ordem; cada uma passa a mostrar o essencial à direita do título (`perfilSection(..., meta)` + `perfilMetas`): idade/altura/peso, telefone ou email, dados médicos preenchidos («2 de 4»), horário de trabalho, alergias/restrições («sem alergias registadas» também aparece), água e opções do plano ativas. Testes em `tests/pro-checkins.test.js` (8 a 11).
+
+## 8bg. Treino, Histórico e Progresso: mais curtos
+
+- **Treino (profissional):** cada dia de treino vem recolhido (estado lembrado em `PRO_FOLD_OPEN`, chave `dia:<id>`); o formulário de novo exercício fica atrás de «+ Adicionar exercício»; «Progressão de carga» e «Sessões registadas» são blocos recolhíveis com resumo.
+- **Histórico:** as 10 alterações mais recentes à vista, as anteriores num bloco «Anteriores».
+- **Progresso do aluno:** Perímetros e Pregas cutâneas passam a blocos recolhíveis (as fotografias e o peso ficam à vista).
+- **Testes:** `pack-repair-browser` (20b) esperava pelo redesenho com leitura imediata e falhava às vezes; passou a esperar pelo texto.
+- **Instável sob carga:** `offline-browser` 15/16 (avisos de sincronização com tempos curtos) falha às vezes quando a bateria corre em paralelo e passa sempre sozinho.

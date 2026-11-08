@@ -207,6 +207,7 @@ function fixtureRow(id, name){
   await p4.waitForFunction(function(){ return window.__fake.tables.session_packs.length === 2; });
   var n1 = await p4.evaluate(function(){ return window.__fake.tables.session_packs.filter(function(x){ return x.id !== "old"; })[0]; });
   check.check("20. Sem aulas ainda, o pacote renovado fica «a contar» (sem data de validade e com a marca da duração)", n1.expires_on === null && /^renov:\d+$/.test(n1.notes || ""));
+  await p4.waitForFunction(function(){ var m = document.getElementById("proMain"); return m && /a validade conta a partir da 1\.ª aula/.test(m.innerText); }, null, {timeout: 6000}).catch(function(){}); // o ecrã redesenha-se depois de gravar
   check.check("20b. E a ficha avisa que a validade conta a partir da 1.ª aula", /a validade conta a partir da 1\.ª aula/.test(await p4.locator("#proMain").innerText()));
   await ctx4.close();
   // a primeira aula do pacote novo entra: o início e a validade passam a contar dessa aula

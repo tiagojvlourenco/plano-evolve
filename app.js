@@ -8124,13 +8124,14 @@ function tplProTreino(s){
     [["last", "Só na última série de cada exercício (recomendado)"], ["all", "Em todas as séries"], ["off", "Não pedir"]].map(function(o){ return `<option value="${o[0]}"${rm === o[0] ? " selected" : ""}>${o[1]}</option>`; }).join("") + `</select></div>`;
   if (!prog.days.length) html += `<p class="muted-p" style="margin-bottom:12px;">Ainda sem dias de treino. Acrescenta o primeiro (ex.: "Treino A — Superior").</p>`;
   prog.days.forEach(function(d){
-    html += `<details class="perfil-section" open style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
+    html += `<details class="perfil-section pro-fold" data-fold="dia:${escapeHtml(d.id)}"${PRO_FOLD_OPEN["dia:" + d.id] ? " open" : ""} style="margin-bottom:12px;"><summary class="eyebrow">${escapeHtml(d.name)} · ${d.exercises.length} exercícios</summary>`;
     d.exercises.forEach(function(e){
       html += `<div class="food-item" style="cursor:default;"><span class="fname"><button type="button" class="wl-info" data-ex-info="${escapeHtml(e.id)}">${escapeHtml(e.name)} <span aria-hidden="true">ⓘ</span></button>${cleanDemoUrl(e.demo) || parseCues(e.cues).length ? ' <span class="pill" style="font-size:0.62rem;">guia</span>' : ""}<span class="muted-p" style="display:block; font-size:0.74rem;">${exerciseGroupOf(e) ? escapeHtml(exerciseGroupOf(e)) + " · " : ""}${e.sets} × ${escapeHtml(e.reps)}${e.rpe ? " · RPE " + e.rpe : ""}${e.rest != null ? " · " + e.rest + " s" : ""}${e.notes ? " · " + escapeHtml(e.notes) : ""}</span></span>` +
         `<span><button type="button" class="assess-del" data-edit-guide="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Editar demonstração e pontos-chave" title="Demonstração e pontos-chave">🎬</button> ` +
         `<button type="button" class="assess-del" data-del-ex="${escapeHtml(d.id)}:${escapeHtml(e.id)}" aria-label="Remover exercício">✕</button></span></div>`;
     });
-    html += `<div class="assess-form-grid" style="margin-top:10px;" data-exform="${escapeHtml(d.id)}">` +
+    html += `<details class="add-food-details"><summary class="btn btn-sm">+ Adicionar exercício</summary>` +
+      `<div class="assess-form-grid" style="margin-top:10px;" data-exform="${escapeHtml(d.id)}">` +
       `<div class="f" style="grid-column:1/-1;"><button type="button" class="btn btn-sm" data-ex-lib style="width:100%;">📚 Escolher da biblioteca</button></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Exercício</label><input type="text" data-ex-name maxlength="120" placeholder="Ex.: Supino com barra"></div>` +
       `<div class="f"><label>Séries</label><input type="number" min="1" max="20" value="3" data-ex-sets></div>` +
@@ -8142,7 +8143,7 @@ function tplProTreino(s){
       `<div class="f" style="grid-column:1/-1;"><label>GIF / vídeo demonstrativo (ligação https, opcional)</label><input type="url" data-ex-demo maxlength="500" placeholder="https://…/supino.gif"></div>` +
       `<div class="f" style="grid-column:1/-1;"><label>Pontos-chave de execução (um por linha, até 3)</label><textarea data-ex-cues rows="3" placeholder="Omoplatas juntas&#10;Barra desce ao peito&#10;Pés firmes no chão"></textarea></div>` +
       `<div class="f"><button type="button" class="btn primary btn-sm" data-add-ex="${escapeHtml(d.id)}" style="width:100%;">+ Exercício</button></div>` +
-    `</div>` +
+    `</div></details>` +
     `<button type="button" class="btn btn-sm" data-del-day="${escapeHtml(d.id)}" style="margin-top:10px;">🗑 Remover este dia</button></details>`;
   });
   html += `<div class="assess-form-grid" style="margin-top:6px;"><div class="f" style="grid-column:1/-1;"><label>Novo dia de treino</label><input type="text" id="newDayName" maxlength="80" placeholder="Ex.: Treino B — Inferior"></div>` +
@@ -8156,7 +8157,7 @@ function tplProTreino(s){
   prog.days.forEach(function(d){ d.exercises.forEach(function(e){ if (!names.some(function(n){ return n.key === e.name.toLowerCase(); })) names.push({key: e.name.toLowerCase(), id: e.id, name: e.name}); }); });
   (s.workoutLogs || []).forEach(function(l){ (l.entries || []).forEach(function(e){ if (!names.some(function(n){ return n.key === String(e.name || "").toLowerCase(); })) names.push({key: String(e.name || "").toLowerCase(), id: e.exerciseId, name: e.name}); }); });
   var rows = names.map(function(n){ var h = exerciseHistory(s, n.id, n.name); return {n: n, h: h, status: progressionStatus(baselineHistory(h))}; }).filter(function(r){ return r.h.length; });
-  html += `<div class="eyebrow" style="margin:22px 0 8px;">Progressão de carga</div>`;
+  var _preProg = html; html = `<div class="eyebrow" style="margin:22px 0 8px;">Progressão de carga</div>`;
   if (!rows.length) html += `<p class="muted-p">Ainda sem sessões registadas pelo aluno.</p>`;
   else {
     var pill = {"progrediu": "good", "estável": "", "estagnado": "warn", "regrediu": "critical"};
@@ -8170,10 +8171,12 @@ function tplProTreino(s){
       `<div id="exChart" class="weight-chart-wrap">${chartRow ? weightSvg(sameKindHistory(chartRow.h).map(function(h){ return {date: h.date, w: h.score}; })) : weightSvg([])}</div>`;
   }
 
+  html = _preProg + proFold("progCarga", "Progressão de carga", rows.length ? plural(rows.length, "exercício", "exercícios") : "sem sessões", html);
+
   // Sessões recentes e volume
   var logs = (s.workoutLogs || []).slice().sort(function(a, b){ return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
   var wk = sessionsInLastDays(s, 7);
-  html += `<div class="eyebrow" style="margin:22px 0 8px;">Sessões registadas</div>`;
+  var _preLogs = html; html = `<div class="eyebrow" style="margin:22px 0 8px;">Sessões registadas</div>`;
   if (!logs.length) html += `<p class="muted-p">Sem sessões registadas.</p>`;
   else {
     var sets7 = wk.reduce(function(a, l){ return a + (l.entries || []).reduce(function(b, e){ return b + (e.sets || []).length; }, 0); }, 0);
@@ -8186,6 +8189,7 @@ function tplProTreino(s){
     });
   }
   if (logs.length) html += `<button type="button" class="btn btn-sm" id="delAllLogs" style="margin-top:14px; border-color:var(--critical); color:var(--critical);">Apagar todas as sessões e a progressão de carga</button>`;
+  html = _preLogs + proFold("sessoesReg", "Sessões registadas", logs.length ? plural(logs.length, "sessão", "sessões") + " · " + wk.length + " nos últimos 7 dias" : "sem sessões", html);
   return html;
 }
 
@@ -8367,10 +8371,10 @@ function tplEvolucaoAluno(s, opts){
 
   // Fase 38: no ecrã do profissional, perímetros, pregas e fotografias vêm recolhidos, com o essencial no resumo
   var nAv = (s.assessments || []).length;
-  function foldIf(key, title, summary, inner){ return !inner ? "" : opts.editable ? proFold(key, title, summary, inner, true) : inner; }
+  function foldIf(key, title, summary, inner, always){ return !inner ? "" : (opts.editable || always) ? proFold(key, title, summary, inner, true) : inner; }
   var perimHtml = tplPerimetersCard(s), skinHtml = tplSkinfoldsCard(s, opts);
-  html += foldIf("perimetros", "Perímetros", plural(nAv, "avaliação", "avaliações"), perimHtml);
-  html += foldIf("pregas", "Pregas cutâneas", plural(nAv, "avaliação", "avaliações"), skinHtml);
+  html += foldIf("perimetros", "Perímetros", plural(nAv, "avaliação", "avaliações"), perimHtml, true); // também no Progresso do aluno: dados secundários
+  html += foldIf("pregas", "Pregas cutâneas", plural(nAv, "avaliação", "avaliações"), skinHtml, true);
   var nPh = (s.photos || []).length;
   html += foldIf("fotos", "Fotografias de progresso", nPh ? plural(nPh, "foto", "fotos") : "sem fotos", tplPhotosSection(s, opts));
 
@@ -12648,7 +12652,8 @@ function tplProHistorico(s){
   if (!planEntries.length){
     html += "<p class=\"muted-p\">Ainda sem alterações registadas.</p>";
   }
-  planEntries.forEach(function(p){
+  function planRow(p){
+    var html = "";
     if (p.type){
       html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + escapeHtml(p.summary) + "</div></div>" +
         "<div class=\"hdate\">" + fmtDatePt(p.date) + (p.time ? " · " + p.time : "") + "</div></div>";
@@ -12656,7 +12661,11 @@ function tplProHistorico(s){
       html += "<div class=\"history-row\"><div><div class=\"hlabel\">" + escapeHtml(p.label) + "</div><div class=\"hdate\">" + fmtDatePt(p.date) + "</div></div>" +
         "<div class=\"hval\">" + p.kcal + " kcal<br><span style=\"color:var(--muted); font-size:0.75rem;\">Flexibilidade " + p.flex + "</span></div></div>";
     }
-  });
+    return html;
+  }
+  // só os 10 mais recentes à vista; os anteriores recolhem-se
+  planEntries.slice(0, 10).forEach(function(p){ html += planRow(p); });
+  if (planEntries.length > 10) html += proFold("histAntigo", "Anteriores", plural(planEntries.length - 10, "alteração", "alterações"), planEntries.slice(10).map(planRow).join(""));
   return html;
 }
 

@@ -23,4 +23,13 @@ check.check("9. Perfil: as alergias aparecem no resumo da Alimentação (e a fal
 check.check("10. Perfil: sem dados, resumos neutros", perfilMetas({}).contacto === "sem contacto" && perfilMetas({}).medicos === "por preencher" && perfilMetas({}).pessoais === "");
 var sec = perfilSection("Rotina", false, "<p>x</p>", "<b>x</b>");
 check.check("11. O resumo é escapado e a secção continua fechada por omissão", sec.indexOf("<b>x</b>") < 0 && /&lt;b&gt;/.test(sec) && !/ open>/.test(sec) && perfilSection("T", false, "x").indexOf("pm-sum-meta") < 0);
+// Histórico: 10 mais recentes à vista, anteriores recolhidos
+var ph = []; for (var q = 1; q <= 14; q++) ph.push({type: "x", summary: "alteração " + q, date: "2026-01-" + ("0" + q).slice(-2)});
+var hh = tplProHistorico({planHistory: ph, adaptationHistory: []});
+check.check("12. Histórico: 14 alterações = 10 à vista + 4 recolhidas, mais recentes primeiro", (hh.match(/history-row/g) || []).length === 14 && /data-fold="histAntigo"/.test(hh) && /4 alterações/.test(hh) && hh.indexOf("alteração 14") < hh.indexOf("alteração 4<"));
+check.check("13. Histórico: com 10 ou menos não há bloco recolhido", tplProHistorico({planHistory: ph.slice(0, 10), adaptationHistory: []}).indexOf("histAntigo") < 0);
+// Treino: dias recolhíveis, novo exercício e progressão/sessões em blocos
+var src = appSource.slice(appSource.indexOf("function tplProTreino(s){"));
+check.check("14. Treino: o dia lembra se estava aberto e o formulário de novo exercício vem recolhido", /data-fold="dia:\$\{escapeHtml\(d\.id\)\}"/.test(src) && /<summary class="btn btn-sm">\+ Adicionar exercício<\/summary>/.test(src) && /data-exform=/.test(src));
+check.check("15. Treino: progressão de carga e sessões registadas em blocos recolhíveis", /proFold\("progCarga"/.test(src) && /proFold\("sessoesReg"/.test(src));
 check.summarize();
