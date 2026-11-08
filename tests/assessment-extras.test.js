@@ -50,10 +50,14 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
 // ---- 5. Gráfico de adesão ----
 (function(){
   var s = {checkins:[1,2,3,4,5,6,7,8,9].map(function(i){ return {date:daysAgo(70 - i * 7), adherence: i < 3 ? 4 : 8}; })};
+  var wasOn = WEEKLY_CHECKIN_ENABLED;
+  check.check("5. Com o check-in semanal retirado o gráfico não aparece (dados antigos só confundem)", (WEEKLY_CHECKIN_ENABLED = false, tplAdherenceChart(s) === ""));
+  WEEKLY_CHECKIN_ENABLED = true;   // o gráfico continua a funcionar para quem o reativar
   var h = tplAdherenceChart(s);
   check.check("5. Mostra só os últimos 8 check-ins, com a média", (h.match(/class="b"/g) || []).length === 8 && /Média/.test(h));
   check.check("5. Barras abaixo do limiar ficam a vermelho", /background:var\(--critical\)/.test(h));
   check.check("5. Sem check-ins não desenha nada", tplAdherenceChart({checkins:[]}) === "");
+  WEEKLY_CHECKIN_ENABLED = wasOn;
 })();
 
 // ---- 6. Check-in: sono, stress, recuperação ----

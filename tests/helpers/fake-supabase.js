@@ -11,7 +11,7 @@
 // Não simula: ordem (order/limit/in não filtram: ordena-se no cliente), CHECKs de valores, leitura por papel, contagens.
 module.exports = function fakeSupabaseSource(initial){
   return "(" + function(INIT){
-    var STUDENT_ALLOWED = ["meal_daily_state", "meals_date", "checkins", "weights", "weight_current", "substitution_history", "adaptation_history", "photos", "workout_logs", "updated_at"];
+    var STUDENT_ALLOWED = ["meal_daily_state", "meals_date", "checkins", "substitution_history", "adaptation_history", "photos", "workout_logs", "updated_at"];
     var F = window.__fake = {
       role: INIT.role, userId: INIT.userId, rows: INIT.rows, writes: [], selects: [], selectCols: [], signedUrls: [], failNext: 0, blockHost: false,
       other: {}, tables: {session_packs: [], sessions: [], payments: [], session_slots: [], studio_settings: [], runs: [], run_tracks: [], run_consents: []}, missingTables: INIT.missingTables || false

@@ -79,7 +79,7 @@ function freshStudent(overrides){
 
 // 7. wireProTab liga .af-food ao evento input/focus (pesquisa), não change (comportamento de select)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var afFoodBlock = fnSrc.slice(fnSrc.indexOf('querySelectorAll(".af-food")'), fnSrc.indexOf('querySelectorAll(".af-food")') + 1200);
   check.check("7. Liga .af-food a 'input' (pesquisa em tempo real)", afFoodBlock.indexOf('addEventListener("input", refresh)') >= 0);
   check.check("7. Liga também a 'focus' (mostra sugestões ao focar)", afFoodBlock.indexOf('addEventListener("focus", refresh)') >= 0);
@@ -114,7 +114,7 @@ function freshStudent(overrides){
 // 10. openMealOptionPicker e a ligação do botão "Ver mais" existem
 (function(){
   check.check("10. openMealOptionPicker existe", typeof openMealOptionPicker === "function");
-  var fnSrc = appSource.slice(appSource.indexOf("function wireAlunoTab"), appSource.indexOf("function wireAlunoTab") + 15000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireAlunoTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireAlunoTab") + 1));
   check.check("10. wireAlunoTab liga [data-more-food-midx]", fnSrc.indexOf("data-more-food-midx") >= 0);
   check.check("10. Chama openMealOptionPicker com optionsFor(f, s)", fnSrc.indexOf("openMealOptionPicker(optionsFor(f, s)") >= 0);
 })();
@@ -133,7 +133,7 @@ function freshStudent(overrides){
 
 // 12. optionsHtml/renderList de openSubstitution existe com pesquisa (verificado por fonte, sem DOM real)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openSubstitution"), appSource.indexOf("function openSubstitution") + 6000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openSubstitution"), appSource.indexOf("\nfunction ", appSource.indexOf("function openSubstitution") + 1));
   check.check("12. Tem um input de pesquisa (subSearch)", fnSrc.indexOf("subSearch") >= 0);
   check.check("12. Só mostra a pesquisa quando há mais de 8 alternativas", fnSrc.indexOf("options.length > 8") >= 0);
   check.check("12. Limita o render com FOOD_SEARCH_RENDER_CAP", fnSrc.indexOf("FOOD_SEARCH_RENDER_CAP") >= 0);

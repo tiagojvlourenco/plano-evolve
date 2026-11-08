@@ -145,7 +145,7 @@ function freshStudent(overrides){
 
 // 15. wireProTab tem a lógica de wiring esperada (existência das ligações certas)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 4000);
   check.check("15. Chama draftPlanFromDailyText(s.dailyEatingDescription)", block.indexOf("draftPlanFromDailyText(pasted ? el.querySelector(\"#pastedPlanText\").value : s.dailyEatingDescription)") >= 0);
   check.check("15. Preenche #dailyPlanDraftResult com renderDailyPlanDraft", block.indexOf("renderDailyPlanDraft(draft)") >= 0);
@@ -244,7 +244,7 @@ function freshStudent(overrides){
 
 // 23. wireProTab liga o botão de remover a tirar o alimento do draft e voltar a renderizar (sem aplicar nada ao plano)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 2600);
   check.check("23. Liga [data-remove-draft-food] a um clique", block.indexOf('querySelectorAll("[data-remove-draft-food]")') >= 0);
   check.check("23. Remove o alimento do draft com splice, sem mexer em s.meals", block.indexOf("draft[mi].foods.splice(fi, 1)") >= 0);

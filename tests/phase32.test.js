@@ -81,7 +81,7 @@ var check = require("./check")();
 // 7. Mudar o "Grupo" manualmente já não reescreve o alimento escolhido
 // (antes: trocar de grupo esvaziava/substituía o alimento por defeito)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("7. Já não há nenhum '.value = options[0]' a mexer no alimento ao trocar de grupo", fnSrc.indexOf("foodInput.value = options[0]") === -1);
 })();
 

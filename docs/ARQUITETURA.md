@@ -1,6 +1,6 @@
 # Evolve Nutrition — resumo técnico da estrutura
 
-> Nota: **não existe `src/`**. O código está em `app.js` (~15 000 linhas, JavaScript puro dentro de uma IIFE) e `app.css`, partilhados por `index.html`, `treino.html` e `gestao.html` (a Gestão fica em `gestao.js`; a Corrida em `corrida-core.js`, `corrida.js` e `corrida-live.js`), CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
+> Nota: **não existe `src/`**. O código está em `app.js` (~13 800 linhas, JavaScript puro dentro de uma IIFE) e `app.css`, partilhados por `index.html`, `treino.html` e `gestao.html` (a Gestão fica em `gestao.js`; a Corrida em `corrida-core.js`, `corrida.js` e `corrida-live.js`), CSS com variáveis, sem build, sem framework). Os números de linha abaixo são aproximados (estado em `main` após o PR #24).
 
 ## 0. Visão geral
 
@@ -66,7 +66,7 @@ Há ainda: convite de aluno (questionário), importação de pesagens (`tplImpor
 
 ---
 
-## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0029`)
+## 2. Base de dados (Supabase / Postgres, `supabase/migrations/0001…0034`)
 
 Migrações corridas à mão por ordem. Todas as tabelas têm **RLS** ligado.
 
@@ -181,7 +181,7 @@ Tudo converge num dicionário global **`FOOD_DB[nome] = {per, kcal, p, c, f}`** 
 | `sw.js` | Service worker (a app abre sem rede) |
 | `vendor/supabase.js`, `fonts/*.woff2` | Supabase JS 2.117.3 e fontes guardados no site (sem CDN; ver `vendor/README.md`) |
 | `exercises/*.webp` | Animações da biblioteca de exercícios (`scripts/build-exercise-media.py`) |
-| `supabase/migrations/0001…0029_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
+| `supabase/migrations/0001…0034_*.sql` | Esquema, RLS, funções e triggers (correr por ordem) |
 | `supabase/manage_professionals.sql` | Adicionar/remover profissionais |
 | `supabase/verify_*.sql` | Verificações de segurança/RLS |
 | `scripts/` | Geração/importação do catálogo e tamanhos de embalagem |

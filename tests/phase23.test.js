@@ -91,7 +91,7 @@ function freshStudent(overrides){
 
 // 8. showToast mostra mensagens compridas durante mais tempo (nunca menos que antes)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function showToast"), appSource.indexOf("function showToast") + 700);
+  var fnSrc = appSource.slice(appSource.indexOf("function showToast"), appSource.indexOf("\nfunction ", appSource.indexOf("function showToast") + 1));
   check.check("8. A duração já não é um número fixo — depende do tamanho da mensagem", fnSrc.indexOf("msg.length") >= 0);
   check.check("8. Nunca é mais curta que o mínimo original (1800ms)", fnSrc.indexOf("Math.max(1800") >= 0);
 })();

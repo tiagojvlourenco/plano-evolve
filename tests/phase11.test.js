@@ -56,7 +56,7 @@ function freshStudent(overrides){
 
 // 5. wireProTab já não tem wiring de #flexSlider / .preset-btn (código morto removido)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("5. Sem referência a flexSlider no wiring", fnSrc.indexOf("flexSlider") === -1);
   check.check("5. Sem referência a preset-btn no wiring", fnSrc.indexOf("preset-btn") === -1);
   check.check("5. Continua a ligar os checkboxes [data-key] (Personalizar)", fnSrc.indexOf("[data-key]") >= 0);
@@ -78,7 +78,7 @@ function freshStudent(overrides){
 
 // 7. wireProTab liga o botão saveMedical aos 4 campos corretos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("7. Liga saveMedical", fnSrc.indexOf("saveMedical") >= 0);
   ["medConditions","medCurrent","medLimitations","medNotes"].forEach(function(id){
     check.check("7. Lê o campo " + id, fnSrc.indexOf(id) >= 0);
@@ -144,7 +144,7 @@ function freshStudent(overrides){
 
 // 16. resolvePhotoUrls (fora de modo local) também resolve weightLogPhotos, não só photos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function resolvePhotoUrls"), appSource.indexOf("function resolvePhotoUrls") + 700);
+  var fnSrc = appSource.slice(appSource.indexOf("function resolvePhotoUrls"), appSource.indexOf("\nfunction ", appSource.indexOf("function resolvePhotoUrls") + 1));
   check.check("16. Junta photos e weightLogPhotos antes de resolver URLs assinados", fnSrc.indexOf("s.weightLogPhotos") >= 0);
 })();
 

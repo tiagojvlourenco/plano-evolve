@@ -60,7 +60,7 @@ function freshStudent(overrides){
 // 5. openOnboardingForm tem o <select> gerado a partir de ACTIVITY_LEVEL_OPTIONS (fonte única de verdade,
 // já testada nas secções 1/2) e uma opção vazia para usar o fallback do nº de treinos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 5000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("5. Tem o campo obActivityLevel", fnSrc.indexOf('id=\\"obActivityLevel\\"') >= 0);
   check.check("5. Gera as opções a partir de ACTIVITY_LEVEL_OPTIONS (não texto fixo)", fnSrc.indexOf("ACTIVITY_LEVEL_OPTIONS.map(") >= 0);
   check.check("5. É opcional (tem uma opção vazia/fallback)", fnSrc.indexOf('value=\\"\\"') >= 0);
@@ -68,7 +68,7 @@ function freshStudent(overrides){
 
 // 6. Ao submeter, o valor escolhido fica no novo aluno (ou null se não escolhido)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 12000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("6. Lê #obActivityLevel para o profile", fnSrc.indexOf('activityLevel: sheet.querySelector("#obActivityLevel").value || null') >= 0);
   check.check("6. Passa profile.activityLevel para o novo aluno", fnSrc.indexOf("activityLevel:profile.activityLevel") >= 0);
 })();
@@ -112,7 +112,7 @@ function freshStudent(overrides){
 
 // 11. wireProTab liga o botão de guardar, grava no aluno e persiste (sem recalcular alvos sozinho)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("saveActivityLevel"), fnSrc.indexOf("saveActivityLevel") + 700);
   check.check("11. Lê o valor de #activityLevelInput", block.indexOf('querySelector("#activityLevelInput")') >= 0);
   check.check("11. Grava em s.activityLevel", block.indexOf("s.activityLevel = raw || null") >= 0);
@@ -121,7 +121,7 @@ function freshStudent(overrides){
 
 // 12. "Guardar peso objetivo" também passa activityLevel ao recalcular os alvos (antes ignorava-o)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("saveWeightGoal"), fnSrc.indexOf("saveWeightGoal") + 900);
   check.check("12. computeSuggestedTargets recebe activityLevel do aluno", block.indexOf("activityLevel: s.activityLevel") >= 0);
 })();

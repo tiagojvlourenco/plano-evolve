@@ -119,7 +119,7 @@ function mockTargetsEl(values){
 
 // 10. wireProTab passa "s" a renderTargetWarning (para conseguir calcular o BMR do aluno certo)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 30000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("10. Chama renderTargetWarning(el, s) ao carregar", fnSrc.indexOf("renderTargetWarning(el, s)") >= 0);
 })();
 

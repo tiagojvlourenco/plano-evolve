@@ -85,7 +85,7 @@ var check = require("./check")();
 
 // 9. O formulário de revisão começa escondido — nunca aparece pré-preenchido sem passar pela leitura/preenchimento manual
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("function openCustomFoodModal") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("\nfunction ", appSource.indexOf("function openCustomFoodModal") + 1));
   check.check("9. cfForm começa com display:none", fnSrc.indexOf('id=\\"cfForm\\" style=\\"display:none;\\"') >= 0 || fnSrc.indexOf('id="cfForm" style="display:none;"') >= 0);
   check.check("9. Tem opção de preencher manualmente sem foto", fnSrc.indexOf("cfManual") >= 0);
   check.check("9. Pede confirmação/revisão dos valores (não são gravados direto da leitura)", fnSrc.indexOf("Confirma") >= 0 || appSource.indexOf("Confirma e corrige") >= 0);
@@ -93,7 +93,7 @@ var check = require("./check")();
 
 // 10. O guardar valida nome, duplicados e valores negativos antes de gravar
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("function openCustomFoodModal") + 6000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("\nfunction ", appSource.indexOf("function openCustomFoodModal") + 1));
   check.check("10. Exige nome preenchido", fnSrc.indexOf("Escreve o nome do alimento") >= 0);
   check.check("10. Rejeita nome já existente no FOOD_DB", fnSrc.indexOf("FOOD_DB[name]") >= 0 && fnSrc.toLowerCase().indexOf("já existe") >= 0);
   check.check("10. Rejeita valores negativos/em falta", fnSrc.indexOf("kcal >= 0") >= 0);
@@ -101,7 +101,7 @@ var check = require("./check")();
 
 // 11. Ao guardar com sucesso (sbReady), insere em custom_foods e funde de imediato no FOOD_DB local
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("function openCustomFoodModal") + 7000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openCustomFoodModal"), appSource.indexOf("\nfunction ", appSource.indexOf("function openCustomFoodModal") + 1));
   check.check("11. Insere na tabela custom_foods", fnSrc.indexOf('sb.from("custom_foods").insert(row)') >= 0);
   check.check("11. Funde imediatamente com mergeCustomFood (disponível já nesta sessão)", fnSrc.indexOf("mergeCustomFood((res.data") >= 0);
   check.check("11. Em modo local (sem sbReady), funde localmente sem tentar gravar no Supabase", /else\s*\{[\s\S]{0,100}mergeCustomFood\(row\)/.test(fnSrc));
@@ -117,7 +117,7 @@ var check = require("./check")();
 
 // 13. wireProTab liga [data-new-food] a abrir o modal, e atualiza a pesquisa/quantidade ao guardar
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 23000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("data-new-food"), fnSrc.indexOf("data-new-food") + 800);
   check.check("13. Abre openCustomFoodModal", block.indexOf("openCustomFoodModal(") >= 0);
   check.check("13. Ao guardar, preenche o campo de pesquisa com o novo nome", block.indexOf("foodInput.value = name") >= 0);

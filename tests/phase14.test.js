@@ -25,7 +25,7 @@ function freshStudent(overrides){
 
 // 1. renderProShell calcula scrollLeft manualmente, sem scrollIntoView
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 7000);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("\nfunction ", appSource.indexOf("function renderProShell") + 1));
   check.check("1. Já não usa scrollIntoView (confirmado a deslocar a página toda num telemóvel real)", fnSrc.indexOf(".scrollIntoView(") === -1);
   check.check("1. Lê container = .pro-sidebar", fnSrc.indexOf('querySelector(".pro-sidebar")') >= 0);
   // Atualizado: offsetLeft é medido a partir da página (incluía a margem do menu e desviava o centrar,
@@ -68,7 +68,7 @@ function freshStudent(overrides){
 
 // 7. wireProTab liga o <select> ao evento "change" (não "blur", que não existe da mesma forma num select)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("7. Regista rename no evento change do .pm-name", /querySelectorAll\("\.pm-name"\)\.forEach\(function\(select\)\{\s*select\.addEventListener\("change"/.test(fnSrc));
   check.check("7. Continua a registar a mudança com logMealRenamed", /pm-name[\s\S]{0,400}logMealRenamed/.test(fnSrc));
 })();

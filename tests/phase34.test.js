@@ -79,7 +79,7 @@ function sampleRow(overrides){
 // 6. loadFoodProducts: pede só "verification_status=verified" ao Supabase
 // (pending/rejected nunca chegam a FOOD_DB por este caminho)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function loadFoodProducts"), appSource.indexOf("function loadFoodProducts") + 500);
+  var fnSrc = appSource.slice(appSource.indexOf("function loadFoodProducts"), appSource.indexOf("\nfunction ", appSource.indexOf("function loadFoodProducts") + 1));
   check.check("6. loadFoodProducts filtra por verification_status = verified", fnSrc.indexOf('.eq("verification_status", "verified")') >= 0);
   check.check("6. loadFoodProducts também pede food_product_retailers (para o sufixo de loja)", fnSrc.indexOf("food_product_retailers") >= 0);
 })();
@@ -103,7 +103,7 @@ function sampleRow(overrides){
 // renderProShell, fora de PRO_TABS (que são por aluno)
 (function(){
   check.check("9. PRO_TABS não inclui 'catalogo'/'catálogo' (não é um separador por aluno)", !PRO_TABS.some(function(t){ return /cat[aá]logo/i.test(t[0]) || /cat[aá]logo/i.test(t[1]); }));
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 2800);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("\nfunction ", appSource.indexOf("function renderProShell") + 1));
   check.check("9. renderProShell tem um botão navCatalog", fnSrc.indexOf('id=\\"navCatalog\\"') >= 0);
   check.check("9. renderProShell despacha para renderProCatalogMain quando proView === 'catalog'", appSource.indexOf('state.proView === "catalog"') >= 0 && appSource.indexOf("renderProCatalogMain()") >= 0);
 })();

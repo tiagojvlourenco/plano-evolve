@@ -142,7 +142,7 @@ function freshStudent(overrides){
 
 // 13. wireProTab pede confirmação antes de aplicar, e regista no histórico do plano
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("autoAdjustBtn"), fnSrc.indexOf("autoAdjustBtn") + 1200);
   check.check("13. Pede confirmação com window.confirm antes de aplicar", block.indexOf("window.confirm(") >= 0);
   check.check("13. Chama autoAdjustPlanQuantities(s)", block.indexOf("autoAdjustPlanQuantities(s)") >= 0);

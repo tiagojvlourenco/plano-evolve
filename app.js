@@ -448,6 +448,13 @@ function food(name, qty, group, required){ return {name:name, qty:qty, group:gro
    Fase 8 explicitamente proíbe. blockedFoods continua obrigatório para todos
    os alunos, mapeados ou não — é a única lista com garantia de segurança. Ver
    hasUnmappedDietaryRisk() para a diferença entre os dois casos. */
+// um alimento está bloqueado para o aluno quando o profissional o pôs em blockedFoods (nome exato, sem distinguir maiúsculas)
+function isFoodBlockedFor(s, name){
+  var blocked = s && s.blockedFoods && s.blockedFoods.length ? s.blockedFoods : null;
+  if (!blocked) return false;
+  var n = String(name || "").toLowerCase();
+  return blocked.some(function(b){ return String(b).toLowerCase() === n; });
+}
 function optionsFor(f, s){
   var base = (f.allowedSubs && f.allowedSubs.length) ? f.allowedSubs : (FOOD_GROUPS[resolveGroup(f.group)] || []);
   var blocked = s && s.blockedFoods && s.blockedFoods.length ? s.blockedFoods.map(function(n){ return n.toLowerCase(); }) : null;
@@ -742,9 +749,30 @@ function fetchAllFoodProductPages(makeQuery){
   return next(0);
 }
 
+// só as colunas que mergeFoodProduct usa (o resto — ingredientes, notas, fontes… — não viaja): ~40 % menos dados no arranque
+var FOOD_PRODUCT_COLS = "id,name,brand,food_group,kcal,protein,carbs,fat,package_quantity,package_unit,food_product_retailers(retailer)";
+// Pede o total e depois todas as páginas EM PARALELO (antes eram 7 pedidos em série: ~2,5 a 3,5 s só de rede). Qualquer falha — contagem
+// indisponível, uma página com erro — cai na leitura em série de sempre, por isso nunca se perde catálogo.
+function fetchFoodProductsFast(makeQuery){
+  function serial(){ return fetchAllFoodProductPages(makeQuery); }
+  var counted;
+  try { counted = Promise.resolve(sb.from("food_products").select("id", {count: "exact", head: true}).eq("verification_status", "verified")); }
+  catch (e) { return serial(); }
+  return counted.then(function(c){
+    var n = c && !c.error ? Number(c.count) : NaN;
+    if (!(n > 0) || n > 100000) return serial();
+    var pages = [];
+    for (var from = 0; from < n; from += 1000) pages.push(Promise.resolve(makeQuery().range(from, Math.min(from + 999, n - 1))));
+    return Promise.all(pages).then(function(rs){
+      if (rs.some(function(r){ return !r || r.error || !Array.isArray(r.data); })) return serial();
+      return {data: rs.reduce(function(all, r){ return all.concat(r.data); }, []), error: null};
+    });
+  }).catch(serial);
+}
+
 function loadFoodProducts(){
   if (!sbReady) return Promise.resolve();
-  return fetchAllFoodProductPages(function(){ return sb.from("food_products").select("*, food_product_retailers(*)").eq("verification_status", "verified").order("id"); }).then(function(res){
+  return fetchFoodProductsFast(function(){ return sb.from("food_products").select(FOOD_PRODUCT_COLS).eq("verification_status", "verified").order("id"); }).then(function(res){
     if (res.error || !res.data) return;
     res.data.forEach(function(row){ mergeFoodProduct(row, row.food_product_retailers); });
   }).catch(function(){});
@@ -1788,8 +1816,9 @@ function getNextMeal(s){
 function computeLastCheckinDaysAgo(s){
   if (!s.checkins || !s.checkins.length) return 999;
   var last = s.checkins[s.checkins.length-1];
-  var days = Math.floor((new Date() - new Date(last.date + "T00:00:00")) / 86400000);
-  return Math.max(0, days);
+  // dias de calendário (daysSinceDate), não milissegundos/24 h: na semana a seguir à mudança de hora, depois das 23 h, 6 dias já contavam como 7
+  var days = daysSinceDate(last.date);
+  return days == null ? 999 : days;
 }
 
 function computeAdherence(s){
@@ -4617,8 +4646,8 @@ function tplProgressHero(s){
   var towardGoal = hasGoal ? ((s.weightGoal - s.weightInitial) * diff >= 0) : true;
   return "<div class=\"card\">" +
     "<div class=\"eyebrow\">Peso atual</div>" +
-    "<div class=\"hero-row\"><div class=\"hero-num\">" + s.weightCurrent.toFixed(1) + "<small>kg</small></div>" +
-      (Math.abs(diff) >= 0.05 ? "<span class=\"pill " + (towardGoal ? "good" : "warn") + "\">" + (diff<0?"▼ ":"▲ ") + Math.abs(diff).toFixed(1) + " kg desde o início</span>" : "") +
+    "<div class=\"hero-row\"><div class=\"hero-num\">" + ptNum(s.weightCurrent, 1) + "<small>kg</small></div>" +
+      (Math.abs(diff) >= 0.05 ? "<span class=\"pill " + (towardGoal ? "good" : "warn") + "\">" + (diff<0?"▼ ":"▲ ") + ptNum(Math.abs(diff), 1) + " kg desde o início</span>" : "") +
     "</div>" +
     (hasGoal ?
       "<div class=\"bar-track\" style=\"margin-top:16px;\"><div class=\"bar-fill\" style=\"width:" + pct + "%\"></div></div>" +
@@ -4833,6 +4862,7 @@ function kpiTileText(label, value, cls, note){
 
 // Gráfico de adesão: uma barra por check-in (últimos 8), vermelha abaixo do limiar de atenção
 function tplAdherenceChart(s){
+  if (!WEEKLY_CHECKIN_ENABLED) return "";   // o check-in semanal foi retirado: um gráfico com dados antigos só confunde
   var list = (s.checkins || []).slice(-8);
   if (!list.length) return "";
   var avg = list.reduce(function(a, c){ return a + (c.adherence || 0); }, 0) / list.length;
@@ -5421,16 +5451,16 @@ function tplTreinoOnlyHome(){
     "<div class=\"card\"><div class=\"eyebrow\">Progresso</div><p class=\"muted-p\" style=\"margin:6px 0 10px;\">As tuas medidas, avaliações e fotos ficam aqui.</p><button type=\"button\" class=\"btn btn-sm\" data-goto-tab=\"evolucao\">Ver o meu progresso</button></div>";
 }
 function tplHoje(s){
-  var html = tplTreinoAppLink();
+  var html = "";   // o atalho para a app de Treino vem DEPOIS das refeições: é isso que o aluno abre a app para fazer
   if (noNutritionOf(s)) return tplTreinoOnlyHome();   // faz a nutrição com outra pessoa: o treino é na app EVOLVE Treino; aqui fica o progresso
   if (!s.meals.length){
-    return html + `<div class="card" style="text-align:center;">` +
+    return tplTreinoAppLink() + `<div class="card" style="text-align:center;">` +
       `<div class="eyebrow">Alimentação</div>` +
       `<div style="font-family:var(--display); font-weight:700; font-size:1.1rem; margin-top:8px;">O teu plano está a ser preparado</div>` +
       `<p class="muted-p" style="margin-top:8px;">O teu profissional já tem o teu questionário e vai definir o teu plano em breve.</p>` +
     `</div>`;
   }
-  html += tplTodayMeals(s);
+  html += tplTodayMeals(s) + tplTreinoAppLink();
   var ciDays = computeLastCheckinDaysAgo(s);
   if (WEEKLY_CHECKIN_ENABLED && ciDays >= 7){
     html += `<div class="card ci-nudge"><div><div class="eyebrow">Check-in semanal</div><p class="muted-p" style="margin:4px 0 0;">${ciDays === 999 ? "Ainda não enviaste nenhum." : "O último foi " + daysAgoLabel(ciDays) + "."} Demora um minuto.</p></div>` +
@@ -5468,7 +5498,7 @@ function tplPlano(s){
   }
   var tier = flexTier(s.flexibility);
   var profile = computeFlexibilityProfile(s);
-  var html = tabHead("Alimentação", "Nível " + TIER_LABEL[tier] + " · " + TIER_HINT[tier]);
+  var html = tabHead("Alimentação", TIER_HINT[tier]);   // o «Nível …» é um conceito do profissional: o aluno só precisa de saber o que pode fazer
   if (planReadyForExport(s)) html += "<div class=\"plano-actions\"><button type=\"button\" class=\"btn btn-sm\" id=\"exportPlanPdf\">⬇ Plano em PDF (imprimir)</button></div>";
   html += tplTargetsCard(s);
   var creatineIdx = breakfastMealIndex(s.meals);
@@ -5481,7 +5511,7 @@ function tplPlano(s){
     else if (tier === "estruturado") html += tplMealFixed(m, idx, s);
     else html += tplMealChoice(m, idx, s, true);
     if (idx === creatineIdx) html += creatineLineHtml(s);
-    html += "<div class=\"plano-meal-macros\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
+    html += "<div class=\"plano-meal-macros\">" + Math.round(totals.kcal) + " kcal · P " + Math.round(totals.p) + "g · H " + Math.round(totals.c) + "g · G " + Math.round(totals.f) + "g</div>";
     html += "</div>";
   });
   return html;
@@ -8264,15 +8294,15 @@ function tplEvolucaoAluno(s, opts){
   var trend = computeWeeklyTrend(s.weights);
   var html = (opts.editable ? "" : tabHead("Progresso", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
-    "<div class=\"hero-row\"><div class=\"hero-num\">" + (s.weightCurrent == null ? "—" : Number(s.weightCurrent).toFixed(1) + "<small>kg</small>") + "</div></div>" +
+    "<div class=\"hero-row\"><div class=\"hero-num\">" + (s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + "<small>kg</small>") + "</div></div>" +
     "<div class=\"weight-chart-wrap\">" + weightSvg(s.weights) + "</div>" +
     "<div class=\"stat-grid-4\">" +
-      statTile("Inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
-      statTile("Atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") +
-      statTile("Objetivo", (s.weightGoal || "—") + (s.weightGoal ? " kg":"")) +
-      statTile("Diferença", diff == null ? "—" : (diff>0?"+":"") + diff + " kg") +
+      statTile("Inicial", s.weightInitial == null ? "—" : ptNum(s.weightInitial, 1) + " kg") +
+      statTile("Atual", s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + " kg") +
+      statTile("Objetivo", s.weightGoal ? ptNum(s.weightGoal, 1) + " kg" : "—") +
+      statTile("Diferença", diff == null ? "—" : (diff>0?"+":"") + ptNum(diff, 1) + " kg") +
     "</div>" +
-    (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência recente: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + trend.toFixed(2) + " kg/semana</span></p>" : "") +
+    (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência recente: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + ptNum(trend, 2) + " kg/semana</span></p>" : "") +
   "</div>";
 
   html += "<div class=\"card\">" +
@@ -8294,7 +8324,7 @@ function assessDelta(curr, prev, unit){
   if (!(curr > 0) || !(prev > 0)) return "";
   var d = curr - prev;
   if (Math.abs(d) < 0.05) return "<span class=\"assess-delta\">=</span>";
-  return "<span class=\"assess-delta\">" + (d>0?"▲":"▼") + " " + Math.abs(d).toFixed(1) + unit + "</span>";
+  return "<span class=\"assess-delta\">" + (d>0?"▲":"▼") + " " + ptNum(Math.abs(d), 1) + unit + "</span>";
 }
 
 // Mais recentes primeiro: por data e, no mesmo dia, pela hora da pesagem (se existir).
@@ -8579,6 +8609,8 @@ function combineReadings(values, tolerancePct){
 }
 function sexKeyOf(sex){ return sex === "Masculino" ? "M" : (sex === "Feminino" ? "F" : null); }
 function ptNum(n, digits){ return Number(n).toFixed(digits).replace(".", ","); }
+// uma casa decimal só quando existe (28,8 / 14), sempre com vírgula
+function ptDec(n){ return String(Math.round(Number(n) * 10) / 10).replace(".", ","); }
 function posNum(v){ var n = Number(v); return isFinite(n) && n > 0 ? n : 0; }
 function skinfoldSitesOf(protocol, sexKey){
   var p = SKINFOLD_PROTOCOLS[protocol];
@@ -9043,7 +9075,7 @@ function tplPhotoCompare(s){
     "</div>" +
     "<div class=\"compare-grid\" id=\"compareGrid\"" + ((s.photos || []).length ? "" : " hidden") + "></div>" + // sem fotografias não há nada para pôr lado a lado
     "<div id=\"compareMetrics\"></div>" +
-    "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">⬇ Descarregar / enviar ao aluno</button>" +
+    "<button type=\"button\" class=\"btn btn-sm\" id=\"downloadCompare\" style=\"margin-top:10px;\">" + (authRole === "student" ? "⬇ Guardar a comparação" : "⬇ Descarregar / enviar ao aluno") + "</button>" +
     "<p class=\"muted-p\" id=\"compareDownloadError\" style=\"color:var(--critical); display:none; margin-top:8px;\"></p>" +
   "</div>";
 }
@@ -9722,7 +9754,65 @@ function wireStudentList(root){
   });
 }
 
-var APP_BUILD = "2026-10-15 · lupa 4";   // sobe quando mudar algo visível: serve para ver se o browser tem a versão mais recente
+var APP_BUILD = "2026-11-08 · fase 38";   // sobe quando mudar algo visível: serve para ver se o browser tem a versão mais recente
+/* Filtros rápidos do painel: respondem às perguntas de todos os dias sem abrir cada ficha.
+   avaliacao = sem avaliação (peso) há DASH_ASSESS_LATE_DAYS dias ou mais, ou nunca; revisao = revisão de fase à espera de decisão;
+   objetivo = o peso não acompanha o objetivo (a mesma decisão do sinal de peso). Só alunos ativos e que não sejam só de estúdio. */
+var DASH_ASSESS_LATE_DAYS = 42;   // avaliações de 4 a 6 semanas: passadas 6 semanas, está atrasada
+function dashQuickFilters(students, today){
+  var out = {avaliacao: [], revisao: [], objetivo: []};
+  var reviews = {};
+  (collectPhaseReviews(today) || []).forEach(function(x){ reviews[x.student.id] = true; });
+  (students || []).forEach(function(st){
+    if (!isStudentActive(st) || isStudioOnly(st)) return;
+    var p; try { p = weightProgress(st, today); } catch (e) { p = null; }
+    if (p && (!p.n || p.daysSinceLast >= DASH_ASSESS_LATE_DAYS)) out.avaliacao.push(st.id);
+    if (reviews[st.id]) out.revisao.push(st.id);
+    var sig; try { sig = signalWeight(st); } catch (e) { sig = null; }
+    if (sig && sig.status === "atencao") out.objetivo.push(st.id);
+  });
+  return out;
+}
+
+/* O estado do aluno num relance (topo do Resumo): peso, avaliação, fase, treino e o que precisa de ti, sem abrir mais separadores.
+   Só lê dados que já existem (nunca guarda nada) e repete as decisões que já se tomam noutros sítios (signalWeight, revisão de fase). */
+function proEstadoRows(s, today){
+  var rows = [];
+  var p = weightProgress(s, today);
+  if (s.weightCurrent != null){
+    var parts = [ptNum(s.weightCurrent, 1) + " kg"];
+    if (s.weightGoal) parts.push("objetivo " + ptNum(s.weightGoal, 1) + " kg");
+    if (s.weightInitial != null && Math.abs(s.weightCurrent - s.weightInitial) >= 0.05) parts.push((s.weightCurrent < s.weightInitial ? "−" : "+") + ptNum(Math.abs(s.weightCurrent - s.weightInitial), 1) + " kg desde o início");
+    rows.push({label: "Peso", text: parts.join(" · ")});
+  }
+  if (!p.n) rows.push({label: "Avaliação", text: "Ainda sem avaliações registadas", warn: true});
+  else rows.push({label: "Avaliação", text: "Última " + daysAgoLabel(p.daysSinceLast), warn: p.daysSinceLast >= DASH_ASSESS_LATE_DAYS});
+  if (!noNutritionOf(s)){
+    var np = phaseOf(s);
+    if (np){
+      var due = np.nextReviewDate || null;
+      rows.push({label: "Fase", text: phaseLabel(np.phase) + (due ? " · próxima revisão " + fmtDatePt(due) : "")});
+    } else rows.push({label: "Fase", text: "Sem fase definida"});
+  }
+  var logs = (s.workoutLogs || []).filter(function(l){ return l && isIsoDate(l.date); }).sort(function(a, b){ return a.date < b.date ? -1 : 1; });
+  if (logs.length){ var d = daysSinceDate(logs[logs.length - 1].date); rows.push({label: "Treino", text: "Último registo " + daysAgoLabel(d), warn: d != null && d >= SIGNAL_TRAINING_IDLE_DAYS}); }
+  return rows;
+}
+function tplProEstado(s){
+  if (!s) return "";
+  var rows = proEstadoRows(s);
+  var attention = [];
+  try { attention = computeStudentSignals(s).filter(function(x){ return x && x.status === "atencao"; }).slice(0, 3); } catch (e) { attention = []; }
+  var html = "<div class=\"card\" id=\"proEstado\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Estado do aluno</div>" +
+    rows.map(function(r){
+      return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(r.label) + "</div><div class=\"hval\" style=\"text-align:right;\">" + escapeHtml(r.text) + (r.warn ? " <span class=\"pill warn\">atenção</span>" : "") + "</div></div>";
+    }).join("");
+  html += attention.length
+    ? "<div class=\"eyebrow\" style=\"margin:12px 0 4px;\">O que precisa de ti</div>" + attention.map(function(x){ return "<p class=\"muted-p\" style=\"margin:4px 0;\">• " + escapeHtml(x.text) + "</p>"; }).join("")
+    : "<p class=\"muted-p\" style=\"margin:10px 0 0;\">✓ Nada a pedir a tua atenção neste momento.</p>";
+  return html + "</div>";
+}
+
 function renderProDashboardMain(){
   var main = document.getElementById("proMain"), dashAllRows = [];
   var hadSearchFocus = dashSearchFocused(), searchCaret = hadSearchFocus ? document.activeElement.selectionStart : null;
@@ -9731,6 +9821,9 @@ function renderProDashboardMain(){
   var activeStudents = visible.filter(isStudentActive);
   var pendingCheckins = activeStudents.filter(function(s){ return dashLateDays(s)>=7; }).length;
   var alertCount = activeStudents.reduce(function(a,s){ return a + computeDashboardAlerts(s).length; }, 0);
+  var quick = dashQuickFilters(activeStudents);
+  // os filtros rápidos só aparecem quando há alguém (ou quando estão selecionados): menos ruído para quem está em dia
+  var quickStat = function(key, label){ return quick[key].length || state.dashboardListMode === key ? proStat(quick[key].length, label, key) : ""; };
 
   // a lupa e a ordem ficam no topo, à vista (antes ficavam por baixo dos cartões e perdiam-se no telemóvel)
   var toolsHtml = state.dashboardListMode ? (
@@ -9738,6 +9831,7 @@ function renderProDashboardMain(){
       "<select id=\"stuSort\" class=\"mini-select\" aria-label=\"Ordenar alunos\">" + [["atencao", "Por atenção"], ["az", "Nome A → Z"], ["za", "Nome Z → A"]].map(function(o){ return "<option value=\"" + o[0] + "\"" + ((state.dashSort || "atencao") === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></div>") : "";
   var html = toolsHtml + "<div class=\"pro-stat-row\">" +
     proStat(activeStudents.length, "Alunos ativos", "active") +
+    quickStat("avaliacao", "Avaliação em atraso") + quickStat("revisao", "Revisão de plano") + quickStat("objetivo", "Fora do objetivo") +
     (WEEKLY_CHECKIN_ENABLED ? proStat(pendingCheckins, "Check-ins", "checkins") : "") +
     (DASH_ALERTS_ENABLED ? proStat(alertCount, "Alertas", "alerts") : "") +
     proStat(visible.length, "Total de alunos", "total") +
@@ -9761,13 +9855,14 @@ function renderProDashboardMain(){
     var listStudents = mode === "total" ? visible : activeStudents.filter(function(st){
       if (mode === "checkins") return dashLateDays(st) >= 7;
       if (mode === "alerts") return computeDashboardAlerts(st).length > 0;
+      if (quick[mode]) return quick[mode].indexOf(st.id) >= 0;
       return true;
     });
     var allRows = dashAllRows = listStudents.map(function(st){
       var al = computeDashboardAlerts(st);
       return {s: st, alerts: al, coach: computeCoachBadges(st), crit: al.filter(function(x){ return x.type === "critical"; }).length, days: dashLateDays(st), pending: pendingHelpFor(st.id)};
     });
-    var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas"}[mode] || "Alunos";
+    var modeLabel = {active: "Alunos ativos", total: "Todos os alunos", checkins: "Check-ins em atraso", alerts: "Alunos com alertas", avaliacao: "Avaliação em atraso (6 semanas ou mais)", revisao: "Revisão de plano à espera de decisão", objetivo: "Peso fora do objetivo"}[mode] || "Alunos";
     html += "<div class=\"eyebrow\" id=\"studentListHead\" style=\"margin-bottom:10px;\">" + modeLabel + "</div>";
     html += "<div class=\"student-list\" id=\"studentListBox\">" + studentListRowsHtml(allRows) + "</div>";
   }
@@ -10176,7 +10271,7 @@ function renderProTabContent(s){
     });
     return;
   }
-  if (state.proTab==="perfil") el.innerHTML = tplProPerfil(s);
+  if (state.proTab==="perfil") el.innerHTML = tplProEstado(s) + tplProPerfil(s);
   else if (state.proTab==="leitura") el.innerHTML = tplProLeitura(s);
   else if (state.proTab==="plano") el.innerHTML = tplProPlano(s);
   else if (state.proTab==="treino") el.innerHTML = tplProTreino(s);
@@ -10463,7 +10558,7 @@ function tplPlanoMealEditor(m, midx){
   // toda a lógica de pesquisa/wiring existente continua a funcionar sem
   // alterações.
   html += "<details class=\"add-food-details\"><summary class=\"btn btn-sm\">+ Adicionar alimento</summary>" + tplAddFoodForm(midx) + "</details>";
-  html += "<div class=\"plano-meal-macros\" style=\"margin-top:10px;\">" + totals.kcal + " kcal · P " + totals.p + "g · H " + totals.c + "g · G " + totals.f + "g</div>";
+  html += "<div class=\"plano-meal-macros\" style=\"margin-top:10px;\">" + Math.round(totals.kcal) + " kcal · P " + ptDec(totals.p) + "g · H " + ptDec(totals.c) + "g · G " + ptDec(totals.f) + "g</div>";
   html += "</div>";
   return html;
 }
@@ -11490,6 +11585,8 @@ function goalDirection(s){
   return "manutencao";
 }
 
+// o sinal de peso «estagnado» marca-se com .stall: é a única decisão de estagnação (o painel, a Leitura e a Nutrição leem-na)
+function stallSignal(sig){ sig.stall = true; return sig; }
 function signalWeight(s){
   var ins = weighInsOf(s);   // pesagens do profissional (avaliações), sem repetir a mesma em duas estruturas
   var change = computeRecentWeightChange(ins, SIGNAL_WEIGHT_TREND_WEEKS);
@@ -11537,11 +11634,11 @@ function signalWeight(s){
   var wrongKg = Math.max(weeks / 3, 0.6);     // 1 kg em 3 semanas: viragem clara no sentido contrário
   if (dir === "perda"){
     if (d > stallKg) return signal("peso", "Peso", "atencao", base + " — o objetivo é perder peso e o peso subiu.", period, "evolucao", d > wrongKg ? "high" : "normal");
-    if (d > -stallKg) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de perda.", period, "evolucao");
+    if (d > -stallKg) return stallSignal(signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de perda.", period, "evolucao"));
     if (-d > fastKg) return signal("peso", "Peso", "atencao", base + " — perda acima de " + MAX_LOSS_PCT_PER_WEEK + "% do peso por semana: confirma energia, fome e massa muscular.", period, "evolucao");
   } else if (dir === "ganho"){
     if (d < -stallKg) return signal("peso", "Peso", "atencao", base + " — o objetivo é ganhar massa e o peso desceu.", period, "evolucao", -d > wrongKg ? "high" : "normal");
-    if (d < stallKg) return signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de ganho.", period, "evolucao");
+    if (d < stallKg) return stallSignal(signal("peso", "Peso", "atencao", base + " — estagnado face ao objetivo de ganho.", period, "evolucao"));
     if (d > fastKg) return signal("peso", "Peso", "atencao", base + " — ganho rápido: possível excesso de gordura, revê o excedente calórico.", period, "evolucao");
   } else if (Math.abs(d) > 0.5 * weeks){
     return signal("peso", "Peso", "atencao", base + " — acima do esperado para manutenção.", period, "evolucao");
@@ -11615,21 +11712,19 @@ function signalInatividadeTreino(s){
   return signal("inatividade_treino", "Inatividade de treino", "positivo", "Última sessão de treino registada " + daysAgoLabel(a.daysSince) + ".", "Última sessão registada", "treino");
 }
 
-/* ===================== ESTAGNAÇÃO DE PESO (Fase 37) =====================
-   Deteta quando o peso deixa de acompanhar o objetivo (perda ou ganho) e propõe
-   um ajuste pequeno de calorias para o profissional aprovar com um clique.
-   Regras (pedido do profissional):
-   - só avalia com pelo menos PLATEAU_MIN_DAYS dias de pesagens (e 3 pontos) — nunca num dia isolado;
-   - tendência por regressão linear sobre as pesagens (kg/semana), não por dois pontos;
-   - se houve um ajuste de calorias recente, só conta as pesagens desde esse ajuste;
-   - com adesão baixa nos check-ins, a sugestão é rever a adesão em vez de mexer nas calorias;
-   - corte: -125 kcal (a maior parte de hidratos); ganho: +150 kcal; proteína intacta;
-   - o profissional pode adiar o alerta (férias, doença…): durante o adiamento não há alerta e, quando termina,
-     só contam as pesagens feitas depois dele (as de viagem não são fiáveis);
+/* ===================== ESTAGNAÇÃO DE PESO (Fase 37, unificada na Fase 38) =====================
+   Uma só decisão sobre «estagnado»: a de signalWeight (a que alimenta o painel e a Leitura). Este bloco só acrescenta,
+   para quem NÃO tem fase definida, a sugestão de ajuste de calorias e o adiamento. Quem tem fase (phaseOf) é tratado pela
+   revisão de fase (computePhaseReview), que já propõe os ajustes e tem o seu próprio adiamento: aqui não se mostra nada,
+   para nunca haver duas propostas nem dois «estagnados» diferentes.
+   Regras:
+   - estagnado = signalWeight(s).stall (mesma regra, mesmos limiares, mesmo texto em todo o lado);
+   - depois de um ajuste de calorias, ou do fim de um adiamento, esperam-se PLATEAU_MIN_DAYS dias antes de reavaliar (nesse
+     intervalo não há alerta: as pesagens de férias/doença ou da 1.ª semana de uma alteração não contam);
+   - com adesão baixa nos check-ins antigos, a sugestão é rever a adesão em vez de mexer nas calorias;
+   - corte: -125 kcal (sobretudo hidratos); ganho: +150 kcal; proteína intacta; nunca abaixo do metabolismo basal;
    - nunca aplica nada sozinho — só o botão do profissional. */
 var PLATEAU_MIN_DAYS = 14;
-var PLATEAU_WINDOW_DAYS = 28;
-var PLATEAU_MIN_PCT_PER_WEEK = 0.10;   // % do peso por semana abaixo da qual se considera parado
 var PLATEAU_CUT_STEP_KCAL = 125;       // corte: 100 a 150 kcal
 var PLATEAU_BULK_STEP_KCAL = 150;      // ganho: 100 a 200 kcal
 var PLATEAU_MIN_KCAL = 1200;           // piso quando não há metabolismo basal calculável
@@ -11662,8 +11757,8 @@ function lastPlateauSnoozeUntil(s){
 }
 
 function isoPlusDays(base, n){
-  var d = new Date(base + "T00:00:00");
-  d.setDate(d.getDate() + n);
+  var d = new Date(base + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -11680,39 +11775,23 @@ function resumePlateau(s){
 }
 
 function plateauDaysBetween(a, b){
-  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+  return Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 86400000);
 }
 
+// estados: null (sem direção) · fase (tratado pela revisão de fase) · adiado · aguarda · estagnado · a_evoluir · outro · insuficiente
 function computeWeightPlateau(s, today){
   today = today || todayISO();
   var dir = plateauDirection(s);
   if (dir === 0) return null;
-  var changed = lastKcalChangeDate(s);
+  if (phaseOf(s)) return {state: "fase", dir: dir};
   var snoozeUntil = lastPlateauSnoozeUntil(s);
   if (snoozeUntil && snoozeUntil >= today) return {state: "adiado", dir: dir, until: snoozeUntil};
-  var startDate = new Date(today + "T00:00:00");
-  startDate.setDate(startDate.getDate() - PLATEAU_WINDOW_DAYS);
-  var start = startDate.toISOString().slice(0, 10);
-  if (changed && changed > start) start = changed;
-  if (snoozeUntil && snoozeUntil > start) start = snoozeUntil; // pesagens do período adiado não contam
-  var pts = (s.weights || []).filter(function(w){ return w && w.date >= start && w.date <= today && w.w > 0; })
-    .sort(function(a, b){ return a.date < b.date ? -1 : 1; });
-  var span = pts.length ? plateauDaysBetween(pts[0].date, pts[pts.length-1].date) : 0;
-  if (pts.length < 3 || span < PLATEAU_MIN_DAYS){
-    var recent = changed && plateauDaysBetween(changed, today) < PLATEAU_MIN_DAYS;
-    return {state: recent ? "aguarda" : "insuficiente", dir: dir, since: changed, days: span, n: pts.length};
-  }
-  var t0 = new Date(pts[0].date + "T00:00:00").getTime();
-  var xs = pts.map(function(p){ return (new Date(p.date + "T00:00:00").getTime() - t0) / 86400000; });
-  var ys = pts.map(function(p){ return p.w; });
-  var n = pts.length, mx = xs.reduce(function(a, b){ return a + b; }, 0) / n, my = ys.reduce(function(a, b){ return a + b; }, 0) / n;
-  var num = 0, den = 0;
-  xs.forEach(function(x, i){ num += (x - mx) * (ys[i] - my); den += (x - mx) * (x - mx); });
-  var slopeDay = den ? num / den : 0;
-  var rate = slopeDay * 7;                       // kg por semana
-  var pct = my ? rate / my * 100 : 0;             // % do peso por semana
-  var stalled = dir < 0 ? pct > -PLATEAU_MIN_PCT_PER_WEEK : pct < PLATEAU_MIN_PCT_PER_WEEK;
-  return {state: stalled ? "estagnado" : "a_evoluir", dir: dir, days: span, n: n, rateKgWeek: rate, pctWeek: pct, from: pts[0].date, to: pts[pts.length-1].date, since: changed};
+  var changed = lastKcalChangeDate(s);
+  var ref = changed && snoozeUntil && snoozeUntil > changed ? snoozeUntil : (changed || snoozeUntil);
+  if (ref && plateauDaysBetween(ref, today) < PLATEAU_MIN_DAYS) return {state: "aguarda", dir: dir, since: ref};
+  var base = signalWeight(s);
+  var state = base.stall ? "estagnado" : base.status === "positivo" ? "a_evoluir" : base.status === "atencao" ? "outro" : "insuficiente";
+  return {state: state, dir: dir, text: base.text, severity: base.severity};
 }
 
 function plateauAdherenceAvg(s){
@@ -11745,18 +11824,18 @@ function suggestPlateauAdjustment(s, plateau){
     text: (cut ? "Sugestão: cortar " : "Sugestão: acrescentar ") + Math.abs(realDelta) + " kcal (" + t.kcal + " → " + newKcal + " kcal), mantendo a proteína."};
 }
 
-function plateauRateLabel(p){
-  return (p.rateKgWeek >= 0 ? "+" : "") + p.rateKgWeek.toFixed(2).replace(".", ",") + " kg/semana";
-}
-
+// o painel, a Leitura e a Nutrição leem o mesmo sinal: o de signalWeight, com o adiamento/espera por cima e o aviso de onde está o ajuste
 function signalWeightPlateau(s){
   var base = signalWeight(s);
   var p = computeWeightPlateau(s);
   if (p && p.state === "adiado"){
     return signal("peso", "Peso", "insuficiente", "Alerta de estagnação adiado até " + fmtDatePt(p.until) + ".", "Adiamento ativo", "plano");
   }
+  if (p && p.state === "aguarda" && base.stall){
+    return signal("peso", "Peso", "insuficiente", "Calorias ajustadas (ou alerta adiado) em " + fmtDatePt(p.since) + ": a aguardar " + PLATEAU_MIN_DAYS + " dias de pesagens para reavaliar.", "Reavaliação em curso", "plano");
+  }
   if (p && p.state === "estagnado"){
-    return signal("peso", "Peso", "atencao", "Peso estagnado há " + p.days + " dias (" + plateauRateLabel(p) + "). Vê o ajuste sugerido no Plano.", "Últimos " + p.days + " dias", "plano");
+    return signal("peso", "Peso", "atencao", base.text + " Vê o ajuste sugerido na Nutrição.", base.period, "plano", base.severity);
   }
   return base;
 }
@@ -11794,21 +11873,19 @@ function wirePlateauCard(el, s){
 
 function tplPlateauCard(s){
   var p = computeWeightPlateau(s);
-  if (!p) return "";
-  var goalWord = p.dir < 0 ? "perda" : "ganho";
+  if (!p || p.state === "fase") return "";
   if (p.state === "adiado"){
-    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏸ Alerta de estagnação adiado até " + escapeHtml(fmtDatePt(p.until)) + " — as pesagens deste período não contam. <button type=\"button\" class=\"btn btn-sm\" id=\"resumePlateau\">Retomar agora</button></p>";
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏸ Alerta de estagnação adiado até " + escapeHtml(fmtDatePt(p.until)) + ". <button type=\"button\" class=\"btn btn-sm\" id=\"resumePlateau\">Retomar agora</button></p>";
   }
   if (p.state === "aguarda"){
-    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏳ Calorias ajustadas em " + escapeHtml(p.since) + " — espera pelo menos " + PLATEAU_MIN_DAYS + " dias de pesagens antes de reavaliar o ritmo de " + goalWord + ".</p>";
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">⏳ Última alteração em " + escapeHtml(fmtDatePt(p.since)) + " — espera pelo menos " + PLATEAU_MIN_DAYS + " dias de pesagens antes de reavaliar.</p>";
   }
   if (p.state === "a_evoluir"){
-    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">✓ Ritmo de " + goalWord + " adequado: " + plateauRateLabel(p) + " (" + p.days + " dias, " + p.n + " pesagens).</p>";
+    return "<p class=\"muted-p\" style=\"margin-bottom:10px;\">✓ " + escapeHtml(p.text) + "</p>";
   }
   if (p.state !== "estagnado") return "";
   var sug = suggestPlateauAdjustment(s, p);
-  var html = "<div class=\"suggestion-banner\" id=\"plateauCard\" style=\"margin-bottom:14px;\">" +
-    "<strong>⚠ Peso estagnado</strong> — " + plateauRateLabel(p) + " há " + p.days + " dias (" + p.n + " pesagens), abaixo do ritmo esperado para " + goalWord + ".";
+  var html = "<div class=\"suggestion-banner\" id=\"plateauCard\" style=\"margin-bottom:14px;\"><strong>⚠ Peso estagnado</strong> — " + escapeHtml(p.text);
   if (sug){
     html += "<br>" + escapeHtml(sug.text);
     if (sug.type === "ajuste"){
@@ -12586,7 +12663,7 @@ function wireProTab(s){
       });
       var applyBtn = resultEl.querySelector("#applyDailyPlanDraft");
       if (applyBtn) applyBtn.addEventListener("click", function(){
-        var createdMeals = 0, addedFoods = 0;
+        var createdMeals = 0, addedFoods = 0, blockedSkipped = [];
         if (pasted) clearPlanIfReplacing(el, s, draft);
         draft.forEach(function(d){
           if (!d.foods.length) return;
@@ -12599,6 +12676,8 @@ function wireProTab(s){
           }
           d.foods.forEach(function(f){
             if (targetMeal.foods.some(function(existing){ return existing.name === f.name; })) return;
+            // o mesmo filtro dos templates: um alimento bloqueado para este aluno nunca entra por aqui
+            if (isFoodBlockedFor(s, f.name)){ if (blockedSkipped.indexOf(f.name) < 0) blockedSkipped.push(f.name); return; }
             targetMeal.foods.push(food(f.name, f.qty, f.group));
             addedFoods++;
           });
@@ -12622,12 +12701,14 @@ function wireProTab(s){
           });
         });
         var summary = "Plano gerado a partir " + (pasted ? "de um plano em texto" : "do dia-a-dia alimentar") + " (" + addedFoods + " alimentos, " + createdMeals + " refeições novas)" +
-          (allUnmatchedWords.length ? " — não reconhecidos: " + allUnmatchedWords.join(", ") : "");
-        if (addedFoods > 0 || allUnmatchedWords.length) logPlanEvent(s, "plano_gerado_texto", summary);
+          (allUnmatchedWords.length ? " — não reconhecidos: " + allUnmatchedWords.join(", ") : "") +
+          (blockedSkipped.length ? " — bloqueados para este aluno (não entraram): " + blockedSkipped.join(", ") : "");
+        if (addedFoods > 0 || allUnmatchedWords.length || blockedSkipped.length) logPlanEvent(s, "plano_gerado_texto", summary);
         renderProTabContent(s);
         persistStudent(s);
         var toastMsg = addedFoods > 0 ? "✓ Plano gerado: " + createdMeals + " refeições novas, " + addedFoods + " alimentos — revê e ajusta" : "Nada para aplicar — nenhum alimento novo reconhecido";
         if (allUnmatchedWords.length) toastMsg += ". Não reconhecidos (acrescenta à mão): " + allUnmatchedWords.join(", ");
+        if (blockedSkipped.length) toastMsg += ". Bloqueados para este aluno (não entraram): " + blockedSkipped.join(", ");
         showToast(toastMsg);
       });
     }
@@ -13377,7 +13458,9 @@ function finishBoot(rows, isProfessional, offline){
   STUDENTS = rows.map(rowToStudent);
   lastStudentsLoad = Date.now();
   // a primeira ligação pode ser lenta: o catálogo extra não pode prender o arranque. As fotos vêm só quando se abre a evolução.
-  var extras = offline ? Promise.resolve() : withTimeout(Promise.all([loadCustomFoods(), loadFoodProducts()]), 12000).catch(function(){});
+  // a Gestão e a app de Treino não mostram alimentos: não pedem o catálogo (era a parte mais lenta do arranque)
+  var needsFoods = APP_MODE !== "gestao" && APP_MODE !== "treino";
+  var extras = offline || !needsFoods ? Promise.resolve() : withTimeout(Promise.all([loadCustomFoods(), loadFoodProducts()]), 12000).catch(function(){});
   return extras.then(function(){
     document.getElementById("signOutBtn").classList.remove("hidden");
     if (isProfessional){

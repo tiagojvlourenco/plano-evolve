@@ -47,7 +47,7 @@ function freshStudent(overrides){
 
 // 3. Ordem e nomes dos 4 blocos do dashboard: Alunos ativos, Check-ins, Alertas, Total de alunos
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 4000);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("\nfunction ", appSource.indexOf("function renderProDashboardMain") + 1));
   var order = ["Alunos ativos", "Check-ins", "Alertas", "Total de alunos"];
   var lastIdx = -1;
   var inOrder = true;
@@ -62,7 +62,7 @@ function freshStudent(overrides){
 
 // 4. A lista completa de alunos já não aparece por omissão — só dentro de state.dashboardListMode
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("function renderProDashboardMain") + 3600);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProDashboardMain"), appSource.indexOf("\nfunction ", appSource.indexOf("function renderProDashboardMain") + 1));
   check.check("4. A lista só é construída dentro de um if (state.dashboardListMode)", fnSrc.indexOf("if (state.dashboardListMode)") >= 0);
 })();
 
@@ -113,7 +113,7 @@ function freshStudent(overrides){
 
 // 10. downloadPhotoComparison(): usa fetch()+blob, nunca img.crossOrigin (mais fiável com URLs assinados)
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function loadImageAsElement"), appSource.indexOf("function loadImageAsElement") + 700);
+  var fnSrc = appSource.slice(appSource.indexOf("function loadImageAsElement"), appSource.indexOf("\nfunction ", appSource.indexOf("function loadImageAsElement") + 1));
   check.check("10. Carrega a foto via fetch() e blob", fnSrc.indexOf("fetch(url)") >= 0 && fnSrc.indexOf(".blob()") >= 0);
   // "crossOrigin" só pode aparecer em comentários (a explicar a decisão),
   // nunca como código real (img.crossOrigin = ...) — daí o filtro de linhas.
@@ -130,7 +130,7 @@ function freshStudent(overrides){
 // confirmado num telemóvel real que também deslocava a página inteira, não só
 // o menu, ao tentar "ajudar" a centrar o elemento (ver phase14.test.js).
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("function renderProShell") + 7000);
+  var fnSrc = appSource.slice(appSource.indexOf("function renderProShell"), appSource.indexOf("\nfunction ", appSource.indexOf("function renderProShell") + 1));
   check.check("11. Calcula o centro do separador ativo manualmente (não usa scrollIntoView)", fnSrc.indexOf("targetCenter") >= 0 && fnSrc.indexOf(".scrollIntoView(") === -1);
   check.check("11. Usa scrollTo() no contentor (nunca escapa a ele)", /container\.scrollTo\(\{/.test(fnSrc));
   check.check("11. Está adiado (setTimeout) para correr depois do layout do DOM recém-inserido", /setTimeout\(function\(\)\{[\s\S]*?scrollTo/.test(fnSrc));
@@ -179,7 +179,7 @@ function freshStudent(overrides){
 
 // 15. As perguntas novas existem no questionário, com as opções exatas do formulário real
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 6000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("15. Género com as 4 opções reais (Masculino/Feminino/Outro/Prefiro não dizer)", /<option>Masculino<\/option><option>Feminino<\/option><option>Outro<\/option><option>Prefiro não dizer<\/option>/.test(fnSrc));
   check.check("15. Facilidade de refeições no trabalho (4 níveis)", WORK_MEALS_EASE_OPTIONS.join(",") === "Muito fácil,Fácil,Difícil,Muito Difícil");
   check.check("15. Suplementos: Proteína e Creatina + Outra", SUPPLEMENT_OPTIONS.join(",") === "Proteína,Creatina" && fnSrc.indexOf("obSupplementOtherText") >= 0);

@@ -166,7 +166,7 @@ function mergeCatalogSample(){
   var html = renderDailyPlanDraft(draftPlanFromDailyText(TEXTO));
   check.check("8. O rascunho mostra 'Não consegui reconhecer' com a linha do Barebells", html.indexOf("Não consegui reconhecer") >= 0 && html.indexOf("Barebells") >= 0);
   check.check("8. O rascunho mostra a quantidade lida do texto na pill", html.indexOf("200 ml") >= 0 && html.indexOf("159 g") >= 0);
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 22000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 4800);
   check.check("8. Ao aplicar, as linhas por reconhecer entram no resumo/histórico (d.unmatchedLines)", block.indexOf("d.unmatchedLines") >= 0);
   var htmlLeite = renderDailyPlanDraft(draftPlanFromDailyText("Pequeno-almoço\n* 200 ml leite meio-gordo"));

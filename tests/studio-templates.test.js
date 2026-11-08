@@ -28,7 +28,7 @@ function iso(daysAgo){ return new Date(Date.now() - daysAgo * 86400000).toISOStr
   check.check("7. Numa data sem avaliação usa a mais recente antes dela e diz qual (avaliação de ...)", /avaliação de/.test(mid) && by["Peso"].a === 80);
   check.check("8. O peso de uma data sem avaliação vem do registo de pesagens (77 kg)", compareMetricRows(s, iso(30), iso(0)).filter(function(r){ return r.label === "Peso"; })[0].a === 77);
   check.check("9. Sem medições nas datas, avisa em vez de mostrar tabela vazia", /Sem medições/.test(compareMetricsHtml({photos: [{date: iso(5), position: "frente"}], assessments: [], weights: []}, iso(5), iso(5))));
-  check.check("10. O JavaScript atualiza as medições ao mudar as datas", /compareMetrics[\s\S]{0,300}compareMetricsHtml\(s, selA\.value, selB\.value\)/.test(appSource.slice(appSource.indexOf("function wirePhotoCompare"), appSource.indexOf("function wirePhotoCompare") + 800)));
+  check.check("10. O JavaScript atualiza as medições ao mudar as datas", /compareMetrics[\s\S]{0,300}compareMetricsHtml\(s, selA\.value, selB\.value\)/.test(appSource.slice(appSource.indexOf("function wirePhotoCompare"), appSource.indexOf("\nfunction ", appSource.indexOf("function wirePhotoCompare") + 1))));
 })();
 
 // ---------- 2. Templates ----------

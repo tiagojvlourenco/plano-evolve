@@ -37,13 +37,13 @@ var check = require("./check")();
 
 // 3. Ordem trocada: "Data de nascimento" aparece antes de "Idade" no formulário
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("3. 'Data de nascimento' vem antes de 'Idade'", fnSrc.indexOf("Data de nascimento") < fnSrc.indexOf(">Idade<"));
 })();
 
 // 4. Ao mudar a data de nascimento, a idade é preenchida automaticamente
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 8000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("4. Liga um evento 'change' a #obBirthDate", fnSrc.indexOf('querySelector("#obBirthDate")') >= 0 && fnSrc.indexOf('addEventListener("change"') >= 0);
   check.check("4. Usa ageFromBirthDate para calcular a idade", fnSrc.indexOf("ageFromBirthDate(birthDateInput.value)") >= 0);
   check.check("4. Escreve o resultado no campo #obAge", fnSrc.indexOf('querySelector("#obAge").value = age') >= 0);
@@ -52,7 +52,7 @@ var check = require("./check")();
 // ---- 3. Altura como lista de escolha ----
 
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("5. Altura é um <select>, não <input>", /<select id=\\"obHeight\\">/.test(fnSrc));
   check.check("5. HEIGHT_OPTIONS cobre um intervalo generoso (120-220)", HEIGHT_OPTIONS[0] === 120 && HEIGHT_OPTIONS[HEIGHT_OPTIONS.length-1] === 220);
 })();
@@ -71,26 +71,26 @@ var check = require("./check")();
 
 // 7. O <select id="obGoal"> usa ONBOARDING_GOAL_OPTIONS, não todas as chaves de GOAL_ADJUST
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("7. Gera as opções a partir de ONBOARDING_GOAL_OPTIONS", fnSrc.indexOf("ONBOARDING_GOAL_OPTIONS.map(") >= 0);
 })();
 
 // ---- 5. Treinos por semana e refeições exageradas como listas ----
 
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 3000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("8. 'Treinos por semana' é um <select>", /<select id=\\"obTrainings\\">/.test(fnSrc));
 })();
 
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 6000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("9. 'Nº de refeições exageradas' é um <select>", /<select id=\\"obOvereating\\">/.test(fnSrc));
 })();
 
 // ---- 6. Horários como <input type="time"> (não texto livre) ----
 
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 4000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("10. 'Horário habitual de treino' é type=\"time\"", /id=\\"obTrainTime\\"/.test(fnSrc) && /type=\\"time\\"[^>]*id=\\"obTrainTime\\"/.test(fnSrc));
   check.check("10. 'Acorda' é type=\"time\"", /type=\\"time\\"[^>]*id=\\"obWake\\"/.test(fnSrc));
   check.check("10. 'Dorme' é type=\"time\"", /type=\\"time\\"[^>]*id=\\"obSleep\\"/.test(fnSrc));
@@ -105,7 +105,7 @@ var check = require("./check")();
 
 // 12. As opções do <select> mostram a descrição no texto, mas o value continua a ser só o nome
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("function openOnboardingForm") + 4000);
+  var fnSrc = appSource.slice(appSource.indexOf("function openOnboardingForm"), appSource.indexOf("\nfunction ", appSource.indexOf("function openOnboardingForm") + 1));
   check.check("12. option value continua a ser só o nome do nível (não o texto com descrição)", fnSrc.indexOf('"<option value=\\"" + o + "\\">" + o + " — " + ACTIVITY_LEVEL_DESCRIPTIONS[o]') >= 0);
 })();
 

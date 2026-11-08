@@ -78,7 +78,7 @@ function freshStudent(overrides){
 
 // 6. wireProTab: guardar recalcula os alvos com base no novo peso objetivo, e reativa o banner de sugestão
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 26000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("6. Liga saveWeightGoal", fnSrc.indexOf("saveWeightGoal") >= 0);
   check.check("6. Recalcula com computeSuggestedTargets", fnSrc.indexOf("computeSuggestedTargets({") >= 0);
   check.check("6. Regista a alteração com logTargetsChange", /saveWeightGoal[\s\S]{0,900}logTargetsChange/.test(fnSrc));
@@ -90,7 +90,7 @@ function freshStudent(overrides){
 // 7. signalWeight já cobre exatamente o critério pedido: <0.3kg em 3 semanas, com objetivo de mudança
 (function(){
   check.check("7. SIGNAL_WEIGHT_TREND_WEEKS é 3 (janela de 2-3 semanas)", SIGNAL_WEIGHT_TREND_WEEKS === 3);
-  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("function signalWeight") + 6200);
+  var fnSrc = appSource.slice(appSource.indexOf("function signalWeight"), appSource.indexOf("\nfunction ", appSource.indexOf("function signalWeight") + 1));
   check.check("7. Usa o limiar de 0,3 kg em 3 semanas (0,1 kg/semana) para considerar estagnado", fnSrc.indexOf("0.1 * weeks") >= 0 && fnSrc.indexOf("0,3 kg em 3 semanas") >= 0);
   check.check("7. Só considera estagnação quando o objetivo implica mudança (perda/ganho), pela direção do objetivo", fnSrc.indexOf('dir === "perda"') >= 0 && fnSrc.indexOf('dir === "ganho"') >= 0);
 })();
@@ -163,7 +163,7 @@ function freshStudent(overrides){
 
 // 14. wireProTab liga o botão, regista cada refeição no histórico, e confirma antes de acrescentar a um plano já existente
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   check.check("14. Liga createPlanSkeleton", fnSrc.indexOf("createPlanSkeleton()") >= 0 || fnSrc.indexOf("createPlanSkeleton(s)") >= 0);
   check.check("14. Regista cada refeição criada com logMealAdded", /createPlanSkeleton\(s\)[\s\S]{0,200}logMealAdded/.test(fnSrc));
   check.check("14. Pede confirmação se já houver refeições no plano", /s\.meals\.length[\s\S]{0,80}window\.confirm/.test(fnSrc));

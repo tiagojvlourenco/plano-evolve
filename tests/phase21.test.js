@@ -102,14 +102,14 @@ function freshStudent(overrides){
 
 // 10. wireProTab liga o botão de editar a mostrar/esconder o formulário (toggle), sem mexer no plano
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf('querySelectorAll("[data-edit-food]")'), fnSrc.indexOf('querySelectorAll("[data-edit-food]")') + 500);
   check.check("10. Alterna a classe hidden do formulário certo", block.indexOf("classList.toggle(\"hidden\")") >= 0);
 })();
 
 // 11. Guardar a edição substitui o alimento (nome/quantidade/grupo) e regista no histórico
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
+  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("\nfunction ", appSource.indexOf("function wireProTab") + 1));
   var block = fnSrc.slice(fnSrc.indexOf('querySelectorAll("[data-save-food-edit]")'), fnSrc.indexOf('querySelectorAll("[data-save-food-edit]")') + 1400);
   check.check("11. Substitui m.foods[fidx] com o novo alimento", block.indexOf("m.foods[fidx] = food(name, qty, group)") >= 0);
   check.check("11. Regista a alteração no histórico do plano", block.indexOf("logFoodEdited(s, m.name, oldFood, m.foods[fidx])") >= 0);
@@ -137,8 +137,9 @@ function freshStudent(overrides){
 
 // 13. wireProTab calcula e mostra os não-reconhecidos na notificação e no histórico ao aplicar
 (function(){
-  var fnSrc = appSource.slice(appSource.indexOf("function wireProTab"), appSource.indexOf("function wireProTab") + 20000);
-  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"), fnSrc.indexOf("draftFromDailyText") + 3900);
+  // o corpo inteiro de wireProTab (até à próxima função de topo), não uma janela de tamanho fixo que parte quando o código cresce
+  var start = appSource.indexOf("function wireProTab"), fnSrc = appSource.slice(start, appSource.indexOf("\nfunction ", start + 1));
+  var block = fnSrc.slice(fnSrc.indexOf("draftFromDailyText"));
   check.check("13. Calcula allUnmatchedWords com extractUnmatchedWords", block.indexOf("extractUnmatchedWords(d.sourceText, matchedNames, index, ") >= 0);
   check.check("13. Inclui os não-reconhecidos na notificação (toast)", block.indexOf("toastMsg += \". Não reconhecidos") >= 0);
   check.check("13. Inclui os não-reconhecidos no resumo registado no histórico", block.indexOf("não reconhecidos: \" + allUnmatchedWords.join") >= 0);

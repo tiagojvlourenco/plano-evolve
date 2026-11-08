@@ -632,3 +632,16 @@ Ronda de verificação por ângulos ainda não testados. Resultado: **dois defei
 - **Limites:** não testa o iOS a limpar o armazenamento, o Wi-Fi a falhar a meio de um pedido nem o disco realmente cheio (o aviso de rascunho não guardado já existia).
 - Testes: `tests/treino-robustez.test.js` (12 verificações, incluindo 8 casos de armazenamento estragado e o offline real).
 
+
+## 8ba. Fase 38: fiabilidade, estagnação unificada e painel do profissional
+
+Resultado da auditoria (`auditoria-evolve.md`). O que mudou:
+- **Mudança de hora (corrigido):** `computeLastCheckinDaysAgo` contava dias por milissegundos/24 h e falhava perto das 23:00 nos dias de mudança de hora (6 testes de datas partiam). Passa a contar dias de calendário (`daysSinceDate`). Teste: `tests/dst-days.test.js`.
+- **Estagnação de peso, uma só decisão:** `signalWeight` decide; o cartão da Fase 37 (`tplPlateauCard`, «Adiar 2/3 semanas») fica só para alunos sem fase, e o motor de fases (`computePhaseReview`) trata dos restantes. Evento `estagnacao_adiada` no histórico do plano.
+- **Catálogo mais rápido:** `fetchFoodProductsFast` (contagem + páginas em paralelo, com recurso ao método em série); as apps Treino e Gestão já não carregam alimentos no arranque.
+- **Alimentos bloqueados:** `isFoodBlockedFor` impede que um rascunho colado aplique alimentos que o aluno evita ou a que tem alergia (avisa quantos saltou).
+- **Números em português:** `ptDec`/`ptNum` na evolução e nas refeições.
+- **Painel do profissional:** filtros rápidos «Avaliação em atraso» (≥ 42 dias), «Revisão de fase» e «Objetivo atingido»; cartão «Estado» no Resumo (`tplProEstado`).
+- **Aluno:** o ecrã Hoje mostra as refeições antes do atalho para o Treino; o gráfico de adesão antigo só aparece com o check-in semanal ativo.
+- **Testes:** `tests/run-all.js` conta os ficheiros ignorados (sem Playwright/Postgres) e falha com `EVOLVE_REQUIRE_BROWSER=1`; 48 ficheiros que liam o código com janelas de tamanho fixo passaram a fatias por função; o falso Supabase já não deixa o aluno escrever `weights`/`weight_current` (migração 0031).
+- **Por fazer (decisão do profissional):** versões otimistas (Y1: nova migração + mudança na sincronização, alto risco, não validável sem a base real); aplicar 0020 (`plan_templates`) e 0026 (`studio_only`), que a produção ainda não tem; confirmar 0031 com a consulta no fim do ficheiro.

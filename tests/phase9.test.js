@@ -168,7 +168,7 @@ function freshStudent(overrides){
 // 15. insertStudent() existe, para o único caso legítimo de criar um aluno (o profissional)
 (function(){
   check.check("15. insertStudent() existe", typeof insertStudent === "function");
-  var fnSrc = appSource.slice(appSource.indexOf("function insertStudent"), appSource.indexOf("function insertStudent") + 700);
+  var fnSrc = appSource.slice(appSource.indexOf("function insertStudent"), appSource.indexOf("\nfunction ", appSource.indexOf("function insertStudent") + 1));
   check.check("15. insertStudent() usa insert(), não upsert()/update()", fnSrc.indexOf(".insert(row)") >= 0 && fnSrc.indexOf(".upsert(") === -1);
 })();
 
