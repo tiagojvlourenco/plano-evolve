@@ -10507,6 +10507,13 @@ function tplQuestionnaireCopy(s){
   "</details>";
 }
 
+var PRO_FOLD_OPEN = {};
+// bloco recolhível do ecrã de Nutrição: o título do próprio bloco (a «eyebrow» inicial) passa para o resumo
+function proFold(key, title, summary, inner){
+  inner = String(inner).replace(/^<div class="eyebrow[^>]*>[^<]*<\/div>/, "");
+  return "<details class=\"pro-fold\" data-fold=\"" + key + "\"" + (PRO_FOLD_OPEN[key] ? " open" : "") + "><summary class=\"pm-summary\"><span class=\"pm-sum-name eyebrow\">" + escapeHtml(title) + "</span>" +
+    "<span class=\"pm-sum-meta\">" + escapeHtml(summary) + "</span></summary><div style=\"margin-top:8px;\">" + inner + "</div></details>";
+}
 function tplProPlano(s){
   var t = s.targets;
   var html = tplQuestionnaireCopy(s);
@@ -10514,8 +10521,7 @@ function tplProPlano(s){
     html += "<div class=\"suggestion-banner\">🧾 Sugestão calculada a partir do questionário inicial — confirma ou ajusta antes de montares as refeições.</div>";
   }
   html += tplPlateauCard(s);
-  html += "<div class=\"eyebrow\">Alvos nutricionais</div>" +
-    "<div class=\"macro-target-grid\">" +
+  var targetsHtml = "<div class=\"macro-target-grid\">" +
     "<div class=\"f\"><label>Calorias <span class=\"num target-extra\" id=\"tKcalDiff\"></span></label><input type=\"number\" min=\"0\" id=\"tKcal\" value=\"" + t.kcal + "\"></div>" +
     "<div class=\"f\"><label>Proteína (g) <span class=\"num target-extra\" id=\"tProteinPct\"></span></label><input type=\"number\" min=\"0\" id=\"tProtein\" value=\"" + t.protein + "\"></div>" +
     "<div class=\"f\"><label>Hidratos (g) <span class=\"num target-extra\" id=\"tCarbsPct\"></span></label><input type=\"number\" min=\"0\" id=\"tCarbs\" value=\"" + (t.carbs!=null?t.carbs:t.carbsMax) + "\"></div>" +
@@ -10523,9 +10529,12 @@ function tplProPlano(s){
     "</div>" +
     "<div id=\"targetWarning\"></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveTargets\" style=\"margin-top:12px;\">Guardar alvos</button>";
-
-  html += tplPhasePanel(s);
-  html += tplCreatineCard(s);
+  // Fase 38: alvos, fase e creatina recolhíveis, cada um com o essencial no resumo (estado lembrado durante a sessão)
+  var tg = s.targets || {};
+  html += proFold("alvos", "Alvos nutricionais", (tg.kcal ? tg.kcal + " kcal · P " + (tg.protein || 0) + " · H " + (tg.carbs != null ? tg.carbs : (tg.carbsMax || 0)) + " · G " + (tg.fat != null ? tg.fat : (tg.fatMax || 0)) : "por definir"), targetsHtml);
+  var npF = phaseOf(s), cst = creatineStatus(s);
+  html += proFold("fase", "Fase e objetivo de peso", npF ? phaseLabel(npF.phase) : "sem fase", tplPhasePanel(s));
+  html += proFold("creatina", "Suplementação", cst.state === "on" ? "creatina " + cst.dose + " g/dia" : cst.state === "off" ? "creatina retirada" : "creatina", tplCreatineCard(s));
 
   html += "<details class=\"perfil-section\" style=\"margin-top:14px;\"><summary class=\"eyebrow\">Colar um plano em texto</summary>" +
     "<p class=\"muted-p\" style=\"margin:8px 0;\">Cola o plano alimentar (por exemplo \"Refeição 1 (pequeno-almoço)\" seguido dos alimentos, com \"OU\" nas alternativas). Reconheço as refeições e os alimentos da nossa base e mostro uma proposta para reveres antes de aplicar.</p>" +
@@ -13103,6 +13112,10 @@ function wireProTab(s){
       persistStudent(s);
       showToast("Alimento adicionado");
     });
+  });
+
+  el.querySelectorAll(".pro-fold").forEach(function(d){
+    d.addEventListener("toggle", function(){ PRO_FOLD_OPEN[d.getAttribute("data-fold")] = d.open; });
   });
 
   el.querySelectorAll(".pm-details").forEach(function(details){

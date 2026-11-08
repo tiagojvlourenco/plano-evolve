@@ -16,4 +16,11 @@ check.check("5. Uma refeição marcada como aberta volta a abrir-se no redesenho
 check.check("6. O estado vai com a refeição, não com a posição (reordenar por horário não o troca)", /pm-details" data-midx="1" open>/.test(tplPlanoMealEditor(m1, 1)) && !/ open>/.test(tplPlanoMealEditor(m2, 0)));
 check.check("7. O nome da refeição no resumo é escapado", /&lt;b&gt;/.test(tplPlanoMealEditor({name: "<b>", time: "9:00", foods: []}, 0)));
 check.check("8. Ligação: o evento toggle regista o estado e a refeição nova abre-se", /querySelectorAll\("\.pm-details"\)[\s\S]{0,300}PRO_MEAL_OPEN\.add\(m\)/.test(appSource) && /PRO_MEAL_OPEN\.add\(newMeal\)/.test(appSource));
+// blocos recolhíveis: alvos, fase e creatina
+var f1 = proFold("alvos", "Alvos nutricionais", "1800 kcal", "<div class=\"eyebrow section-gap\">Título repetido</div><p>miolo</p>");
+check.check("9. O bloco recolhível vem fechado, com título e resumo", /<details class="pro-fold" data-fold="alvos"><summary/.test(f1) && /Alvos nutricionais/.test(f1) && /1800 kcal/.test(f1));
+check.check("10. O título repetido do conteúdo sai (fica só no resumo) e o miolo mantém-se", f1.indexOf("Título repetido") < 0 && f1.indexOf("<p>miolo</p>") > 0);
+PRO_FOLD_OPEN.alvos = true;
+check.check("11. O estado aberto lembra-se entre redesenhos", /data-fold="alvos" open>/.test(proFold("alvos", "A", "b", "x")) && !/ open>/.test(proFold("fase", "A", "b", "x")));
+check.check("12. Ligação: o ecrã usa três blocos (alvos, fase, creatina) e guarda o estado no toggle", /proFold\("alvos"/.test(appSource) && /proFold\("fase"/.test(appSource) && /proFold\("creatina"/.test(appSource) && /PRO_FOLD_OPEN\[d\.getAttribute\("data-fold"\)\] = d\.open/.test(appSource));
 check.summarize();

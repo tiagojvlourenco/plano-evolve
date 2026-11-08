@@ -81,6 +81,7 @@ function fixtureRow(id, name, o){
   // ficha de Nutrição
   await pg.locator('[data-open="a1"]').first().click();
   await pg.locator('.pro-sidebar [data-t="plano"]').click();
+  await pg.evaluate(function(){ document.querySelectorAll(".pro-fold").forEach(function(d){ d.open = true; }); }); // alvos, fase e creatina vêm recolhidos
   await pg.waitForSelector("#phaseCard");
   var panel = await pg.locator("#phaseCard").innerText();
   check.check("10. A ficha de Nutrição mostra a fase Cut, o objetivo (82 kg), as calorias face à manutenção e a próxima revisão", /cut/i.test(panel) && /82 kg/.test(panel) && /da manutenção de/.test(panel) && /Próxima revisão/.test(panel));

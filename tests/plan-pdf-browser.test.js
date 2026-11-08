@@ -81,6 +81,7 @@ function fixtureRow(id, name, extra){
   await pp.locator('[data-open="stu1"]').first().click();
   await pp.locator('.pro-sidebar [data-t="plano"]').click();
   await pp.waitForSelector("#proExportPdf");
+  await pp.evaluate(function(){ document.querySelectorAll(".pro-fold").forEach(function(d){ d.open = true; }); }); // alvos, fase e creatina vêm recolhidos
   check.check("8. O profissional vê o cartão da creatina (dose pelo peso) e o botão do PDF", /4 g por dia/.test(await pp.locator("#creatineCard").innerText()) && (await pp.locator("#proExportPdf").count()) === 1);
   var [dl2] = await Promise.all([pp.waitForEvent("download"), pp.click("#proExportPdf")]);
   check.check("9. O botão do profissional descarrega o mesmo PDF", /^plano-alimentar-ana-teste-/.test(dl2.suggestedFilename()));

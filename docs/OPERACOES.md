@@ -657,3 +657,5 @@ Resultado da auditoria (`auditoria-evolve.md`). O que mudou:
 ## 8bc. Nutrição do profissional: refeições recolhíveis
 
 Cada refeição do plano (`tplPlanoMealEditor`) é um `<details class="pm-details">`: fechada mostra uma linha (nome, hora, kcal, nº de alimentos); aberta mostra o que já existia (nome, horário, remover, alimentos, «+ Adicionar alimento», macros). O estado aberto/fechado guarda-se por refeição (`PRO_MEAL_OPEN`, um `WeakSet` pela referência da refeição), por isso sobrevive aos redesenhos e à reordenação por horário; a refeição nova abre-se sozinha. Nenhuma lógica de edição mudou (os campos continuam no DOM). Teste: `tests/pro-refeicoes.test.js`.
+
+Também recolhíveis (`proFold`, estado em `PRO_FOLD_OPEN`, lembrado durante a sessão): **Alvos nutricionais**, **Fase e objetivo de peso** e **Suplementação (creatina)**. Fechados mostram o essencial (ex.: «1800 kcal · P 140 · H 180 · G 55», «Cut», «creatina 4 g/dia»). Os testes de browser que clicam nestes cartões abrem-nos primeiro (`.pro-fold` → `open`).
