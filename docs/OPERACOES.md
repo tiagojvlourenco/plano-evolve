@@ -667,3 +667,7 @@ No separador Avaliação (só na vista do profissional; o aluno vê tudo como an
 ## 8be. Check-ins do profissional: resumo e histórico curto
 
 `tplProCheckins` abre com um resumo (quantos check-ins, quando foi o último e a média de adesão, energia e fome dos últimos 4) e mostra só os 6 mais recentes; os anteriores ficam num bloco recolhido «Anteriores» (`proFold`). As linhas são as mesmas de antes (todos os campos). Teste: `tests/pro-checkins.test.js`.
+
+## 8bf. Perfil do profissional: resumo em cada secção
+
+As secções do Perfil continuam recolhidas por omissão e pela mesma ordem; cada uma passa a mostrar o essencial à direita do título (`perfilSection(..., meta)` + `perfilMetas`): idade/altura/peso, telefone ou email, dados médicos preenchidos («2 de 4»), horário de trabalho, alergias/restrições («sem alergias registadas» também aparece), água e opções do plano ativas. Testes em `tests/pro-checkins.test.js` (8 a 11).

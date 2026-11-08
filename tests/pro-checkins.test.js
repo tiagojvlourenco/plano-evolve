@@ -15,4 +15,12 @@ check.check("4. Com 10 check-ins, 6 ficam à vista e 4 recolhidos", (hm.match(/h
 check.check("5. Os mais recentes estão antes do bloco recolhido", hm.indexOf("history-row") < hm.indexOf("data-fold=\"checkinsAntigos\""));
 check.check("6. A média usa só os últimos 4 (adesão 7, 8, 9, 10 = 8,5)", /adesão <span class="num">8,5<\/span>/.test(hm));
 check.check("7. Sem check-ins, mensagem simples e sem resumo", /Sem check-ins registados/.test(tplProCheckins({checkins: []})) && tplProCheckins({checkins: []}).indexOf("card") < 0);
+// Perfil: cada secção mostra o essencial no resumo
+var st = {name: "Ana Teste", age: 30, height: 170, weightCurrent: 65.5, phone: "912345678", work: "Escritório", allergies: ["Marisco", "Frutos secos"], waterIntake: "2 L", likes: [], dislikes: [], avoid: [], supplements: [], targets: {}, meals: [], medicalConditions: "Hipertensão"};
+var m = perfilMetas(st);
+check.check("8. Perfil: dados pessoais, contacto e dados médicos resumidos", m.pessoais === "30 anos · 170 cm · 65,5 kg" && m.contacto === "912345678" && m.medicos === "1 de 4 preenchidos");
+check.check("9. Perfil: as alergias aparecem no resumo da Alimentação (e a falta delas também)", m.alimentacao === "2 alergias/restrições" && perfilMetas({allergies: []}).alimentacao === "sem alergias registadas");
+check.check("10. Perfil: sem dados, resumos neutros", perfilMetas({}).contacto === "sem contacto" && perfilMetas({}).medicos === "por preencher" && perfilMetas({}).pessoais === "");
+var sec = perfilSection("Rotina", false, "<p>x</p>", "<b>x</b>");
+check.check("11. O resumo é escapado e a secção continua fechada por omissão", sec.indexOf("<b>x</b>") < 0 && /&lt;b&gt;/.test(sec) && !/ open>/.test(sec) && perfilSection("T", false, "x").indexOf("pm-sum-meta") < 0);
 check.summarize();

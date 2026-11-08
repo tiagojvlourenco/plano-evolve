@@ -10360,6 +10360,7 @@ function tplProPerfil(s){
   // <details> recolhível (nativo, sem JS a mais). Fase 11: todas começam
   // fechadas, incluindo "Dados pessoais" — pedido explícito para não ter
   // informação sempre à vista, igual ao resto das secções.
+  var pm = perfilMetas(s);
   var html = tplNoNutritionToggle(s) + perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
     fRow("Idade", s.age == null ? "—" : s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex || "—") + fRow("Altura", s.height == null ? "—" : s.height + " cm") +
     fRow("Peso atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
@@ -10377,7 +10378,7 @@ function tplProPerfil(s){
       ACTIVITY_LEVEL_OPTIONS.map(function(o){ return "<option value=\"" + o + "\"" + (s.activityLevel===o?" selected":"") + ">" + o + " — " + ACTIVITY_LEVEL_DESCRIPTIONS[o] + "</option>"; }).join("") +
     "</select></div>" +
   "<p class=\"muted-p\" style=\"margin-top:6px;\">Usado para calcular a manutenção (separador Nutrição) e sugerir alvos — mais preciso do que só o nº de treinos.</p>" +
-  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveActivityLevel\" style=\"margin-top:8px;\">Guardar nível de atividade</button>");
+  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveActivityLevel\" style=\"margin-top:8px;\">Guardar nível de atividade</button>", pm.pessoais);
 
   html += perfilSection("Contacto", false,
     "<div class=\"field-row\">" + fRow("Email do convite", s.inviteEmail ? escapeHtml(s.inviteEmail) : "—") + "</div>" +
@@ -10387,7 +10388,7 @@ function tplProPerfil(s){
     "<p class=\"muted-p\" id=\"contactPhoneErr\" style=\"color:var(--critical); display:none;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveContactPhone\" style=\"margin-top:8px;\">Guardar telefone</button>" +
     (contactEntries(s, "contacto").length ? "<div class=\"eyebrow\" style=\"margin:16px 0 6px;\">Últimos contactos</div>" + contactEntries(s, "contacto").slice(-5).reverse().map(function(e){
-      return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(e.date)) + " · " + escapeHtml(CONTACT_CHANNEL_LABELS[e.channel] || "Contacto") + "</div><div class=\"muted-p\">" + escapeHtml((CONTACT_REASONS[e.reason] || CONTACT_REASONS.generico).label) + "</div></div>"; }).join("") : ""));
+      return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(e.date)) + " · " + escapeHtml(CONTACT_CHANNEL_LABELS[e.channel] || "Contacto") + "</div><div class=\"muted-p\">" + escapeHtml((CONTACT_REASONS[e.reason] || CONTACT_REASONS.generico).label) + "</div></div>"; }).join("") : ""), pm.contacto);
 
   html += perfilSection("Dados médicos", false,
     "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
@@ -10398,7 +10399,7 @@ function tplProPerfil(s){
       "<textarea id=\"medLimitations\" placeholder=\"Ex.: hérnia discal, lesão no joelho...\">" + escapeHtml(s.physicalLimitations || "") + "</textarea></div>" +
     "<div class=\"checkin-field\"><label for=\"medNotes\">Observações</label>" +
       "<textarea id=\"medNotes\" placeholder=\"Qualquer outra informação relevante\">" + escapeHtml(s.medicalNotes || "") + "</textarea></div>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>");
+    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>", pm.medicos);
 
   // Alinhado ao questionário real (Google Forms): horário de trabalho +
   // facilidade de fazer refeições no local de trabalho + suplementação.
@@ -10407,7 +10408,7 @@ function tplProPerfil(s){
     fRow("Utiliza suplementos?", s.usesSupplements ? "Sim" : "Não") +
   "</div>" +
     (s.usesSupplements && s.supplements && s.supplements.length ?
-      "<div style=\"margin-top:10px;\"><div class=\"muted-p\">Suplementos:</div><div class=\"tag-list\">" + s.supplements.map(function(x){return "<span class=\"tag\">"+escapeHtml(x)+"</span>";}).join("") + "</div></div>" : ""));
+      "<div style=\"margin-top:10px;\"><div class=\"muted-p\">Suplementos:</div><div class=\"tag-list\">" + s.supplements.map(function(x){return "<span class=\"tag\">"+escapeHtml(x)+"</span>";}).join("") + "</div></div>" : ""), pm.rotina);
 
   html += perfilSection("Alimentação", false, "<div class=\"field-row\">" +
     fRow("Refeições exageradas / semana", s.overeatingMealsPerWeek != null ? s.overeatingMealsPerWeek : "—") +
@@ -10420,11 +10421,11 @@ function tplProPerfil(s){
       (s.dislikes.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não gosta:</div><div class=\"tag-list\">" + s.dislikes.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
       (s.avoid.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não quer consumir:</div><div class=\"tag-list\">" + s.avoid.map(function(x){return "<span class=\"tag\">"+x+"</span>";}).join("") + "</div>" : "") +
       (s.allergies.length? "<div class=\"muted-p\" style=\"margin-top:8px;\">Não consome / alérgico/a:</div><div class=\"tag-list\">" + s.allergies.map(function(x){return "<span class=\"tag\">"+escapeHtml(x)+"</span>";}).join("") + "</div>" : "") +
-    "</div>");
+    "</div>", pm.alimentacao);
 
   html += perfilSection("Hidratação", false, "<div class=\"field-row\">" +
     fRow("Água ingerida em 24h", s.waterIntake || "—") +
-  "</div>");
+  "</div>", pm.hidratacao);
 
   if (s.weekendNote && s.weekendNote !== "—"){
     html += perfilSection("Contexto", false, "<div class=\"field-row\">" +
@@ -10441,15 +10442,31 @@ function tplProPerfil(s){
         "<input type=\"checkbox\" id=\"ov_" + key + "\" data-key=\"" + key + "\"" + (flexProfile[key] ? " checked" : "") + ">" +
         "<label for=\"ov_" + key + "\" style=\"font-size:0.85rem;\">" + label + "</label>" +
       "</div>";
-    }).join(""));
+    }).join(""), pm.flex);
 
   html += "<details class=\"perfil-section\" style=\"margin-top:22px;\"><summary class=\"eyebrow\">Apagar aluno</summary><p class=\"muted-p\" style=\"margin:8px 0;\">Apaga a ficha, as fotografias e tudo o que está ligado a " + escapeHtml(s.name) + ", e o aluno deixa de ter acesso à app. Não dá para desfazer. Se só queres arrumá-lo, usa o interruptor ativo/inativo na lista de alunos.</p>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"stuDeleteBtn\" style=\"border-color:var(--critical); color:var(--critical);\">Apagar " + escapeHtml(s.name) + "</button></details>";
   return html;
 }
 
-function perfilSection(title, openByDefault, innerHtml){
-  return "<details class=\"perfil-section\"" + (openByDefault ? " open" : "") + "><summary class=\"eyebrow\">" + title + "</summary>" + innerHtml + "</details>";
+function perfilSection(title, openByDefault, innerHtml, meta){
+  return "<details class=\"perfil-section\"" + (openByDefault ? " open" : "") + "><summary class=\"eyebrow\">" + title +
+    (meta ? "<span class=\"pm-sum-meta\">" + escapeHtml(meta) + "</span>" : "") + "</summary>" + innerHtml + "</details>";
+}
+// Fase 38: cada secção do Perfil mostra o essencial no resumo, para não ser preciso abri-las só para ver
+function perfilMetas(s){
+  var med = [s.medicalConditions, s.currentMedication, s.physicalLimitations, s.medicalNotes].filter(function(x){ return String(x || "").trim(); }).length;
+  var ov = 0; try { var fp = computeFlexibilityProfile(s); FLEX_OVERRIDE_CHECKBOXES.forEach(function(pr){ if (fp[pr[0]]) ov++; }); } catch (e) {}
+  var al = (s.allergies || []).length;
+  return {
+    pessoais: [s.age != null ? s.age + " anos" : "", s.height != null ? s.height + " cm" : "", s.weightCurrent != null ? ptNum(s.weightCurrent, 1) + " kg" : ""].filter(Boolean).join(" · "),
+    contacto: s.phone || s.inviteEmail || "sem contacto",
+    medicos: med ? med + " de 4 preenchidos" : "por preencher",
+    rotina: s.work && s.work !== "—" ? s.work : "",
+    alimentacao: al ? plural(al, "alergia/restrição", "alergias/restrições") : "sem alergias registadas",
+    hidratacao: s.waterIntake || "",
+    flex: ov + " de " + FLEX_OVERRIDE_CHECKBOXES.length + " ativas"
+  };
 }
 
 // Fase 11: pedido do profissional — ao reajustar o plano, poder ver/copiar

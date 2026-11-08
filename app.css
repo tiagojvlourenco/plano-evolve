@@ -1207,3 +1207,4 @@ html[data-app="treino"] :is(#tabError .eyebrow, #runLoadErr .muted-p){color:var(
 html[data-app="treino"] :is(.run-err, .run-msg.run-err, #wlError, .wl-warn){color:var(--critical-text); font-size:0.84rem; font-weight:600; line-height:1.4;}
 html[data-app="treino"] .sync-line{font-size:0.84rem; line-height:1.4;}
 html[data-app="treino"] .evo-chips + .sync-line{margin-top:10px;}
+  .perfil-section summary .pm-sum-meta{margin-left:auto; text-align:right; font-weight:400; text-transform:none; letter-spacing:0; min-width:0; overflow:hidden; text-overflow:ellipsis;}
