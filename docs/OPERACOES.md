@@ -683,3 +683,7 @@ As secções do Perfil continuam recolhidas por omissão e pela mesma ordem; cad
 ## 8bh. Plano do aluno: refeições recolhíveis
 
 No separador Plano do aluno, cada refeição é um `<details class="pl-meal">` com nome, hora e kcal no resumo; abre-se para ver os alimentos, trocar e ver as macros. O estado lembra-se enquanto a app está aberta (`state.planMealOpen`). O ecrã Hoje não mudou (já mostra as refeições do dia). Gestão e a app Treino não foram alteradas: a Gestão já esconde por omissão os pacotes sem nada a tratar («Mostrar todos») e o Treino é o ecrã de uso durante o treino.
+
+## 8bi. Apagar um aluno a partir da lista
+
+Cada linha da lista de alunos do painel tem um botão 🗑 («Apagar <nome>») que abre a mesma janela de confirmação do Perfil (`openDeleteStudentModal`): nada se apaga sem carregar em «Apagar» nessa janela. O botão não abre a ficha (`stopPropagation`). O caminho antigo (Perfil → «Apagar aluno») mantém-se. Teste: `tests/delete-from-list.test.js`.

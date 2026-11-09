@@ -9797,6 +9797,7 @@ function studentListRowsHtml(allRows){
         "<div><div class=\"sname\">" + escapeHtml(st.name) + (st.isDemo ? " <span class=\"pill\" style=\"font-size:0.65rem;\">demonstração</span>" : "") + "</div><div class=\"sgoal\">" + (isStudioOnly(st) ? "Só estúdio" : escapeHtml(st.goal)) + "</div>" +
         (badges ? "<div class=\"sr-badges\">" + badges + "</div>" : "") + "</div>" +
       "</div>" +
+      "<button type=\"button\" class=\"student-del\" data-del-student=\"" + st.id + "\" aria-label=\"Apagar " + escapeHtml(st.name) + "\" title=\"Apagar aluno\">🗑</button>" +
       "<label class=\"switch\" title=\"" + (isStudentActive(st) ? "Ativo" : "Inativo") + "\">" +
         "<input type=\"checkbox\" data-active-toggle=\"" + st.id + "\"" + (isStudentActive(st) ? " checked" : "") + ">" +
         "<span class=\"switch-track\"><span class=\"switch-thumb\"></span></span>" +
@@ -9809,6 +9810,14 @@ function studentListRowsHtml(allRows){
 function wireStudentList(root){
   root.querySelectorAll("[data-open]").forEach(function(el){
     el.addEventListener("click", function(){ state.proSelectedId = el.getAttribute("data-open"); state.proTab="perfil"; renderProShell(); try { window.scrollTo(0, 0); } catch (e) {} });
+  });
+  // apagar sem entrar na ficha: abre a mesma janela de confirmação do Perfil (nada se apaga sem confirmar lá)
+  root.querySelectorAll("[data-del-student]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var st = findStudent(btn.getAttribute("data-del-student"));
+      if (st) openDeleteStudentModal(st);
+    });
   });
   root.querySelectorAll("[data-active-toggle]").forEach(function(input){
     input.addEventListener("click", function(e){ e.stopPropagation(); });
