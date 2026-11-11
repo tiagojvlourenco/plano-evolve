@@ -9305,9 +9305,11 @@ function drawComparisonSlide(canvas, d){
     ctx.fillText(d.index + "/" + d.total, px + pw / 2, py + ph / 2 + 1);
   }
   // barra laranja e marca
-  ctx.fillStyle = "#E85D2C"; ctx.fillRect(0, H - 52, Math.round(W * 0.71), 5);
+  // a linha fica ao nível do meio das letras do logótipo (centro vertical H-52) e acaba antes dele, com uma folga
+  var logoW = 300, markLeft = W - pad - logoW;
+  ctx.fillStyle = "#E85D2C"; ctx.fillRect(0, H - 52 - 3, markLeft - 30, 6);
   if (d.logo){ // logótipo (logo-evolve.jpg, fundo preto): recorta-se a margem à volta e desenha-se à direita
-    var lw = 300, sx = 66, sy = 334, sw = 756, sh = 220, lh = Math.round(lw * sh / sw);
+    var lw = logoW, sx = 66, sy = 334, sw = 756, sh = 220, lh = Math.round(lw * sh / sw);
     ctx.drawImage(d.logo, sx, sy, sw, sh, W - pad - lw, H - 52 - lh / 2, lw, lh);
   } else {
     ctx.fillStyle = "#ffffff"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "600 44px " + DISPLAY;
