@@ -239,8 +239,8 @@
   .pl-meal[open] > .pm-summary{margin-bottom:10px;}
   .pm-summary::after{content:"▾"; color:var(--muted); transition:transform .15s;}
   .pm-details[open] > .pm-summary::after{transform:rotate(180deg);}
-  .pm-sum-name{font-weight:600; flex:1; min-width:0;}
-  .pm-sum-meta{color:var(--muted); font-size:0.78rem; font-family:var(--mono); white-space:nowrap;}
+  .pm-sum-name{font-weight:600; flex:1 1 auto; min-width:0;}
+  .pm-sum-meta{color:var(--muted); font-size:0.78rem; font-family:var(--mono); flex:0 1 auto; max-width:55%; text-align:right; white-space:normal; line-height:1.3;}
   .plano-meal-macros{font-size:0.72rem; color:var(--muted); margin-top:6px; font-family:var(--mono);}
 
   .builder-group{margin-bottom:14px;}
@@ -479,6 +479,19 @@
   .sort-th{background:none; border:none; padding:0; margin:0; font:inherit; letter-spacing:inherit; text-transform:inherit; color:inherit; cursor:pointer; white-space:nowrap;}
   .sort-th:hover, .sort-th.on{color:var(--accent);}
   .assess-delta{font-size:0.68rem; color:var(--muted-2); margin-left:3px;}
+  table.assess-table td .assess-delta{display:block; margin:1px 0 0;}
+  table.assess-table td.date-cell{line-height:1.25;}
+  table.assess-table td.date-cell .atime{font-size:0.7rem;}
+  table.assess-table th:first-child, table.assess-table td.date-cell{position:sticky; left:0; z-index:2; background:var(--surface); box-shadow:6px 0 6px -6px rgba(0,0,0,.6);}
+  table.assess-table td.date-cell{border-left:3px solid transparent;}
+  table.assess-table td.date-cell.ph-cut{border-left-color:var(--warn);}
+  table.assess-table td.date-cell.ph-bulk{border-left-color:var(--good);}
+  table.assess-table td.date-cell.ph-man{border-left-color:var(--muted);}
+  table.assess-table tr.phase-mark td{padding:0; border-bottom:none; text-align:left;}
+  .phase-mark-in{position:sticky; left:0; width:min(calc(100vw - 110px), 520px); white-space:normal; padding:8px 6px 4px; font-size:0.7rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;}
+  tr.phase-mark.ph-cut .phase-mark-in{color:var(--warn);}
+  tr.phase-mark.ph-bulk .phase-mark-in{color:var(--good);}
+  tr.phase-mark.ph-man .phase-mark-in{color:var(--muted);}
   .atime{color:var(--muted); white-space:nowrap;}
   .assess-form-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(100px,1fr)); gap:10px; margin-top:12px; align-items:end;}
   .assess-form-grid .f{min-width:0;}

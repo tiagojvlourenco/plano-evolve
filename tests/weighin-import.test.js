@@ -127,7 +127,7 @@ function byDate(d){ return P.entries.filter(function(e){ return e.date === d; })
   var t = tplAssessTable({assessments: lista}, true);
   check.check("5. Com mais de 10, mostra só as 10 mais recentes", (t.match(/<tr><td class="date-cell"/g) || []).length === 10);
   check.check("5. Oferece 'Mostrar todas (25)'", /id="assessToggleAll"[^>]*>Mostrar todas \(25\)/.test(t));
-  check.check("5. A mais recente (25/01) está primeiro e mostra a hora, sem 'jejum'", /25\/01\/2024 <span class="atime">· 07:00<\/span>/.test(t) && t.indexOf("jejum") === -1);
+  check.check("5. A mais recente (25/01) está primeiro e mostra a hora, sem 'jejum'", /25\/01\/2024<br><span class="atime">07:00<\/span>/.test(t) && t.indexOf("jejum") === -1);
   check.check("5. Os índices de apagar continuam certos (0 a 9)", /data-idx="0"/.test(t) && /data-idx="9"/.test(t) && !/data-idx="10"/.test(t));
   state.assessShowAll = true;
   var todas = tplAssessTable({assessments: lista}, true);

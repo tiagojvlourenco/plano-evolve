@@ -8366,7 +8366,7 @@ function tplEvolucaoAluno(s, opts){
 
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
-    (opts.editable ? proFold("novaAval", "Nova avaliação", "registar medidas e importar pesagens", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
+    (opts.editable ? proFold("novaAval", "Nova avaliação", "registar · importar", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessTable(s, opts.editable) +
   "</div>";
 
@@ -8873,6 +8873,21 @@ function tplAssessForm(s){
   "</div>";
 }
 
+// Fases (cut / bulk / manutenção) por ordem de início: dos eventos «fase_inicio» do histórico e da fase atual
+function phaseTimeline(s){
+  var out = [], seen = {};
+  (s.planHistory || []).forEach(function(p){
+    if (p && p.type === "fase_inicio" && isIsoDate(p.date) && (p.after === "cut" || p.after === "bulk" || p.after === "manutencao")){
+      var m = String(p.summary || "").match(/\(objetivo ([\d.,]+) kg\)/);
+      if (!seen[p.date]){ seen[p.date] = true; out.push({date: p.date, phase: p.after, target: m ? m[1] : ""}); }
+    }
+  });
+  var np = phaseOf(s);
+  if (np && !seen[np.startDate]) out.push({date: np.startDate, phase: np.phase, target: np.targetWeight ? ptNum(np.targetWeight, 1) : ""});
+  out.sort(function(x, y){ return x.date < y.date ? -1 : x.date > y.date ? 1 : 0; });
+  return out;
+}
+function phaseClassOf(phase){ return phase === "cut" ? "ph-cut" : phase === "bulk" ? "ph-bulk" : "ph-man"; }
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
@@ -8889,11 +8904,20 @@ function tplAssessTable(s, editable){
     return "<th" + (on ? " aria-sort=\"" + (sort.dir === "asc" ? "ascending" : "descending") + "\"" : "") + "><button type=\"button\" class=\"sort-th" + (on ? " on" : "") + "\" data-sort=\"" + c[0] + "\">" + c[1] + (on ? (sort.dir === "asc" ? " ▲" : " ▼") : "") + "</button></th>";
   }).join("") + (editable?"<th></th>":"") + "</tr></thead><tbody>";
   var LIMIT = 10, collapsed = list.length > LIMIT && !state.assessShowAll;
+  // marcas de fase: cada linha leva a cor da fase em que foi feita e, ordenando por data (mais recente primeiro), uma linha «Início do Cut / Bulk» no sítio certo
+  var timeline = phaseTimeline(s), colN = COLS.length + (editable ? 1 : 0), byDateDesc = sort.key === "date" && sort.dir === "desc";
+  function phaseAt(date){ var cur = null; timeline.forEach(function(t){ if (t.date <= date) cur = t; }); return cur; }
+  var pendingMarks = byDateDesc ? timeline.slice().reverse() : [];
+  function markRow(t){
+    return "<tr class=\"phase-mark " + phaseClassOf(t.phase) + "\"><td colspan=\"" + colN + "\"><div class=\"phase-mark-in\">▶ Início do " + escapeHtml(phaseLabel(t.phase)) + " · " + escapeHtml(fmtDateFullPt(t.date)) + (t.target ? " · objetivo " + escapeHtml(t.target) + " kg" : "") + "</div></td></tr>";
+  }
   (collapsed ? shown.slice(0, LIMIT) : shown).forEach(function(a){
     var idx = list.indexOf(a);
     var prev = list[idx+1];
+    while (pendingMarks.length && pendingMarks[0].date > a.date) html += markRow(pendingMarks.shift()); // esta linha é anterior ao início da fase
+    var ph = phaseAt(a.date);
     html += "<tr>" +
-      "<td class=\"date-cell\">" + fmtDateFullPt(a.date) + (a.time ? " <span class=\"atime\">· " + escapeHtml(a.time) + "</span>" : "") + (a.context ? " <span class=\"atime\">· " + escapeHtml(a.context) + "</span>" : "") + (function(){ var tags = []; if (PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; })) tags.push("perímetros"); if (skinfoldValuesOf(a)) tags.push("pregas"); return tags.length ? "<br><span class=\"atime\">" + tags.join(" · ") + "</span>" : ""; })() + "</td>" +
+      "<td class=\"date-cell" + (ph ? " " + phaseClassOf(ph.phase) : "") + "\">" + fmtDateFullPt(a.date) + ((a.time || a.context) ? "<br><span class=\"atime\">" + [a.time ? escapeHtml(a.time) : "", a.context ? escapeHtml(a.context) : ""].filter(Boolean).join(" · ") + "</span>" : "") + (function(){ var tags = []; if (PERIMETER_FIELDS.some(function(f){ return posNum(a[f[0]]) > 0; })) tags.push("perímetros"); if (skinfoldValuesOf(a)) tags.push("pregas"); return tags.length ? "<br><span class=\"atime\">" + tags.join(" · ") + "</span>" : ""; })() + "</td>" +
       "<td>" + fmtPos(a.weight, 1, "kg") + (prev?assessDelta(a.weight,prev.weight,"kg"):"") + "</td>" +
       "<td>" + fmtPos(a.bodyFat, 1, "%") + (prev?assessDelta(a.bodyFat,prev.bodyFat,"%"):"") + "</td>" +
       "<td>" + fmtPos(a.muscle, 1, "kg") + (prev?assessDelta(a.muscle,prev.muscle,"kg"):"") + "</td>" +
@@ -8902,6 +8926,7 @@ function tplAssessTable(s, editable){
       (editable ? "<td><button type=\"button\" class=\"assess-del\" data-idx=\"" + idx + "\" aria-label=\"Remover\">✕</button></td>" : "") +
     "</tr>";
   });
+  if (!collapsed) while (pendingMarks.length) html += markRow(pendingMarks.shift()); // fase que começou antes da primeira avaliação registada
   html += "</tbody></table></div>";
   if (list.length > LIMIT){
     html += "<button type=\"button\" class=\"btn btn-sm\" id=\"assessToggleAll\" style=\"margin-top:10px;\">" +
@@ -10246,7 +10271,7 @@ function proStat(v, l, key){
 var PRO_NAV = APP_MODE === "gestao" ? [
   {id: "pacotes", label: "Pacotes", tabs: ["sessoes"]}
 ] : [
-  {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["pedidos", "perfil", "notas"] : ["perfil", "notas"]},
+  {id: "resumo", label: "Resumo", tabs: HELP_REQUESTS_ENABLED ? ["pedidos", "perfil"] : ["perfil"]},
   {id: "nutricao", label: "Nutrição", tabs: ["plano"]},
   {id: "treino", label: "Treino", tabs: ["treino", "corridas"]},
   {id: "avaliacao", label: "Avaliação", tabs: ["evolucao"]}
@@ -10365,7 +10390,7 @@ function renderProTabContent(s){
       loadGestao().then(gestaoWithData).then(function(ok){ if (ok && state.proSelectedId === s.id && state.proTab === "sessoes") renderProTabContent(s); else if (!ok) el.innerHTML = "<p class=\"muted-p\">Não foi possível abrir os pacotes. Verifica a ligação.</p>"; });
     } else { el.innerHTML = G.tplProSessoes(s); if (G.studio.available) G.wireProSessoes(s, el); }
   }
-  else if (state.proTab==="notas") el.innerHTML = tplProNotas(s);
+  else if (state.proTab==="notas"){ state.proTab = "perfil"; el.innerHTML = tplProEstado(s) + tplProPerfil(s); } // as notas passaram para uma secção do Perfil
   else el.innerHTML = tplProHistorico(s);
   wireProTab(s);
 }
@@ -10463,6 +10488,8 @@ function tplProPerfil(s){
         "<label for=\"ov_" + key + "\" style=\"font-size:0.85rem;\">" + label + "</label>" +
       "</div>";
     }).join(""), pm.flex);
+
+  html += perfilSection("Notas privadas", false, tplProNotas(s).replace(/^<div class="eyebrow"[^>]*>[^<]*<\/div>/, ""), String(s.notes || "").trim() ? "com notas" : "vazio");
 
   html += "<details class=\"perfil-section\" style=\"margin-top:22px;\"><summary class=\"eyebrow\">Apagar aluno</summary><p class=\"muted-p\" style=\"margin:8px 0;\">Apaga a ficha, as fotografias e tudo o que está ligado a " + escapeHtml(s.name) + ", e o aluno deixa de ter acesso à app. Não dá para desfazer. Se só queres arrumá-lo, usa o interruptor ativo/inativo na lista de alunos.</p>" +
     "<button type=\"button\" class=\"btn btn-sm\" id=\"stuDeleteBtn\" style=\"border-color:var(--critical); color:var(--critical);\">Apagar " + escapeHtml(s.name) + "</button></details>";

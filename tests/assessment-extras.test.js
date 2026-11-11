@@ -23,7 +23,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   ]};
   var t = tplAssessTable(s, true);
   check.check("2. Uma avaliação só com perímetros não rebenta e mostra '—' nos valores em falta", t.indexOf("—") >= 0 && t.indexOf("0.0%") === -1);
-  check.check("2. A condição da pesagem aparece ao lado da data, escapada", /· Em jejum/.test(t) && tplAssessTable({assessments:[{date:"2026-09-01", weight:60, bodyFat:25, muscle:40, visceral:3, water:52, context:"<b>x</b>"}]}, false).indexOf("<b>x</b>") === -1);
+  check.check("2. A condição da pesagem aparece ao lado da data, escapada", /Em jejum/.test(t) && tplAssessTable({assessments:[{date:"2026-09-01", weight:60, bodyFat:25, muscle:40, visceral:3, water:52, context:"<b>x</b>"}]}, false).indexOf("<b>x</b>") === -1);
 })();
 
 // ---- 3. Massa gorda e magra em kg ----
