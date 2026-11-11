@@ -743,3 +743,4 @@ O logótipo (`logo-evolve-wordmark.jpg`, a versão recortada de `logo-evolve.jpg
 - **Aluno:** continua a ver só os números.
 
 Testes: `tests/massa-gorda-referencias.test.js`. Nota: o limite de tamanho de `app.js` no teste de `alimentos-ficheiro` passou de 1 MB para 1,1 MB (as tabelas de alimentos continuam fora; o código cresceu).
+- **Sem vermelho para o aluno:** no Progresso do aluno (`tplEvolucaoAluno` com `editable: false`) as variações que pioraram aparecem a cinzento, tanto no histórico por medida como nos cartões da composição (`tplAssessKpis(s, true)`). O verde de quando melhora mantém-se. O vermelho é só para o profissional, porque é ele quem decide se é preciso mudar algo; uma subida de uma semana quase sempre é água ou ruído.

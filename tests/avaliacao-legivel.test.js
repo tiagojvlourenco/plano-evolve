@@ -33,4 +33,12 @@ check.check("14. «Tabela completa» mostra a tabela de sempre (com apagar) e um
 state.assessView = null; state.assessMetric = null;
 check.check("15. Sem avaliações: diz que não há; o aluno vê «Tabela completa» sem «apagar»", /Ainda sem avaliações/.test(tplAssessHistory({assessments: []}, false)) && />Tabela completa</.test(tplAssessHistory(s, false)));
 check.check("16. Os botões da medida e da vista estão ligados no profissional e no aluno", (appSource.match(/wireAssessHistory\(el, function\(\)\{ render(ProTabContent|AlunoTab)\(s\); \}\);/g) || []).length === 2);
+// ecrã do aluno: sem vermelho (o que piorou fica a cinzento), o verde mantém-se; o profissional vê tudo
+state.assessView = null; state.assessMetric = null;
+var hp = tplAssessHistory(s, true), ha = tplAssessHistory(s, false);
+check.check("17. Aluno: nenhuma variação a vermelho no histórico; as boas continuam a verde (o profissional vê o vermelho)", /am-d bad/.test(hp) && !/am-d bad/.test(ha) && /am-d good/.test(ha) && /53,7<small>kg<\/small><\/div><div class="am-d flat">▼ 0,6/.test(ha));
+var kAv = {assessments: [{date: "2026-09-25", weight: 53.5, bodyFat: 25.1, muscle: 38.0, water: 51.5}, {date: "2026-09-18", weight: 53.7, bodyFat: 25.0, muscle: 38.1, water: 51.6}]};
+check.check("18. Aluno: os cartões da composição também não ficam a vermelho", /class="d bad"/.test(tplAssessKpis(kAv)) && !/class="d bad"/.test(tplAssessKpis(kAv, true)) && /class="d flat">▲ 0.1 %/.test(tplAssessKpis(kAv, true)));
+var evA = tplEvolucaoAluno(Object.assign({weights: [], photos: [], planHistory: [], weightInitial: 58.5, weightCurrent: 53.5}, kAv), {editable: false});
+check.check("19. O Progresso do aluno usa a versão sem vermelho", !/class="d bad"/.test(evA) && !/am-d bad/.test(evA) && /tplAssessKpis\(s, !opts\.editable\)/.test(appSource));
 check.summarize();

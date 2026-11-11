@@ -4843,7 +4843,8 @@ function lastTwoWith(list, valueOf){
   for (var i = 0; i < list.length && out.length < 2; i++){ var v = valueOf(list[i]); if (v != null && v > 0) out.push({a: list[i], v: v}); }
   return out;
 }
-function tplAssessKpis(s){
+// gentle (ecrã do aluno): o que piorou fica a cinzento, nunca a vermelho; o verde de quando melhora mantém-se
+function tplAssessKpis(s, gentle){
   var list = (s.assessments||[]).slice().sort(function(x, y){ return compareAssessmentsDesc(x, y); });
   if (!list.length) return "";
   function tile(label, unit, good, digits, valueOf){
@@ -4858,6 +4859,7 @@ function tplAssessKpis(s){
     tile("Massa gorda (kg)", "kg", "down", 1, fatMassKg) +
     tile("Massa magra (kg)", "kg", "up", 1, leanMassKg) +
   "</div>";
+  if (gentle) html = html.replace(/class="d bad"/g, "class=\"d flat\"");
   return html.indexOf("class=\"kpi\"") >= 0 ? html : "";
 }
 
@@ -8444,7 +8446,7 @@ function tplEvolucaoAluno(s, opts){
   "</div>";
 
   html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) + (opts.editable ? tplBodyFatRef(s) : "") +
+    "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s, !opts.editable) + (opts.editable ? tplBodyFatRef(s) : "") +
     (opts.editable ? proFold("novaAval", "Nova avaliação", "", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessHistory(s, opts.editable) +
   "</div>";
@@ -9009,6 +9011,7 @@ function tplAssessHistory(s, editable){
   if (rows.length >= 2){
     var newest = rows[0], oldest = rows[rows.length - 1], tot = Number(newest[m.key]) - Number(oldest[m.key]);
     var totCls = assessDeltaCls(tot, m, assessGoodDir(s, m, newest.date, timeline));
+    if (!editable && totCls === "bad") totCls = "flat"; // o aluno vê o verde quando melhora; o que piorou fica a cinzento (o vermelho é para o profissional)
     html += "<p class=\"am-sum\">Desde " + fmtDateFullPt(oldest.date) + ": " + ptNum(oldest[m.key], m.digits) + " → " + ptNum(newest[m.key], m.digits) + u +
       " <span class=\"am-d " + totCls + "\">(" + (Math.abs(tot) < Math.pow(10, -m.digits) / 2 ? "=" : (tot > 0 ? "+" : "−") + ptNum(Math.abs(tot), m.digits) + u) + ")</span></p>";
   }
@@ -9022,6 +9025,7 @@ function tplAssessHistory(s, editable){
     if (prev){
       var d = v - Number(prev[m.key]);
       var cls = assessDeltaCls(d, m, assessGoodDir(s, m, a.date, timeline));
+      if (!editable && cls === "bad") cls = "flat";
       dHtml = Math.abs(d) < Math.pow(10, -m.digits) / 2 ? "=" : (d > 0 ? "▲ " : "▼ ") + ptNum(Math.abs(d), m.digits);
       dHtml = "<div class=\"am-d " + cls + "\">" + dHtml + "</div>";
     } else dHtml = "<div class=\"am-d flat\">início</div>";
