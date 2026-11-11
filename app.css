@@ -355,6 +355,22 @@
   .am-d.good{color:var(--good);} .am-d.bad{color:var(--critical);} .am-d.flat{color:var(--muted); font-weight:600;}
   .am-mark{font-size:0.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:12px 4px 4px;}
   .am-mark.ph-cut{color:var(--warn);} .am-mark.ph-bulk{color:var(--good);} .am-mark.ph-man{color:var(--muted);}
+  /* referências de massa gorda (Avaliação do profissional) */
+  .bfref{margin-top:14px; padding:12px 14px 10px; background:var(--surface-2); border-radius:14px;}
+  .bfref p{margin:5px 0; font-size:0.84rem;}
+  .bfbar{position:relative; height:12px; border-radius:6px; background:var(--line); margin:30px 4px 24px;}
+  .bfbar .z{position:absolute; top:-3px; bottom:-3px; border-radius:6px;}
+  .bfbar .z-ok{top:0; bottom:0; background:var(--good-soft); box-shadow:inset 0 0 0 1px var(--good);}
+  .bfbar .z-cut{box-shadow:inset 0 0 0 2px var(--warn);}
+  .bfbar .z-stop{box-shadow:inset 0 0 0 2px var(--critical);}
+  .bfbar .mk{position:absolute; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--ink); border:2px solid var(--surface-2);}
+  .bfbar .mk-l{position:absolute; top:-24px; transform:translateX(-50%); font-size:0.74rem; font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums;}
+  .bfbar .t{position:absolute; top:14px; transform:translateX(-50%); font-size:0.66rem; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .bf-legend{display:flex; gap:12px; flex-wrap:wrap; font-size:0.7rem; color:var(--muted); margin:0 0 6px;}
+  .bf-legend i{display:inline-block; width:14px; height:8px; border-radius:4px; vertical-align:middle; margin-right:5px;}
+  .bf-legend .lg-ok{background:var(--good-soft); box-shadow:inset 0 0 0 1px var(--good);}
+  .bf-legend .lg-cut{box-shadow:inset 0 0 0 2px var(--warn);}
+  .bf-legend .lg-stop{box-shadow:inset 0 0 0 2px var(--critical);}
   .stat-grid-4{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px;}
   @media (max-width:350px){ .stat-grid-4{grid-template-columns:repeat(2,minmax(0,1fr));} }
   @media (max-width:760px){ .pro-main .stat-grid-4{grid-template-columns:repeat(2,minmax(0,1fr));} }

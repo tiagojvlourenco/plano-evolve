@@ -3184,6 +3184,78 @@ function phaseTypeFor(current, goal){
   if (!(current > 0) || !(goal > 0) || Math.abs(goal - current) < PHASE_CFG.gapKg) return "manutencao";
   return goal < current ? "cut" : "bulk";
 }
+/* ---------- Referências de massa gorda e peso coerente ----------
+   Intervalo saudável por sexo e idade: Gallagher et al. 2000 (Am J Clin Nutr 72:694–701), adultos 20–39 / 40–59 / 60–79 anos.
+   Zonas de trabalho do cut e do bulk: convenção prática de treinadores (nenhum estudo fixa estes números). O princípio vem de
+   Forbes 2000 (quem é magro perde mais massa magra num défice; quem tem mais gordura ganha mais gordura num excedente) e de
+   Helms et al. 2014 (valores muito baixos só por pouco tempo). Peso coerente = massa magra atual ÷ (1 − % de massa gorda). */
+var BF_HEALTHY = {F: [[39, 21, 32, "20–39"], [59, 23, 33, "40–59"], [999, 24, 35, "60–79"]], M: [[39, 8, 19, "20–39"], [59, 11, 21, "40–59"], [999, 13, 24, "60–79"]]};
+var BF_ZONES = {F: {cutEnd: [18, 22], bulkStart: [22, 24], bulkStop: [26, 28], scale: [12, 40]}, M: {cutEnd: [10, 13], bulkStart: [13, 15], bulkStop: [17, 20], scale: [4, 30]}};
+var BF_OLD_DAYS = 60;   // uma avaliação mais antiga do que isto já não diz como está agora
+function bfHealthyRange(sexKey, age){
+  var t = BF_HEALTHY[sexKey], a = Number(age) > 0 ? Number(age) : 30;
+  if (!t) return null;
+  for (var i = 0; i < t.length; i++) if (a <= t[i][0]) return {lo: t[i][1], hi: t[i][2], ages: t[i][3]};
+  return null;
+}
+// última avaliação com peso e % de massa gorda: dá a massa magra para calcular o peso coerente
+function bodyCompNow(s){
+  var list = (s && s.assessments || []).slice().sort(compareAssessmentsDesc);
+  for (var i = 0; i < list.length; i++){
+    var a = list[i];
+    if (a.weight > 0 && a.bodyFat > 0 && a.bodyFat < 70) return {date: a.date, weight: Number(a.weight), bf: Number(a.bodyFat), lean: Number(a.weight) * (1 - Number(a.bodyFat) / 100)};
+  }
+  return null;
+}
+function weightForBf(lean, bf){ return lean > 0 && bf > 0 && bf < 90 ? lean / (1 - bf / 100) : null; }
+function bfPctRange(lo, hi){ return lo + "–" + hi + " %"; }
+function kgRange(lean, lo, hi){ var a = weightForBf(lean, lo), b = weightForBf(lean, hi); return a && b ? ptNum(a, 1) + "–" + ptNum(b, 1) + " kg" : ""; }
+// tudo o que é preciso para mostrar e avisar: intervalo saudável, zonas, valor atual e o que isso quer dizer na fase atual
+function bfReference(s){
+  var sexKey = sexKeyOf(s && s.sex), now = bodyCompNow(s);
+  if (!sexKey || !now || (Number(s.age) > 0 && Number(s.age) < 16)) return null;
+  var healthy = bfHealthyRange(sexKey, s.age), z = BF_ZONES[sexKey], np = phaseOf(s), phase = np ? np.phase : null;
+  var ageDays = daysSinceDate(now.date), old = ageDays != null && ageDays > BF_OLD_DAYS;
+  var st = {level: "ok", text: ""};
+  var hr = bfPctRange(healthy.lo, healthy.hi);
+  if (now.bf < healthy.lo) st = {level: "warn", text: "abaixo do intervalo saudável (" + hr + ")", short: "abaixo do saudável (" + hr + ")"};
+  else if (phase === "cut" && now.bf <= z.cutEnd[1]) st = {level: "warn", text: "já está na zona de fim do cut (" + bfPctRange(z.cutEnd[0], z.cutEnd[1]) + ")", short: "na zona de fim do cut"};
+  else if (phase === "bulk" && now.bf >= z.bulkStop[0]) st = {level: "warn", text: "chegou à zona de parar o bulk (" + bfPctRange(z.bulkStop[0], z.bulkStop[1]) + ")", short: "na zona de parar o bulk"};
+  else if (now.bf > healthy.hi) st = {level: "high", text: "acima do intervalo saudável (" + hr + ")", short: "acima do saudável (" + hr + ")"};
+  else st = {level: "ok", text: "dentro do intervalo saudável (" + hr + ")", short: "saudável (" + hr + ")"};
+  var target = phase === "cut" ? {label: "Zona para acabar o cut", lo: z.cutEnd[0], hi: z.cutEnd[1], kg: kgRange(now.lean, z.cutEnd[0], z.cutEnd[1]), note: ""}
+    : phase === "bulk" ? {label: "Zona para parar o bulk", lo: z.bulkStop[0], hi: z.bulkStop[1], kg: kgRange(now.lean, z.bulkStop[0], z.bulkStop[1]), note: " (um pouco mais, se ganhar músculo)"}
+    : {label: "Intervalo saudável", lo: healthy.lo, hi: healthy.hi, kg: kgRange(now.lean, healthy.lo, healthy.hi), note: ""};
+  return {sexKey: sexKey, sexLabel: sexKey === "F" ? "mulheres" : "homens", age: Number(s.age) > 0 ? Number(s.age) : null, healthy: healthy, zones: z, now: now, phase: phase, old: old, ageDays: ageDays, status: st, target: target};
+}
+// barra horizontal: intervalo saudável (verde), zona de fim do cut (contorno laranja), zona de parar o bulk (contorno vermelho) e o valor atual
+function tplBfBar(r){
+  var lo = Math.min(r.zones.scale[0], Math.floor(r.now.bf - 2)), hi = Math.max(r.zones.scale[1], Math.ceil(r.now.bf + 2));
+  var p = function(v){ return Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(1); };
+  var band = function(cls, a, b){ return "<span class=\"z " + cls + "\" style=\"left:" + p(a) + "%; width:" + (p(b) - p(a)).toFixed(1) + "%;\"></span>"; };
+  var tick = function(v){ return "<span class=\"t\" style=\"left:" + p(v) + "%;\">" + v + "</span>"; };
+  return "<div class=\"bfbar\" aria-hidden=\"true\">" + band("z-ok", r.healthy.lo, r.healthy.hi) + band("z-cut", r.zones.cutEnd[0], r.zones.cutEnd[1]) + band("z-stop", r.zones.bulkStop[0], r.zones.bulkStop[1]) +
+    "<span class=\"mk\" style=\"left:" + p(r.now.bf) + "%;\"></span><span class=\"mk-l\" style=\"left:" + p(r.now.bf) + "%;\">" + ptNum(r.now.bf, 1) + " %</span>" +
+    tick(r.healthy.lo) + tick(r.healthy.hi) + "</div>" +
+    "<div class=\"bf-legend\"><span><i class=\"lg-ok\"></i>saudável</span><span><i class=\"lg-cut\"></i>fim do cut</span><span><i class=\"lg-stop\"></i>parar o bulk</span></div>";
+}
+function tplBodyFatRef(s){
+  var r = bfReference(s);
+  if (!r){
+    if (!sexKeyOf(s && s.sex) && bodyCompNow(s)) return "<p class=\"muted-p\" style=\"margin-top:12px;\">Para ver as referências de massa gorda é preciso o sexo do aluno na ficha.</p>";
+    return "";
+  }
+  var lean = ptNum(r.now.lean, 1);
+  var html = "<div class=\"bfref\"><div class=\"eyebrow\">Referências de massa gorda</div>" + tplBfBar(r) +
+    "<p><b>" + ptNum(r.now.bf, 1) + " %</b> (" + fmtDateFullPt(r.now.date) + ") · " + escapeHtml(r.status.text.replace(" (" + bfPctRange(r.healthy.lo, r.healthy.hi) + ")", "")) + (r.status.level === "warn" ? " <span class=\"pill warn\">atenção</span>" : "") + "</p>" +
+    "<p class=\"muted-p\">Saudável para " + r.sexLabel + " de " + r.healthy.ages + " anos: " + bfPctRange(r.healthy.lo, r.healthy.hi) + ".</p>";
+  if (r.target.kg) html += "<p class=\"muted-p\">" + escapeHtml(r.target.label) + ": " + bfPctRange(r.target.lo, r.target.hi) + " → com a massa magra atual (" + lean + " kg), <b style=\"color:var(--ink);\">" + r.target.kg + "</b>" + escapeHtml(r.target.note) + ".</p>";
+  if (!r.phase) html += "<p class=\"muted-p\">Cut: acabar por volta de " + bfPctRange(r.zones.cutEnd[0], r.zones.cutEnd[1]) + " (" + kgRange(r.now.lean, r.zones.cutEnd[0], r.zones.cutEnd[1]) + "). Bulk: começar abaixo de ~" + r.zones.bulkStart[1] + " % e parar por volta de " + bfPctRange(r.zones.bulkStop[0], r.zones.bulkStop[1]) + ".</p>";
+  if (r.old) html += "<p class=\"muted-p\">A última avaliação com massa gorda tem " + r.ageDays + " dias: vale a pena medir de novo.</p>";
+  html += "<p class=\"muted-p\" style=\"font-size:0.72rem;\">Intervalo saudável: Gallagher et al. 2000. Zonas do cut e do bulk: referência prática de treino (não há estudo que fixe estes números).</p></div>";
+  return html;
+}
+
 function latestBodyFat(s){
   var list = (s && s.assessments || []).slice().sort(function(x, y){ return compareAssessmentsDesc(x, y); });
   for (var i = 0; i < list.length; i++) if (list[i].bodyFat > 0 && list[i].bodyFat < 70) return list[i].bodyFat;
@@ -3702,6 +3774,8 @@ function tplPhasePanel(s){
     (maint && s.targets && s.targets.kcal ? "<p class=\"muted-p\">Calorias " + s.targets.kcal + " kcal (" + (s.targets.kcal >= maint ? "+" : "−") + Math.abs(s.targets.kcal - maint) + " kcal, " + pt2(Math.abs(phaseDeficitPct(s.targets.kcal, maint) || 0)) + " % " + (s.targets.kcal >= maint ? "acima" : "abaixo") + " da manutenção de " + maint + " kcal)</p>" : "");
   var rv = null; try { rv = computePhaseReview(s, localTodayISO(), {force: true}); } catch (e) {}
   if (rv && rv.evidence) html += "<p class=\"muted-p\">" + escapeHtml(rv.evidence) + "</p>";
+  var bfz = null; try { bfz = bfReference(s); } catch (e2) { bfz = null; }
+  if (bfz && bfz.phase && bfz.target.kg) html += "<p class=\"muted-p\">Massa gorda " + ptNum(bfz.now.bf, 1) + " % · " + escapeHtml(bfz.target.label.toLowerCase()) + " " + bfPctRange(bfz.target.lo, bfz.target.hi) + " → " + bfz.target.kg + escapeHtml(bfz.target.note) + (bfz.status.level === "warn" ? " · <b style=\"color:var(--warn);\">" + escapeHtml(bfz.status.text) + "</b>" : "") + "</p>";
   html += "<p class=\"muted-p\">Próxima revisão: " + escapeHtml(fmtDateFullPt(np.nextReviewDate || addDaysISO(np.startDate, np.reviewEveryDays || PHASE_CFG.reviewDays))) + (np.snoozeUntil ? " (adiada até " + escapeHtml(fmtDateFullPt(np.snoozeUntil)) + ")" : "") + "</p>";
   var last = (np.reviews || []).slice(-3).reverse();
   if (last.length) html += "<p class=\"muted-p\" style=\"font-size:0.78rem;\">Últimas revisões: " + last.map(function(r){ return escapeHtml(fmtDateFullPt(r.date)) + (r.deltaKcal ? " (" + (r.deltaKcal > 0 ? "+" : "") + r.deltaKcal + " kcal)" : ""); }).join(" · ") + "</p>";
@@ -8370,7 +8444,7 @@ function tplEvolucaoAluno(s, opts){
   "</div>";
 
   html += "<div class=\"card\">" +
-    "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
+    "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) + (opts.editable ? tplBodyFatRef(s) : "") +
     (opts.editable ? proFold("novaAval", "Nova avaliação", "", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessHistory(s, opts.editable) +
   "</div>";
@@ -10073,12 +10147,18 @@ function proEstadoRows(s, today){
     rows.push({label: "Peso atual", text: ptNum(cur, 1) + " kg"});
     if (goal){
       var left = Math.round((cur - goal) * 10) / 10;
-      rows.push({label: "Objetivo", text: ptNum(goal, 1) + " kg · " + (Math.abs(left) < 0.05 ? "atingido" : "faltam " + ptNum(Math.abs(left), 1) + " kg")});
+      var bcG = bodyCompNow(s), bfAtGoal = bcG && goal > bcG.lean ? Math.round((1 - bcG.lean / goal) * 100) : null;
+      rows.push({label: "Objetivo", text: ptNum(goal, 1) + " kg · " + (Math.abs(left) < 0.05 ? "atingido" : "faltam " + ptNum(Math.abs(left), 1) + " kg") + (bfAtGoal != null && bfAtGoal > 0 ? " · ≈ " + bfAtGoal + " % MG" : "")});
     }
     if (init != null && Math.abs(cur - init) >= 0.05) rows.push({label: cur < init ? "Peso perdido" : "Peso ganho", text: ptNum(Math.abs(cur - init), 1) + " kg desde o início"});
     // numa fase (cut/bulk) conta-se também desde o dia em que a fase começou; muda sozinho quando se passa de Cut para Bulk
     if (npw && Number(npw.startWeight) > 0 && npw.startDate && Math.abs(cur - Number(npw.startWeight)) >= 0.05 && (init == null || Math.abs(Number(npw.startWeight) - init) >= 0.05))
       rows.push({label: "Nesta fase", text: (cur < Number(npw.startWeight) ? "perdidos " : "ganhos ") + ptNum(Math.abs(cur - Number(npw.startWeight)), 1) + " kg desde " + fmtDatePt(npw.startDate)});
+  }
+  var bfr = null; try { bfr = bfReference(s); } catch (e) { bfr = null; }
+  if (bfr){
+    rows.push({label: "Massa gorda", text: ptNum(bfr.now.bf, 1) + " % · " + bfr.status.short, warn: bfr.status.level === "warn"});
+    if (bfr.phase && bfr.phase !== "manutencao" && bfr.target.kg) rows.push({label: bfr.phase === "cut" ? "Fim do cut" : "Parar o bulk", text: bfPctRange(bfr.target.lo, bfr.target.hi) + " ≈ " + bfr.target.kg});
   }
   if (!p.n) rows.push({label: "Avaliação", text: "Ainda sem avaliações registadas", warn: true});
   else rows.push({label: "Avaliação", text: "Última " + daysAgoLabel(p.daysSinceLast), warn: p.daysSinceLast >= DASH_ASSESS_LATE_DAYS});
@@ -12011,6 +12091,13 @@ function daysSinceDate(iso){
   var n = new Date(); // dias de calendário, não múltiplos de 24 h: a mudança de hora (23 h ou 25 h) não desloca «ontem» durante uma hora
   return Math.max(0, Math.round((Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000));
 }
+function signalMassaGorda(s){
+  var r = bfReference(s);
+  if (!r) return signal("massagorda", "Massa gorda", "insuficiente", "Sem avaliação com massa gorda (ou sem sexo na ficha).", "—", "evolucao");
+  if (r.old) return signal("massagorda", "Massa gorda", "insuficiente", "Última massa gorda há " + r.ageDays + " dias.", "Última avaliação", "evolucao");
+  if (r.status.level === "warn") return signal("massagorda", "Massa gorda", "atencao", "Massa gorda " + ptNum(r.now.bf, 1) + " %: " + r.status.text + (r.phase === "cut" && r.now.bf >= r.healthy.lo ? " — pondera passar a manutenção." : r.phase === "bulk" ? " — pondera um mini-cut ou manutenção." : "."), "Última avaliação", "evolucao");
+  return signal("massagorda", "Massa gorda", "positivo", "Massa gorda " + ptNum(r.now.bf, 1) + " %: " + r.status.text + ".", "Última avaliação", "evolucao");
+}
 function signalPesagem(s){
   var p = weightProgress(s);
   if (!p.n) return signal("pesagem", "Pesagem", "insuficiente", WEIGHT_MISSING_TEXT, "Desde sempre", "evolucao");
@@ -12315,6 +12402,7 @@ function computeStudentSignals(s){
     safeSignal(signalHungerEnergy, s),
     safeSignal(signalTreinos, s),
     safeSignal(signalPesagem, s),
+    safeSignal(signalMassaGorda, s),
     safeSignal(signalInatividadeTreino, s),
     safeSignal(signalRecuperacao, s),
     safeSignal(signalSessoes, s),

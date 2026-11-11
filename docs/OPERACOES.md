@@ -728,3 +728,18 @@ O logótipo (`logo-evolve-wordmark.jpg`, a versão recortada de `logo-evolve.jpg
 
 - **Gráfico do peso** (`trendChartSvg`, no cartão «Evolução de peso»): cada dia é um ponto discreto (média do dia) e a linha laranja é a tendência, uma média móvel centrada (± span/30 dias, entre 2 e 10). Assim os altos e baixos do dia a dia não escondem a evolução. Tem eixo com valores, meses (ou 4 datas em períodos curtos), a linha do objetivo a tracejado verde (só se não estiver longe demais), o início das fases e os valores do primeiro e do último dia. O eixo do tempo é real (dias), não por índice. Com menos de 8 dias não há suavização. Os gráficos dos exercícios (Treino) continuam com `weightSvg`.
 - **Histórico das avaliações por medida** (`tplAssessHistory`): botões Peso · M. gorda · M. muscular · Visceral · Água (só as medidas que existem). Para a escolhida aparece o gráfico, «Desde dd/mm/aaaa: X → Y» e uma lista data → valor → variação para a anterior. A cor diz se a variação foi no sentido certo: o peso conforme a fase nessa data (Cut desce, Bulk sobe, sem fase conforme o peso objetivo), a massa gorda e a visceral a descer, e a massa muscular e a água a subir. Mudanças pequenas ficam a cinzento (peso, gordura e água < 0,3; músculo < 0,2; visceral < 1). As marcas «▶ Cut/Bulk» e a cor da fase na borda das linhas continuam. «Tabela completa» (`state.assessView = "tabela"`) mostra a tabela de sempre, com ordenação e ✕ para apagar, e «Ver por medida» volta à lista. A medida escolhida fica em `state.assessMetric`. Vale para o profissional e para o Progresso do aluno. Testes: `tests/avaliacao-legivel.test.js`.
+
+## 8bo. Referências de massa gorda e peso coerente
+
+`bfReference(s)` junta a avaliação mais recente com peso e % de massa gorda (`bodyCompNow`, que também dá a massa magra), o sexo (`sexKeyOf`) e a idade (calculada pela data de nascimento).
+- **Intervalo saudável** (`BF_HEALTHY`, Gallagher et al. 2000, Am J Clin Nutr): mulheres 21–32 % (20–39 anos), 23–33 % (40–59), 24–35 % (60–79); homens 8–19 %, 11–21 %, 13–24 %. Menores de 16 anos não têm referência; dos 16 aos 19 usa-se a faixa 20–39.
+- **Zonas de trabalho** (`BF_ZONES`, convenção prática; nenhum estudo fixa estes números — o princípio vem de Forbes 2000 e Helms et al. 2014): acabar o cut a 18–22 % (mulheres) / 10–13 % (homens); começar o bulk abaixo de ~22–24 % / ~13–15 %; parar o bulk a 26–28 % / 17–20 %. Para mudar os números basta editar `BF_ZONES`.
+- **Peso coerente** = massa magra ÷ (1 − % alvo) (`weightForBf`, `kgRange`).
+- **Onde aparece (só no profissional):**
+  - **Avaliação:** bloco «Referências de massa gorda» com uma barra (saudável a verde, fim do cut a laranja, parar o bulk a vermelho, valor atual) e o peso para a zona da fase.
+  - **Resumo:** «Objetivo … · ≈ X % MG», «Massa gorda: Y % · saudável (…)» e, numa fase, «Fim do cut» / «Parar o bulk» com o intervalo em kg.
+  - **Fase (Nutrição):** a mesma zona com os kg.
+  - **«O que precisa de ti»:** sinal `signalMassaGorda`. Avisa quando está abaixo do saudável, quando um cut já chegou à zona de fim (≤ limite de cima) ou quando um bulk chegou à zona de parar. Uma avaliação com mais de 60 dias (`BF_OLD_DAYS`) não avisa e pede para medir de novo.
+- **Aluno:** continua a ver só os números.
+
+Testes: `tests/massa-gorda-referencias.test.js`. Nota: o limite de tamanho de `app.js` no teste de `alimentos-ficheiro` passou de 1 MB para 1,1 MB (as tabelas de alimentos continuam fora; o código cresceu).

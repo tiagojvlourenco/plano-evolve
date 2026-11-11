@@ -147,7 +147,7 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("8. checkins: números forjados viram 0/ausentes e datas inválidas são descartadas", s.checkins.length === 1 && s.checkins[0].weight === 0 && s.checkins[0].adherence === 0 && s.checkins[0].sleepHours === undefined && s.checkins[0].stress === 4);
   var html = tplProTreino(s) + tplProCheckins(s) + tplAdherenceChart(s) + tplProLeitura(s);
   check.check("8. Nada de <img onerror> nos ecrãs do profissional com dados forjados", html.indexOf("<img src=x") === -1);
-  check.check("8. Os indicadores não rebentam com dados forjados", computeStudentSignals(s).length === 13);
+  check.check("8. Os indicadores não rebentam com dados forjados", computeStudentSignals(s).length === 14);
   check.check("8. fmtDateFullPt tolera lixo", fmtDateFullPt(20261001) === "—" && fmtDateFullPt(evil) === "—" && fmtDateFullPt("2026-10-01") === "01/10/2026");
   var boom = safeSignal(function(){ throw new Error("x"); }, {});
   check.check("8. Um indicador que rebente não deita abaixo os outros (devolve 'indicador indisponível')", boom.status === "insuficiente" && /indisponível/.test(boom.title));
