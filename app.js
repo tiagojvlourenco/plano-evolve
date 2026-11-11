@@ -13561,6 +13561,11 @@ function setAuthMode(mode){
   var forgotWrap = document.getElementById("authForgotWrap");
   errEl.style.display = "none";
   errEl.style.color = "var(--critical)";
+  var signinLook = mode !== "signup" && mode !== "recover"; // o ecrã de entrada mostra só o logótipo, o formulário e uma linha
+  document.getElementById("authTitle").style.display = signinLook ? "none" : "";
+  document.getElementById("authSubtitle").style.display = signinLook ? "none" : "";
+  var noteEl = document.getElementById("authNote");
+  if (noteEl){ noteEl.textContent = signinLook ? (APP_MODE === "treino" ? "Acesso reservado aos alunos EVOLVE" : "Acesso reservado à equipa EVOLVE") : ""; noteEl.style.display = signinLook ? "" : "none"; }
   if (mode === "signup"){
     document.getElementById("authTitle").textContent = "Criar conta";
     document.getElementById("authSubtitle").textContent = "Usa o email para o qual foste convidado (ou o teu, se és o profissional).";
