@@ -10320,9 +10320,7 @@ function renderProDetailMain(s){
       "<div class=\"avatar\">" + escapeHtml(s.initials) + "</div>" +
       "<div><div class=\"sname\">" + escapeHtml(s.name) + "</div><div class=\"muted-p\">" + escapeHtml(s.goal) + "</div></div>" +
     "</div>" +
-    (APP_MODE === "gestao" ? "" : "<div class=\"quick-actions\">" +
-      "<button type=\"button\" class=\"chip\" data-qa=\"aluno\">Ver como aluno</button>" +
-    "</div>") + subtabs +
+    subtabs +
     "<div id=\"proTabContent\" class=\"card\"></div>";
   wireProDetailNav(main);
   renderProTabContent(s);
@@ -13519,7 +13517,13 @@ function setMode(mode){
   document.getElementById("alunoApp").classList.toggle("hidden", mode!=="aluno");
   document.getElementById("proApp").classList.toggle("hidden", mode!=="pro");
   if (mode==="aluno"){
-    if (state.proSelectedId) state.alunoStudentId = state.proSelectedId;
+    if (state.proSelectedId){
+      state.alunoStudentId = state.proSelectedId;
+      // abre o separador do aluno que corresponde ao que o profissional está a ver
+      if (state.proTab === "plano" && !noNutritionOf(STUDENTS.filter(function(x){ return String(x.id) === String(state.proSelectedId); })[0] || {})) state.alunoTab = "plano";
+      else if (state.proTab === "evolucao") state.alunoTab = "evolucao";
+      else state.alunoTab = "hoje";
+    }
     renderAlunoShell();
   } else {
     renderProShell();
