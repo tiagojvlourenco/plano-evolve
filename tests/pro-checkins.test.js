@@ -60,5 +60,6 @@ check.check("27. Gera uma imagem por posição com foto (frente, lado, costas) e
 check.check("28. «Nova avaliação» já não tem texto de resumo ao lado", /proFold\("novaAval", "Nova avaliação", ""/.test(appSource));
 check.check("29. O logótipo vem de logo-evolve.jpg (com recurso a texto) e o ficheiro existe no projeto", /loadImageAsElement\("logo-evolve\.jpg"\)/.test(appSource) && /d\.logo/.test(appSource) && require("fs").existsSync(__dirname + "/../logo-evolve.jpg"));
 var idx = require("fs").readFileSync(__dirname + "/../index.html", "utf8");
-check.check("30. O logótipo aparece no ecrã de carregamento e no de entrada (ficheiro recortado existe)", (idx.match(/logo-evolve-wordmark\.jpg/g) || []).length === 2 && require("fs").existsSync(__dirname + "/../logo-evolve-wordmark.jpg"));
+check.check("31. Na Gestão o logótipo fica escondido", /html\[data-app="gestao"\] \.brand-logo\{display:none;\}/.test(require("fs").readFileSync(__dirname + "/../app.css", "utf8")));
+check.check("30. O logótipo aparece no ecrã de carregamento e no de entrada (ficheiro recortado existe)", (idx.match(/logo-evolve-wordmark\.jpg/g) || []).length === 2 && ["treino", "gestao"].every(function(n){ return (require("fs").readFileSync(__dirname + "/../" + n + ".html", "utf8").match(/logo-evolve-wordmark\.jpg/g) || []).length === 2; }) && require("fs").existsSync(__dirname + "/../logo-evolve-wordmark.jpg"));
 check.summarize();
