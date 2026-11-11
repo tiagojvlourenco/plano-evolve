@@ -8366,7 +8366,7 @@ function tplEvolucaoAluno(s, opts){
 
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
-    (opts.editable ? proFold("novaAval", "Nova avaliação", "registar · importar", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
+    (opts.editable ? proFold("novaAval", "Nova avaliação", "", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
     tplAssessTable(s, opts.editable) +
   "</div>";
 
@@ -9241,95 +9241,106 @@ function drawImageCover(ctx, img, x, y, w, h){
 // entrega a imagem da comparação: no telemóvel abre a folha de partilha (WhatsApp, Mensagens, Fotografias);
 // numa app instalada sem partilha mostra a imagem para guardar; no computador descarrega
 function deliverComparisonImage(blob, name, studentName){
-  var file = null;
-  try { file = new File([blob], name, {type: "image/png"}); } catch (e) {}
+  // aceita uma imagem (blob, nome) ou várias ([{blob, name}, …]): cada posição (frente, lado, costas) é uma imagem, como num carrossel
+  var items = Array.isArray(blob) ? blob : [{blob: blob, name: name}];
+  var files = [];
+  items.forEach(function(it){ try { files.push(new File([it.blob], it.name, {type: "image/png"})); } catch (e) {} });
   var touchFirst = !window.matchMedia || window.matchMedia("(pointer: coarse)").matches;
-  var url = URL.createObjectURL(blob);
+  var urls = items.map(function(it){ return URL.createObjectURL(it.blob); });
   var fallback = function(){
     var standalone = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
     if (standalone){
-      openModal("<div class=\"mtitle\">Comparação pronta</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Mantém o dedo carregado na imagem para a guardar ou partilhar.</p>" +
-        "<img src=\"" + url + "\" alt=\"Comparação de fotografias\" style=\"width:100%; border-radius:12px; background:#fff;\">");
+      openModal("<div class=\"mtitle\">Comparação pronta</div><p class=\"muted-p\" style=\"margin-bottom:10px;\">Mantém o dedo carregado em cada imagem para a guardar ou partilhar.</p>" +
+        urls.map(function(u){ return "<img src=\"" + u + "\" alt=\"Comparação de fotografias\" style=\"width:100%; border-radius:12px; background:#000; margin-bottom:10px;\">"; }).join(""));
     } else {
-      var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+      items.forEach(function(it, k){
+        setTimeout(function(){ var a = document.createElement("a"); a.href = urls[k]; a.download = it.name; document.body.appendChild(a); a.click(); a.remove(); }, k * 350);
+      });
+      setTimeout(function(){ urls.forEach(function(u){ try { URL.revokeObjectURL(u); } catch (e) {} }); }, 60000);
     }
   };
-  if (touchFirst && file && navigator.share && navigator.canShare && navigator.canShare({files: [file]})){
-    navigator.share({files: [file], title: "Evolução" + (studentName ? " — " + studentName : "")}).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) fallback(); });
+  if (touchFirst && files.length === items.length && navigator.share && navigator.canShare && navigator.canShare({files: files})){
+    navigator.share({files: files, title: "Evolução" + (studentName ? " — " + studentName : "")}).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) fallback(); });
     return;
   }
   fallback();
 }
+// Uma imagem por posição (frente, lado, costas), 1080×1350: fundo preto, peso e massa gorda por cima de cada foto, as duas fotos lado a lado,
+// barra laranja e marca EVOLVE em baixo (como as publicações de antes e depois). Função de desenho pura: recebe os dados já preparados.
+var COMPARE_SLIDE_W = 1080, COMPARE_SLIDE_H = 1350;
+function drawComparisonSlide(canvas, d){
+  var W = COMPARE_SLIDE_W, H = COMPARE_SLIDE_H, pad = 30, gap = 8, top = 200, bottom = 100;
+  var cellW = (W - pad * 2 - gap) / 2, cellH = H - top - bottom;
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, W, H);
+  var FONT = "Manrope, -apple-system, Helvetica, sans-serif", DISPLAY = "Jura, Manrope, -apple-system, sans-serif";
+  function head(x, h){
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#ffffff";
+    ctx.font = "700 50px " + DISPLAY;
+    ctx.fillText(h.weight != null ? ptNum(h.weight, 1) + " KG" : "— KG", x, 108);
+    var label = "Massa Gorda: ", val = h.fat != null ? ptNum(h.fat, 1) + "%" : "—";
+    ctx.font = "400 30px " + FONT; var w1 = ctx.measureText(label).width;
+    ctx.font = "700 30px " + FONT; var w2 = ctx.measureText(val).width;
+    var x0 = x - (w1 + w2) / 2; ctx.textAlign = "left";
+    ctx.font = "400 30px " + FONT; ctx.fillText(label, x0, 158);
+    ctx.font = "700 30px " + FONT; ctx.fillText(val, x0 + w1, 158);
+  }
+  var xA = pad, xB = pad + cellW + gap;
+  head(xA + cellW / 2, d.headA); head(xB + cellW / 2, d.headB);
+  [[xA, d.imgA, d.failA], [xB, d.imgB, d.failB]].forEach(function(c){
+    if (c[1]) drawImageCover(ctx, c[1], c[0], top, cellW, cellH);
+    else {
+      ctx.fillStyle = "#15171c"; ctx.fillRect(c[0], top, cellW, cellH);
+      ctx.fillStyle = "#6b7280"; ctx.font = "400 30px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(c[2] ? "Erro ao carregar" : "Sem foto", c[0] + cellW / 2, top + cellH / 2);
+    }
+  });
+  if (d.total > 1){ // «1/3»
+    var pw = 84, ph = 52, px = W - pad - pw + 4, py = 40;
+    ctx.fillStyle = "#26282d"; ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(px, py, pw, ph, 26); else ctx.rect(px, py, pw, ph);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.font = "500 26px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(d.index + "/" + d.total, px + pw / 2, py + ph / 2 + 1);
+  }
+  // barra laranja e marca
+  ctx.fillStyle = "#E85D2C"; ctx.fillRect(0, H - 52, Math.round(W * 0.71), 5);
+  ctx.fillStyle = "#ffffff"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "600 44px " + DISPLAY;
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "8px";
+  ctx.fillText("≡EVOLVE≡", W - pad, H - 50);
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  return canvas;
+}
+function comparisonHeadFor(s, date){
+  var a = assessmentForDate(s, date);
+  var w = weightForDate(s, date, a);
+  return {weight: w > 0 ? w : null, fat: a && a.bodyFat > 0 ? a.bodyFat : null};
+}
 function downloadPhotoComparison(s, dateA, dateB, errEl){
   if (errEl) errEl.style.display = "none";
-  var cellW = 280, cellH = 360, labelW = 90, gap = 14, headerH = 46, titleH = 46, pad = 24;
-  var colX = [pad+labelW, pad+labelW+cellW+gap];
-  var canvasW = pad*2 + labelW + cellW*2 + gap;
-  var canvasH = pad*2 + titleH + headerH + PHOTO_POSITIONS.length*cellH + (PHOTO_POSITIONS.length-1)*gap;
-
-  var cells = [];
-  PHOTO_POSITIONS.forEach(function(pos, ri){
-    var y = pad + titleH + headerH + ri*(cellH+gap);
-    [dateA, dateB].forEach(function(d, ci){
-      cells.push({pos:pos, x:colX[ci], y:y, photo: findPhotoByDateAndPosition(s, d, pos.key)});
+  // uma imagem por posição com foto numa das datas (se não houver nenhuma foto, uma só, só com os valores)
+  var slides = PHOTO_POSITIONS.map(function(pos){ return {pos: pos, pa: findPhotoByDateAndPosition(s, dateA, pos.key), pb: findPhotoByDateAndPosition(s, dateB, pos.key)}; })
+    .filter(function(x){ return x.pa || x.pb; });
+  if (!slides.length) slides = [{pos: PHOTO_POSITIONS[0], pa: null, pb: null}];
+  var headA = comparisonHeadFor(s, dateA), headB = comparisonHeadFor(s, dateB);
+  var fontsReady = (document.fonts && document.fonts.load) ? Promise.all([document.fonts.load("700 50px Jura"), document.fonts.load("400 30px Manrope"), document.fonts.load("700 30px Manrope")]).catch(function(){}) : Promise.resolve();
+  var loadJobs = [];
+  slides.forEach(function(sl){
+    [["pa", "imgA", "failA"], ["pb", "imgB", "failB"]].forEach(function(k){
+      if (!sl[k[0]]) return;
+      loadJobs.push(loadImageAsElement(photoUrl(sl[k[0]])).then(function(img){ sl[k[1]] = img; }).catch(function(){ sl[k[2]] = true; }));
     });
   });
-
-  var loadJobs = cells.map(function(c){
-    if (!c.photo) return Promise.resolve();
-    return loadImageAsElement(photoUrl(c.photo)).then(function(img){ c.img = img; }).catch(function(){ c.loadFailed = true; });
-  });
-
-  return Promise.all(loadJobs).then(function(){
-    var canvas = document.createElement("canvas");
-    canvas.width = canvasW;
-    canvas.height = canvasH;
-    var ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvasW, canvasH);
-
-    ctx.fillStyle = "#111111";
-    ctx.font = "bold 20px -apple-system, sans-serif";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText(s.name + " — evolução", pad, pad + 22);
-
-    ctx.font = "600 14px -apple-system, sans-serif";
-    ctx.fillStyle = "#555555";
-    ctx.textAlign = "center";
-    ctx.fillText(fmtDatePt(dateA), colX[0]+cellW/2, pad+titleH+headerH-16);
-    ctx.fillText(fmtDatePt(dateB), colX[1]+cellW/2, pad+titleH+headerH-16);
-    ctx.textAlign = "left";
-
-    ctx.font = "700 13px -apple-system, sans-serif";
-    ctx.fillStyle = "#111111";
-    ctx.textBaseline = "middle";
-    PHOTO_POSITIONS.forEach(function(pos, ri){
-      var y = pad + titleH + headerH + ri*(cellH+gap);
-      ctx.fillText(pos.label, pad, y+cellH/2);
-    });
-    ctx.textBaseline = "alphabetic";
-
-    cells.forEach(function(c){
-      if (c.img){
-        drawImageCover(ctx, c.img, c.x, c.y, cellW, cellH);
-      } else {
-        ctx.fillStyle = "#eeeeee";
-        ctx.fillRect(c.x, c.y, cellW, cellH);
-        ctx.fillStyle = "#999999";
-        ctx.font = "13px -apple-system, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(c.loadFailed ? "Erro ao carregar" : "Sem foto", c.x+cellW/2, c.y+cellH/2);
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
-      }
-    });
-
-    return new Promise(function(resolve){ canvas.toBlob(resolve, "image/png"); });
-  }).then(function(blob){
-    if (!blob) throw new Error("Não foi possível gerar a imagem.");
-    deliverComparisonImage(blob, "evolucao-" + slug(s.name || s.id) + "-" + dateA + "-vs-" + dateB + ".png", s.name);
+  return Promise.all(loadJobs.concat([fontsReady])).then(function(){
+    return Promise.all(slides.map(function(sl, i){
+      var canvas = document.createElement("canvas");
+      drawComparisonSlide(canvas, {headA: headA, headB: headB, imgA: sl.imgA, imgB: sl.imgB, failA: sl.failA, failB: sl.failB, index: i + 1, total: slides.length});
+      return new Promise(function(resolve){ canvas.toBlob(function(b){ resolve({blob: b, name: "evolucao-" + slug(s.name || s.id) + "-" + dateA + "-vs-" + dateB + "-" + sl.pos.key + ".png"}); }, "image/png"); });
+    }));
+  }).then(function(items){
+    if (!items.length || items.some(function(it){ return !it.blob; })) throw new Error("Não foi possível gerar a imagem.");
+    deliverComparisonImage(items, null, s.name);
   }).catch(function(err){
     if (errEl){
       errEl.textContent = "⚠ Não foi possível gerar a imagem de comparação — tenta novamente.";

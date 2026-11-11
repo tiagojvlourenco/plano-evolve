@@ -48,4 +48,14 @@ check.check("21. A data vem numa linha e a hora por baixo (coluna estreita)", /2
 var pf = tplProPerfil({name: "Ana", notes: "algo", likes: [], dislikes: [], avoid: [], allergies: [], supplements: [], targets: {}, meals: []});
 check.check("22. As notas privadas passaram para uma secção do Perfil (com o campo e o botão)", /Notas privadas<span class="pm-sum-meta">com notas/.test(pf) && /id="proNotes"/.test(pf) && /id="saveNotes"/.test(pf) && /id="addDatedNote"/.test(pf));
 check.check("23. O separador Notas deixou de existir na navegação", !/"perfil", "notas"/.test(appSource) && !/\["perfil", "notas"\]/.test(appSource));
+// Imagem de antes e depois (estilo publicação): cabeçalho com peso e massa gorda, fotos lado a lado, barra laranja e marca
+var sc = {assessments: [{date: "2026-01-10", weight: 73.4, bodyFat: 39.8}, {date: "2026-09-10", weight: 56.9, bodyFat: 19.5}], weights: []};
+var hA = comparisonHeadFor(sc, "2026-01-10"), hB = comparisonHeadFor(sc, "2026-09-10");
+check.check("24. O cabeçalho de cada lado traz o peso e a massa gorda da data", hA.weight === 73.4 && hA.fat === 39.8 && hB.weight === 56.9 && hB.fat === 19.5);
+check.check("25. Sem medições o cabeçalho fica vazio (não inventa valores)", comparisonHeadFor({assessments: [], weights: []}, "2026-01-10").weight === null && comparisonHeadFor({assessments: [], weights: []}, "2026-01-10").fat === null);
+var dsrc = appSource.slice(appSource.indexOf("function drawComparisonSlide"), appSource.indexOf("function comparisonHeadFor"));
+check.check("26. A imagem é 1080×1350 com fundo preto, «Massa Gorda:», contador n/total, barra laranja e marca EVOLVE", /COMPARE_SLIDE_W = 1080, COMPARE_SLIDE_H = 1350/.test(appSource) && /#000000/.test(dsrc) && /Massa Gorda: /.test(dsrc) && /d\.index \+ "\/" \+ d\.total/.test(dsrc) && /#E85D2C/.test(dsrc) && /EVOLVE/.test(dsrc));
+var dl = appSource.slice(appSource.indexOf("function downloadPhotoComparison"), appSource.indexOf("// O profissional carrega uma foto"));
+check.check("27. Gera uma imagem por posição com foto (frente, lado, costas) e entrega-as todas de uma vez", /filter\(function\(x\)\{ return x\.pa \|\| x\.pb; \}\)/.test(dl) && /deliverComparisonImage\(items, null, s\.name\)/.test(dl));
+check.check("28. «Nova avaliação» já não tem texto de resumo ao lado", /proFold\("novaAval", "Nova avaliação", ""/.test(appSource));
 check.summarize();
