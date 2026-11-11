@@ -234,6 +234,7 @@
   .plano-meal-head .mtime{font-family:var(--mono); font-size:0.78rem; color:var(--muted);}
   .pro-fold{margin-top:14px;}
   .pro-fold + .pro-fold{margin-top:6px;}
+  .brand-logo{display:block; width:200px; max-width:70%; height:auto; margin:0 auto 14px; mix-blend-mode:screen;}
   .pm-summary{display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:44px; cursor:pointer; list-style:none; user-select:none;}
   .pm-summary::-webkit-details-marker{display:none;}
   .pl-meal[open] > .pm-summary{margin-bottom:10px;}
