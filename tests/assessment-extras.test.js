@@ -72,12 +72,4 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   check.check("6. Check-ins antigos sem estes campos → dados insuficientes (não alerta)", signalRecuperacao({checkins:[{date:daysAgo(7), adherence:8}]}).status === "insuficiente");
 })();
 
-// ---- 7. Notas datadas ----
-(function(){
-  var n1 = prependDatedNote("", "Primeira");
-  check.check("7. A nota fica com data e hora [dd/mm/aaaa hh:mm]", /^\[\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}\] Primeira$/.test(n1));
-  var n2 = prependDatedNote(n1, "Segunda");
-  check.check("7. A mais recente fica no topo e a anterior é preservada", n2.indexOf("Segunda") < n2.indexOf("Primeira") && n2.indexOf("Primeira") > 0);
-  check.check("7. A aba Notas tem o campo de nota datada, escapado", /id="addDatedNote"/.test(tplProNotas({notes:'<img src=x onerror=alert(1)>'})) && tplProNotas({notes:'<img src=x onerror=alert(1)>'}).indexOf("<img") === -1);
-})();
 check.summarize();

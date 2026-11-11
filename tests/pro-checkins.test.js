@@ -18,9 +18,9 @@ check.check("7. Sem check-ins, mensagem simples e sem resumo", /Sem check-ins re
 // Perfil: cada secção mostra o essencial no resumo
 var st = {name: "Ana Teste", age: 30, height: 170, weightCurrent: 65.5, phone: "912345678", work: "Escritório", allergies: ["Marisco", "Frutos secos"], waterIntake: "2 L", likes: [], dislikes: [], avoid: [], supplements: [], targets: {}, meals: [], medicalConditions: "Hipertensão"};
 var m = perfilMetas(st);
-check.check("8. Perfil: dados pessoais, contacto e dados médicos resumidos", m.pessoais === "30 anos · 170 cm · 65,5 kg" && m.contacto === "912345678" && m.medicos === "1 de 4 preenchidos");
+check.check("8. Perfil: dados pessoais, contacto e dados médicos resumidos", m.pessoais === "30 anos · 170 cm · 65,5 kg" && m.contacto === "912345678" && m.medicos === "1 de 3 com registo");
 check.check("9. Perfil: as alergias aparecem no resumo da Alimentação (e a falta delas também)", m.alimentacao === "2 alergias/restrições" && perfilMetas({allergies: []}).alimentacao === "sem alergias registadas");
-check.check("10. Perfil: sem dados, resumos neutros", perfilMetas({}).contacto === "sem contacto" && perfilMetas({}).medicos === "por preencher" && perfilMetas({}).pessoais === "");
+check.check("10. Perfil: sem dados, resumos neutros", perfilMetas({}).contacto === "sem contacto" && perfilMetas({}).medicos === "sem registos" && perfilMetas({}).pessoais === "");
 var sec = perfilSection("Rotina", false, "<p>x</p>", "<b>x</b>");
 check.check("11. O resumo é escapado e a secção continua fechada por omissão", sec.indexOf("<b>x</b>") < 0 && /&lt;b&gt;/.test(sec) && !/ open>/.test(sec) && perfilSection("T", false, "x").indexOf("pm-sum-meta") < 0);
 // Histórico: 10 mais recentes à vista, anteriores recolhidos
@@ -46,7 +46,7 @@ check.check("20. A fase atual conta mesmo sem evento no histórico", /▶ Bulk/.
 check.check("21. A data vem numa linha e a hora por baixo (coluna estreita)", /20\/10\/2026/.test(tplAssessTable({assessments: [{date: "2026-10-20", time: "08:00", weight: 70}]}, false)) && /<br><span class="atime">08:00<\/span>/.test(tplAssessTable({assessments: [{date: "2026-10-20", time: "08:00", weight: 70}]}, false)));
 // Notas dentro do Perfil
 var pf = tplProPerfil({name: "Ana", notes: "algo", likes: [], dislikes: [], avoid: [], allergies: [], supplements: [], targets: {}, meals: []});
-check.check("22. As notas privadas passaram para uma secção do Perfil (com o campo e o botão)", /Notas privadas<span class="pm-sum-meta">com notas/.test(pf) && /id="proNotes"/.test(pf) && /id="saveNotes"/.test(pf) && /id="addDatedNote"/.test(pf));
+check.check("22. O Perfil já não tem «Notas privadas» nem «Apagar aluno» (apagar faz-se na lista de alunos)", !/Notas privadas/.test(pf) && !/id="proNotes"/.test(pf) && !/Apagar aluno/.test(pf) && !/id="stuDeleteBtn"/.test(pf));
 check.check("23. O separador Notas deixou de existir na navegação", !/"perfil", "notas"/.test(appSource) && !/\["perfil", "notas"\]/.test(appSource));
 // Imagem de antes e depois (estilo publicação): cabeçalho com peso e massa gorda, fotos lado a lado, barra laranja e marca
 var sc = {assessments: [{date: "2026-01-10", weight: 73.4, bodyFat: 39.8}, {date: "2026-09-10", weight: 56.9, bodyFat: 19.5}], weights: []};

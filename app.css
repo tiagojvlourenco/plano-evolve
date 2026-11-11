@@ -395,6 +395,9 @@
   .chip.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
   .chip:focus-visible{outline:2px solid var(--accent-strong); outline-offset:2px;}
   .pro-subtabs .chip{min-height:40px;}
+  .yn-pills{display:flex; gap:8px; margin:2px 0 8px;}
+  .yn-pills .chip{min-width:72px; min-height:40px;}
+  .yn-field textarea[hidden]{display:none;}
   .sr-badges{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
 
   /* Menu lateral persistente (Profissional) */

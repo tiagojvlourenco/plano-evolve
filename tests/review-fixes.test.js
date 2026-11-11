@@ -178,7 +178,6 @@ function daysAgo(n){ return new Date(Date.now() - n * 864e5).toISOString().slice
   var html = require("./helpers/app-text")();
   check.check("11. Descanso prescrito de 0 s só marca a série (não arranca 90 s)", /if \(secs >= 5\) restTimerStart\(secs/.test(appSource));
   check.check("11. Guardar o treino fecha o cronómetro", /wlDraftClear\(s, day\.id\);\s*restTimerStop\(\);/.test(appSource));
-  check.check("11. 'Acrescentar nota datada' não perde o texto ainda não guardado", /if \(area\) s\.notes = area\.value;/.test(appSource));
   check.check("11. Alvos de toque do cronómetro ≥ 44 px e toques rápidos sem zoom (touch-action)", /rt-head button\{[^}]*min-height:44px[^}]*touch-action:manipulation/.test(html) && /rt-actions button\{touch-action:manipulation; min-height:44px/.test(html));
   check.check("11. Epley limitado a 12 repetições: uma série de 30 não 'sobe' o máximo", epley1RM(70, 30) === epley1RM(70, 12));
   function hist(arr){ return arr.map(function(v, i){ return {date:daysAgo(60 - i * 7), score:v}; }); }

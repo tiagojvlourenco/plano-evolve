@@ -11,7 +11,7 @@ var EVIL = '<img src=x onerror=alert(1)>';
 (function(){
   var s = {id:"x", name:EVIL, goal:EVIL, notes:'</textarea><script>alert(1)</script>', initials:"XX", checkins:[{date:"2026-01-01", adherence:8, hunger:5, energy:5, weight:70, workouts:3, mealsOff:0, notes:EVIL}], meals:[], weights:[], assessments:[], photos:[], targets:{kcal:2000, protein:100, carbs:200, fat:60}, alerts:[], trainingDays:[], flexibility:50, allowPhotos:false};
   var out = [];
-  ["tplProCheckins", "tplProNotas"].forEach(function(fn){
+  ["tplProCheckins"].forEach(function(fn){
     try { if (typeof eval(fn) === "function") out.push(eval(fn)(s)); } catch (e) { out.push(""); }
   });
   var html = out.join("\n");

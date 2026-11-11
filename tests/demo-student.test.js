@@ -32,7 +32,7 @@ STUDENTS.forEach(function(s){
   var screens = {
     leitura: function(){ return tplProLeitura(s); }, checkins: function(){ return tplProCheckins(s); }, plano: function(){ return tplProPlano(s); },
     treino: function(){ return tplProTreino(s); }, perfil: function(){ return tplProPerfil(s); }, historico: function(){ return tplProHistorico(s); },
-    notas: function(){ return tplProNotas(s); }, pedidos: function(){ return tplProPedidos(s, []); },
+    pedidos: function(){ return tplProPedidos(s, []); },
     evolucaoPT: function(){ return tplEvolucaoAluno(s, {editable: true}); }, evolucaoAluno: function(){ return tplEvolucaoAluno(studentView(s), {editable: false}); },
     checkin: function(){ return tplCheckin(studentView(s)); }, hoje: function(){ return tplHoje(studentView(s)); },
     planoAluno: function(){ state.planoSection = "alimentacao"; return tplPlanoTabs(studentView(s)); },

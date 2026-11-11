@@ -161,9 +161,9 @@ function freshStudent(overrides){
   // Dados pessoais, Contacto, Rotina de trabalho, Alimentação, Hidratação, Dados
   // médicos, Personalizar — sem "Contexto" (só aparece com weekendNote
   // real, testado a seguir).
-  check.check("13. Usa <details> para as 7 secções (com Contacto) e «Apagar aluno» sem Contexto legacy", (html.match(/<details/g) || []).length === 9); // + «Notas privadas» (o separador Notas passou para o Perfil)
+  check.check("13. Usa <details> para as 7 secções (com Contacto), sem «Notas privadas» nem «Apagar aluno» (já há na lista) e sem Contexto legacy", (html.match(/<details/g) || []).length === 7);
   check.check("13. Nenhuma secção começa aberta (Fase 11: nada à vista por omissão)", (html.match(/<details class="perfil-section" open>/g) || []) .length === 0);
-  check.check("13. Mostra a data de nascimento formatada", html.indexOf(fmtDatePt("1994-03-10")) >= 0);
+  check.check("13. Mostra a data de nascimento num campo de data (a idade calcula-se dela)", html.indexOf('id="birthDateInput" value="1994-03-10"') >= 0);
 })();
 
 // 14. "Contexto" só aparece para dados antigos com weekendNote real preenchido

@@ -2220,7 +2220,12 @@ var trainingColumnsAvailable = true;
 // versão otimista da ficha (migração 0035): contador que o servidor sobe em cada alteração; não enumerável para nunca entrar em cópias nem em comparações
 function revOf(r){ return r && r.rev != null && isFinite(Number(r.rev)) ? Number(r.rev) : null; }
 function setRev(s, v){ try { Object.defineProperty(s, "_rev", {value: v, writable: true, configurable: true, enumerable: false}); } catch (e) {} }
-function rowToStudent(r){ var o = rowToStudentBase(r); setRev(o, revOf(r)); return o; }
+function rowToStudent(r){
+  var o = rowToStudentBase(r); setRev(o, revOf(r));
+  var a = o.birthDate ? ageFromBirthDate(o.birthDate) : null; // a idade acompanha a data de nascimento (muda em cada aniversário)
+  if (a != null) o.age = a;
+  return o;
+}
 function rowToStudentBase(r){
   return {
     id: r.id, initials: r.initials, name: r.name, age: r.age, sex: r.sex, height: r.height,
@@ -9902,10 +9907,17 @@ function proEstadoRows(s, today){
   var rows = [];
   var p = weightProgress(s, today);
   if (s.weightCurrent != null){
-    var parts = [ptNum(s.weightCurrent, 1) + " kg"];
-    if (s.weightGoal) parts.push("objetivo " + ptNum(s.weightGoal, 1) + " kg");
-    if (s.weightInitial != null && Math.abs(s.weightCurrent - s.weightInitial) >= 0.05) parts.push((s.weightCurrent < s.weightInitial ? "−" : "+") + ptNum(Math.abs(s.weightCurrent - s.weightInitial), 1) + " kg desde o início");
-    rows.push({label: "Peso", text: parts.join(" · ")});
+    var cur = Number(s.weightCurrent), goal = Number(s.weightGoal) > 0 ? Number(s.weightGoal) : null, init = s.weightInitial != null ? Number(s.weightInitial) : null;
+    var npw = phaseOf(s);
+    rows.push({label: "Peso atual", text: ptNum(cur, 1) + " kg"});
+    if (goal){
+      var left = Math.round((cur - goal) * 10) / 10;
+      rows.push({label: "Objetivo", text: ptNum(goal, 1) + " kg · " + (Math.abs(left) < 0.05 ? "atingido" : "faltam " + ptNum(Math.abs(left), 1) + " kg")});
+    }
+    if (init != null && Math.abs(cur - init) >= 0.05) rows.push({label: cur < init ? "Peso perdido" : "Peso ganho", text: ptNum(Math.abs(cur - init), 1) + " kg desde o início"});
+    // numa fase (cut/bulk) conta-se também desde o dia em que a fase começou; muda sozinho quando se passa de Cut para Bulk
+    if (npw && Number(npw.startWeight) > 0 && npw.startDate && Math.abs(cur - Number(npw.startWeight)) >= 0.05 && (init == null || Math.abs(Number(npw.startWeight) - init) >= 0.05))
+      rows.push({label: "Nesta fase", text: (cur < Number(npw.startWeight) ? "perdidos " : "ganhos ") + ptNum(Math.abs(cur - Number(npw.startWeight)), 1) + " kg desde " + fmtDatePt(npw.startDate)});
   }
   if (!p.n) rows.push({label: "Avaliação", text: "Ainda sem avaliações registadas", warn: true});
   else rows.push({label: "Avaliação", text: "Última " + daysAgoLabel(p.daysSinceLast), warn: p.daysSinceLast >= DASH_ASSESS_LATE_DAYS});
@@ -10417,6 +10429,15 @@ function fRow(label, val){ return "<div class=\"f\"><label>" + label + "</label>
 function tplNoNutritionToggle(s){
   return "<div class=\"card\" style=\"margin-bottom:12px;\"><label style=\"display:flex; align-items:flex-start; gap:8px; font-size:0.88rem; cursor:pointer;\"><input type=\"checkbox\" id=\"noNutritionToggle\" style=\"margin-top:3px;\"" + (s.noNutrition ? " checked" : "") + "> <span><strong>Não faz nutrição comigo</strong><br><span class=\"muted-p\">O aluno (e tu) deixam de ver plano alimentar, refeições, compras e PDF; ficam o treino, as avaliações e as fotos.</span></span></label></div>";
 }
+// pergunta de sim/não: «Não» não pede nada; «Sim» abre o campo para dizer o quê (guardado vazio quando é «Não»)
+function ynField(id, question, placeholder, value){
+  var on = String(value || "").trim() !== "";
+  return "<div class=\"checkin-field yn-field\" data-yn=\"" + id + "\"><label id=\"" + id + "Lbl\">" + escapeHtml(question) + "</label>" +
+    "<div class=\"yn-pills\" role=\"group\" aria-labelledby=\"" + id + "Lbl\">" +
+      "<button type=\"button\" class=\"chip" + (on ? "" : " on") + "\" data-yn-val=\"0\" aria-pressed=\"" + (on ? "false" : "true") + "\">Não</button>" +
+      "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-yn-val=\"1\" aria-pressed=\"" + (on ? "true" : "false") + "\">Sim</button></div>" +
+    "<textarea id=\"" + id + "\" aria-labelledby=\"" + id + "Lbl\" placeholder=\"" + escapeHtml(placeholder) + "\"" + (on ? "" : " hidden") + ">" + escapeHtml(value || "") + "</textarea></div>";
+}
 function tplProPerfil(s){
   // Fase 10: o perfil já não é uma lista contínua de secções — cada uma é um
   // <details> recolhível (nativo, sem JS a mais). Fase 11: todas começam
@@ -10424,12 +10445,17 @@ function tplProPerfil(s){
   // informação sempre à vista, igual ao resto das secções.
   var pm = perfilMetas(s);
   var html = tplNoNutritionToggle(s) + perfilSection("Dados pessoais", false, "<div class=\"field-row\">" +
-    fRow("Idade", s.age == null ? "—" : s.age + " anos") + fRow("Data de nascimento", s.birthDate ? fmtDatePt(s.birthDate) : "—") + fRow("Sexo", s.sex || "—") + fRow("Altura", s.height == null ? "—" : s.height + " cm") +
+    fRow("Idade", s.age == null ? "—" : s.age + " anos") + fRow("Sexo", s.sex || "—") + fRow("Altura", s.height == null ? "—" : s.height + " cm") +
     fRow("Peso atual", s.weightCurrent == null ? "—" : s.weightCurrent + " kg") + fRow("Peso inicial", s.weightInitial == null ? "—" : s.weightInitial + " kg") +
     fRow("Objetivo", s.goal) + fRow("Treinos / semana", s.trainingsPerWeek) + fRow("Tipo de treino", s.trainingType) +
     fRow("Horário de treino", s.trainingTime) + fRow("Acorda", s.wakeTime) + fRow("Dorme", s.sleepTime) +
     fRow("Nível de atividade", s.activityLevel || "— (a usar treinos/semana como aproximação)") +
   "</div>" +
+  "<div class=\"checkin-field\" style=\"margin-top:14px; max-width:220px;\"><label for=\"birthDateInput\">Data de nascimento</label>" +
+    "<input type=\"date\" id=\"birthDateInput\" value=\"" + (isIsoDate(s.birthDate) ? s.birthDate : "") + "\" max=\"" + localTodayISO() + "\"></div>" +
+  "<p class=\"muted-p\" id=\"birthDateErr\" style=\"color:var(--critical); display:none; margin-top:6px;\"></p>" +
+  "<p class=\"muted-p\" style=\"margin-top:6px;\">A idade calcula-se sozinha a partir desta data e atualiza-se em cada aniversário.</p>" +
+  "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveBirthDate\" style=\"margin-top:8px;\">Guardar data de nascimento</button>" +
   "<div class=\"checkin-field\" style=\"margin-top:14px; max-width:220px;\"><label for=\"weightGoalInput\">Peso objetivo (kg)</label>" +
     "<input type=\"number\" step=\"0.5\" min=\"0\" id=\"weightGoalInput\" value=\"" + (s.weightGoal != null ? s.weightGoal : "") + "\" placeholder=\"Ex.: 90\"></div>" +
   "<p class=\"muted-p\" style=\"margin-top:6px;\">Ao guardar, os alvos nutricionais são recalculados com um ritmo gradual (~" + WEIGHT_GOAL_RATE_KG_PER_WEEK + " kg/semana) em vez do ajuste fixo por objetivo — revê-os depois no separador Plano.</p>" +
@@ -10453,13 +10479,10 @@ function tplProPerfil(s){
       return "<div class=\"history-row\"><div class=\"hlabel\">" + escapeHtml(fmtDateFullPt(e.date)) + " · " + escapeHtml(CONTACT_CHANNEL_LABELS[e.channel] || "Contacto") + "</div><div class=\"muted-p\">" + escapeHtml((CONTACT_REASONS[e.reason] || CONTACT_REASONS.generico).label) + "</div></div>"; }).join("") : ""), pm.contacto);
 
   html += perfilSection("Dados médicos", false,
-    "<div class=\"checkin-field\"><label for=\"medConditions\">Condições médicas / patologias</label>" +
-      "<textarea id=\"medConditions\" placeholder=\"Ex.: hipertensão, diabetes tipo 2...\">" + escapeHtml(s.medicalConditions || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medCurrent\">Medicação atual</label>" +
-      "<textarea id=\"medCurrent\" placeholder=\"Fármacos que o aluno toma regularmente (não inclui suplementos)\">" + escapeHtml(s.currentMedication || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medLimitations\">Lesões ou limitações físicas</label>" +
-      "<textarea id=\"medLimitations\" placeholder=\"Ex.: hérnia discal, lesão no joelho...\">" + escapeHtml(s.physicalLimitations || "") + "</textarea></div>" +
-    "<div class=\"checkin-field\"><label for=\"medNotes\">Observações</label>" +
+    ynField("medConditions", "Tem alguma condição médica ou patologia?", "Quais? Ex.: hipertensão, diabetes tipo 2...", s.medicalConditions) +
+    ynField("medCurrent", "Toma medicação?", "Quais? Fármacos que toma regularmente (não inclui suplementos)", s.currentMedication) +
+    ynField("medLimitations", "Tem lesões ou limitações físicas?", "Quais? Ex.: hérnia discal, lesão no joelho...", s.physicalLimitations) +
+    "<div class=\"checkin-field\"><label for=\"medNotes\">Observações (opcional)</label>" +
       "<textarea id=\"medNotes\" placeholder=\"Qualquer outra informação relevante\">" + escapeHtml(s.medicalNotes || "") + "</textarea></div>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveMedical\">Guardar dados médicos</button>", pm.medicos);
 
@@ -10506,10 +10529,6 @@ function tplProPerfil(s){
       "</div>";
     }).join(""), pm.flex);
 
-  html += perfilSection("Notas privadas", false, tplProNotas(s).replace(/^<div class="eyebrow"[^>]*>[^<]*<\/div>/, ""), String(s.notes || "").trim() ? "com notas" : "vazio");
-
-  html += "<details class=\"perfil-section\" style=\"margin-top:22px;\"><summary class=\"eyebrow\">Apagar aluno</summary><p class=\"muted-p\" style=\"margin:8px 0;\">Apaga a ficha, as fotografias e tudo o que está ligado a " + escapeHtml(s.name) + ", e o aluno deixa de ter acesso à app. Não dá para desfazer. Se só queres arrumá-lo, usa o interruptor ativo/inativo na lista de alunos.</p>" +
-    "<button type=\"button\" class=\"btn btn-sm\" id=\"stuDeleteBtn\" style=\"border-color:var(--critical); color:var(--critical);\">Apagar " + escapeHtml(s.name) + "</button></details>";
   return html;
 }
 
@@ -10519,13 +10538,13 @@ function perfilSection(title, openByDefault, innerHtml, meta){
 }
 // Fase 38: cada secção do Perfil mostra o essencial no resumo, para não ser preciso abri-las só para ver
 function perfilMetas(s){
-  var med = [s.medicalConditions, s.currentMedication, s.physicalLimitations, s.medicalNotes].filter(function(x){ return String(x || "").trim(); }).length;
+  var med = [s.medicalConditions, s.currentMedication, s.physicalLimitations].filter(function(x){ return String(x || "").trim(); }).length;
   var ov = 0; try { var fp = computeFlexibilityProfile(s); FLEX_OVERRIDE_CHECKBOXES.forEach(function(pr){ if (fp[pr[0]]) ov++; }); } catch (e) {}
   var al = (s.allergies || []).length;
   return {
     pessoais: [s.age != null ? s.age + " anos" : "", s.height != null ? s.height + " cm" : "", s.weightCurrent != null ? ptNum(s.weightCurrent, 1) + " kg" : ""].filter(Boolean).join(" · "),
     contacto: s.phone || s.inviteEmail || "sem contacto",
-    medicos: med ? med + " de 4 preenchidos" : "por preencher",
+    medicos: med ? med + " de 3 com registo" : (String(s.medicalNotes || "").trim() ? "só observações" : "sem registos"),
     rotina: s.work && s.work !== "—" ? s.work : "",
     alimentacao: al ? plural(al, "alergia/restrição", "alergias/restrições") : "sem alergias registadas",
     hidratacao: s.waterIntake || "",
@@ -11585,25 +11604,6 @@ function tplProCheckins(s){
   }
   if (!s.checkins.length) html += "<p class=\"muted-p\">Sem check-ins registados.</p>";
   return html;
-}
-
-// "[10/10/2026 21:30] texto" no topo das notas: mais recente primeiro, nunca apaga as anteriores
-function prependDatedNote(existing, text){
-  var d = new Date();
-  var stamp = ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear() + " " + nowHHMM();
-  var line = "[" + stamp + "] " + String(text).trim();
-  return existing && String(existing).trim() ? line + "\n\n" + existing : line;
-}
-
-function tplProNotas(s){
-  return "<div class=\"eyebrow\" style=\"margin-bottom:10px;\">Notas privadas</div>" +
-    "<p class=\"muted-p\" style=\"margin-bottom:10px;\">Visíveis apenas para a equipa Evolve — o aluno não tem acesso.</p>" +
-    "<textarea class=\"notes-area\" id=\"proNotes\">" + escapeHtml(s.notes) + "</textarea>" +
-    "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveNotes\" style=\"margin-top:10px;\">Guardar notas</button>" +
-    "<div style=\"margin-top:18px;\"><div class=\"eyebrow\" style=\"margin-bottom:6px;\">Nova nota datada</div>" +
-      "<p class=\"muted-p\" style=\"margin-bottom:8px;\">Fica no topo das notas com a data e a hora — o histórico da evolução do aluno.</p>" +
-      "<textarea id=\"proNoteNew\" placeholder=\"Ex.: Aumentei 100 kcal, queixa-se de pouca energia nos treinos\" style=\"width:100%; min-height:70px; border:1px solid var(--line-strong); border-radius:11px; padding:10px 12px; background:var(--bg);\"></textarea>" +
-      "<button type=\"button\" class=\"btn btn-sm\" id=\"addDatedNote\" style=\"margin-top:8px;\">Acrescentar nota datada</button></div>";
 }
 
 var HELP_SITUATION_LABEL = {};
@@ -13265,16 +13265,6 @@ function wireProTab(s){
     });
   });
 
-  var saveN = el.querySelector("#saveNotes");
-  if (saveN) saveN.addEventListener("click", function(){
-    s.notes = el.querySelector("#proNotes").value;
-    saveN.textContent = "Guardado ✓";
-    persistStudent(s);
-    setTimeout(function(){ saveN.textContent = "Guardar notas"; }, 1400);
-  });
-
-  var delBtn = el.querySelector("#stuDeleteBtn");
-  if (delBtn) delBtn.addEventListener("click", function(){ openDeleteStudentModal(s); });
   var nnToggle = el.querySelector("#noNutritionToggle");
   if (nnToggle) nnToggle.addEventListener("change", function(){
     s.noNutrition = nnToggle.checked;
@@ -13282,6 +13272,20 @@ function wireProTab(s){
     persistStudent(s);
     showToast(s.noNutrition ? "✓ Sem nutrição para este aluno" : "✓ Nutrição ativa para este aluno");
     renderProShell();
+  });
+  var saveBD = el.querySelector("#saveBirthDate");
+  if (saveBD) saveBD.addEventListener("click", function(){
+    var v = el.querySelector("#birthDateInput").value, err = el.querySelector("#birthDateErr"), age = ageFromBirthDate(v);
+    if (v && (age == null || age < 5 || age > 110)){ err.textContent = "Data de nascimento inválida."; err.style.display = "block"; return; }
+    err.style.display = "none";
+    s.birthDate = v || null;
+    if (age != null) s.age = age;
+    persistStudent(s);
+    showToast(age != null ? "Idade atualizada: " + age + " anos" : "Data de nascimento retirada");
+    var aberto = [].map.call(el.querySelectorAll("details.perfil-section"), function(d){ return d.open; }); // a secção não fecha ao guardar
+    renderProTabContent(s);
+    var depois = document.querySelectorAll("#proTabContent details.perfil-section");
+    aberto.forEach(function(o, i){ if (o && depois[i]) depois[i].open = true; });
   });
   var saveWG = el.querySelector("#saveWeightGoal");
   if (saveWG) saveWG.addEventListener("click", function(){
@@ -13335,12 +13339,27 @@ function wireProTab(s){
     showToast("Telefone guardado");
   });
 
+  el.querySelectorAll(".yn-field [data-yn-val]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = btn.closest(".yn-field"), yes = btn.getAttribute("data-yn-val") === "1";
+      box.querySelectorAll("[data-yn-val]").forEach(function(b){ var on = (b.getAttribute("data-yn-val") === "1") === yes; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); });
+      var ta = box.querySelector("textarea");
+      if (ta){ ta.hidden = !yes; if (yes) { try { ta.focus(); } catch (e) {} } }
+    });
+  });
   var saveMed = el.querySelector("#saveMedical");
   if (saveMed) saveMed.addEventListener("click", function(){
-    s.medicalConditions = el.querySelector("#medConditions").value.trim();
-    s.currentMedication = el.querySelector("#medCurrent").value.trim();
-    s.physicalLimitations = el.querySelector("#medLimitations").value.trim();
+    // «Não» guarda vazio (o texto escrito antes fica só no ecrã até se sair); «Sim» sem dizer o quê não se guarda
+    var yn = function(id){ var box = el.querySelector("[data-yn=\"" + id + "\"]"), yes = box && box.querySelector("[data-yn-val=\"1\"]").classList.contains("on"); return {yes: !!yes, text: yes ? el.querySelector("#" + id).value.trim() : ""}; };
+    var c = yn("medConditions"), m = yn("medCurrent"), l = yn("medLimitations");
+    var missing = [c, m, l].filter(function(x){ return x.yes && !x.text; }).length;
+    if (missing){ showToast("Nas respostas «Sim», diz o quê (ou escolhe «Não»)"); return; }
+    s.medicalConditions = c.text;
+    s.currentMedication = m.text;
+    s.physicalLimitations = l.text;
     s.medicalNotes = el.querySelector("#medNotes").value.trim();
+    var sumMed = saveMed.closest("details"), metaMed = sumMed && sumMed.querySelector(".pm-sum-meta");
+    if (metaMed) metaMed.textContent = perfilMetas(s).medicos;
     saveMed.textContent = "Guardado ✓";
     persistStudent(s);
     setTimeout(function(){ saveMed.textContent = "Guardar dados médicos"; }, 1400);
@@ -13496,17 +13515,6 @@ function wireProTab(s){
 
   wireProTreino(s, el);
 
-  var addNote = el.querySelector("#addDatedNote");
-  if (addNote) addNote.addEventListener("click", function(){
-    var text = el.querySelector("#proNoteNew").value.trim();
-    if (!text){ showToast("Escreve primeiro a nota"); try { el.querySelector("#proNoteNew").focus(); } catch (e) {} return; }
-    var area = el.querySelector("#proNotes");
-    if (area) s.notes = area.value; // não perde o que já estava escrito e ainda não guardado
-    s.notes = prependDatedNote(s.notes, text);
-    persistStudent(s);
-    renderProTabContent(s);
-    showToast("Nota acrescentada");
-  });
   wirePlateauCard(el, s);
 }
 

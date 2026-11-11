@@ -382,12 +382,7 @@ function row(id, name, runsMode){
   // I. apagar aluno: o texto fala das corridas
   var I = await open("professional", [row("a", "Ana Silva", "import")], "index.html");
   await I.pg.waitForSelector(".student-row");
-  await I.pg.locator('[data-open="a"]').first().click();
-  await I.pg.waitForSelector("#proBack");
-  await I.pg.click('.pro-nav-item[data-g="resumo"]');
-  if ((await I.pg.locator('[data-sub="perfil"]').count()) > 0) await I.pg.click('[data-sub="perfil"]');
-  await I.pg.locator('summary:has-text("Apagar aluno")').click();
-  await I.pg.click("#stuDeleteBtn");
+  await I.pg.click('[data-del-student="a"]');
   await I.pg.waitForSelector("#delCancel");
   check.check("66. O aviso de apagar aluno diz que apaga as corridas e os percursos (e continua a falar da ficha, das fotografias, dos pacotes e das cobranças)", /as corridas e os percursos/.test(await I.pg.locator(".modal-sheet").innerText()) && /a ficha, as fotografias, os pacotes, as cobranças/.test(await I.pg.locator(".modal-sheet").innerText()));
   await I.ctx.close();
