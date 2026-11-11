@@ -690,7 +690,7 @@ Cada linha da lista de alunos do painel tem um botão 🗑 («Apagar <nome>») q
 
 ## 8bj. Avaliação: marcas de fase, coluna da data fixa; Notas dentro do Perfil
 
-- **Tabela de avaliações (profissional e aluno):** a coluna da Data fica fixa ao deslizar para o lado; a hora e a condição vão por baixo da data (coluna estreita); as variações (▲▼) vão por baixo do valor. Cada avaliação leva uma barra de cor da fase em que foi feita (Cut laranja, Bulk verde, Manutenção cinzento) e, ordenando por data, aparece uma linha «▶ Início do Cut/Bulk · data · objetivo» no sítio certo (`phaseTimeline`: eventos `fase_inicio` do histórico + fase atual).
+- **Tabela de avaliações (profissional e aluno):** a coluna da Data fica fixa ao deslizar para o lado; a hora e a condição vão por baixo da data (coluna estreita); as variações (▲▼) vão por baixo do valor. Cada avaliação leva uma barra de cor da fase em que foi feita (Cut laranja, Bulk verde, Manutenção cinzento) e, ordenando por data, aparece uma linha «▶ Cut/Bulk · data · objetivo» no sítio certo (`phaseTimeline`: eventos `fase_inicio` do histórico + fase atual).
 - **Resumos dos blocos recolhíveis** já não se sobrepõem ao título (o resumo quebra linha, no máximo 55 % da largura).
 - **Separador Notas removido:** as notas privadas e as notas datadas passaram para uma secção «Notas privadas» no fim do Perfil (mesmos campos e botões). Quem tinha o separador «notas» aberto é levado ao Perfil.
 - Testes: `tests/pro-checkins.test.js` (16 a 23); ajustados os que liam o formato antigo da data/hora.

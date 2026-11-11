@@ -36,13 +36,13 @@ check.check("15. Treino: progressão de carga e sessões registadas em blocos re
 var av = [{date: "2026-10-20", weight: 70}, {date: "2026-10-05", weight: 71}, {date: "2026-09-20", weight: 72}, {date: "2026-09-01", weight: 73}];
 var stp = {assessments: av, planHistory: [{type: "fase_inicio", date: "2026-09-15", summary: "Fase Cut iniciada (objetivo 65 kg): 1800 kcal", after: "cut"}], nutritionPhase: null};
 var tb = tplAssessTable(stp, false);
-check.check("16. A tabela marca o início do Cut entre as avaliações antes e depois", /Início do Cut · [^<]*15\/09\/2026 · objetivo 65 kg/.test(tb) && tb.indexOf("Início do Cut") > tb.indexOf("20/09/2026") && tb.indexOf("Início do Cut") < tb.indexOf("01/09/2026"));
+check.check("16. A tabela marca o início do Cut entre as avaliações antes e depois", /▶ Cut · [^<]*15\/09\/2026 · objetivo 65 kg/.test(tb) && tb.indexOf("▶ Cut") > tb.indexOf("20/09/2026") && tb.indexOf("▶ Cut") < tb.indexOf("01/09/2026"));
 check.check("17. As avaliações dentro da fase levam a cor do Cut; a anterior não", (tb.match(/date-cell ph-cut/g) || []).length === 3 && (tb.match(/class="date-cell"/g) || []).length === 1);
 var stb = {assessments: av, planHistory: [{type: "fase_inicio", date: "2026-09-15", summary: "Fase Cut iniciada", after: "cut"}, {type: "fase_inicio", date: "2026-10-10", summary: "Fase Bulk iniciada", after: "bulk"}]};
 var tb2 = tplAssessTable(stb, false);
-check.check("18. Duas fases: Cut e depois Bulk, cada uma no sítio certo e com a sua cor", tb2.indexOf("Início do Bulk") < tb2.indexOf("Início do Cut") && /date-cell ph-bulk/.test(tb2) && /date-cell ph-cut/.test(tb2));
+check.check("18. Duas fases: Cut e depois Bulk, cada uma no sítio certo e com a sua cor", tb2.indexOf("▶ Bulk") < tb2.indexOf("▶ Cut") && /date-cell ph-bulk/.test(tb2) && /date-cell ph-cut/.test(tb2));
 check.check("19. Sem fase não há marcas", tplAssessTable({assessments: av}, false).indexOf("phase-mark") < 0);
-check.check("20. A fase atual conta mesmo sem evento no histórico", /Início do Bulk/.test(tplAssessTable({assessments: av, planHistory: [], nutritionPhase: {phase: "bulk", startDate: "2026-09-10", targetWeight: 80}}, false)));
+check.check("20. A fase atual conta mesmo sem evento no histórico", /▶ Bulk/.test(tplAssessTable({assessments: av, planHistory: [], nutritionPhase: {phase: "bulk", startDate: "2026-09-10", targetWeight: 80}}, false)));
 check.check("21. A data vem numa linha e a hora por baixo (coluna estreita)", /20\/10\/2026/.test(tplAssessTable({assessments: [{date: "2026-10-20", time: "08:00", weight: 70}]}, false)) && /<br><span class="atime">08:00<\/span>/.test(tplAssessTable({assessments: [{date: "2026-10-20", time: "08:00", weight: 70}]}, false)));
 // Notas dentro do Perfil
 var pf = tplProPerfil({name: "Ana", notes: "algo", likes: [], dislikes: [], avoid: [], allergies: [], supplements: [], targets: {}, meals: []});

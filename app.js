@@ -8904,12 +8904,12 @@ function tplAssessTable(s, editable){
     return "<th" + (on ? " aria-sort=\"" + (sort.dir === "asc" ? "ascending" : "descending") + "\"" : "") + "><button type=\"button\" class=\"sort-th" + (on ? " on" : "") + "\" data-sort=\"" + c[0] + "\">" + c[1] + (on ? (sort.dir === "asc" ? " ▲" : " ▼") : "") + "</button></th>";
   }).join("") + (editable?"<th></th>":"") + "</tr></thead><tbody>";
   var LIMIT = 10, collapsed = list.length > LIMIT && !state.assessShowAll;
-  // marcas de fase: cada linha leva a cor da fase em que foi feita e, ordenando por data (mais recente primeiro), uma linha «Início do Cut / Bulk» no sítio certo
+  // marcas de fase: cada linha leva a cor da fase em que foi feita e, ordenando por data (mais recente primeiro), uma linha «▶ Cut / Bulk» no sítio certo
   var timeline = phaseTimeline(s), colN = COLS.length + (editable ? 1 : 0), byDateDesc = sort.key === "date" && sort.dir === "desc";
   function phaseAt(date){ var cur = null; timeline.forEach(function(t){ if (t.date <= date) cur = t; }); return cur; }
   var pendingMarks = byDateDesc ? timeline.slice().reverse() : [];
   function markRow(t){
-    return "<tr class=\"phase-mark " + phaseClassOf(t.phase) + "\"><td colspan=\"" + colN + "\"><div class=\"phase-mark-in\">▶ Início do " + escapeHtml(phaseLabel(t.phase)) + " · " + escapeHtml(fmtDateFullPt(t.date)) + (t.target ? " · objetivo " + escapeHtml(t.target) + " kg" : "") + "</div></td></tr>";
+    return "<tr class=\"phase-mark " + phaseClassOf(t.phase) + "\"><td colspan=\"" + colN + "\"><div class=\"phase-mark-in\">▶ " + escapeHtml(phaseLabel(t.phase)) + " · " + escapeHtml(fmtDateFullPt(t.date)) + (t.target ? " · objetivo " + escapeHtml(t.target) + " kg" : "") + "</div></td></tr>";
   }
   (collapsed ? shown.slice(0, LIMIT) : shown).forEach(function(a){
     var idx = list.indexOf(a);
