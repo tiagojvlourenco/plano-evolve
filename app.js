@@ -9306,10 +9306,15 @@ function drawComparisonSlide(canvas, d){
   }
   // barra laranja e marca
   ctx.fillStyle = "#E85D2C"; ctx.fillRect(0, H - 52, Math.round(W * 0.71), 5);
-  ctx.fillStyle = "#ffffff"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "600 44px " + DISPLAY;
-  if ("letterSpacing" in ctx) ctx.letterSpacing = "8px";
-  ctx.fillText("≡EVOLVE≡", W - pad, H - 50);
-  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  if (d.logo){ // logótipo (logo-evolve.jpg, fundo preto): recorta-se a margem à volta e desenha-se à direita
+    var lw = 300, sx = 66, sy = 334, sw = 756, sh = 220, lh = Math.round(lw * sh / sw);
+    ctx.drawImage(d.logo, sx, sy, sw, sh, W - pad - lw, H - 52 - lh / 2, lw, lh);
+  } else {
+    ctx.fillStyle = "#ffffff"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "600 44px " + DISPLAY;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "8px";
+    ctx.fillText("≡EVOLVE≡", W - pad, H - 50);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  }
   return canvas;
 }
 function comparisonHeadFor(s, date){
@@ -9325,7 +9330,8 @@ function downloadPhotoComparison(s, dateA, dateB, errEl){
   if (!slides.length) slides = [{pos: PHOTO_POSITIONS[0], pa: null, pb: null}];
   var headA = comparisonHeadFor(s, dateA), headB = comparisonHeadFor(s, dateB);
   var fontsReady = (document.fonts && document.fonts.load) ? Promise.all([document.fonts.load("700 50px Jura"), document.fonts.load("400 30px Manrope"), document.fonts.load("700 30px Manrope")]).catch(function(){}) : Promise.resolve();
-  var loadJobs = [];
+  var logoImg = null;
+  var loadJobs = [loadImageAsElement("logo-evolve.jpg").then(function(img){ logoImg = img; }).catch(function(){})]; // sem o ficheiro (ou sem rede) a marca desenha-se em texto
   slides.forEach(function(sl){
     [["pa", "imgA", "failA"], ["pb", "imgB", "failB"]].forEach(function(k){
       if (!sl[k[0]]) return;
@@ -9335,7 +9341,7 @@ function downloadPhotoComparison(s, dateA, dateB, errEl){
   return Promise.all(loadJobs.concat([fontsReady])).then(function(){
     return Promise.all(slides.map(function(sl, i){
       var canvas = document.createElement("canvas");
-      drawComparisonSlide(canvas, {headA: headA, headB: headB, imgA: sl.imgA, imgB: sl.imgB, failA: sl.failA, failB: sl.failB, index: i + 1, total: slides.length});
+      drawComparisonSlide(canvas, {logo: logoImg, headA: headA, headB: headB, imgA: sl.imgA, imgB: sl.imgB, failA: sl.failA, failB: sl.failB, index: i + 1, total: slides.length});
       return new Promise(function(resolve){ canvas.toBlob(function(b){ resolve({blob: b, name: "evolucao-" + slug(s.name || s.id) + "-" + dateA + "-vs-" + dateB + "-" + sl.pos.key + ".png"}); }, "image/png"); });
     }));
   }).then(function(items){

@@ -698,3 +698,5 @@ Cada linha da lista de alunos do painel tem um botão 🗑 («Apagar <nome>») q
 ## 8bk. Antes e depois: imagem no estilo das publicações
 
 «Descarregar / enviar ao aluno» (e «Guardar a comparação» no aluno) gera agora **uma imagem por posição** (frente, lado, costas; só as que têm foto numa das datas), 1080×1350, fundo preto: por cima de cada foto o peso («73,4 KG») e «Massa Gorda: 39,8%» da avaliação dessa data, as duas fotos lado a lado, o contador «1/3», a barra laranja e a marca EVOLVE em baixo (`drawComparisonSlide`, `comparisonHeadFor`). No telemóvel abre a folha de partilha com todas as imagens; no computador descarrega-as uma a uma. Sem fotos nenhumas sai uma só imagem, com os valores. O bloco «Nova avaliação» já não mostra texto de resumo ao lado do título.
+
+O logótipo da marca está guardado em `logo-evolve.jpg` (886×887, branco sobre preto) e é usado na imagem de antes e depois (recortado e desenhado à direita da barra laranja). Se o ficheiro não carregar, a marca desenha-se em texto.
