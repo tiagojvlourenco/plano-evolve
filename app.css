@@ -234,6 +234,18 @@
   .plano-meal-head .mtime{font-family:var(--mono); font-size:0.78rem; color:var(--muted);}
   .pro-fold{margin-top:14px;}
   .pro-fold + .pro-fold{margin-top:6px;}
+  /* ecrã de entrada limpo: fundo preto, logótipo grande, sem cartão */
+  html:has(body.on-auth), body.on-auth{background:#0a0a0a;} body.on-auth{min-height:100vh;}
+  body.on-auth .brand-header, body.on-auth .proto-ribbon{display:none;}
+  body.on-auth #authScreen{margin-top:14vh !important;}
+  body.on-auth #authScreen > .card{background:transparent; border:none; box-shadow:none; padding:0 4px;}
+  body.on-auth #authScreen .brand-logo{width:min(300px, 80%); margin-bottom:44px;}
+  body.on-auth #authScreen .checkin-field label{text-transform:none; letter-spacing:0; font-size:1rem; font-weight:500; margin-bottom:8px;}
+  body.on-auth #authScreen .checkin-field input{background:#121212; border-color:#262626; border-radius:14px; padding:16px 14px; font-size:1rem;}
+  body.on-auth #authScreen .checkin-field input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #121212 inset;}
+  body.on-auth #authScreen .btn.primary{text-transform:none; letter-spacing:0; font-family:var(--sans); font-size:1.05rem; font-weight:600; padding:17px 16px; border-radius:16px; margin-top:8px;}
+  body.on-auth #authScreen .auth-note{margin:34px 0 10px; font-size:0.95rem;}
+  body.on-auth #authScreen .linklike{color:var(--muted); text-decoration:none; font-size:0.85rem;}
   .auth-note{text-align:center; margin:22px 0 4px; font-size:14px;}
   .brand-logo{display:block; width:240px; max-width:70%; height:auto; margin:0 auto 14px; mix-blend-mode:screen;}
   html[data-app="gestao"] .brand-logo{display:none;} /* a Gestão não leva o logótipo (o corpo das três páginas é igual, por isso esconde-se aqui) */

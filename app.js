@@ -13541,6 +13541,7 @@ var SCREEN_IDS = ["appLoading","authScreen","recoveryScreen","connectionErrorScr
 
 function hideAllScreens(){
   SCREEN_IDS.forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
+  if (document.body && document.body.classList) document.body.classList.remove("on-auth");
 }
 
 function showLoading(text){
@@ -13601,6 +13602,7 @@ function setAuthMode(mode){
 function showAuthScreen(mode){
   hideAllScreens();
   document.getElementById("authScreen").classList.remove("hidden");
+  if (document.body && document.body.classList) document.body.classList.add("on-auth"); // entrada em ecrã limpo: sem cabeçalho nem cartão
   document.getElementById("signOutBtn").classList.add("hidden");
   document.getElementById("modeSwitch").classList.add("hidden");
   setAuthMode(mode || "signin");
