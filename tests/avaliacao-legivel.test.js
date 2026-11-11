@@ -1,0 +1,36 @@
+// Avaliação mais fácil de ler: gráfico de evolução com tendência/eixo/objetivo e histórico por medida (lista com cores) + tabela completa num botão.
+require("./setup")();
+var appSource = require("./extract-app")();
+eval(appSource);
+var check = require("./check")();
+var W = [];
+for (var d = 0; d < 120; d++) W.push({date: new Date(Date.UTC(2026, 3, 22) + d * 86400000).toISOString().slice(0, 10), w: 58.5 - d * 0.04 + (d % 3 === 0 ? 0.6 : -0.3)});
+var svg = trendChartSvg(W, {goal: 51, marks: [{date: "2026-06-01", label: "Cut"}]});
+check.check("1. Gráfico: tendência (linha) por cima dos pontos de cada dia, eixo com valores e meses", /class="tc-trend"/.test(svg) && (svg.match(/class="tc-dot"/g) || []).length === 120 && /class="tc-grid"/.test(svg) && />mai</.test(svg) && />jul</.test(svg));
+check.check("2. Gráfico: linha do objetivo e início das fases; legenda e descrição acessível", /class="tc-goal"/.test(svg) && /objetivo 51,0/.test(svg) && /class="tc-mark"/.test(svg) && />Cut</.test(svg) && /chart-legend/.test(svg) && /aria-label="De 59,1 kg em 22\/04\/2026 para [\d,]+ kg em 19\/08\/2026; objetivo 51,0 kg"/.test(svg));
+check.check("3. A tendência é mais lisa do que as pesagens (média móvel centrada)", (function(){ var t = trendSeries(W.map(function(p){ return {x: dayNum(p.date), date: p.date, v: p.w}; }), 4); var jump = function(a){ var m = 0; for (var i = 1; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - a[i - 1])); return m; }; return jump(t.map(function(p){ return p.v; })) < jump(W.map(function(p){ return p.w; })) / 3; })());
+check.check("4. Eixo do tempo é real: dois pontos com 30 dias de intervalo ficam mais afastados do que dois com 1 dia", (function(){ var s2 = trendChartSvg([{date: "2026-01-01", w: 70}, {date: "2026-01-02", w: 70.2}, {date: "2026-01-31", w: 69}]); var xs = (s2.match(/points="([^"]+)"/g) || [])[1].replace(/points="|"/g, "").split(" ").map(function(p){ return parseFloat(p); }); return (xs[2] - xs[1]) > 10 * (xs[1] - xs[0]); })());
+check.check("5. Objetivo muito longe não esmaga o gráfico; com menos de 2 dias diz que faltam dados", !/tc-goal/.test(trendChartSvg(W, {goal: 20})) && /Ainda não há dados suficientes/.test(trendChartSvg([{date: "2026-01-01", w: 70}])));
+check.check("6. O cartão de peso usa o gráfico novo (com o objetivo do aluno)", /trendChartSvg\(s\.weights, \{goal: s\.weightGoal, marks: phaseChartMarks\(s\)/.test(appSource));
+
+var av = [["2026-09-25", 53.5, 25.1, 38.0, 3, 51.5], ["2026-09-18", 53.7, 25.0, 38.1, 3, 51.6], ["2026-09-04", 54.3, 25.6, 38.3, 3, 51.4], ["2026-08-23", 55.3, 24.0, 39.0, 3, 51.5]].map(function(r){ return {date: r[0], time: "08:00", weight: r[1], bodyFat: r[2], muscle: r[3], visceral: r[4], water: r[5]}; });
+var s = {weightInitial: 58.5, weightGoal: 51, assessments: av, planHistory: [{type: "fase_inicio", date: "2026-09-10", after: "bulk", summary: "Fase Bulk iniciada (objetivo 60 kg)"}]};
+state.assessView = null; state.assessMetric = null;
+var h = tplAssessHistory(s, true);
+check.check("7. Por omissão: lista por medida (Peso), com as medidas disponíveis em botões e a tabela completa num botão", /Histórico das avaliações/.test(h) && /data-assess-metric="weight" aria-pressed="true"/.test(h) && /data-assess-metric="water"/.test(h) && /data-assess-view="tabela"/.test(h) && !/<table class="assess-table"/.test(h));
+check.check("8. Cada linha: data, hora, valor com unidade e variação para a anterior", /<div class="am-date">25\/09\/2026<span>08:00<\/span><\/div><div class="am-val">53,5<small>kg<\/small><\/div><div class="am-d [a-z]+">▼ 0,2<\/div>/.test(h));
+check.check("9. Cor do peso conforme a fase: no Bulk descer 0,6 kg é mau; antes da fase (objetivo abaixo) descer 1,0 kg é bom; 0,2 kg é ruído (cinzento)", /53,7<small>kg<\/small><\/div><div class="am-d bad">▼ 0,6/.test(h) && /54,3<small>kg<\/small><\/div><div class="am-d good">▼ 1,0/.test(h) && /53,5<small>kg<\/small><\/div><div class="am-d flat">▼ 0,2/.test(h));
+check.check("10. Marca da fase no sítio certo e linhas da fase com a cor dela", /▶ Bulk · 10\/09\/2026 · objetivo 60 kg[\s\S]*04\/09\/2026/.test(h) && h.indexOf("▶ Bulk") > h.indexOf("18/09/2026") && /am-row ph-bulk/.test(h));
+check.check("11. Resumo desde a primeira avaliação, com cor", /Desde 23\/08\/2026: 55,3 → 53,5 kg <span class="am-d (good|bad|flat)">\(−1,8 kg\)<\/span>/.test(h));
+state.assessMetric = "bodyFat";
+var hf = tplAssessHistory(s, true);
+check.check("12. Massa gorda: subir é mau, descer é bom (em qualquer fase)", /data-assess-metric="bodyFat" aria-pressed="true"/.test(hf) && /25,6<small>%<\/small><\/div><div class="am-d bad">▲ 1,6/.test(hf) && /25,0<small>%<\/small><\/div><div class="am-d good">▼ 0,6/.test(hf));
+state.assessMetric = "muscle";
+check.check("13. Massa muscular: descer é mau", /38,3<small>kg<\/small><\/div><div class="am-d bad">▼ 0,7/.test(tplAssessHistory(s, true)));
+state.assessView = "tabela";
+var ht = tplAssessHistory(s, true);
+check.check("14. «Tabela completa» mostra a tabela de sempre (com apagar) e um botão para voltar", /<table class="assess-table"/.test(ht) && /class="assess-del" data-idx=/.test(ht) && /data-assess-view="lista"/.test(ht));
+state.assessView = null; state.assessMetric = null;
+check.check("15. Sem avaliações: diz que não há; o aluno vê «Tabela completa» sem «apagar»", /Ainda sem avaliações/.test(tplAssessHistory({assessments: []}, false)) && />Tabela completa</.test(tplAssessHistory(s, false)));
+check.check("16. Os botões da medida e da vista estão ligados no profissional e no aluno", (appSource.match(/wireAssessHistory\(el, function\(\)\{ render(ProTabContent|AlunoTab)\(s\); \}\);/g) || []).length === 2);
+check.summarize();

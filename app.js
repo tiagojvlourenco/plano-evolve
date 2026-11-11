@@ -8359,7 +8359,7 @@ function tplEvolucaoAluno(s, opts){
   var html = (opts.editable ? "" : tabHead("Progresso", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
     "<div class=\"hero-row\"><div class=\"hero-num\">" + (s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + "<small>kg</small>") + "</div></div>" +
-    "<div class=\"weight-chart-wrap\">" + weightSvg(s.weights) + "</div>" +
+    "<div class=\"weight-chart-wrap\">" + trendChartSvg(s.weights, {goal: s.weightGoal, marks: phaseChartMarks(s), pointsLabel: "pesagens"}) + "</div>" +
     "<div class=\"stat-grid-4\">" +
       statTile("Inicial", s.weightInitial == null ? "—" : ptNum(s.weightInitial, 1) + " kg") +
       statTile("Atual", s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + " kg") +
@@ -8372,7 +8372,7 @@ function tplEvolucaoAluno(s, opts){
   html += "<div class=\"card\">" +
     "<div class=\"eyebrow\">Composição corporal</div>" + tplAssessKpis(s) +
     (opts.editable ? proFold("novaAval", "Nova avaliação", "", tplAssessForm(s) + tplImportWeighIns(s)) : "<p class=\"muted-p\" style=\"margin-top:6px;\">Registada pelo teu profissional em cada avaliação.</p>") +
-    tplAssessTable(s, opts.editable) +
+    tplAssessHistory(s, opts.editable) +
   "</div>";
 
   // Fase 38: no ecrã do profissional, perímetros, pregas e fotografias vêm recolhidos, com o essencial no resumo
@@ -8893,6 +8893,78 @@ function phaseTimeline(s){
   return out;
 }
 function phaseClassOf(phase){ return phase === "cut" ? "ph-cut" : phase === "bulk" ? "ph-bulk" : "ph-man"; }
+/* Histórico das avaliações, legível no telemóvel: escolhe-se uma medida (Peso, M. gorda, ...) e aparece o gráfico dela
+   e uma lista data → valor → variação. A cor da variação diz se foi no sentido certo (o peso conforme a fase: Cut desce,
+   Bulk sobe); mudanças pequenas (ruído do dia a dia) ficam a cinzento. A tabela com tudo continua num botão. */
+var ASSESS_METRICS = [
+  {key: "weight", label: "Peso", unit: "kg", digits: 1, noise: 0.3, good: null},
+  {key: "bodyFat", label: "M. gorda", unit: "%", digits: 1, noise: 0.3, good: "down"},
+  {key: "muscle", label: "M. muscular", unit: "kg", digits: 1, noise: 0.2, good: "up"},
+  {key: "visceral", label: "Visceral", unit: "", digits: 0, noise: 1, good: "down"},
+  {key: "water", label: "Água", unit: "%", digits: 1, noise: 0.3, good: "up"}
+];
+function assessGoodDir(s, metric, date, timeline){
+  if (metric.good) return metric.good;
+  var cur = null;
+  (timeline || []).forEach(function(t){ if (t.date <= date) cur = t; });
+  if (cur) return cur.phase === "cut" ? "down" : cur.phase === "bulk" ? "up" : null;
+  var g = Number(s.weightGoal), i = Number(s.weightInitial);
+  return g > 0 && i > 0 && Math.abs(g - i) >= 0.5 ? (g < i ? "down" : "up") : null;
+}
+function assessDeltaCls(d, metric, dir){
+  if (Math.abs(d) < Math.max(metric.noise, Math.pow(10, -metric.digits) / 2) || !dir) return "flat";
+  return (dir === "down" ? d < 0 : d > 0) ? "good" : "bad";
+}
+function tplAssessHistory(s, editable){
+  var list = (s.assessments || []).slice().sort(compareAssessmentsDesc);
+  if (!list.length || state.assessView === "tabela"){
+    return tplAssessTable(s, editable) + (list.length ? "<button type=\"button\" class=\"btn btn-sm\" data-assess-view=\"lista\" style=\"margin-top:10px;\">Ver por medida</button>" : "");
+  }
+  var avail = ASSESS_METRICS.filter(function(m){ return list.some(function(a){ return Number(a[m.key]) > 0; }); });
+  if (!avail.length) return tplAssessTable(s, editable);
+  var m = avail.filter(function(x){ return x.key === state.assessMetric; })[0] || avail[0];
+  var rows = list.filter(function(a){ return Number(a[m.key]) > 0; });
+  var timeline = phaseTimeline(s);
+  var u = m.unit ? (m.unit === "%" ? " %" : " " + m.unit) : "";
+  var html = "<div class=\"eyebrow\" style=\"margin-top:18px;\">Histórico das avaliações</div>" +
+    "<div class=\"assess-metrics\" role=\"group\" aria-label=\"Medida a ver\">" + avail.map(function(x){
+      var on = x.key === m.key;
+      return "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-assess-metric=\"" + x.key + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + x.label + "</button>";
+    }).join("") + "</div>";
+  html += "<div class=\"weight-chart-wrap\">" + trendChartSvg(rows.map(function(a){ return {date: a.date, v: Number(a[m.key])}; }), {unit: m.unit, digits: m.digits, goal: m.key === "weight" ? s.weightGoal : null, marks: phaseChartMarks(s), pointsLabel: "avaliações", emptyText: "Só há uma avaliação com " + m.label.toLowerCase() + ": o gráfico aparece a partir da segunda."}) + "</div>";
+  if (rows.length >= 2){
+    var newest = rows[0], oldest = rows[rows.length - 1], tot = Number(newest[m.key]) - Number(oldest[m.key]);
+    var totCls = assessDeltaCls(tot, m, assessGoodDir(s, m, newest.date, timeline));
+    html += "<p class=\"am-sum\">Desde " + fmtDateFullPt(oldest.date) + ": " + ptNum(oldest[m.key], m.digits) + " → " + ptNum(newest[m.key], m.digits) + u +
+      " <span class=\"am-d " + totCls + "\">(" + (Math.abs(tot) < Math.pow(10, -m.digits) / 2 ? "=" : (tot > 0 ? "+" : "−") + ptNum(Math.abs(tot), m.digits) + u) + ")</span></p>";
+  }
+  var LIMIT = 10, collapsed = rows.length > LIMIT && !state.assessShowAll;
+  var pendingMarks = timeline.slice().reverse();
+  var markHtml = function(t){ return "<div class=\"am-mark " + phaseClassOf(t.phase) + "\">▶ " + escapeHtml(phaseLabel(t.phase)) + " · " + escapeHtml(fmtDateFullPt(t.date)) + (t.target ? " · objetivo " + escapeHtml(t.target) + " kg" : "") + "</div>"; };
+  html += "<div class=\"am-list\">";
+  (collapsed ? rows.slice(0, LIMIT) : rows).forEach(function(a, i){
+    while (pendingMarks.length && pendingMarks[0].date > a.date) html += markHtml(pendingMarks.shift());
+    var prev = rows[i + 1], v = Number(a[m.key]), dHtml = "";
+    if (prev){
+      var d = v - Number(prev[m.key]);
+      var cls = assessDeltaCls(d, m, assessGoodDir(s, m, a.date, timeline));
+      dHtml = Math.abs(d) < Math.pow(10, -m.digits) / 2 ? "=" : (d > 0 ? "▲ " : "▼ ") + ptNum(Math.abs(d), m.digits);
+      dHtml = "<div class=\"am-d " + cls + "\">" + dHtml + "</div>";
+    } else dHtml = "<div class=\"am-d flat\">início</div>";
+    var ph = null; timeline.forEach(function(t){ if (t.date <= a.date) ph = t; });
+    html += "<div class=\"am-row" + (ph ? " " + phaseClassOf(ph.phase) : "") + "\"><div class=\"am-date\">" + fmtDateFullPt(a.date) + (a.time ? "<span>" + escapeHtml(a.time) + "</span>" : "") + "</div>" +
+      "<div class=\"am-val\">" + ptNum(v, m.digits) + (m.unit ? "<small>" + m.unit + "</small>" : "") + "</div>" + dHtml + "</div>";
+  });
+  if (!collapsed) while (pendingMarks.length) html += markHtml(pendingMarks.shift());
+  html += "</div><div style=\"display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;\">" +
+    (rows.length > LIMIT ? "<button type=\"button\" class=\"btn btn-sm\" id=\"assessToggleAll\">" + (collapsed ? "Mostrar todas (" + rows.length + ")" : "Mostrar só as " + LIMIT + " mais recentes") + "</button>" : "") +
+    "<button type=\"button\" class=\"btn btn-sm\" data-assess-view=\"tabela\">" + (editable ? "Tabela completa (e apagar)" : "Tabela completa") + "</button></div>";
+  return html;
+}
+function wireAssessHistory(el, rerender){
+  el.querySelectorAll("[data-assess-metric]").forEach(function(b){ b.addEventListener("click", function(){ state.assessMetric = b.getAttribute("data-assess-metric"); rerender(); }); });
+  el.querySelectorAll("[data-assess-view]").forEach(function(b){ b.addEventListener("click", function(){ state.assessView = b.getAttribute("data-assess-view"); rerender(); }); });
+}
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
   if (!list.length) return "<p class=\"muted-p\" style=\"margin-top:10px;\">Ainda sem avaliações registadas.</p>";
@@ -9432,6 +9504,94 @@ function statTile(label, val){
   return "<div class=\"stat-tile\"><div class=\"v\">" + val + "</div><div class=\"l\">" + label + "</div></div>";
 }
 
+/* Gráfico de evolução (peso e medidas das avaliações): cada dia é um ponto discreto, a linha laranja é a tendência
+   (média móvel centrada, para os altos e baixos do dia a dia não esconderem a evolução), eixo com valores, linha do
+   objetivo (tracejado verde), meses em baixo e início das fases (Cut/Bulk). O eixo do tempo é real (dias), não por índice. */
+var PT_MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function chartNiceStep(range){
+  var c = [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100];
+  for (var i = 0; i < c.length; i++) if (range / c[i] <= 5) return c[i];
+  return 200;
+}
+function trendSeries(pts, halfDays){
+  return pts.map(function(p){
+    var sum = 0, n = 0;
+    pts.forEach(function(q){ if (Math.abs(q.x - p.x) <= halfDays){ sum += q.v; n++; } });
+    return {x: p.x, date: p.date, v: sum / n};
+  });
+}
+function trendChartSvg(points, opts){
+  opts = opts || {};
+  var dg = opts.digits != null ? opts.digits : 1, unit = opts.unit == null ? "kg" : opts.unit;
+  var byDay = {};
+  (points || []).forEach(function(p){
+    var v = p ? Number(p.w != null ? p.w : p.v) : 0;
+    if (p && isIsoDate(p.date) && v > 0) (byDay[p.date] = byDay[p.date] || []).push(v);
+  });
+  var pts = Object.keys(byDay).sort().map(function(d){ var a = byDay[d]; return {date: d, x: dayNum(d), v: a.reduce(function(s2, c){ return s2 + c; }, 0) / a.length}; });
+  if (pts.length < 2) return "<p class=\"muted-p\" style=\"text-align:center; padding:6px 0 2px;\">" + escapeHtml(opts.emptyText || "Ainda não há dados suficientes para mostrar a evolução.") + "</p>";
+  var W = 380, H = 200, L = 38, R = 14, T = 18, B = 26;
+  var x0 = pts[0].x, x1 = pts[pts.length - 1].x, span = Math.max(1, x1 - x0);
+  var smooth = pts.length >= 8;
+  var trend = smooth ? trendSeries(pts, Math.max(2, Math.min(10, Math.round(span / 30)))) : pts;
+  var vals = pts.map(function(p){ return p.v; });
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var goal = Number(opts.goal) > 0 ? Number(opts.goal) : null, rng = Math.max(hi - lo, 0.5);
+  if (goal != null && (goal < lo - rng || goal > hi + rng)) goal = null; // objetivo muito longe: não esmaga o gráfico
+  if (goal != null){ lo = Math.min(lo, goal); hi = Math.max(hi, goal); }
+  var step = chartNiceStep(Math.max(hi - lo, 0.2));
+  lo = Math.floor((lo - 1e-9) / step) * step; hi = Math.ceil((hi + 1e-9) / step) * step;
+  if (hi - lo < step * 2) hi = lo + step * 2;
+  var X = function(d){ return L + (d - x0) / span * (W - L - R); };
+  var Y = function(v){ return T + (hi - v) / (hi - lo) * (H - T - B); };
+  var f1 = function(n){ return Math.round(n * 10) / 10; };
+  var tickDg = step < 1 ? (step === 0.25 ? 2 : 1) : 0;
+  var svg = "";
+  for (var v = lo; v <= hi + step / 1000; v += step){
+    svg += "<line class=\"tc-grid\" x1=\"" + L + "\" x2=\"" + (W - R) + "\" y1=\"" + f1(Y(v)) + "\" y2=\"" + f1(Y(v)) + "\"></line>" +
+      "<text x=\"" + (L - 6) + "\" y=\"" + f1(Y(v) + 4) + "\" text-anchor=\"end\">" + ptNum(v, tickDg) + "</text>";
+  }
+  // datas em baixo: meses (períodos longos) ou 4 datas (períodos curtos)
+  if (span >= 60){
+    var d0 = new Date(pts[0].date + "T00:00:00Z"), m = d0.getUTCMonth() + 1, y = d0.getUTCFullYear(), every = span > 300 ? 2 : 1, k = 0;
+    while (true){
+      if (m > 11){ m = 0; y++; }
+      var iso = y + "-" + ("0" + (m + 1)).slice(-2) + "-01", dx = dayNum(iso);
+      if (dx > x1) break;
+      if (k++ % every === 0 && X(dx) > L + 8 && X(dx) < W - R - 8) svg += "<text x=\"" + f1(X(dx)) + "\" y=\"" + (H - 6) + "\" text-anchor=\"middle\">" + PT_MONTHS_SHORT[m] + (m === 0 ? " " + String(y).slice(2) : "") + "</text>";
+      m++;
+    }
+  } else {
+    [0, 1 / 3, 2 / 3, 1].forEach(function(t, i){
+      var dx = Math.round(x0 + t * span), iso = new Date(dx * 86400000).toISOString().slice(0, 10);
+      svg += "<text x=\"" + f1(X(dx)) + "\" y=\"" + (H - 6) + "\" text-anchor=\"" + (i === 0 ? "start" : i === 3 ? "end" : "middle") + "\">" + iso.slice(8) + "/" + iso.slice(5, 7) + "</text>";
+    });
+  }
+  // início das fases dentro do período
+  (opts.marks || []).forEach(function(mk){
+    if (!mk || !isIsoDate(mk.date)) return;
+    var dx = dayNum(mk.date);
+    if (dx < x0 || dx > x1) return;
+    svg += "<line class=\"tc-mark\" x1=\"" + f1(X(dx)) + "\" x2=\"" + f1(X(dx)) + "\" y1=\"" + T + "\" y2=\"" + (H - B) + "\"></line>" +
+      "<text class=\"tc-mark-l\" x=\"" + f1(X(dx) + 3) + "\" y=\"" + (T - 6) + "\">" + escapeHtml(mk.label || "") + "</text>";
+  });
+  if (goal != null) svg += "<line class=\"tc-goal\" x1=\"" + L + "\" x2=\"" + (W - R) + "\" y1=\"" + f1(Y(goal)) + "\" y2=\"" + f1(Y(goal)) + "\"></line>" +
+    "<text class=\"tc-goal-l\" x=\"" + (W - R) + "\" y=\"" + f1(Y(goal) - 5) + "\" text-anchor=\"end\">objetivo " + ptNum(goal, dg) + "</text>";
+  var line = trend.map(function(p){ return f1(X(p.x)) + "," + f1(Y(p.v)); }).join(" ");
+  svg += "<polygon class=\"tc-area\" points=\"" + line + " " + f1(X(x1)) + "," + f1(Y(lo)) + " " + f1(X(x0)) + "," + f1(Y(lo)) + "\"></polygon>";
+  var r = pts.length > 120 ? 1.6 : pts.length > 40 ? 2.1 : 3;
+  if (smooth) svg += pts.map(function(p){ return "<circle class=\"tc-dot\" cx=\"" + f1(X(p.x)) + "\" cy=\"" + f1(Y(p.v)) + "\" r=\"" + r + "\"></circle>"; }).join("");
+  svg += "<polyline class=\"tc-trend\" points=\"" + line + "\"></polyline>";
+  var first = pts[0], last = pts[pts.length - 1];
+  svg += "<text class=\"tc-v\" x=\"" + (L + 4) + "\" y=\"" + f1(Math.max(T + 10, Y(trend[0].v) - 9)) + "\">" + ptNum(first.v, dg) + "</text>" +
+    "<circle class=\"tc-last\" cx=\"" + f1(X(last.x)) + "\" cy=\"" + f1(Y(last.v)) + "\" r=\"4.5\"></circle>" +
+    "<text class=\"tc-v\" x=\"" + f1(X(last.x) - 8) + "\" y=\"" + f1(Y(last.v) > T + 20 ? Y(last.v) - 9 : Y(last.v) + 18) + "\" text-anchor=\"end\">" + ptNum(last.v, dg) + "</text>";
+  var aria = "De " + ptNum(first.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(first.date) + " para " + ptNum(last.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(last.date) + (goal != null ? "; objetivo " + ptNum(goal, dg) + (unit ? " " + unit : "") : "");
+  return "<svg class=\"tchart\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"" + escapeHtml(aria) + "\">" + svg + "</svg>" +
+    "<div class=\"chart-legend\">" + (smooth ? "<span><i class=\"lg-dot\"></i>" + escapeHtml(opts.pointsLabel || "pesagens") + "</span><span><i class=\"lg-line\"></i>tendência</span>" : "") + (goal != null ? "<span><i class=\"lg-goal\"></i>objetivo</span>" : "") + "</div>";
+}
+function phaseChartMarks(s){ return phaseTimeline(s).map(function(t){ return {date: t.date, label: phaseLabel(t.phase)}; }); }
+
 function weightSvg(weights){
   if (weights.length < 2){
     return "<p class=\"muted-p\" style=\"text-align:center; padding:6px 0 2px;\">Ainda não há dados suficientes para mostrar a evolução.</p>";
@@ -9633,6 +9793,7 @@ function wireAlunoTab(s){
   var toggleAllAluno = el.querySelector("#assessToggleAll");
   if (toggleAllAluno) toggleAllAluno.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderAlunoTab(s); });
   el.querySelectorAll(".sort-th").forEach(function(b){ b.addEventListener("click", function(){ toggleAssessSort(b.getAttribute("data-sort")); renderAlunoTab(s); }); });
+  wireAssessHistory(el, function(){ renderAlunoTab(s); });
 
   var submitBtn = el.querySelector("#submitCheckin");
   if (submitBtn) submitBtn.addEventListener("click", function(){
@@ -13386,6 +13547,7 @@ function wireProTab(s){
   var toggleAll = el.querySelector("#assessToggleAll");
   if (toggleAll) toggleAll.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderProTabContent(s); });
   el.querySelectorAll(".sort-th").forEach(function(b){ b.addEventListener("click", function(){ toggleAssessSort(b.getAttribute("data-sort")); renderProTabContent(s); }); });
+  wireAssessHistory(el, function(){ renderProTabContent(s); });
 
   var importPreviewBtn = el.querySelector("#importWeighPreview");
   if (importPreviewBtn) importPreviewBtn.addEventListener("click", function(){
