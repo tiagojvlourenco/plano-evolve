@@ -235,11 +235,15 @@
   .pro-fold{margin-top:14px;}
   .pro-fold + .pro-fold{margin-top:6px;}
   /* ecrã de entrada limpo: fundo preto, logótipo, formulário e um Phi muito discreto atrás dos campos (medidas tiradas da imagem de referência) */
-  html:has(body.on-auth), body.on-auth{background:#0a0a0a;} body.on-auth{min-height:100vh;}
+  html:has(body.on-auth), body.on-auth{background:#0a0a0a;} body.on-auth{min-height:100vh; padding-top:0; padding-bottom:0;}
+  /* os dados da entrada ficam centrados no ecrã (na vertical e na horizontal); com a margem de segurança igual em cima e em baixo, para a ilha dinâmica não os tapar */
+  body.on-auth .app-wrap{box-sizing:border-box; display:flex; flex-direction:column; min-height:100vh; min-height:100dvh; padding-top:max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px)); padding-bottom:max(env(safe-area-inset-top, 0px), env(safe-area-inset-bottom, 0px));}
   body.on-auth .brand-header, body.on-auth .proto-ribbon{display:none;}
-  body.on-auth #authScreen{margin-top:calc(27vh + 2px) !important; max-width:393px;}
+  body.on-auth #authScreen{margin:auto !important; width:100%; max-width:393px;}
   body.on-auth #authScreen > .card{background:transparent; border:none; box-shadow:none; padding:0 8px;}
   body.on-auth #authScreen > .card > *{position:relative;}
+  body.on-auth #authScreen > .card > p{margin-bottom:0;} /* sem margem em baixo, para o bloco ficar mesmo no meio */
+  body.on-auth .sr-only{top:0; left:0;} /* a região viva não pode ficar abaixo do ecrã (dava 1 px de deslocação) */
   body.on-auth #authScreen .brand-logo{width:198px; max-width:100%; margin:0 auto 48px;}
   body.on-auth #authForm{position:relative; z-index:0;}
   body.on-auth #authForm::before{content:""; position:absolute; z-index:-1; pointer-events:none; left:50%; top:-34px; width:172px; height:275px; transform:translateX(-50%); background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 320'%3E%3Ccircle cx='100' cy='160' r='90' fill='none' stroke='%23161616' stroke-width='20'/%3E%3Crect x='90' y='0' width='20' height='320' fill='%23161616'/%3E%3C/svg%3E") center/100% 100% no-repeat;}
