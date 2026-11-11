@@ -13542,6 +13542,30 @@ var SCREEN_IDS = ["appLoading","authScreen","recoveryScreen","connectionErrorScr
 function hideAllScreens(){
   SCREEN_IDS.forEach(function(id){ document.getElementById(id).classList.add("hidden"); });
   if (document.body && document.body.classList) document.body.classList.remove("on-auth");
+  // quem chama esconde tudo e logo a seguir mostra o ecrã seguinte; se esse não for o de «a carregar», o arranque pode terminar
+  setTimeout(function(){
+    try { var l = document.getElementById("appLoading"); if (l && l.classList.contains("hidden")) splashRelease(); } catch (e) {}
+  }, 0);
+}
+
+/* Ecrã de arranque (Phi + anel laranja, #evSplash no HTML): fica por cima enquanto a app decide o que mostrar e depois dissolve-se.
+   Tempo mínimo desde que a página abriu, para o Phi não «piscar» quando tudo carrega depressa; com «reduzir movimento» sai logo. */
+var SPLASH_MIN_MS = 650;
+var splashDone = false;
+function splashRelease(){
+  if (splashDone) return;
+  splashDone = true;
+  var el = document.getElementById("evSplash");
+  if (!el || !el.classList) return;
+  var reduce = false;
+  try { reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) {}
+  var now = 0;
+  try { now = window.performance && performance.now ? performance.now() : SPLASH_MIN_MS; } catch (e2) { now = SPLASH_MIN_MS; }
+  var wait = reduce ? 0 : Math.max(0, SPLASH_MIN_MS - now);
+  setTimeout(function(){
+    el.classList.add("out");
+    setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+  }, wait);
 }
 
 function showLoading(text){
