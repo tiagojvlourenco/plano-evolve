@@ -414,14 +414,14 @@ O mesmo site tem **três apps instaláveis**, cada uma com a sua página, o seu 
 | App | Página | Ícone | Para quê |
 |---|---|---|---|
 | **EVOLVE** | `index.html` | preto e branco | Alimentação, avaliações e progresso do aluno; o profissional vê aqui Alunos, Catálogo e Eu (nutrição, treino, avaliação, corridas de cada aluno) |
-| **EVOLVE Treino** | `treino.html` | verde-água | Musculação (programa, registo de cada sessão, descanso, música) e **Corrida**; para o aluno |
+| **EVOLVE Treino** | `treino.html` | preto e branco (igual ao EVOLVE; já foi verde-água) | Musculação (programa, registo de cada sessão, descanso, música) e **Corrida**; para o aluno |
 | **EVOLVE Gestão** | `gestao.html` | laranja | Estúdio e Contratos; só para o profissional |
 
 - O código é o mesmo (`app.js`, `app.css`); cada página só diz de que app é com `<html data-app="…">` (`treino`, `gestao`; sem atributo = EVOLVE). `APP_MODE` em `app.js` escolhe o que se mostra.
 - **O treino saiu da app EVOLVE**: lá, «Hoje» tem só as refeições (e um atalho «Treino e corrida» para a nova app) e «Plano» só Alimentação e Compras. Os dados (`training_program`, `workout_logs`) não mudaram de sítio nem foram tocados; o profissional continua a editar o programa na ficha do aluno (grupo «Treino»). Alunos que «não fazem nutrição comigo» só veem o atalho na EVOLVE e usam a EVOLVE Treino.
 - **EVOLVE Treino**: dois separadores, «Treino» (o treino de hoje, o programa, os últimos treinos, uma ligação para a EVOLVE) e «Corrida» (ver 8u). Um profissional que abra `treino.html` vê o ecrã do aluno em pré-visualização, com o seletor de aluno.
 - **Instalar**: abrir `…/treino.html` no Safari → Partilhar → «Adicionar ao ecrã principal». **No iPhone cada ícone guarda a sua própria sessão** (afirmação já feita em 8m, não verificada de novo): o aluno inicia sessão uma vez em cada app. Se o treino já estava aberto na EVOLVE como atalho, deve instalar a nova.
-- O service worker guarda uma cópia de cada página por separado (`pageKey`) e `VERSION` subiu para `evolve-v5`; os ícones novos estão em `icon-treino-*.png`.
+- O service worker guarda uma cópia de cada página por separado (`pageKey`) e `VERSION` subiu para `evolve-v5` (e para `evolve-v6` quando o ícone do Treino passou a preto e branco); os ícones novos estão em `icon-treino-*.png`.
 - Verificado (Chromium, Supabase simulado, `tests/treino-app.test.js`): separadores de cada app, ecrãs, atalhos, pré-visualização do profissional, manifesto, service worker. **Por verificar em telemóvel real**: instalar no ecrã principal (ícone, nome «Treino», sessão própria por ícone) e o regresso do seletor de ficheiros/música.
 
 ### Pôr a funcionar sem surpresas (ordem de publicação e instalação)
@@ -709,3 +709,10 @@ O logótipo (`logo-evolve-wordmark.jpg`, a versão recortada de `logo-evolve.jpg
 **Arranque** (`#evSplash`, logo a seguir ao `<body>` das três páginas, escondido na Gestão por CSS): Phi branco com um anel laranja fino (`#e85d26` a 65 %), por cima de tudo, até a app decidir o que mostrar. Aí `hideAllScreens()` (que todos os caminhos chamam antes de mostrar o ecrã seguinte) verifica se `#appLoading` já não está visível e chama `splashRelease()`: espera o mínimo de 650 ms desde que a página abriu (`SPLASH_MIN_MS`, para o Phi não «piscar»), põe a classe `out` e retira o elemento 500 ms depois. A saída copia o vídeo de referência: dissolução de 0,27 s com `ease`, anel a alargar em linha reta (×1,42 em 0,35 s) e Phi a crescer 5 %. Com «reduzir movimento» sai em 0,12 s, sem anel nem escala. Se o JavaScript falhar, uma animação CSS (`evSplashFailsafe`) tira-o sozinho aos 6 s.
 
 **Imagem de arranque do iPhone** (`splash/arranque-LxA.png`, 12 tamanhos, ligadas por `apple-touch-startup-image` em `index.html` e `treino.html`): o primeiro fotograma, antes de a página abrir, tem as mesmas medidas do `#evSplash` (Phi 78 px, anel 79 px, em px CSS) para a passagem não se notar. Geram-se com `python3 scripts/gerar-ecras-arranque.py` (Pillow). **O iOS só lê estas imagens quando a app é adicionada ao ecrã principal**: quem já a tinha instalada tem de a remover e voltar a adicionar para as ver; o resto da animação (dentro da página) atualiza-se sozinho. Teste: `tests/splash.test.js`.
+
+## 8ba. Ícone do EVOLVE Treino a preto e branco e o logótipo offline
+
+- **Ícone:** o EVOLVE Treino deixa de ter o ícone verde-água e passa a usar o mesmo preto e branco do EVOLVE (`icon-treino-180/192/512.png` iguais a `icon-180/192/512.png`, por decisão do Tiago). A Gestão mantém o ícone laranja. Como o Treino e o EVOLVE ficam com ícones iguais, no ecrã principal distinguem-se só pelo nome. O service worker subiu para `evolve-v6` para o ícone novo não ficar preso na cache. **No iPhone o ícone antigo fica guardado: apaga a app do ecrã principal e volta a adicioná-la pelo Safari («Partilhar → Adicionar ao ecrã principal»).**
+- **Defeito apanhado pelo teste de offline:** `logo-evolve-wordmark.jpg` (logótipo da entrada e do carregamento, acrescentado no `main`) não estava no pré-cache do service worker, por isso sem rede aparecia partido. Passou a estar em `SHELL`.
+- **Testes do `main` por atualizar:** com os «Pedidos de ajuda» retirados, o grupo «Resumo» da ficha do aluno só tem o Perfil e deixou de ter sub-separadores; `offline-browser` e `gestao-split` esperavam o botão «Perfil» e foram ajustados (sem alterações à app).
+
