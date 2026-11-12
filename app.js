@@ -8971,24 +8971,18 @@ function phaseTimeline(s){
   return out;
 }
 function phaseClassOf(phase){ return phase === "cut" ? "ph-cut" : phase === "bulk" ? "ph-bulk" : "ph-man"; }
-/* Histórico das avaliações, legível no telemóvel: escolhe-se uma medida (Peso, M. gorda, ...) e aparece o gráfico dela
-   e uma lista data → valor → variação. A cor da variação diz se foi no sentido certo (o peso conforme a fase: Cut desce,
-   Bulk sobe); mudanças pequenas (ruído do dia a dia) ficam a cinzento. A tabela com tudo continua num botão. */
+/* Histórico das avaliações, legível no telemóvel: escolhe-se uma medida (M. gorda, M. muscular, ...) e aparece o gráfico dela
+   e uma lista data → valor → variação. A cor da variação diz se foi no sentido certo (gordura e visceral descem, músculo e água
+   sobem); mudanças pequenas (ruído do dia a dia) ficam a cinzento. A tabela com tudo continua num botão.
+   O Peso não entra aqui: tem o seu cartão e gráfico (com o objetivo, as fases e os períodos) mais acima, e continua na tabela completa. */
 var ASSESS_METRICS = [
-  {key: "weight", label: "Peso", unit: "kg", digits: 1, noise: 0.3, good: null},
   {key: "bodyFat", label: "M. gorda", unit: "%", digits: 1, noise: 0.3, good: "down"},
   {key: "muscle", label: "M. muscular", unit: "kg", digits: 1, noise: 0.2, good: "up"},
   {key: "visceral", label: "Visceral", unit: "", digits: 0, noise: 1, good: "down"},
   {key: "water", label: "Água", unit: "%", digits: 1, noise: 0.3, good: "up"}
 ];
-function assessGoodDir(s, metric, date, timeline){
-  if (metric.good) return metric.good;
-  var cur = null;
-  (timeline || []).forEach(function(t){ if (t.date <= date) cur = t; });
-  if (cur) return cur.phase === "cut" ? "down" : cur.phase === "bulk" ? "up" : null;
-  var g = Number(s.weightGoal), i = Number(s.weightInitial);
-  return g > 0 && i > 0 && Math.abs(g - i) >= 0.5 ? (g < i ? "down" : "up") : null;
-}
+// sentido bom de cada medida (gordura e visceral descem, músculo e água sobem)
+function assessGoodDir(s, metric){ return metric.good; }
 function assessDeltaCls(d, metric, dir){
   if (Math.abs(d) < Math.max(metric.noise, Math.pow(10, -metric.digits) / 2) || !dir) return "flat";
   return (dir === "down" ? d < 0 : d > 0) ? "good" : "bad";
@@ -9009,9 +9003,16 @@ function tplAssessHistory(s, editable){
       var on = x.key === m.key;
       return "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-assess-metric=\"" + x.key + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + x.label + "</button>";
     }).join("") + "</div>";
-  html += "<div class=\"weight-chart-wrap\">" + trendChartSvg(rows.map(function(a){ return {date: a.date, v: Number(a[m.key])}; }), {unit: m.unit, digits: m.digits, goal: m.key === "weight" ? s.weightGoal : null, marks: phaseChartMarks(s), pointsLabel: "avaliações", emptyText: "Só há uma avaliação com " + m.label.toLowerCase() + ": o gráfico aparece a partir da segunda."}) + "</div>";
-  if (rows.length >= 2){
-    var newest = rows[0], oldest = rows[rows.length - 1], tot = Number(newest[m.key]) - Number(oldest[m.key]);
+  // período do gráfico: os mesmos botões do peso (3 meses, 6 meses, 1 ano, tudo); com mais de 400 dias de avaliações começa no último ano
+  var spanA = rows.length > 1 ? dayNum(rows[0].date) - dayNum(rows[rows.length - 1].date) : 0, rangeA = state.assessRange != null ? state.assessRange : (spanA > 400 ? 365 : 0);
+  var inRange = rangeA > 0 && rows.length ? rows.filter(function(a){ return dayNum(a.date) >= dayNum(rows[0].date) - rangeA; }) : rows;
+  if (spanA > 120) html += "<div class=\"assess-metrics\" role=\"group\" aria-label=\"Período do gráfico\">" + WEIGHT_RANGES.map(function(r){
+    var on = r[0] === rangeA;
+    return "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-arange=\"" + r[0] + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + r[1] + "</button>";
+  }).join("") + "</div>";
+  html += "<div class=\"weight-chart-wrap\">" + trendChartSvg(rows.map(function(a){ return {date: a.date, v: Number(a[m.key])}; }), {unit: m.unit, digits: m.digits, rangeDays: spanA > 120 ? rangeA : 0, marks: phaseChartMarks(s), pointsLabel: "avaliações", emptyText: "Só há uma avaliação com " + m.label.toLowerCase() + (spanA > 120 && rangeA > 0 ? " neste período: escolhe um período maior." : ": o gráfico aparece a partir da segunda.")}) + "</div>";
+  if (inRange.length >= 2){
+    var newest = inRange[0], oldest = inRange[inRange.length - 1], tot = Number(newest[m.key]) - Number(oldest[m.key]);
     var totCls = assessDeltaCls(tot, m, assessGoodDir(s, m, newest.date, timeline));
     if (!editable && totCls === "bad") totCls = "flat"; // o aluno vê o verde quando melhora; o que piorou fica a cinzento (o vermelho é para o profissional)
     html += "<p class=\"am-sum\">Desde " + fmtDateFullPt(oldest.date) + ": " + ptNum(oldest[m.key], m.digits) + " → " + ptNum(newest[m.key], m.digits) + u +
@@ -9045,6 +9046,7 @@ function wireAssessHistory(el, rerender){
   el.querySelectorAll("[data-assess-metric]").forEach(function(b){ b.addEventListener("click", function(){ state.assessMetric = b.getAttribute("data-assess-metric"); rerender(); }); });
   el.querySelectorAll("[data-assess-view]").forEach(function(b){ b.addEventListener("click", function(){ state.assessView = b.getAttribute("data-assess-view"); rerender(); }); });
   el.querySelectorAll("[data-wrange]").forEach(function(b){ b.addEventListener("click", function(){ state.weightRange = parseInt(b.getAttribute("data-wrange"), 10) || 0; rerender(); }); });
+  el.querySelectorAll("[data-arange]").forEach(function(b){ b.addEventListener("click", function(){ state.assessRange = parseInt(b.getAttribute("data-arange"), 10) || 0; rerender(); }); });
 }
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
@@ -9398,7 +9400,7 @@ function drawImageCover(ctx, img, x, y, w, h){
 // imagem combinada, não os ficheiros separados.
 // entrega a imagem da comparação: no telemóvel abre a folha de partilha (WhatsApp, Mensagens, Fotografias);
 // numa app instalada sem partilha mostra a imagem para guardar; no computador descarrega
-function deliverComparisonImage(blob, name, studentName){
+function deliverComparisonImage(blob, name, studentName, text){
   // aceita uma imagem (blob, nome) ou várias ([{blob, name}, …]): cada posição (frente, lado, costas) é uma imagem, como num carrossel
   var items = Array.isArray(blob) ? blob : [{blob: blob, name: name}];
   var files = [];
@@ -9418,7 +9420,9 @@ function deliverComparisonImage(blob, name, studentName){
     }
   };
   if (touchFirst && files.length === items.length && navigator.share && navigator.canShare && navigator.canShare({files: files})){
-    navigator.share({files: files, title: "Evolução" + (studentName ? " — " + studentName : "")}).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) fallback(); });
+    var data = {files: files, title: "Evolução" + (studentName ? " — " + studentName : "")};
+    if (text){ try { if (navigator.canShare(Object.assign({text: text}, data))) data.text = text; } catch (e) {} } // a mensagem vai junto (o WhatsApp pode usá-la como legenda ou ignorá-la: por isso também fica copiada)
+    navigator.share(data).catch(function(e){ if (!e || (e.name !== "AbortError" && e.name !== "InvalidStateError")) fallback(); });
     return;
   }
   fallback();
@@ -9578,23 +9582,32 @@ function evolutionPrepare(){
   evolutionAssets = Promise.all([fonts, loadImageAsElement("logo-evolve.jpg").then(function(img){ logo = img; }).catch(function(){})]).then(function(){ return {logo: logo}; });
   return evolutionAssets;
 }
+// copia a imagem para a área de transferência (para a colar numa conversa do WhatsApp); false se o aparelho não deixa
+function copyImageToClipboard(blob){
+  try {
+    if (!(blob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) return Promise.resolve(false);
+    var item = {}; item[blob.type || "image/png"] = blob;
+    return Promise.resolve(navigator.clipboard.write([new window.ClipboardItem(item)])).then(function(){ return true; }, function(){ return false; });
+  } catch (e) { return Promise.resolve(false); }
+}
 function openEvolutionShare(s){
   var cur = weightRangeDays(s), hasPhone = normalizePhone(s.phone).ok, blobNow = null;
   var sheet = openModal("<div class=\"mtitle\">Enviar evolução a " + escapeHtml(s.name) + "</div>" +
     "<div class=\"assess-metrics\" id=\"evRange\" role=\"group\" aria-label=\"Período\">" + WEIGHT_RANGES.map(function(r){ return "<button type=\"button\" class=\"chip" + (r[0] === cur ? " on" : "") + "\" data-evr=\"" + r[0] + "\" aria-pressed=\"" + (r[0] === cur ? "true" : "false") + "\">" + r[1] + "</button>"; }).join("") + "</div>" +
     "<div id=\"evPreview\" style=\"min-height:120px;\"><p class=\"muted-p\">A preparar a imagem…</p></div>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"evSendImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem</button>" +
+    (hasPhone ? "<button type=\"button\" class=\"btn primary\" id=\"evWaImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem pelo WhatsApp</button>" : "") +
+    "<button type=\"button\" class=\"btn" + (hasPhone ? "" : " primary") + "\" id=\"evSendImg\" style=\"width:100%; margin:" + (hasPhone ? "0" : "10px") + " 0 8px;\" disabled>" + (hasPhone ? "Partilhar a imagem noutra app" : "Enviar imagem") + "</button>" +
     "<div class=\"checkin-field\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
     (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Abrir mensagem no WhatsApp</a>"
       : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser enviada na mesma.</p>") +
-    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">O WhatsApp não deixa juntar a imagem à mensagem: envia a imagem e, se quiseres, a mensagem.</p>");
-  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">" + (hasPhone ? "«Enviar imagem pelo WhatsApp» copia a imagem e abre a conversa com " + escapeHtml(s.name) + ": toca no campo de escrever e em «Colar». O WhatsApp não deixa anexar a imagem por ligação, é o mais próximo possível da mensagem." : "«Enviar imagem» abre a lista de partilha do telemóvel: escolhe o WhatsApp e o aluno. A mensagem fica copiada para a colares como legenda.") + "</p>");
+  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), waImgBtn = sheet.querySelector("#evWaImg"), prev = sheet.querySelector("#evPreview"), token = 0;
   function syncWa(){ if (wa) wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); }
   msg.addEventListener("input", syncWa);
   if (wa) wa.addEventListener("click", function(){ syncWa(); contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); });
   function build(range){
     var my = ++token, sum = evolutionSummary(s, range);
-    blobNow = null; sendBtn.disabled = true;
+    blobNow = null; sendBtn.disabled = true; if (waImgBtn) waImgBtn.disabled = true;
     if (!sum){ prev.innerHTML = "<p class=\"muted-p\">Há poucas pesagens neste período: escolhe um período maior.</p>"; msg.value = ""; syncWa(); return; }
     msg.value = evolutionMessage(sum); syncWa();
     evolutionPrepare().then(function(a){
@@ -9606,7 +9619,7 @@ function openEvolutionShare(s){
         if (!b){ prev.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível gerar a imagem. Tenta novamente.</p>"; return; }
         blobNow = b;
         prev.innerHTML = "<img src=\"" + canvas.toDataURL("image/png") + "\" alt=\"Evolução do peso\" style=\"width:100%; border-radius:12px; background:#000;\">";
-        sendBtn.disabled = false;
+        sendBtn.disabled = false; if (waImgBtn) waImgBtn.disabled = false;
       }, "image/png");
     });
   }
@@ -9616,9 +9629,26 @@ function openEvolutionShare(s){
       build(parseInt(b.getAttribute("data-evr"), 10) || 0);
     });
   });
+  // imagem pelo WhatsApp: o WhatsApp não tem ligação que abra a conversa já com uma imagem; por isso copia-se a imagem e abre-se a conversa deste aluno
+  // (como na mensagem), onde basta «Colar»; se o aparelho não deixar copiar imagens, cai na folha de partilha
+  if (waImgBtn) waImgBtn.addEventListener("click", function(){
+    if (!blobNow) return;
+    var url = whatsappUrl(s.phone, msg.value.trim());
+    waImgBtn.disabled = true; waImgBtn.setAttribute("aria-busy", "true");
+    copyImageToClipboard(blobNow).then(function(ok){
+      waImgBtn.disabled = false; waImgBtn.removeAttribute("aria-busy");
+      if (!ok){ showToast("Não foi possível copiar a imagem: usa «Partilhar a imagem noutra app»"); return; }
+      contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"});
+      showToast("✓ Imagem copiada: na conversa, toca no campo de escrever e em «Colar»");
+      setTimeout(function(){ window.location.href = url; }, 700);
+    });
+  });
   sendBtn.addEventListener("click", function(){
     if (!blobNow) return;
-    deliverComparisonImage([{blob: blobNow, name: "evolucao-" + slug(s.name || s.id) + "-" + todayISO() + ".png"}], null, s.name);
+    var text = msg.value.trim(), copied = false;
+    // o WhatsApp não abre uma conversa já com imagem: a folha de partilha deixa escolher o WhatsApp e o aluno; a mensagem fica copiada para colar como legenda
+    try { if (text && navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ showToast("✓ Mensagem copiada: cola-a como legenda da imagem"); }, function(){}); copied = true; } } catch (e) {}
+    deliverComparisonImage([{blob: blobNow, name: "evolucao-" + slug(s.name || s.id) + "-" + todayISO() + ".png"}], null, s.name, text);
   });
   build(cur);
 }
