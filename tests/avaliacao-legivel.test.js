@@ -17,11 +17,12 @@ var av = [["2026-09-25", 53.5, 25.1, 38.0, 3, 51.5], ["2026-09-18", 53.7, 25.0, 
 var s = {weightInitial: 58.5, weightGoal: 51, assessments: av, planHistory: [{type: "fase_inicio", date: "2026-09-10", after: "bulk", summary: "Fase Bulk iniciada (objetivo 60 kg)"}]};
 state.assessView = null; state.assessMetric = null;
 var h = tplAssessHistory(s, true);
-check.check("7. Por omissão: lista por medida (Peso), com as medidas disponíveis em botões e a tabela completa num botão", /Histórico das avaliações/.test(h) && /data-assess-metric="weight" aria-pressed="true"/.test(h) && /data-assess-metric="water"/.test(h) && /data-assess-view="tabela"/.test(h) && !/<table class="assess-table"/.test(h));
-check.check("8. Cada linha: data, hora, valor com unidade e variação para a anterior", /<div class="am-date">25\/09\/2026<span>08:00<\/span><\/div><div class="am-val">53,5<small>kg<\/small><\/div><div class="am-d [a-z]+">▼ 0,2<\/div>/.test(h));
-check.check("9. Cor do peso conforme a fase: no Bulk descer 0,6 kg é mau; antes da fase (objetivo abaixo) descer 1,0 kg é bom; 0,2 kg é ruído (cinzento)", /53,7<small>kg<\/small><\/div><div class="am-d bad">▼ 0,6/.test(h) && /54,3<small>kg<\/small><\/div><div class="am-d good">▼ 1,0/.test(h) && /53,5<small>kg<\/small><\/div><div class="am-d flat">▼ 0,2/.test(h));
+check.check("7. Por omissão: lista por medida (M. gorda; o Peso não está aqui, tem o seu gráfico), com as medidas disponíveis em botões e a tabela completa num botão", /Histórico das avaliações/.test(h) && /data-assess-metric="bodyFat" aria-pressed="true"/.test(h) && /data-assess-metric="water"/.test(h) && !/data-assess-metric="weight"/.test(h) && /data-assess-view="tabela"/.test(h) && !/<table class="assess-table"/.test(h));
+check.check("8. Cada linha: data, hora, valor com unidade e variação para a anterior", /<div class="am-date">25\/09\/2026<span>08:00<\/span><\/div><div class="am-val">25,1<small>%<\/small><\/div><div class="am-d [a-z]+">▲ 0,1<\/div>/.test(h));
+state.assessView = "tabela"; var tb9 = tplAssessHistory(s, true); state.assessView = null;
+check.check("9. Cor da variação: gordura a subir é má (1,6 ▲), a descer é boa (0,6 ▼) e 0,1 é ruído (cinzento); o Peso continua na tabela completa", /25,6<small>%<\/small><\/div><div class="am-d bad">▲ 1,6/.test(h) && /25,0<small>%<\/small><\/div><div class="am-d good">▼ 0,6/.test(h) && /25,1<small>%<\/small><\/div><div class="am-d flat">▲ 0,1/.test(h) && />Peso/.test(tb9) && /<table class="assess-table"/.test(tb9));
 check.check("10. Marca da fase no sítio certo e linhas da fase com a cor dela", /▶ Bulk · 10\/09\/2026 · objetivo 60 kg[\s\S]*04\/09\/2026/.test(h) && h.indexOf("▶ Bulk") > h.indexOf("18/09/2026") && /am-row ph-bulk/.test(h));
-check.check("11. Resumo desde a primeira avaliação, com cor", /Desde 23\/08\/2026: 55,3 → 53,5 kg <span class="am-d (good|bad|flat)">\(−1,8 kg\)<\/span>/.test(h));
+check.check("11. Resumo desde a primeira avaliação, com cor", /Desde 23\/08\/2026: 24,0 → 25,1 % <span class="am-d (good|bad|flat)">\(\+1,1 %\)<\/span>/.test(h));
 state.assessMetric = "bodyFat";
 var hf = tplAssessHistory(s, true);
 check.check("12. Massa gorda: subir é mau, descer é bom (em qualquer fase)", /data-assess-metric="bodyFat" aria-pressed="true"/.test(hf) && /25,6<small>%<\/small><\/div><div class="am-d bad">▲ 1,6/.test(hf) && /25,0<small>%<\/small><\/div><div class="am-d good">▼ 0,6/.test(hf));
@@ -36,7 +37,7 @@ check.check("16. Os botões da medida e da vista estão ligados no profissional 
 // ecrã do aluno: sem vermelho (o que piorou fica a cinzento), o verde mantém-se; o profissional vê tudo
 state.assessView = null; state.assessMetric = null;
 var hp = tplAssessHistory(s, true), ha = tplAssessHistory(s, false);
-check.check("17. Aluno: nenhuma variação a vermelho no histórico; as boas continuam a verde (o profissional vê o vermelho)", /am-d bad/.test(hp) && !/am-d bad/.test(ha) && /am-d good/.test(ha) && /53,7<small>kg<\/small><\/div><div class="am-d flat">▼ 0,6/.test(ha));
+check.check("17. Aluno: nenhuma variação a vermelho no histórico; as boas continuam a verde (o profissional vê o vermelho)", /am-d bad/.test(hp) && !/am-d bad/.test(ha) && /am-d good/.test(ha) && /25,6<small>%<\/small><\/div><div class="am-d flat">▲ 1,6/.test(ha));
 var kAv = {assessments: [{date: "2026-09-25", weight: 53.5, bodyFat: 25.1, muscle: 38.0, water: 51.5}, {date: "2026-09-18", weight: 53.7, bodyFat: 25.0, muscle: 38.1, water: 51.6}]};
 check.check("18. Aluno: os cartões da composição também não ficam a vermelho", /class="d bad"/.test(tplAssessKpis(kAv)) && !/class="d bad"/.test(tplAssessKpis(kAv, true)) && /class="d flat">▲ 0.1 %/.test(tplAssessKpis(kAv, true)));
 var evA = tplEvolucaoAluno(Object.assign({weights: [], photos: [], planHistory: [], weightInitial: 58.5, weightCurrent: 53.5}, kAv), {editable: false});
@@ -64,4 +65,19 @@ check.check("25. O gráfico leva um ponto por dia (x|y|data · valor · tendênc
 check.check("26. O ponto mais próximo do dedo é o certo (nas pontas e no meio)", chartNearest(cp, -50) === cp[0] && chartNearest(cp, 9999) === cp[cp.length - 1] && chartNearest(cp, cp[60].x + 0.1) === cp[60]);
 check.check("27. Sem suavização (poucos pontos) a etiqueta não fala de tendência", !/tendência/.test(chartPoints((trendChartSvg([{date: "2026-01-01", w: 70}, {date: "2026-01-05", w: 69.5}], {}).match(/data-p="([^"]+)"/) || [])[1])[0].label));
 check.check("28. Toque, arrastar e rato ligados; a página continua a deslizar na vertical (touch-action: pan-y)", /\["pointerdown", "pointermove", "pointerleave"\]\.forEach\(function\(ev\)\{ document\.addEventListener\(ev, chartScrub, true\); \}\);/.test(appSource) && /\.tchart\{touch-action:pan-y;/.test(require("fs").readFileSync(__dirname + "/../app.css", "utf8")));
+
+// períodos no gráfico das avaliações (os mesmos botões do peso)
+var AL = [];
+for (var q = 0; q < 30; q++) AL.push({date: new Date(Date.UTC(2024, 0, 1) + q * 30 * 86400000).toISOString().slice(0, 10), time: "08:00", bodyFat: 30 - q * 0.2});
+var sAL = {assessments: AL.slice().reverse().map(function(a){ return a; }), planHistory: []};
+state.assessView = null; state.assessMetric = "bodyFat"; state.assessRange = null;
+var hl = tplAssessHistory(sAL, true);
+check.check("25. Com mais de 400 dias de avaliações o gráfico das medidas começa em «1 ano» e tem os botões 3 meses · 6 meses · 1 ano · Tudo, como o peso", /data-arange="365" aria-pressed="true">1 ano/.test(hl) && /data-arange="90"[^>]*>3 meses/.test(hl) && /data-arange="0"[^>]*>Tudo/.test(hl));
+check.check("26. «1 ano» mostra só os últimos 365 dias no gráfico e no resumo («Desde» a primeira avaliação dentro do período)", (function(){ var m = /Desde (\d\d)\/(\d\d)\/(\d{4}):/.exec(hl); return !!m && parseInt(m[3], 10) >= 2025 && /aria-label="De [\d,]+ % em \d\d\/\d\d\/202[5-6]/.test(hl); })());
+state.assessRange = 0;
+var hl0 = tplAssessHistory(sAL, true);
+check.check("27. «Tudo» volta ao histórico completo (desde 01/01/2024) e a escolha fica guardada", /Desde 01\/01\/2024:/.test(hl0) && /data-arange="0" aria-pressed="true">Tudo/.test(hl0));
+state.assessRange = null;
+check.check("28. Com poucos meses de avaliações não há botões de período (ficam só os do ecrã atual) e os botões estão ligados", !/data-arange/.test(tplAssessHistory(s, true)) && /state\.assessRange = parseInt\(b\.getAttribute\("data-arange"\), 10\) \|\| 0/.test(appSource));
+state.assessMetric = null;
 check.summarize();
