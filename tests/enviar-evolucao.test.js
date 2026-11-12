@@ -39,23 +39,6 @@ check.check("11. Se o aparelho não aceita imagem com texto, a imagem vai na mes
 withShare(true); shared = null; deliverComparisonImage([{blob: png, name: "evolucao.png"}], null, "Diana");
 check.check("12. Sem mensagem (comparações de fotografias) nada muda: só imagem e título", shared && !("text" in shared));
 Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: navSaved});
-check.check("13. «Enviar imagem» copia a mensagem (aviso «Mensagem copiada») e a nota explica que o WhatsApp não deixa anexar a imagem por ligação", /navigator\.clipboard\.writeText\(text\)/.test(fn) && /Mensagem copiada: cola-a como legenda/.test(fn) && /não deixa anexar a imagem por ligação/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow[\s\S]*?, null, s\.name, text\)/.test(fn));
+check.check("13. «Enviar imagem» copia a mensagem (aviso «Mensagem copiada») e a nota explica que o WhatsApp não abre a conversa já com a imagem", /navigator\.clipboard\.writeText\(text\)/.test(fn) && /Mensagem copiada: cola-a como legenda/.test(fn) && /não tem ligação que abra a conversa de um número já com uma imagem/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow[\s\S]*?, null, s\.name, text\)/.test(fn));
 
-// imagem pelo WhatsApp: copia a imagem e abre a conversa do aluno (como a mensagem); sem permissão, avisa e deixa a partilha
-var winSaved = global.window, clip = null;
-function withClipboard(ok){
-  global.window.ClipboardItem = function(o){ this.items = o; };
-  Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: {clipboard: {write: function(a){ clip = a; return ok ? Promise.resolve() : Promise.reject(new Error("no")); }}}});
-}
-withClipboard(true); clip = null;
-var copiedOk = null; copyImageToClipboard(png).then(function(v){ copiedOk = v; });
-withClipboard(false);
-var copiedNo = null; copyImageToClipboard(png).then(function(v){ copiedNo = v; });
-Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: {}});
-var copiedNone = null; copyImageToClipboard(png).then(function(v){ copiedNone = v; });
-Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: navSaved});
-setTimeout(function(){
-  check.check("14. A imagem copia-se como PNG para a área de transferência; se o aparelho recusa ou não tem a função, devolve falso (e a app cai na partilha)", copiedOk === true && copiedNo === false && copiedNone === false);
-  check.check("15. Com telefone, «Enviar imagem pelo WhatsApp» copia a imagem, regista o contacto, avisa («Imagem copiada… Colar») e abre a conversa do aluno; sem telefone só há a partilha", /id=\\"evWaImg\\"/.test(fn) && /copyImageToClipboard\(blobNow\)/.test(fn) && /Imagem copiada: na conversa, toca no campo de escrever e em «Colar»/.test(fn) && /window\.location\.href = url/.test(fn) && /whatsappUrl\(s\.phone, msg\.value\.trim\(\)\)/.test(fn) && /hasPhone \? "Partilhar a imagem noutra app" : "Enviar imagem"/.test(fn));
-  check.summarize();
-}, 50);
+check.summarize();

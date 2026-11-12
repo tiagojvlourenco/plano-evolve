@@ -9582,32 +9582,23 @@ function evolutionPrepare(){
   evolutionAssets = Promise.all([fonts, loadImageAsElement("logo-evolve.jpg").then(function(img){ logo = img; }).catch(function(){})]).then(function(){ return {logo: logo}; });
   return evolutionAssets;
 }
-// copia a imagem para a área de transferência (para a colar numa conversa do WhatsApp); false se o aparelho não deixa
-function copyImageToClipboard(blob){
-  try {
-    if (!(blob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) return Promise.resolve(false);
-    var item = {}; item[blob.type || "image/png"] = blob;
-    return Promise.resolve(navigator.clipboard.write([new window.ClipboardItem(item)])).then(function(){ return true; }, function(){ return false; });
-  } catch (e) { return Promise.resolve(false); }
-}
 function openEvolutionShare(s){
   var cur = weightRangeDays(s), hasPhone = normalizePhone(s.phone).ok, blobNow = null;
   var sheet = openModal("<div class=\"mtitle\">Enviar evolução a " + escapeHtml(s.name) + "</div>" +
     "<div class=\"assess-metrics\" id=\"evRange\" role=\"group\" aria-label=\"Período\">" + WEIGHT_RANGES.map(function(r){ return "<button type=\"button\" class=\"chip" + (r[0] === cur ? " on" : "") + "\" data-evr=\"" + r[0] + "\" aria-pressed=\"" + (r[0] === cur ? "true" : "false") + "\">" + r[1] + "</button>"; }).join("") + "</div>" +
     "<div id=\"evPreview\" style=\"min-height:120px;\"><p class=\"muted-p\">A preparar a imagem…</p></div>" +
-    (hasPhone ? "<button type=\"button\" class=\"btn primary\" id=\"evWaImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem pelo WhatsApp</button>" : "") +
-    "<button type=\"button\" class=\"btn" + (hasPhone ? "" : " primary") + "\" id=\"evSendImg\" style=\"width:100%; margin:" + (hasPhone ? "0" : "10px") + " 0 8px;\" disabled>" + (hasPhone ? "Partilhar a imagem noutra app" : "Enviar imagem") + "</button>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"evSendImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem</button>" +
     "<div class=\"checkin-field\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
     (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Abrir mensagem no WhatsApp</a>"
       : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser enviada na mesma.</p>") +
-    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">" + (hasPhone ? "«Enviar imagem pelo WhatsApp» copia a imagem e abre a conversa com " + escapeHtml(s.name) + ": toca no campo de escrever e em «Colar». O WhatsApp não deixa anexar a imagem por ligação, é o mais próximo possível da mensagem." : "«Enviar imagem» abre a lista de partilha do telemóvel: escolhe o WhatsApp e o aluno. A mensagem fica copiada para a colares como legenda.") + "</p>");
-  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), waImgBtn = sheet.querySelector("#evWaImg"), prev = sheet.querySelector("#evPreview"), token = 0;
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">«Enviar imagem» abre a lista de partilha do telemóvel com a imagem já anexada: escolhe o WhatsApp e o aluno e envia. O WhatsApp não tem ligação que abra a conversa de um número já com uma imagem (só com texto, como «Abrir mensagem no WhatsApp»); a mensagem fica copiada para a colares como legenda.</p>");
+  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
   function syncWa(){ if (wa) wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); }
   msg.addEventListener("input", syncWa);
   if (wa) wa.addEventListener("click", function(){ syncWa(); contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); });
   function build(range){
     var my = ++token, sum = evolutionSummary(s, range);
-    blobNow = null; sendBtn.disabled = true; if (waImgBtn) waImgBtn.disabled = true;
+    blobNow = null; sendBtn.disabled = true;
     if (!sum){ prev.innerHTML = "<p class=\"muted-p\">Há poucas pesagens neste período: escolhe um período maior.</p>"; msg.value = ""; syncWa(); return; }
     msg.value = evolutionMessage(sum); syncWa();
     evolutionPrepare().then(function(a){
@@ -9619,7 +9610,7 @@ function openEvolutionShare(s){
         if (!b){ prev.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível gerar a imagem. Tenta novamente.</p>"; return; }
         blobNow = b;
         prev.innerHTML = "<img src=\"" + canvas.toDataURL("image/png") + "\" alt=\"Evolução do peso\" style=\"width:100%; border-radius:12px; background:#000;\">";
-        sendBtn.disabled = false; if (waImgBtn) waImgBtn.disabled = false;
+        sendBtn.disabled = false;
       }, "image/png");
     });
   }
@@ -9627,20 +9618,6 @@ function openEvolutionShare(s){
     b.addEventListener("click", function(){
       sheet.querySelectorAll("[data-evr]").forEach(function(x){ var on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on ? "true" : "false"); });
       build(parseInt(b.getAttribute("data-evr"), 10) || 0);
-    });
-  });
-  // imagem pelo WhatsApp: o WhatsApp não tem ligação que abra a conversa já com uma imagem; por isso copia-se a imagem e abre-se a conversa deste aluno
-  // (como na mensagem), onde basta «Colar»; se o aparelho não deixar copiar imagens, cai na folha de partilha
-  if (waImgBtn) waImgBtn.addEventListener("click", function(){
-    if (!blobNow) return;
-    var url = whatsappUrl(s.phone, msg.value.trim());
-    waImgBtn.disabled = true; waImgBtn.setAttribute("aria-busy", "true");
-    copyImageToClipboard(blobNow).then(function(ok){
-      waImgBtn.disabled = false; waImgBtn.removeAttribute("aria-busy");
-      if (!ok){ showToast("Não foi possível copiar a imagem: usa «Partilhar a imagem noutra app»"); return; }
-      contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"});
-      showToast("✓ Imagem copiada: na conversa, toca no campo de escrever e em «Colar»");
-      setTimeout(function(){ window.location.href = url; }, 700);
     });
   });
   sendBtn.addEventListener("click", function(){
