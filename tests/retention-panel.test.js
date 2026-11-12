@@ -108,7 +108,7 @@ check.check("20. A lista mostra no máximo 8 e diz quantos mais há", qm.shown.l
 check.check("37. O painel está no dashboard, antes da lista de alunos", /\(HELP_REQUESTS_ENABLED \? tplContactQueue\(activeStudents\) : ""\) \+ \(ONBOARDING_CARD_ENABLED \? tplOnboardingCard\(activeStudents\) : ""\) \+ \(STUDIO_PULSE_ENABLED \? tplStudioPulse\(activeStudents\) : ""\)[^;]*;[\s\S]{0,400}if \(state\.dashboardListMode\)/.test(appSource));
 check.check("38. O cartão tem botão Contactar com o motivo principal", /data-contact="/.test(tplContactQueue([gone])) && /data-reason="sem-registos"/.test(tplContactQueue([gone])));
 check.check("39. Sem ninguém a contactar diz que está tudo bem", /Ninguém precisa de contacto hoje/.test(tplContactQueue([ok])));
-check.check("40. O convite pede o telefone (opcional) e a ficha tem o campo Contacto", /id=\\"obPhone\\"/.test(appSource) && /saveContactPhone/.test(appSource));
+check.check("40. O convite pede o telefone (opcional) e a ficha tem o campo Contacto", /phoneFieldHtml\("obPhone"/.test(appSource) && /saveContactPhone/.test(appSource));
 check.check("41. O telefone e o registo de contactos entram na gravação só se a migração 0022 existe", /if \(contactColumnsAvailable\)\{ row\.phone = s\.phone \|\| null; row\.contact_log = s\.contactLog \|\| \[\]; \}/.test(appSource));
 var mig = fs.readFileSync(__dirname + "/../supabase/migrations/0022_contact_and_onboarding.sql", "utf8");
 check.check("42. A migração 0022 acrescenta as 3 colunas e é repetível", /add column if not exists phone/.test(mig) && /add column if not exists contact_log/.test(mig) && /add column if not exists created_at/.test(mig) && !/drop column|drop table/i.test(mig));

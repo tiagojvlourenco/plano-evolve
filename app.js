@@ -10536,7 +10536,7 @@ function openOnboardingForm(){
     "<div class=\"onb-field\"><label>Nome completo</label><input type=\"text\" id=\"obName\" placeholder=\"Nome completo\"></div>" +
     "<div class=\"onb-field\"><label>Email (para o aluno criar a conta)</label><input type=\"email\" id=\"obEmail\" placeholder=\"email@exemplo.com\"></div>" +
     "<label style=\"display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; margin:4px 0 12px;\"><input type=\"checkbox\" id=\"obNoNutrition\"> Não faz nutrição comigo (fica sem o bloco de alimentação)</label>" +
-    "<div class=\"onb-field\"><label>Telefone / WhatsApp (opcional)</label><input type=\"tel\" id=\"obPhone\" placeholder=\"912 345 678\" autocomplete=\"off\"></div>" +
+    "<div class=\"onb-field\"><label>Telefone / WhatsApp (opcional)</label>" + phoneFieldHtml("obPhone", "") + "</div>" +
     "<p class=\"muted-p\" id=\"obError\" style=\"color:var(--critical); display:none; margin:-6px 0 10px;\"></p>" +
     "<div class=\"onb-field\"><label>Género</label><select id=\"obSex\"><option>Masculino</option><option>Feminino</option><option>Outro</option><option>Prefiro não dizer</option></select></div>" +
     "<div class=\"onb-row\">" +
@@ -10661,6 +10661,8 @@ function openOnboardingForm(){
       }
     }
     var overeatingRaw = sheet.querySelector("#obOvereating").value.trim();
+    var obPh = phoneRead(sheet, "obPhone");
+    if (!obPh.ok){ errEl.textContent = obPh.error; errEl.style.display = "block"; sheet.querySelector("#obPhone").focus(); return; }
 
     var profile = {
       name:name,
@@ -10728,7 +10730,7 @@ function openOnboardingForm(){
       inviteEmail: inviteEmail || null,
       noNutrition: !!sheet.querySelector("#obNoNutrition").checked,
       runsColumn: STUDENTS.some(function(st){ return st.runsColumn; }), runsMode: "off", // a ficha nova ainda não veio do servidor: herda o que as outras já mostram sobre a migração 0032
-      phone: normalizePhone(sheet.querySelector("#obPhone").value).ok ? sheet.querySelector("#obPhone").value.trim().slice(0, 30) : null,
+      phone: phoneRead(sheet, "obPhone").value || null,
       createdAt: new Date().toISOString()
     };
 
@@ -10927,8 +10929,8 @@ function tplProPerfil(s){
   html += perfilSection("Contacto", false,
     "<div class=\"field-row\">" + fRow("Email do convite", s.inviteEmail ? escapeHtml(s.inviteEmail) : "—") + "</div>" +
     (s.inviteEmail && authRole === "professional" ? "<button type=\"button\" class=\"btn btn-sm\" id=\"genInvite\" style=\"margin-top:8px;\">" + (s.authUserId ? "Link para nova password" : "Gerar link de convite") + "</button>" : "") +
-    "<div class=\"checkin-field\" style=\"margin-top:10px; max-width:260px;\"><label for=\"contactPhone\">Telefone / WhatsApp</label>" +
-      "<input type=\"tel\" id=\"contactPhone\" value=\"" + escapeHtml(s.phone || "") + "\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
+    "<div class=\"checkin-field\" style=\"margin-top:10px;\"><label for=\"contactPhone\">Telefone / WhatsApp</label>" +
+      phoneFieldHtml("contactPhone", s.phone) + "</div>" +
     "<p class=\"muted-p\" id=\"contactPhoneErr\" style=\"color:var(--critical); display:none;\"></p>" +
     "<button type=\"button\" class=\"btn primary btn-sm\" id=\"saveContactPhone\" style=\"margin-top:8px;\">Guardar telefone</button>" +
     (contactEntries(s, "contacto").length ? "<div class=\"eyebrow\" style=\"margin:16px 0 6px;\">Últimos contactos</div>" + contactEntries(s, "contacto").slice(-5).reverse().map(function(e){
@@ -10999,7 +11001,7 @@ function perfilMetas(s){
   var al = (s.allergies || []).length;
   return {
     pessoais: [s.age != null ? s.age + " anos" : "", s.height != null ? s.height + " cm" : "", s.weightCurrent != null ? ptNum(s.weightCurrent, 1) + " kg" : ""].filter(Boolean).join(" · "),
-    contacto: s.phone || s.inviteEmail || "sem contacto",
+    contacto: (s.phone ? phonePretty(s.phone) || s.phone : "") || s.inviteEmail || "sem contacto",
     medicos: med ? med + " de 3 com registo" : (String(s.medicalNotes || "").trim() ? "só observações" : "sem registos"),
     rotina: s.work && s.work !== "—" ? s.work : "",
     alimentacao: al ? plural(al, "alergia/restrição", "alergias/restrições") : "sem alergias registadas",
@@ -12812,6 +12814,55 @@ function normalizePhone(raw){
   if (!plus && /^[29]\d{8}$/.test(d)) d = "351" + d;
   return {ok: d.length >= 9 && d.length <= 15, digits: d};
 }
+/* Telefone com país: um seletor de indicativo (Portugal por omissão) + o número; guarda-se sempre internacional («+351916028745»).
+   Em Portugal: 9 dígitos a começar por 2 ou 9. Noutros países: 6 a 12 dígitos (um 0 inicial de «tronco» é retirado) e no máximo 15 no total (E.164).
+   Quem escreve o número já com «+» ou «00» usa o indicativo escrito, seja qual for o país escolhido. «Outro país» pede o número completo com «+». */
+var PHONE_COUNTRIES = [["PT", "Portugal", "351"], ["ES", "Espanha", "34"], ["FR", "França", "33"], ["GB", "Reino Unido", "44"], ["DE", "Alemanha", "49"], ["CH", "Suíça", "41"], ["LU", "Luxemburgo", "352"],
+  ["BE", "Bélgica", "32"], ["NL", "Países Baixos", "31"], ["IE", "Irlanda", "353"], ["IT", "Itália", "39"], ["BR", "Brasil", "55"], ["AO", "Angola", "244"], ["MZ", "Moçambique", "258"], ["CV", "Cabo Verde", "238"], ["US", "EUA / Canadá", "1"], ["XX", "Outro país", ""]];
+function phoneCountryByDial(digits){
+  var best = null;
+  PHONE_COUNTRIES.forEach(function(c){ if (c[2] && digits.indexOf(c[2]) === 0 && (!best || c[2].length > best[2].length)) best = c; });
+  return best;
+}
+function phoneParse(value){
+  var raw = String(value == null ? "" : value).trim();
+  if (!raw) return {cc: "PT", national: ""};
+  var intl = /^(\+|00)/.test(raw), digits = raw.replace(/\D/g, "");
+  if (intl){ digits = raw.charAt(0) === "+" ? digits : digits.replace(/^00/, ""); var c = phoneCountryByDial(digits); return c ? {cc: c[0], national: digits.slice(c[2].length)} : {cc: "XX", national: "+" + digits}; }
+  return {cc: "PT", national: digits};
+}
+function phoneValidate(ccIso, text){
+  var raw = String(text == null ? "" : text).trim();
+  if (!raw) return {ok: true, value: ""};
+  var digits = raw.replace(/\D/g, ""), intl = /^(\+|00)/.test(raw);
+  if (intl){
+    var all = raw.charAt(0) === "+" ? digits : digits.replace(/^00/, "");
+    return all.length >= 8 && all.length <= 15 ? {ok: true, value: "+" + all} : {ok: false, error: "Número inválido: com indicativo, entre 8 e 15 dígitos."};
+  }
+  var c = PHONE_COUNTRIES.filter(function(x){ return x[0] === ccIso; })[0] || PHONE_COUNTRIES[0];
+  if (!c[2]) return {ok: false, error: "Para «Outro país» escreve o número completo com o indicativo (ex.: +49 151 2345678)."};
+  var nat = c[0] === "IT" ? digits : digits.replace(/^0/, "");
+  if (c[0] === "PT") return /^[29]\d{8}$/.test(nat) ? {ok: true, value: "+351" + nat} : {ok: false, error: "Número de Portugal inválido: 9 dígitos a começar por 2 ou 9 (ex.: 912 345 678)."};
+  if (nat.length < 6 || nat.length > 12 || (c[2] + nat).length > 15) return {ok: false, error: "Número inválido para " + c[1] + ": entre 6 e 12 dígitos depois do indicativo."};
+  return {ok: true, value: "+" + c[2] + nat};
+}
+function phonePretty(value){
+  var p = phoneParse(value), c = PHONE_COUNTRIES.filter(function(x){ return x[0] === p.cc; })[0];
+  if (!p.national) return "";
+  if (p.cc === "XX") return p.national;
+  var n = p.national;
+  return "+" + c[2] + " " + (p.cc === "PT" && n.length === 9 ? n.slice(0, 3) + " " + n.slice(3, 6) + " " + n.slice(6) : n);
+}
+// campo: seletor de país + número (os ids do número mantêm-se: obPhone, contactPhone, ctPhone)
+function phoneFieldHtml(id, value, placeholder){
+  var p = phoneParse(value);
+  return "<div class=\"phone-field\"><select id=\"" + id + "Cc\" aria-label=\"País do telefone\">" + PHONE_COUNTRIES.map(function(c){ return "<option value=\"" + c[0] + "\"" + (c[0] === p.cc ? " selected" : "") + ">" + (c[2] ? "+" + c[2] + " " : "") + c[1] + "</option>"; }).join("") + "</select>" +
+    "<input type=\"tel\" id=\"" + id + "\" value=\"" + escapeHtml(p.cc === "PT" && p.national.length === 9 ? p.national.slice(0, 3) + " " + p.national.slice(3, 6) + " " + p.national.slice(6) : p.national) + "\" placeholder=\"" + escapeHtml(placeholder || "912 345 678") + "\" autocomplete=\"off\" inputmode=\"tel\"></div>";
+}
+function phoneRead(root, id){
+  var num = root.querySelector("#" + id), cc = root.querySelector("#" + id + "Cc");
+  return phoneValidate(cc ? cc.value : "PT", num ? num.value : "");
+}
 function whatsappUrl(phone, text){
   var n = normalizePhone(phone);
   return n.ok ? "https://wa.me/" + n.digits + (text ? "?text=" + encodeURIComponent(text) : "") : "";
@@ -13017,7 +13068,7 @@ function openContactModal(s, reasonKey, onDone){
     "<p class=\"muted-p\" style=\"margin-bottom:10px;\">" + escapeHtml(label) + "</p>" +
     "<div class=\"checkin-field\"><label for=\"ctMsg\">Mensagem (podes editar)</label><textarea id=\"ctMsg\" rows=\"5\">" + escapeHtml(contactMessageFor(reason, s, (reasons.filter(function(r){ return r.key === reason; })[0] || {}).vars)) + "</textarea></div>" +
     (hasPhone ? "<a class=\"btn primary\" id=\"ctWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none; margin-bottom:8px;\">Abrir no WhatsApp</a>"
-      : "<div class=\"checkin-field\"><label for=\"ctPhone\">Sem telefone na ficha — acrescenta para abrir o WhatsApp</label><input type=\"tel\" id=\"ctPhone\" placeholder=\"912 345 678 ou +351…\" autocomplete=\"off\"></div>" +
+      : "<div class=\"checkin-field\"><label for=\"ctPhone\">Sem telefone na ficha — acrescenta para abrir o WhatsApp</label>" + phoneFieldHtml("ctPhone", "") + "</div>" +
         "<button type=\"button\" class=\"btn btn-sm\" id=\"ctSavePhone\" style=\"margin-bottom:8px;\">Guardar telefone</button>") +
     "<p class=\"muted-p\" id=\"ctErr\" style=\"color:var(--critical); display:none;\"></p>" +
     "<div class=\"checkin-field\"><label for=\"ctChannel\">Já contactei por</label><select id=\"ctChannel\" class=\"mini-select\" style=\"width:100%;\">" +
@@ -13038,10 +13089,10 @@ function openContactModal(s, reasonKey, onDone){
   }
   var savePhone = sheet.querySelector("#ctSavePhone");
   if (savePhone) savePhone.addEventListener("click", function(){
-    var raw = sheet.querySelector("#ctPhone").value, n = normalizePhone(raw), err = sheet.querySelector("#ctErr");
-    if (!n.ok){ err.textContent = "Número inválido: indica 9 dígitos (ex.: 912 345 678) ou com indicativo (+351…)."; err.style.display = "block"; return; }
+    var ph = phoneRead(sheet, "ctPhone"), err = sheet.querySelector("#ctErr");
+    if (!ph.ok || !ph.value){ err.textContent = ph.error || "Indica o número."; err.style.display = "block"; return; }
     ensureSyncBaseline(s);
-    s.phone = raw.trim().slice(0, 30); persistStudent(s);
+    s.phone = ph.value; persistStudent(s);
     closeModal(); openContactModal(s, reasonKey, onDone);
   });
   sheet.querySelector("#ctDone").addEventListener("click", function(){
@@ -13795,11 +13846,14 @@ function wireProTab(s){
 
   var savePh = el.querySelector("#saveContactPhone");
   if (savePh) savePh.addEventListener("click", function(){
-    var raw = el.querySelector("#contactPhone").value.trim(), err = el.querySelector("#contactPhoneErr");
-    if (raw && !normalizePhone(raw).ok){ err.textContent = "Número inválido: indica 9 dígitos (ex.: 912 345 678) ou com indicativo (+351…)."; err.style.display = "block"; return; }
+    var ph = phoneRead(el, "contactPhone"), err = el.querySelector("#contactPhoneErr");
+    if (!ph.ok){ err.textContent = ph.error; err.style.display = "block"; return; }
     err.style.display = "none";
-    s.phone = raw ? raw.slice(0, 30) : null;
+    s.phone = ph.value || null;
     persistStudent(s);
+    var pe = el.querySelector("#contactPhone"); if (pe && ph.value) pe.value = phonePretty(ph.value).replace(/^\+\d+ /, "");
+    var dsum = savePh.closest("details"), mmeta = dsum && dsum.querySelector(".pm-sum-meta");
+    if (mmeta) mmeta.textContent = perfilMetas(s).contacto;
     showToast("Telefone guardado");
   });
 

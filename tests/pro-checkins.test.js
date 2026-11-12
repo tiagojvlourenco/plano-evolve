@@ -18,7 +18,7 @@ check.check("7. Sem check-ins, mensagem simples e sem resumo", /Sem check-ins re
 // Perfil: cada secção mostra o essencial no resumo
 var st = {name: "Ana Teste", age: 30, height: 170, weightCurrent: 65.5, phone: "912345678", work: "Escritório", allergies: ["Marisco", "Frutos secos"], waterIntake: "2 L", likes: [], dislikes: [], avoid: [], supplements: [], targets: {}, meals: [], medicalConditions: "Hipertensão"};
 var m = perfilMetas(st);
-check.check("8. Perfil: dados pessoais, contacto e dados médicos resumidos", m.pessoais === "30 anos · 170 cm · 65,5 kg" && m.contacto === "912345678" && m.medicos === "1 de 3 com registo");
+check.check("8. Perfil: dados pessoais, contacto e dados médicos resumidos", m.pessoais === "30 anos · 170 cm · 65,5 kg" && m.contacto === "+351 912 345 678" && m.medicos === "1 de 3 com registo");
 check.check("9. Perfil: as alergias aparecem no resumo da Alimentação (e a falta delas também)", m.alimentacao === "2 alergias/restrições" && perfilMetas({allergies: []}).alimentacao === "sem alergias registadas");
 check.check("10. Perfil: sem dados, resumos neutros", perfilMetas({}).contacto === "sem contacto" && perfilMetas({}).medicos === "sem registos" && perfilMetas({}).pessoais === "");
 var sec = perfilSection("Rotina", false, "<p>x</p>", "<b>x</b>");
