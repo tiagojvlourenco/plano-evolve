@@ -8435,7 +8435,8 @@ function tplEvolucaoAluno(s, opts){
   var html = (opts.editable ? "" : tabHead("Progresso", "Peso e composição corporal ao longo do tempo.")) + "<div class=\"card\">" +
     "<div class=\"eyebrow\">Evolução de peso</div>" +
     "<div class=\"hero-row\"><div class=\"hero-num\">" + (s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + "<small>kg</small>") + "</div></div>" +
-    "<div class=\"weight-chart-wrap\">" + trendChartSvg(s.weights, {goal: s.weightGoal, marks: phaseChartMarks(s), pointsLabel: "pesagens"}) + "</div>" +
+    tplWeightRange(s) +
+    "<div class=\"weight-chart-wrap\">" + trendChartSvg(s.weights, {goal: s.weightGoal, marks: phaseChartMarks(s), pointsLabel: "pesagens", rangeDays: weightRangeDays(s)}) + "</div>" +
     "<div class=\"stat-grid-4\">" +
       statTile("Inicial", s.weightInitial == null ? "—" : ptNum(s.weightInitial, 1) + " kg") +
       statTile("Atual", s.weightCurrent == null ? "—" : ptNum(s.weightCurrent, 1) + " kg") +
@@ -9042,6 +9043,7 @@ function tplAssessHistory(s, editable){
 function wireAssessHistory(el, rerender){
   el.querySelectorAll("[data-assess-metric]").forEach(function(b){ b.addEventListener("click", function(){ state.assessMetric = b.getAttribute("data-assess-metric"); rerender(); }); });
   el.querySelectorAll("[data-assess-view]").forEach(function(b){ b.addEventListener("click", function(){ state.assessView = b.getAttribute("data-assess-view"); rerender(); }); });
+  el.querySelectorAll("[data-wrange]").forEach(function(b){ b.addEventListener("click", function(){ state.weightRange = parseInt(b.getAttribute("data-wrange"), 10) || 0; rerender(); }); });
 }
 function tplAssessTable(s, editable){
   var list = (s.assessments||[]).slice().sort(compareAssessmentsDesc);
@@ -9607,11 +9609,16 @@ function trendChartSvg(points, opts){
     if (p && isIsoDate(p.date) && v > 0) (byDay[p.date] = byDay[p.date] || []).push(v);
   });
   var pts = Object.keys(byDay).sort().map(function(d){ var a = byDay[d]; return {date: d, x: dayNum(d), v: a.reduce(function(s2, c){ return s2 + c; }, 0) / a.length}; });
+  if (opts.rangeDays > 0 && pts.length){ var cutX = pts[pts.length - 1].x - opts.rangeDays; pts = pts.filter(function(p){ return p.x >= cutX; }); }
   if (pts.length < 2) return "<p class=\"muted-p\" style=\"text-align:center; padding:6px 0 2px;\">" + escapeHtml(opts.emptyText || "Ainda não há dados suficientes para mostrar a evolução.") + "</p>";
   var W = 380, H = 200, L = 38, R = 14, T = 18, B = 26;
   var x0 = pts[0].x, x1 = pts[pts.length - 1].x, span = Math.max(1, x1 - x0);
-  var smooth = pts.length >= 8;
-  var trend = smooth ? trendSeries(pts, Math.max(2, Math.min(10, Math.round(span / 30)))) : pts;
+  var smooth = pts.length >= 8, gapDays = Math.max(30, Math.round(span / 15));
+  var half = Math.max(2, Math.min(10, Math.round(Math.min(span, 365) / 30)));
+  var segs = [[]];
+  pts.forEach(function(p, i){ if (i && p.x - pts[i - 1].x > gapDays) segs.push([]); segs[segs.length - 1].push(p); });
+  var segTrends = segs.map(function(sg){ return smooth && sg.length >= 3 ? trendSeries(sg, half) : sg; });
+  var trend = [].concat.apply([], segTrends);
   var vals = pts.map(function(p){ return p.v; });
   var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
   var goal = Number(opts.goal) > 0 ? Number(opts.goal) : null, rng = Math.max(hi - lo, 0.5);
@@ -9629,14 +9636,16 @@ function trendChartSvg(points, opts){
     svg += "<line class=\"tc-grid\" x1=\"" + L + "\" x2=\"" + (W - R) + "\" y1=\"" + f1(Y(v)) + "\" y2=\"" + f1(Y(v)) + "\"></line>" +
       "<text x=\"" + (L - 6) + "\" y=\"" + f1(Y(v) + 4) + "\" text-anchor=\"end\">" + ptNum(v, tickDg) + "</text>";
   }
-  // datas em baixo: meses (períodos longos) ou 4 datas (períodos curtos)
+  // datas em baixo: no máximo ~6 etiquetas; meses (com o ano em janeiro) ou anos em períodos longos; 4 datas em períodos curtos
   if (span >= 60){
-    var d0 = new Date(pts[0].date + "T00:00:00Z"), m = d0.getUTCMonth() + 1, y = d0.getUTCFullYear(), every = span > 300 ? 2 : 1, k = 0;
-    while (true){
+    var months = span / 30.4, stepM = [1, 2, 3, 6, 12, 24, 36].filter(function(st){ return months / st <= 6; })[0] || 48;
+    var d0 = new Date(pts[0].date + "T00:00:00Z"), m = d0.getUTCMonth() + 1, y = d0.getUTCFullYear(), guard = 0;
+    while (guard++ < 400){
       if (m > 11){ m = 0; y++; }
       var iso = y + "-" + ("0" + (m + 1)).slice(-2) + "-01", dx = dayNum(iso);
       if (dx > x1) break;
-      if (k++ % every === 0 && X(dx) > L + 8 && X(dx) < W - R - 8) svg += "<text x=\"" + f1(X(dx)) + "\" y=\"" + (H - 6) + "\" text-anchor=\"middle\">" + PT_MONTHS_SHORT[m] + (m === 0 ? " " + String(y).slice(2) : "") + "</text>";
+      var show = stepM >= 12 ? (m === 0 && y % (stepM / 12) === 0) : ((y * 12 + m) % stepM === 0);
+      if (show && X(dx) > L + 10 && X(dx) < W - R - 10) svg += "<text x=\"" + f1(X(dx)) + "\" y=\"" + (H - 6) + "\" text-anchor=\"middle\">" + (stepM >= 12 ? String(y) : PT_MONTHS_SHORT[m] + (m === 0 ? " " + String(y).slice(2) : "")) + "</text>";
       m++;
     }
   } else {
@@ -9655,11 +9664,11 @@ function trendChartSvg(points, opts){
   });
   if (goal != null) svg += "<line class=\"tc-goal\" x1=\"" + L + "\" x2=\"" + (W - R) + "\" y1=\"" + f1(Y(goal)) + "\" y2=\"" + f1(Y(goal)) + "\"></line>" +
     "<text class=\"tc-goal-l\" x=\"" + (W - R) + "\" y=\"" + f1(Y(goal) - 5) + "\" text-anchor=\"end\">objetivo " + ptNum(goal, dg) + "</text>";
-  var line = trend.map(function(p){ return f1(X(p.x)) + "," + f1(Y(p.v)); }).join(" ");
-  svg += "<polygon class=\"tc-area\" points=\"" + line + " " + f1(X(x1)) + "," + f1(Y(lo)) + " " + f1(X(x0)) + "," + f1(Y(lo)) + "\"></polygon>";
+  var lineOf = function(sg){ return sg.map(function(p){ return f1(X(p.x)) + "," + f1(Y(p.v)); }).join(" "); };
+  segTrends.forEach(function(sg){ if (sg.length >= 2) svg += "<polygon class=\"tc-area\" points=\"" + lineOf(sg) + " " + f1(X(sg[sg.length - 1].x)) + "," + f1(Y(lo)) + " " + f1(X(sg[0].x)) + "," + f1(Y(lo)) + "\"></polygon>"; });
   var r = pts.length > 120 ? 1.6 : pts.length > 40 ? 2.1 : 3;
   if (smooth) svg += pts.map(function(p){ return "<circle class=\"tc-dot\" cx=\"" + f1(X(p.x)) + "\" cy=\"" + f1(Y(p.v)) + "\" r=\"" + r + "\"></circle>"; }).join("");
-  svg += "<polyline class=\"tc-trend\" points=\"" + line + "\"></polyline>";
+  segTrends.forEach(function(sg){ if (sg.length >= 2) svg += "<polyline class=\"tc-trend\" points=\"" + lineOf(sg) + "\"></polyline>"; });
   var first = pts[0], last = pts[pts.length - 1];
   svg += "<text class=\"tc-v\" x=\"" + (L + 4) + "\" y=\"" + f1(Math.max(T + 10, Y(trend[0].v) - 9)) + "\">" + ptNum(first.v, dg) + "</text>" +
     "<circle class=\"tc-last\" cx=\"" + f1(X(last.x)) + "\" cy=\"" + f1(Y(last.v)) + "\" r=\"4.5\"></circle>" +
@@ -9667,6 +9676,24 @@ function trendChartSvg(points, opts){
   var aria = "De " + ptNum(first.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(first.date) + " para " + ptNum(last.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(last.date) + (goal != null ? "; objetivo " + ptNum(goal, dg) + (unit ? " " + unit : "") : "");
   return "<svg class=\"tchart\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"" + escapeHtml(aria) + "\">" + svg + "</svg>" +
     "<div class=\"chart-legend\">" + (smooth ? "<span><i class=\"lg-dot\"></i>" + escapeHtml(opts.pointsLabel || "pesagens") + "</span><span><i class=\"lg-line\"></i>tendência</span>" : "") + (goal != null ? "<span><i class=\"lg-goal\"></i>objetivo</span>" : "") + "</div>";
+}
+// período do gráfico do peso: com muitos meses de pesagens começa no último ano (escolhe-se 3 meses, 6 meses, 1 ano ou tudo)
+var WEIGHT_RANGES = [[90, "3 meses"], [182, "6 meses"], [365, "1 ano"], [0, "Tudo"]];
+function weightSpanDays(s){
+  var ds = (s && s.weights || []).map(function(w){ return w && w.date; }).filter(isIsoDate).sort();
+  return ds.length > 1 ? dayNum(ds[ds.length - 1]) - dayNum(ds[0]) : 0;
+}
+function weightRangeDays(s){
+  if (state.weightRange != null) return state.weightRange;
+  return weightSpanDays(s) > 400 ? 365 : 0;
+}
+function tplWeightRange(s){
+  if (weightSpanDays(s) <= 120) return "";
+  var cur = weightRangeDays(s);
+  return "<div class=\"assess-metrics\" role=\"group\" aria-label=\"Período do gráfico\">" + WEIGHT_RANGES.map(function(r){
+    var on = r[0] === cur;
+    return "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-wrange=\"" + r[0] + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + r[1] + "</button>";
+  }).join("") + "</div>";
 }
 function phaseChartMarks(s){ return phaseTimeline(s).map(function(t){ return {date: t.date, label: phaseLabel(t.phase)}; }); }
 

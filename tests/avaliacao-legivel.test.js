@@ -41,4 +41,19 @@ var kAv = {assessments: [{date: "2026-09-25", weight: 53.5, bodyFat: 25.1, muscl
 check.check("18. Aluno: os cartões da composição também não ficam a vermelho", /class="d bad"/.test(tplAssessKpis(kAv)) && !/class="d bad"/.test(tplAssessKpis(kAv, true)) && /class="d flat">▲ 0.1 %/.test(tplAssessKpis(kAv, true)));
 var evA = tplEvolucaoAluno(Object.assign({weights: [], photos: [], planHistory: [], weightInitial: 58.5, weightCurrent: 53.5}, kAv), {editable: false});
 check.check("19. O Progresso do aluno usa a versão sem vermelho", !/class="d bad"/.test(evA) && !/am-d bad/.test(evA) && /tplAssessKpis\(s, !opts\.editable\)/.test(appSource));
+// vários anos de pesagens com intervalos grandes (caso real da Diana)
+var M = [];
+function bloco(ini, n, a, b){ var t0 = Date.parse(ini + "T00:00:00Z"); for (var i = 0; i < n; i += 2) M.push({date: new Date(t0 + i * 86400000).toISOString().slice(0, 10), w: a + (b - a) * i / n}); }
+bloco("2021-07-10", 60, 58.5, 52.8); bloco("2024-05-05", 44, 56.3, 53.5); bloco("2025-06-01", 400, 52.4, 53.6);
+var tudo = trendChartSvg(M, {}), ano = trendChartSvg(M, {rangeDays: 365});
+var etiquetas = function(svgS){ return (svgS.match(/y="194" text-anchor="middle">[^<]+</g) || []).length; };
+check.check("20. Vários anos: as datas em baixo passam a anos (sem etiquetas sobrepostas, no máximo ~6)", />2022</.test(tudo) && />2025</.test(tudo) && etiquetas(tudo) <= 6 && !/>jul</.test(tudo));
+check.check("21. Um intervalo grande sem pesagens corta a linha da tendência (3 troços, sem rampa inventada)", (tudo.match(/class="tc-trend"/g) || []).length === 3);
+check.check("22. «1 ano» mostra só os últimos 365 dias", (ano.match(/class="tc-trend"/g) || []).length === 1 && etiquetas(ano) <= 6 && /aria-label="De [\d,]+ kg em \d\d\/\d\d\/2025/.test(ano));
+state.weightRange = null;
+var sLong = {weights: M}, sShort = {weights: M.slice(-30)};
+check.check("23. Com mais de 400 dias de pesagens o gráfico começa em «1 ano»; botões 3 meses · 6 meses · 1 ano · Tudo", weightRangeDays(sLong) === 365 && /data-wrange="365" aria-pressed="true">1 ano/.test(tplWeightRange(sLong)) && /data-wrange="0"[^>]*>Tudo/.test(tplWeightRange(sLong)) && tplWeightRange(sShort) === "" && weightRangeDays(sShort) === 0);
+state.weightRange = 0;
+check.check("24. A escolha do período fica guardada e os botões estão ligados", weightRangeDays(sLong) === 0 && /state\.weightRange = parseInt\(b\.getAttribute\("data-wrange"\), 10\) \|\| 0/.test(appSource));
+state.weightRange = null;
 check.summarize();
