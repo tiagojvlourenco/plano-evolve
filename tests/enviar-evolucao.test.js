@@ -24,7 +24,7 @@ check.check("7. Sem objetivo e sem peso inicial a imagem não inventa quadros (m
 var ev = tplEvolucaoAluno(Object.assign({photos: [], planHistory: []}, s), {editable: true}), al = tplEvolucaoAluno(Object.assign({photos: [], planHistory: []}, s), {editable: false});
 check.check("8. Botão «Enviar evolução ao aluno» só no ecrã do profissional (e só com pesagens)", /id="sendEvolution"/.test(ev) && !/id="sendEvolution"/.test(al) && !/id="sendEvolution"/.test(tplEvolucaoAluno({weights: [], photos: [], planHistory: []}, {editable: true})));
 var fn = appSource.slice(appSource.indexOf("function openEvolutionShare"), appSource.indexOf("function comparisonHeadFor"));
-check.check("9. Janela: períodos, pré-visualização, «Enviar imagem» (folha de partilha), mensagem editável e WhatsApp com registo do contacto", /data-evr/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow/.test(fn) && /whatsappUrl\(s\.phone, msg\.value\.trim\(\)\)/.test(fn) && /contactLogAdd\(s, \{kind: "contacto", channel: "whatsapp", reason: "generico"\}\)/.test(fn) && /Sem telefone na ficha/.test(fn) && /openEvolutionShare\(s\)/.test(appSource));
+check.check("9. Janela: períodos, pré-visualização, «Partilhar a imagem» (folha de partilha), mensagem editável e WhatsApp só com texto, com registo do contacto", /data-evr/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow/.test(fn) && /whatsappUrl\(s\.phone, msg\.value\.trim\(\)\)/.test(fn) && /contactLogAdd\(s, \{kind: "contacto", channel: "whatsapp", reason: "generico"\}\)/.test(fn) && /Sem telefone na ficha/.test(fn) && /openEvolutionShare\(s\)/.test(appSource));
 
 // «Enviar imagem»: a mensagem vai como texto da partilha (se o aparelho aceitar) e fica copiada para colar como legenda no WhatsApp
 var navSaved = global.navigator, shared = null;
@@ -39,23 +39,66 @@ check.check("11. Se o aparelho não aceita imagem com texto, a imagem vai na mes
 withShare(true); shared = null; deliverComparisonImage([{blob: png, name: "evolucao.png"}], null, "Diana");
 check.check("12. Sem mensagem (comparações de fotografias) nada muda: só imagem e título", shared && !("text" in shared));
 Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: navSaved});
-check.check("13. «Enviar imagem» copia a mensagem (aviso «Mensagem copiada») e a nota explica que o WhatsApp não deixa anexar a imagem por ligação", /navigator\.clipboard\.writeText\(text\)/.test(fn) && /Mensagem copiada: cola-a como legenda/.test(fn) && /não deixa anexar a imagem por ligação/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow[\s\S]*?, null, s\.name, text\)/.test(fn));
+check.check("13. «Partilhar a imagem» copia a mensagem (aviso «Mensagem copiada») e a nota explica a diferença entre a ligação e o ficheiro", /navigator\.clipboard\.writeText\(text\)/.test(fn) && /Mensagem copiada: cola-a como legenda/.test(fn) && /«Partilhar a imagem» envia o próprio ficheiro/.test(fn) && /deliverComparisonImage\(\[\{blob: blobNow[\s\S]*?, null, s\.name, text\)/.test(fn));
 
-// imagem pelo WhatsApp: copia a imagem e abre a conversa do aluno (como a mensagem); sem permissão, avisa e deixa a partilha
-var winSaved = global.window, clip = null;
-function withClipboard(ok){
-  global.window.ClipboardItem = function(o){ this.items = o; };
-  Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: {clipboard: {write: function(a){ clip = a; return ok ? Promise.resolve() : Promise.reject(new Error("no")); }}}});
+// ---- «Abrir no WhatsApp com ligação à imagem»: a ligação wa.me só leva texto, por isso o JPEG vai para um ficheiro privado e a mensagem leva a ligação ----
+function fakeBlob(size){ return {size: size, type: "image/jpeg"}; }
+var calls = null;
+function fakeStorage(o){
+  o = o || {}; calls = {bucket: null, uploads: [], signed: [], listed: [], removed: []};
+  sb = {storage: {from: function(b){ calls.bucket = b; return {
+    upload: function(p, blob, opts){ calls.uploads.push([p, blob, opts]); return Promise.resolve(o.uploadError ? {data: null, error: {message: o.uploadError}} : {data: {path: p}, error: null}); },
+    createSignedUrl: function(p, ttl){ calls.signed.push([p, ttl]); return Promise.resolve(o.signError ? {data: null, error: {message: o.signError}} : {data: {signedUrl: "https://x.supabase.co/storage/v1/object/sign/progress-photos/" + p + "?token=abc"}, error: null}); },
+    list: function(dir, opts){ calls.listed.push([dir, opts]); if (o.listThrows) throw new Error("boom"); return o.listRejects ? Promise.reject(new Error("net")) : Promise.resolve({data: o.files || [], error: null}); },
+    remove: function(paths){ calls.removed.push(paths); return Promise.resolve({data: [], error: null}); }
+  }; }}};
+  sbReady = true;
 }
-withClipboard(true); clip = null;
-var copiedOk = null; copyImageToClipboard(png).then(function(v){ copiedOk = v; });
-withClipboard(false);
-var copiedNo = null; copyImageToClipboard(png).then(function(v){ copiedNo = v; });
-Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: {}});
-var copiedNone = null; copyImageToClipboard(png).then(function(v){ copiedNone = v; });
-Object.defineProperty(global, "navigator", {configurable: true, writable: true, value: navSaved});
-setTimeout(function(){
-  check.check("14. A imagem copia-se como PNG para a área de transferência; se o aparelho recusa ou não tem a função, devolve falso (e a app cai na partilha)", copiedOk === true && copiedNo === false && copiedNone === false);
-  check.check("15. Com telefone, «Enviar imagem pelo WhatsApp» copia a imagem, regista o contacto, avisa («Imagem copiada… Colar») e abre a conversa do aluno; sem telefone só há a partilha", /id=\\"evWaImg\\"/.test(fn) && /copyImageToClipboard\(blobNow\)/.test(fn) && /Imagem copiada: na conversa, toca no campo de escrever e em «Colar»/.test(fn) && /window\.location\.href = url/.test(fn) && /whatsappUrl\(s\.phone, msg\.value\.trim\(\)\)/.test(fn) && /hasPhone \? "Partilhar a imagem noutra app" : "Enviar imagem"/.test(fn));
+function tick(){ return new Promise(function(r){ setTimeout(r, 0); }); }
+async function rejects(f){ try { await f(); return null; } catch (e) { return e.message; } }
+(async function(){
+  var tries = [];
+  var b1 = await canvasToJpegUnder({toBlob: function(cb, type, q){ tries.push([type, q]); cb(fakeBlob(Math.round(q * 400000))); }}, EVOLUTION_LINK_MAX_BYTES);
+  check.check("14. O JPEG baixa a qualidade até caber em 280 KB (0,9 → 0,8 → 0,7) e pára logo que cabe", EVOLUTION_LINK_MAX_BYTES === 280 * 1024 && b1.size === 280000 && tries.map(function(t){ return t[1]; }).join() === "0.9,0.8,0.7" && tries.every(function(t){ return t[0] === "image/jpeg"; }));
+  tries = [];
+  var b2 = await canvasToJpegUnder({toBlob: function(cb, type, q){ tries.push(q); cb(fakeBlob(900000)); }}, EVOLUTION_LINK_MAX_BYTES);
+  var b3 = await canvasToJpegUnder({toBlob: function(cb){ cb(null); }}, EVOLUTION_LINK_MAX_BYTES);
+  check.check("15. Se nem à qualidade mínima cabe fica a última tentativa (cinco no máximo); se o canvas não der imagem devolve null", b2.size === 900000 && tries.length === 5 && b3 === null);
+
+  fakeStorage();
+  var url1 = await uploadEvolutionImage(fakeBlob(1000)), up = calls.uploads[0];
+  check.check("16. O JPEG vai para o balde privado progress-photos, na pasta evolucao, com nome aleatório e tipo image/jpeg", calls.bucket === "progress-photos" && up && /^evolucao\/[0-9a-f]{32}\.jpg$/.test(up[0]) && up[2].contentType === "image/jpeg");
+  check.check("17. A ligação criada é para esse ficheiro, expira em 7 dias (604 800 s) e é a que se devolve", EVOLUTION_LINK_DAYS === 7 && calls.signed.length === 1 && calls.signed[0][0] === up[0] && calls.signed[0][1] === 604800 && url1 === "https://x.supabase.co/storage/v1/object/sign/progress-photos/" + up[0] + "?token=abc");
+  await uploadEvolutionImage(fakeBlob(1000));
+  check.check("18. Cada envio tem o seu ficheiro (nomes diferentes)", calls.uploads.length === 2 && calls.uploads[0][0] !== calls.uploads[1][0]);
+
+  fakeStorage({uploadError: "new row violates row-level security policy"});
+  var e1 = await rejects(function(){ return uploadEvolutionImage(fakeBlob(1)); }), signedAfterRefusal = calls.signed.length;
+  fakeStorage({signError: "signing failed"});
+  var e2 = await rejects(function(){ return uploadEvolutionImage(fakeBlob(1)); });
+  sbReady = false;
+  var e3 = await rejects(function(){ return uploadEvolutionImage(fakeBlob(1)); });
+  check.check("19. Falhas dizem a causa: recusa do servidor (sem criar a ligação), ligação por criar, e sem sessão/rede", /row-level security/.test(e1) && signedAfterRefusal === 0 && /signing failed/.test(e2) && /sem ligação à conta/.test(e3));
+
+  var DAY = 86400000, now = Date.now();
+  function ago(d){ return new Date(now - d * DAY).toISOString(); }
+  fakeStorage({files: [{name: "velha.jpg", created_at: ago(10)}, {name: "quase.jpg", created_at: ago(8.5)}, {name: "nova.jpg", created_at: ago(2)}, {name: "ainda.jpg", created_at: ago(7.5)}, {name: ".emptyFolderPlaceholder", created_at: null}, {name: "semdata.jpg"}]});
+  await uploadEvolutionImage(fakeBlob(1)); await tick();
+  check.check("20. Depois de gravar apaga as imagens com mais de 8 dias (validade + 1), pelas mais antigas, e deixa as outras", calls.listed.length === 1 && calls.listed[0][0] === "evolucao" && calls.listed[0][1].sortBy.column === "created_at" && calls.listed[0][1].sortBy.order === "asc" && calls.removed.length === 1 && calls.removed[0].join() === "evolucao/velha.jpg,evolucao/quase.jpg");
+  fakeStorage({files: [{name: "nova.jpg", created_at: ago(1)}]}); await uploadEvolutionImage(fakeBlob(1)); await tick();
+  var nothingRemoved = calls.removed.length === 0;
+  fakeStorage({listThrows: true}); var okThrow = await uploadEvolutionImage(fakeBlob(1));
+  fakeStorage({listRejects: true}); var okRej = await uploadEvolutionImage(fakeBlob(1)); await tick();
+  check.check("21. Sem imagens velhas nada se apaga; se a listagem falhar o envio continua (a limpeza é só um extra)", nothingRemoved && /^https:/.test(okThrow) && /^https:/.test(okRej));
+
+  check.check("22. A mensagem leva a ligação numa linha própria com a validade; sem texto fica só a ligação", evolutionLinkText("Olá Diana!", "https://x/y?token=1") === "Olá Diana!\n\nImagem da tua evolução (ligação válida 7 dias):\nhttps://x/y?token=1" && evolutionLinkText("", "https://x/y") === "Imagem da tua evolução (ligação válida 7 dias):\nhttps://x/y");
+  fakeStorage();
+  var wa = await evolutionWhatsappUrl({phone: "912345678"}, {toBlob: function(cb){ cb(fakeBlob(1000)); }}, "Olá Diana! Aqui está a tua evolução."), q = decodeURIComponent(wa.split("?text=")[1] || "");
+  check.check("23. A ligação wa.me é a da conversa do aluno (351…) com a mensagem e, no fim, a ligação à imagem guardada", /^https:\/\/wa\.me\/351912345678\?text=/.test(wa) && q.indexOf("Olá Diana! Aqui está a tua evolução.\n\nImagem da tua evolução") === 0 && q.slice(-"?token=abc".length) === "?token=abc" && q.indexOf("https://x.supabase.co/storage/v1/object/sign/progress-photos/" + calls.uploads[0][0]) > 0);
+  var e4 = await rejects(function(){ return evolutionWhatsappUrl({phone: "912345678"}, {toBlob: function(cb){ cb(null); }}, "x"); });
+  check.check("24. Sem imagem gerada não se guarda nem se cria ligação nenhuma", /não foi possível gerar a imagem/.test(e4) && calls.uploads.length === 1);
+
+  check.check("25. Janela: o botão da ligação só existe com telefone e começa desativado; o clique usa a imagem gerada, regista o contacto, abre a conversa e, se falhar, avisa e deixa a partilha",
+    /\(hasPhone \? "<button type=\\"button\\" class=\\"btn primary\\" id=\\"evWaLink\\"[\s\S]*?disabled>Abrir no WhatsApp com ligação à imagem<\/button>" : ""\)/.test(fn) && /cvNow = canvas;/.test(fn) && /evolutionWhatsappUrl\(s, cvNow, text\)/.test(fn) && /contactLogAdd\(s, \{kind: "contacto", channel: "whatsapp", reason: "generico"\}\)[\s\S]*openWhatsappChat\(url\)/.test(fn) && /Não consegui preparar a ligação à imagem/.test(fn) && /Só a mensagem, sem imagem/.test(fn));
   check.summarize();
-}, 50);
+})();
