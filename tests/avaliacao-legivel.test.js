@@ -56,4 +56,12 @@ check.check("23. Com mais de 400 dias de pesagens o gráfico começa em «1 ano�
 state.weightRange = 0;
 check.check("24. A escolha do período fica guardada e os botões estão ligados", weightRangeDays(sLong) === 0 && /state\.weightRange = parseInt\(b\.getAttribute\("data-wrange"\), 10\) \|\| 0/.test(appSource));
 state.weightRange = null;
+// arrastar o dedo pelo gráfico
+var sv = trendChartSvg(W, {});
+var dp = (sv.match(/data-p="([^"]+)"/) || [])[1] || "";
+var cp = chartPoints(dp.replace(/&amp;/g, "&"));
+check.check("25. O gráfico leva um ponto por dia (x|y|data · valor · tendência) e um cursor escondido", cp.length === 120 && /^\d{2}\/\d{2}\/\d{4} · [\d,]+ kg · tendência [\d,]+$/.test(cp[0].label) && /class="tc-cursor" visibility="hidden"/.test(sv) && /toca e arrasta para ver cada dia/.test(sv));
+check.check("26. O ponto mais próximo do dedo é o certo (nas pontas e no meio)", chartNearest(cp, -50) === cp[0] && chartNearest(cp, 9999) === cp[cp.length - 1] && chartNearest(cp, cp[60].x + 0.1) === cp[60]);
+check.check("27. Sem suavização (poucos pontos) a etiqueta não fala de tendência", !/tendência/.test(chartPoints((trendChartSvg([{date: "2026-01-01", w: 70}, {date: "2026-01-05", w: 69.5}], {}).match(/data-p="([^"]+)"/) || [])[1])[0].label));
+check.check("28. Toque, arrastar e rato ligados; a página continua a deslizar na vertical (touch-action: pan-y)", /\["pointerdown", "pointermove", "pointerleave"\]\.forEach\(function\(ev\)\{ document\.addEventListener\(ev, chartScrub, true\); \}\);/.test(appSource) && /\.tchart\{touch-action:pan-y;/.test(require("fs").readFileSync(__dirname + "/../app.css", "utf8")));
 check.summarize();

@@ -8443,6 +8443,7 @@ function tplEvolucaoAluno(s, opts){
       statTile("Objetivo", s.weightGoal ? ptNum(s.weightGoal, 1) + " kg" : "—") +
       statTile("Diferença", diff == null ? "—" : (diff>0?"+":"") + ptNum(diff, 1) + " kg") +
     "</div>" +
+    (opts.editable && (s.weights || []).length >= 2 ? "<button type=\"button\" class=\"btn btn-sm\" id=\"sendEvolution\" style=\"margin-top:12px;\">Enviar evolução ao aluno</button>" : "") +
     (trend!=null ? "<p class=\"muted-p\" style=\"margin-top:12px;\">Tendência recente: <span class=\"num\" style=\"color:var(--ink); font-weight:600;\">" + (trend>0?"+":"") + ptNum(trend, 2) + " kg/semana</span></p>" : "") +
   "</div>";
 
@@ -9476,6 +9477,151 @@ function drawComparisonSlide(canvas, d){
   }
   return canvas;
 }
+/* ---------- Enviar a evolução ao aluno (imagem + mensagem de WhatsApp) ---------- */
+function evolutionSummary(s, rangeDays){
+  var byDay = {};
+  (s.weights || []).forEach(function(w){ var v = Number(w && w.w); if (w && isIsoDate(w.date) && v > 0) (byDay[w.date] = byDay[w.date] || []).push(v); });
+  var pts = Object.keys(byDay).sort().map(function(d){ var a = byDay[d]; return {date: d, x: dayNum(d), v: a.reduce(function(p, c){ return p + c; }, 0) / a.length}; });
+  if (rangeDays > 0 && pts.length){ var cutX = pts[pts.length - 1].x - rangeDays; pts = pts.filter(function(p){ return p.x >= cutX; }); }
+  if (pts.length < 2) return null;
+  var cur = Number(s.weightCurrent) > 0 ? Number(s.weightCurrent) : pts[pts.length - 1].v;
+  var init = Number(s.weightInitial) > 0 ? Number(s.weightInitial) : null;
+  var goal = Number(s.weightGoal) > 0 ? Number(s.weightGoal) : null;
+  var bc = bodyCompNow(s);
+  return {name: String(s.name || "").trim(), first: String(s.name || "").trim().split(/\s+/)[0] || "", pts: pts, cur: cur, init: init, goal: goal,
+    diff: init != null ? Math.round((cur - init) * 10) / 10 : null, trend: computeWeeklyTrend(s.weights), bf: bc ? bc.bf : null, from: pts[0].date, to: pts[pts.length - 1].date};
+}
+function evolutionMessage(sum){
+  var t = "Olá" + (sum.first ? " " + sum.first : "") + "! Aqui está a tua evolução: peso atual " + ptNum(sum.cur, 1) + " kg";
+  if (sum.diff != null && Math.abs(sum.diff) >= 0.05) t += " (" + (sum.diff < 0 ? "−" : "+") + ptNum(Math.abs(sum.diff), 1) + " kg desde o início)";
+  t += ".";
+  if (sum.goal){ var left = Math.round((sum.cur - sum.goal) * 10) / 10; t += " Objetivo: " + ptNum(sum.goal, 1) + " kg" + (Math.abs(left) < 0.05 ? " (atingido!)" : " (faltam " + ptNum(Math.abs(left), 1) + " kg)") + "."; }
+  if (sum.trend != null && Math.abs(sum.trend) >= 0.01) t += " Tendência recente: " + (sum.trend > 0 ? "+" : "−") + ptNum(Math.abs(sum.trend), 2) + " kg/semana.";
+  return t + " Segue o plano, estou contigo.";
+}
+var EVOLUTION_SLIDE_W = 1080, EVOLUTION_SLIDE_H = 1350;
+// imagem 1080×1350 (fundo preto, peso grande, gráfico com tendência e objetivo, quadros e marca); função de desenho pura
+function drawEvolutionSlide(canvas, d){
+  var W = EVOLUTION_SLIDE_W, H = EVOLUTION_SLIDE_H, pad = 30;
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext("2d");
+  var FONT = "Manrope, -apple-system, Helvetica, sans-serif", DISPLAY = "Jura, Manrope, -apple-system, sans-serif", MUTED = "#8A91A0", ORANGE = "#E85D2C";
+  ctx.fillStyle = "#000000"; ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = "alphabetic"; ctx.textAlign = "center";
+  ctx.fillStyle = ORANGE; ctx.font = "700 28px " + FONT; if ("letterSpacing" in ctx) ctx.letterSpacing = "6px";
+  ctx.fillText(d.first ? "A EVOLUÇÃO DE " + d.first.toUpperCase() : "A TUA EVOLUÇÃO", W / 2, 96);
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  ctx.fillStyle = "#ffffff"; ctx.font = "700 132px " + DISPLAY; ctx.fillText(ptNum(d.cur, 1) + " KG", W / 2, 250);
+  var sub = d.diff != null && Math.abs(d.diff) >= 0.05 ? (d.diff < 0 ? "−" : "+") + ptNum(Math.abs(d.diff), 1) + " kg desde o início" : "";
+  if (sub){ ctx.fillStyle = "#7ED9A0"; ctx.font = "600 38px " + FONT; ctx.fillText(sub, W / 2, 316); }
+  // gráfico
+  var gx0 = 130, gx1 = W - 50, gy0 = 380, gy1 = 880, pts = d.pts;
+  var x0 = pts[0].x, x1 = pts[pts.length - 1].x, span = Math.max(1, x1 - x0);
+  var lo = Math.min.apply(null, pts.map(function(p){ return p.v; })), hi = Math.max.apply(null, pts.map(function(p){ return p.v; }));
+  var goal = d.goal && d.goal > lo - (hi - lo + 1) * 2 && d.goal < hi + (hi - lo + 1) * 2 ? d.goal : null;
+  if (goal != null){ lo = Math.min(lo, goal); hi = Math.max(hi, goal); }
+  var step = chartNiceStep(Math.max(hi - lo, 0.2));
+  lo = Math.floor((lo - 1e-9) / step) * step; hi = Math.ceil((hi + 1e-9) / step) * step; if (hi - lo < step * 2) hi = lo + step * 2;
+  var X = function(x){ return gx0 + (x - x0) / span * (gx1 - gx0); }, Y = function(v){ return gy0 + (hi - v) / (hi - lo) * (gy1 - gy0); };
+  ctx.font = "400 26px " + FONT; ctx.textAlign = "right"; ctx.lineWidth = 2;
+  for (var v = lo; v <= hi + step / 1000; v += step){
+    ctx.strokeStyle = "#1c2028"; ctx.beginPath(); ctx.moveTo(gx0, Y(v)); ctx.lineTo(gx1, Y(v)); ctx.stroke();
+    ctx.fillStyle = MUTED; ctx.fillText(ptNum(v, step < 1 ? 1 : 0), gx0 - 14, Y(v) + 9);
+  }
+  ctx.textAlign = "center"; ctx.fillStyle = MUTED; ctx.font = "400 26px " + FONT;
+  var MESES = PT_MONTHS_SHORT, labelOf = function(iso){ return span > 400 ? iso.slice(0, 4) : span >= 60 ? MESES[parseInt(iso.slice(5, 7), 10) - 1] + (span > 200 ? " " + iso.slice(2, 4) : "") : iso.slice(8) + "/" + iso.slice(5, 7); };
+  var nLab = span >= 60 ? 5 : 4;
+  for (var i = 0; i < nLab; i++){ var dx = Math.round(x0 + span * i / (nLab - 1)), iso = new Date(dx * 86400000).toISOString().slice(0, 10); ctx.textAlign = i === 0 ? "left" : i === nLab - 1 ? "right" : "center"; ctx.fillText(labelOf(iso), i === 0 ? gx0 : i === nLab - 1 ? gx1 : X(dx), gy1 + 46); }
+  if (goal != null){
+    ctx.strokeStyle = "#7ED9A0"; ctx.lineWidth = 3; ctx.setLineDash && ctx.setLineDash([14, 10]);
+    ctx.beginPath(); ctx.moveTo(gx0, Y(goal)); ctx.lineTo(gx1, Y(goal)); ctx.stroke(); ctx.setLineDash && ctx.setLineDash([]);
+    ctx.fillStyle = "#7ED9A0"; ctx.textAlign = "right"; ctx.font = "600 26px " + FONT; ctx.fillText("objetivo " + ptNum(goal, 1), gx1, Y(goal) - 12);
+  }
+  var gapDays = Math.max(30, Math.round(span / 15)), half = Math.max(2, Math.min(10, Math.round(Math.min(span, 365) / 30))), smooth = pts.length >= 8;
+  var segs = [[]]; pts.forEach(function(p, k){ if (k && p.x - pts[k - 1].x > gapDays) segs.push([]); segs[segs.length - 1].push(p); });
+  if (smooth){ ctx.fillStyle = "rgba(138,145,160,0.55)"; pts.forEach(function(p){ ctx.beginPath(); ctx.arc(X(p.x), Y(p.v), pts.length > 120 ? 3 : 4.5, 0, Math.PI * 2); ctx.fill(); }); }
+  var lastTrend = pts[pts.length - 1];
+  ctx.strokeStyle = ORANGE; ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  segs.forEach(function(sg){
+    var tr = smooth && sg.length >= 3 ? trendSeries(sg, half) : sg;
+    if (tr.length < 2) return;
+    ctx.beginPath(); tr.forEach(function(p, k){ if (k) ctx.lineTo(X(p.x), Y(p.v)); else ctx.moveTo(X(p.x), Y(p.v)); }); ctx.stroke();
+  });
+  var first = pts[0], last = pts[pts.length - 1];
+  ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(X(last.x), Y(last.v), 11, 0, Math.PI * 2); ctx.fill();
+  ctx.font = "700 32px " + FONT; ctx.textAlign = "left"; ctx.fillText(ptNum(first.v, 1), gx0 + 8, Math.max(gy0 + 30, Y(first.v) - 18));
+  ctx.textAlign = "right"; ctx.fillText(ptNum(last.v, 1), X(last.x) - 20, Y(last.v) > gy0 + 50 ? Y(last.v) - 22 : Y(last.v) + 44);
+  // quadros
+  var tiles = [["INICIAL", d.init != null ? ptNum(d.init, 1) + " kg" : null], ["ATUAL", ptNum(d.cur, 1) + " kg"], ["DIFERENÇA", d.diff != null ? (d.diff > 0 ? "+" : d.diff < 0 ? "−" : "") + ptNum(Math.abs(d.diff), 1) + " kg" : null],
+    ["OBJETIVO", d.goal ? ptNum(d.goal, 1) + " kg" : null], ["MASSA GORDA", d.bf != null ? ptNum(d.bf, 1) + " %" : null]].filter(function(t){ return t[1]; }).slice(0, 4);
+  var tg = 16, tw = (W - pad * 2 - tg * (tiles.length - 1)) / tiles.length, ty = 985, th = 170;
+  tiles.forEach(function(t, k){
+    var tx = pad + k * (tw + tg);
+    ctx.fillStyle = "#14171c"; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(tx, ty, tw, th, 22); else ctx.rect(tx, ty, tw, th); ctx.fill();
+    ctx.textAlign = "center"; ctx.fillStyle = "#ffffff"; ctx.font = "700 " + (tiles.length > 3 ? 40 : 46) + "px " + DISPLAY; ctx.fillText(t[1], tx + tw / 2, ty + 88);
+    ctx.fillStyle = MUTED; ctx.font = "600 22px " + FONT; if ("letterSpacing" in ctx) ctx.letterSpacing = "3px"; ctx.fillText(t[0], tx + tw / 2, ty + 132); if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  });
+  ctx.textAlign = "center"; ctx.fillStyle = MUTED; ctx.font = "400 27px " + FONT;
+  ctx.fillText(fmtDateFullPt(d.from) + " → " + fmtDateFullPt(d.to) + (d.trend != null && Math.abs(d.trend) >= 0.01 ? " · tendência " + (d.trend > 0 ? "+" : "−") + ptNum(Math.abs(d.trend), 2) + " kg/semana" : ""), W / 2, 1218);
+  // barra laranja e marca (como no antes e depois)
+  var logoW = 300, markLeft = W - pad - logoW;
+  ctx.fillStyle = ORANGE; ctx.fillRect(0, H - 52 - 3, markLeft - 30, 6);
+  if (d.logo){ var lw = logoW, sx = 66, sy = 334, sw = 756, sh = 220, lh = Math.round(lw * sh / sw); ctx.drawImage(d.logo, sx, sy, sw, sh, W - pad - lw, H - 52 - lh / 2, lw, lh); }
+  else { ctx.fillStyle = "#ffffff"; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.font = "600 44px " + DISPLAY; ctx.fillText("≡EVOLVE≡", W - pad, H - 50); }
+  return canvas;
+}
+var evolutionAssets = null;
+function evolutionPrepare(){
+  if (evolutionAssets) return evolutionAssets;
+  var fonts = (document.fonts && document.fonts.load) ? Promise.all([document.fonts.load("700 50px Jura"), document.fonts.load("400 30px Manrope"), document.fonts.load("700 30px Manrope")]).catch(function(){}) : Promise.resolve();
+  var logo = null;
+  evolutionAssets = Promise.all([fonts, loadImageAsElement("logo-evolve.jpg").then(function(img){ logo = img; }).catch(function(){})]).then(function(){ return {logo: logo}; });
+  return evolutionAssets;
+}
+function openEvolutionShare(s){
+  var cur = weightRangeDays(s), hasPhone = normalizePhone(s.phone).ok, blobNow = null;
+  var sheet = openModal("<div class=\"mtitle\">Enviar evolução a " + escapeHtml(s.name) + "</div>" +
+    "<div class=\"assess-metrics\" id=\"evRange\" role=\"group\" aria-label=\"Período\">" + WEIGHT_RANGES.map(function(r){ return "<button type=\"button\" class=\"chip" + (r[0] === cur ? " on" : "") + "\" data-evr=\"" + r[0] + "\" aria-pressed=\"" + (r[0] === cur ? "true" : "false") + "\">" + r[1] + "</button>"; }).join("") + "</div>" +
+    "<div id=\"evPreview\" style=\"min-height:120px;\"><p class=\"muted-p\">A preparar a imagem…</p></div>" +
+    "<button type=\"button\" class=\"btn primary\" id=\"evSendImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem</button>" +
+    "<div class=\"checkin-field\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
+    (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Abrir mensagem no WhatsApp</a>"
+      : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser enviada na mesma.</p>") +
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">O WhatsApp não deixa juntar a imagem à mensagem: envia a imagem e, se quiseres, a mensagem.</p>");
+  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
+  function syncWa(){ if (wa) wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); }
+  msg.addEventListener("input", syncWa);
+  if (wa) wa.addEventListener("click", function(){ syncWa(); contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); });
+  function build(range){
+    var my = ++token, sum = evolutionSummary(s, range);
+    blobNow = null; sendBtn.disabled = true;
+    if (!sum){ prev.innerHTML = "<p class=\"muted-p\">Há poucas pesagens neste período: escolhe um período maior.</p>"; msg.value = ""; syncWa(); return; }
+    msg.value = evolutionMessage(sum); syncWa();
+    evolutionPrepare().then(function(a){
+      if (my !== token) return;
+      var canvas = document.createElement("canvas");
+      drawEvolutionSlide(canvas, Object.assign({logo: a.logo}, sum));
+      canvas.toBlob(function(b){
+        if (my !== token) return;
+        if (!b){ prev.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível gerar a imagem. Tenta novamente.</p>"; return; }
+        blobNow = b;
+        prev.innerHTML = "<img src=\"" + canvas.toDataURL("image/png") + "\" alt=\"Evolução do peso\" style=\"width:100%; border-radius:12px; background:#000;\">";
+        sendBtn.disabled = false;
+      }, "image/png");
+    });
+  }
+  sheet.querySelectorAll("[data-evr]").forEach(function(b){
+    b.addEventListener("click", function(){
+      sheet.querySelectorAll("[data-evr]").forEach(function(x){ var on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on ? "true" : "false"); });
+      build(parseInt(b.getAttribute("data-evr"), 10) || 0);
+    });
+  });
+  sendBtn.addEventListener("click", function(){
+    if (!blobNow) return;
+    deliverComparisonImage([{blob: blobNow, name: "evolucao-" + slug(s.name || s.id) + "-" + todayISO() + ".png"}], null, s.name);
+  });
+  build(cur);
+}
 function comparisonHeadFor(s, date){
   var a = assessmentForDate(s, date);
   var w = weightForDate(s, date, a);
@@ -9674,8 +9820,14 @@ function trendChartSvg(points, opts){
     "<circle class=\"tc-last\" cx=\"" + f1(X(last.x)) + "\" cy=\"" + f1(Y(last.v)) + "\" r=\"4.5\"></circle>" +
     "<text class=\"tc-v\" x=\"" + f1(X(last.x) - 8) + "\" y=\"" + f1(Y(last.v) > T + 20 ? Y(last.v) - 9 : Y(last.v) + 18) + "\" text-anchor=\"end\">" + ptNum(last.v, dg) + "</text>";
   var aria = "De " + ptNum(first.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(first.date) + " para " + ptNum(last.v, dg) + (unit ? " " + unit : "") + " em " + fmtDateFullPt(last.date) + (goal != null ? "; objetivo " + ptNum(goal, dg) + (unit ? " " + unit : "") : "");
-  return "<svg class=\"tchart\" viewBox=\"0 0 " + W + " " + H + "\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"" + escapeHtml(aria) + "\">" + svg + "</svg>" +
-    "<div class=\"chart-legend\">" + (smooth ? "<span><i class=\"lg-dot\"></i>" + escapeHtml(opts.pointsLabel || "pesagens") + "</span><span><i class=\"lg-line\"></i>tendência</span>" : "") + (goal != null ? "<span><i class=\"lg-goal\"></i>objetivo</span>" : "") + "</div>";
+  // pontos para o dedo: x|y|texto (separados por «;»), na escala do desenho; o cursor liga-se em chartScrub
+  var tv = {}; trend.forEach(function(p){ tv[p.x] = p.v; });
+  var dataP = pts.map(function(p){
+    return f1(X(p.x)) + "|" + f1(Y(p.v)) + "|" + fmtDateFullPt(p.date) + " · " + ptNum(p.v, dg) + (unit ? " " + unit : "") + (smooth && tv[p.x] != null ? " · tendência " + ptNum(tv[p.x], dg) : "");
+  }).join(";");
+  svg += "<g class=\"tc-cursor\" visibility=\"hidden\"><line x1=\"0\" x2=\"0\" y1=\"" + T + "\" y2=\"" + (H - B) + "\"></line><circle r=\"5\" cx=\"0\" cy=\"0\"></circle><g class=\"tc-tip\"><rect rx=\"6\" height=\"22\"></rect><text></text></g></g>";
+  return "<svg class=\"tchart\" viewBox=\"0 0 " + W + " " + H + "\" data-w=\"" + W + "\" data-p=\"" + escapeHtml(dataP) + "\" xmlns=\"http://www.w3.org/2000/svg\" role=\"img\" aria-label=\"" + escapeHtml(aria) + "\">" + svg + "</svg>" +
+    "<div class=\"chart-legend\">" + "<span class=\"hint\">toca e arrasta para ver cada dia</span>" + (smooth ? "<span><i class=\"lg-dot\"></i>" + escapeHtml(opts.pointsLabel || "pesagens") + "</span><span><i class=\"lg-line\"></i>tendência</span>" : "") + (goal != null ? "<span><i class=\"lg-goal\"></i>objetivo</span>" : "") + "</div>";
 }
 // período do gráfico do peso: com muitos meses de pesagens começa no último ano (escolhe-se 3 meses, 6 meses, 1 ano ou tudo)
 var WEIGHT_RANGES = [[90, "3 meses"], [182, "6 meses"], [365, "1 ano"], [0, "Tudo"]];
@@ -9695,6 +9847,38 @@ function tplWeightRange(s){
     return "<button type=\"button\" class=\"chip" + (on ? " on" : "") + "\" data-wrange=\"" + r[0] + "\" aria-pressed=\"" + (on ? "true" : "false") + "\">" + r[1] + "</button>";
   }).join("") + "</div>";
 }
+// «x|y|texto;x|y|texto…» -> lista (testável); o ponto mais próximo de um x (na escala do desenho)
+function chartPoints(str){
+  return String(str || "").split(";").filter(Boolean).map(function(q){ var a = q.split("|"); return {x: parseFloat(a[0]), y: parseFloat(a[1]), label: a.slice(2).join("|")}; });
+}
+function chartNearest(pts, vx){
+  var best = null, bd = 1e9;
+  pts.forEach(function(p){ var d = Math.abs(p.x - vx); if (d < bd){ bd = d; best = p; } });
+  return best;
+}
+// arrastar o dedo (ou passar o rato) pelo gráfico mostra a data e o valor do dia mais próximo
+function chartScrub(e){
+  var t = e.target, svg = t && t.closest ? t.closest(".tchart") : null;
+  if (!svg) return;
+  if (e.type === "pointerleave"){ if (e.pointerType === "mouse"){ var c0 = svg.querySelector(".tc-cursor"); if (c0) c0.setAttribute("visibility", "hidden"); } return; }
+  var cur = svg.querySelector(".tc-cursor");
+  if (!cur) return;
+  var r = svg.getBoundingClientRect(), W = parseFloat(svg.getAttribute("data-w")) || 380;
+  if (!r.width) return;
+  var pts = svg._pts || (svg._pts = chartPoints(svg.getAttribute("data-p")));
+  var p = chartNearest(pts, (e.clientX - r.left) / r.width * W);
+  if (!p) return;
+  cur.setAttribute("visibility", "visible");
+  var ln = cur.querySelector("line"), dot = cur.querySelector("circle"), tip = cur.querySelector(".tc-tip"), rect = tip.querySelector("rect"), tx = tip.querySelector("text");
+  ln.setAttribute("x1", p.x); ln.setAttribute("x2", p.x); dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y);
+  tx.textContent = p.label;
+  var w = 160; try { w = tx.getBBox().width; } catch (e2) { w = p.label.length * 6.4; }
+  w += 14;
+  var rx = Math.max(2, Math.min(W - 2 - w, p.x - w / 2)), ry = p.y - 34 < 2 ? p.y + 12 : p.y - 34;
+  rect.setAttribute("x", rx); rect.setAttribute("y", ry); rect.setAttribute("width", w);
+  tx.setAttribute("x", rx + 7); tx.setAttribute("y", ry + 15);
+}
+["pointerdown", "pointermove", "pointerleave"].forEach(function(ev){ document.addEventListener(ev, chartScrub, true); });
 function phaseChartMarks(s){ return phaseTimeline(s).map(function(t){ return {date: t.date, label: phaseLabel(t.phase)}; }); }
 
 function weightSvg(weights){
@@ -13667,6 +13851,8 @@ function wireProTab(s){
   if (toggleAll) toggleAll.addEventListener("click", function(){ state.assessShowAll = !state.assessShowAll; renderProTabContent(s); });
   el.querySelectorAll(".sort-th").forEach(function(b){ b.addEventListener("click", function(){ toggleAssessSort(b.getAttribute("data-sort")); renderProTabContent(s); }); });
   wireAssessHistory(el, function(){ renderProTabContent(s); });
+  var sendEv = el.querySelector("#sendEvolution");
+  if (sendEv) sendEv.addEventListener("click", function(){ openEvolutionShare(s); });
 
   var importPreviewBtn = el.querySelector("#importWeighPreview");
   if (importPreviewBtn) importPreviewBtn.addEventListener("click", function(){
