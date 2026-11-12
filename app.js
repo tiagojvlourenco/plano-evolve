@@ -9582,23 +9582,90 @@ function evolutionPrepare(){
   evolutionAssets = Promise.all([fonts, loadImageAsElement("logo-evolve.jpg").then(function(img){ logo = img; }).catch(function(){})]).then(function(){ return {logo: logo}; });
   return evolutionAssets;
 }
+// A ligação wa.me do WhatsApp só leva texto, nunca um ficheiro. Por isso a imagem vai para um ficheiro privado (balde progress-photos, pasta
+// «evolucao») e a mensagem leva uma ligação assinada que expira ao fim de EVOLUTION_LINK_DAYS dias: o WhatsApp do profissional pode fazer a
+// miniatura por cima da caixa de texto, antes de enviar (não garantido: depende do WhatsApp). Quem tiver a ligação vê a imagem até ela expirar; os ficheiros já expirados são apagados.
+var EVOLUTION_LINK_DAYS = 7, EVOLUTION_LINK_DIR = "evolucao", EVOLUTION_LINK_MAX_BYTES = 280 * 1024; // o WhatsApp só faz miniatura de imagens com menos de ~600 KB
+// JPEG que cabe no tamanho pedido: baixa a qualidade até ficar leve
+function canvasToJpegUnder(canvas, maxBytes){
+  var qualities = [0.9, 0.8, 0.7, 0.6, 0.5];
+  return new Promise(function(resolve){
+    var i = 0;
+    (function next(){
+      canvas.toBlob(function(b){
+        if (!b || b.size <= maxBytes || i >= qualities.length - 1) return resolve(b);
+        i++; next();
+      }, "image/jpeg", qualities[i]);
+    })();
+  });
+}
+function evolutionImageName(){
+  var a = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(a); else for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+  return Array.prototype.map.call(a, function(x){ return (x < 16 ? "0" : "") + x.toString(16); }).join("") + ".jpg";
+}
+// guarda o JPEG e devolve a ligação assinada (rejeita com a causa se falhar: sem sessão, sem rede, sem permissão)
+function uploadEvolutionImage(blob){
+  if (!sbReady || !sb) return Promise.reject(new Error("sem ligação à conta"));
+  var bucket = sb.storage.from("progress-photos"), path = EVOLUTION_LINK_DIR + "/" + evolutionImageName();
+  return bucket.upload(path, blob, {contentType: "image/jpeg"}).then(function(res){
+    if (res && res.error) throw new Error(res.error.message || "erro de acesso");
+    return bucket.createSignedUrl(path, EVOLUTION_LINK_DAYS * 86400);
+  }).then(function(res){
+    var url = res && res.data && res.data.signedUrl;
+    if (!url) throw new Error((res && res.error && res.error.message) || "não foi possível criar a ligação");
+    purgeOldEvolutionImages(bucket);
+    return url;
+  });
+}
+// apaga as imagens com mais de (validade + 1) dias: já não abrem, só ocupariam espaço. Em segundo plano; se falhar, fica para a próxima vez.
+function purgeOldEvolutionImages(bucket){
+  try {
+    var cutoff = Date.now() - (EVOLUTION_LINK_DAYS + 1) * 86400000;
+    bucket.list(EVOLUTION_LINK_DIR, {limit: 100, sortBy: {column: "created_at", order: "asc"}}).then(function(res){
+      var old = ((res && res.data) || []).filter(function(f){ var t = f && Date.parse(f.created_at); return f && f.name && t > 0 && t < cutoff; }).map(function(f){ return EVOLUTION_LINK_DIR + "/" + f.name; });
+      return old.length ? bucket.remove(old) : null;
+    }).catch(function(){});
+  } catch (e) {}
+}
+// texto final: a mensagem do profissional + a ligação (com a validade, para o aluno saber que deve guardar a imagem)
+function evolutionLinkText(text, url){
+  return (text ? text + "\n\n" : "") + "Imagem da tua evolução (ligação válida " + EVOLUTION_LINK_DAYS + " dias):\n" + url;
+}
+// → Promise da ligação wa.me da conversa do aluno, com a mensagem e a ligação à imagem
+function evolutionWhatsappUrl(s, canvas, text){
+  return canvasToJpegUnder(canvas, EVOLUTION_LINK_MAX_BYTES).then(function(blob){
+    if (!blob) throw new Error("não foi possível gerar a imagem");
+    return uploadEvolutionImage(blob);
+  }).then(function(url){ return whatsappUrl(s.phone, evolutionLinkText(text, url)); });
+}
+// abre a conversa: no telemóvel e na app instalada navega na própria página (abre a app do WhatsApp); num computador abre outro separador para não perder a app
+function openWhatsappChat(url){
+  var touch = !window.matchMedia || window.matchMedia("(pointer: coarse)").matches;
+  var standalone = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  if (!touch && !standalone){ try { var w = window.open(url, "_blank"); if (w){ try { w.opener = null; } catch (e) {} return; } } catch (e) {} }
+  window.location.href = url;
+}
 function openEvolutionShare(s){
-  var cur = weightRangeDays(s), hasPhone = normalizePhone(s.phone).ok, blobNow = null;
+  var cur = weightRangeDays(s), hasPhone = normalizePhone(s.phone).ok, blobNow = null, cvNow = null;
   var sheet = openModal("<div class=\"mtitle\">Enviar evolução a " + escapeHtml(s.name) + "</div>" +
     "<div class=\"assess-metrics\" id=\"evRange\" role=\"group\" aria-label=\"Período\">" + WEIGHT_RANGES.map(function(r){ return "<button type=\"button\" class=\"chip" + (r[0] === cur ? " on" : "") + "\" data-evr=\"" + r[0] + "\" aria-pressed=\"" + (r[0] === cur ? "true" : "false") + "\">" + r[1] + "</button>"; }).join("") + "</div>" +
     "<div id=\"evPreview\" style=\"min-height:120px;\"><p class=\"muted-p\">A preparar a imagem…</p></div>" +
-    "<button type=\"button\" class=\"btn primary\" id=\"evSendImg\" style=\"width:100%; margin:10px 0 8px;\" disabled>Enviar imagem</button>" +
-    "<div class=\"checkin-field\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
-    (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Abrir mensagem no WhatsApp</a>"
-      : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser enviada na mesma.</p>") +
-    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">«Enviar imagem» abre a lista de partilha do telemóvel com a imagem já anexada: escolhe o WhatsApp e o aluno e envia. O WhatsApp não tem ligação que abra a conversa de um número já com uma imagem (só com texto, como «Abrir mensagem no WhatsApp»); a mensagem fica copiada para a colares como legenda.</p>");
-  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
+    "<div class=\"checkin-field\" style=\"margin-top:10px;\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
+    (hasPhone ? "<button type=\"button\" class=\"btn primary\" id=\"evWaLink\" style=\"width:100%; margin:4px 0 8px;\" disabled>Abrir no WhatsApp com ligação à imagem</button>" : "") +
+    "<button type=\"button\" class=\"btn" + (hasPhone ? "" : " primary") + "\" id=\"evSendImg\" style=\"width:100%; margin:" + (hasPhone ? "0 0 8px" : "4px 0 8px") + ";\" disabled>Partilhar a imagem (escolher o aluno)</button>" +
+    (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Só a mensagem, sem imagem</a>"
+      : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser partilhada na mesma.</p>") +
+    "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">" +
+      (hasPhone ? "«Abrir no WhatsApp com ligação à imagem» abre a conversa do aluno com a mensagem e uma ligação à imagem (o WhatsApp pode mostrar a miniatura antes de enviares). A ligação é privada e dura " + EVOLUTION_LINK_DAYS + " dias: quem a tiver vê a imagem até lá. " : "") +
+      "«Partilhar a imagem» envia o próprio ficheiro, mas escolhes o aluno na lista de partilha do telemóvel; a mensagem fica copiada para a colares como legenda.</p>");
+  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), waLink = sheet.querySelector("#evWaLink"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
   function syncWa(){ if (wa) wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); }
   msg.addEventListener("input", syncWa);
   if (wa) wa.addEventListener("click", function(){ syncWa(); contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); });
   function build(range){
     var my = ++token, sum = evolutionSummary(s, range);
-    blobNow = null; sendBtn.disabled = true;
+    blobNow = null; cvNow = null; sendBtn.disabled = true; if (waLink) waLink.disabled = true;
     if (!sum){ prev.innerHTML = "<p class=\"muted-p\">Há poucas pesagens neste período: escolhe um período maior.</p>"; msg.value = ""; syncWa(); return; }
     msg.value = evolutionMessage(sum); syncWa();
     evolutionPrepare().then(function(a){
@@ -9608,9 +9675,9 @@ function openEvolutionShare(s){
       canvas.toBlob(function(b){
         if (my !== token) return;
         if (!b){ prev.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível gerar a imagem. Tenta novamente.</p>"; return; }
-        blobNow = b;
+        blobNow = b; cvNow = canvas;
         prev.innerHTML = "<img src=\"" + canvas.toDataURL("image/png") + "\" alt=\"Evolução do peso\" style=\"width:100%; border-radius:12px; background:#000;\">";
-        sendBtn.disabled = false;
+        sendBtn.disabled = false; if (waLink) waLink.disabled = false;
       }, "image/png");
     });
   }
@@ -9626,6 +9693,18 @@ function openEvolutionShare(s){
     // o WhatsApp não abre uma conversa já com imagem: a folha de partilha deixa escolher o WhatsApp e o aluno; a mensagem fica copiada para colar como legenda
     try { if (text && navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ showToast("✓ Mensagem copiada: cola-a como legenda da imagem"); }, function(){}); copied = true; } } catch (e) {}
     deliverComparisonImage([{blob: blobNow, name: "evolucao-" + slug(s.name || s.id) + "-" + todayISO() + ".png"}], null, s.name, text);
+  });
+  // abre a conversa do aluno com a mensagem + a ligação à imagem (guarda o JPEG, cria a ligação privada e só depois abre o WhatsApp)
+  if (waLink) waLink.addEventListener("click", function(){
+    if (!cvNow || waLink.disabled) return;
+    var label = waLink.textContent, text = msg.value.trim();
+    waLink.disabled = true; waLink.textContent = "A preparar a ligação…";
+    evolutionWhatsappUrl(s, cvNow, text).then(function(url){
+      try { contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); } catch (e) {}
+      openWhatsappChat(url);
+    }).catch(function(err){
+      showToast("⚠ Não consegui preparar a ligação à imagem" + (err && err.message ? " (" + err.message + ")" : "") + ". Usa «Partilhar a imagem».");
+    }).then(function(){ waLink.textContent = label; waLink.disabled = !cvNow; });
   });
   build(cur);
 }

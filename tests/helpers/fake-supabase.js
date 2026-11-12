@@ -212,9 +212,29 @@ module.exports = function fakeSupabaseSource(initial){
           return Promise.resolve({data: {user: {id: INIT.userId}}, error: null});
         }
       },
+      // Storage: regista o que a app guarda (F.uploads: caminho, tipo, tamanho, primeiros bytes e base64), a validade das ligações (F.signedTtls),
+      // o que apaga (F.removed) e devolve F.storageFiles na listagem. F.failUpload / F.failSign simulam recusa do servidor; F.rejectUpload, o pedido que cai (rejeita).
       storage: { from: function(){ return {
-        createSignedUrl: function(path){ F.signedUrls.push(path); return Promise.resolve({data: {signedUrl: "https://signed.test/" + path}, error: null}); },
-        upload: function(){ return Promise.resolve({data: {}, error: null}); }, remove: function(){ return Promise.resolve({}); }
+        createSignedUrl: function(path, ttl){
+          F.signedUrls.push(path); (F.signedTtls = F.signedTtls || []).push(ttl);
+          if (F.failSign) return Promise.resolve({data: null, error: {message: "signing failed"}});
+          return Promise.resolve({data: {signedUrl: "https://signed.test/" + path}, error: null});
+        },
+        upload: function(path, blob, opts){
+          if (F.failUpload) return Promise.resolve({data: null, error: {message: "new row violates row-level security policy"}});
+          if (F.rejectUpload) return Promise.reject(new TypeError("Failed to fetch"));
+          var rec = {path: path, type: opts && opts.contentType, size: blob && blob.size};
+          (F.uploads = F.uploads || []).push(rec);
+          if (!blob || !blob.arrayBuffer) return Promise.resolve({data: {path: path}, error: null});
+          return blob.arrayBuffer().then(function(buf){
+            var u = new Uint8Array(buf), bin = "";
+            for (var i = 0; i < u.length; i++) bin += String.fromCharCode(u[i]);
+            rec.head = Array.prototype.slice.call(u.subarray(0, 3)); rec.b64 = btoa(bin);
+            return {data: {path: path}, error: null};
+          });
+        },
+        list: function(dir){ (F.listed = F.listed || []).push(dir); return Promise.resolve({data: (F.storageFiles || []).slice(), error: null}); },
+        remove: function(paths){ (F.removed = F.removed || []).push(paths); return Promise.resolve({data: [], error: null}); }
       }; } },
       channel: function(){ return {on: function(){ return this; }, subscribe: function(){ return this; }}; }
     };
