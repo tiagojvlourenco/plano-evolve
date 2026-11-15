@@ -9652,20 +9652,18 @@ function openEvolutionShare(s){
     "<div class=\"assess-metrics\" id=\"evRange\" role=\"group\" aria-label=\"Período\">" + WEIGHT_RANGES.map(function(r){ return "<button type=\"button\" class=\"chip" + (r[0] === cur ? " on" : "") + "\" data-evr=\"" + r[0] + "\" aria-pressed=\"" + (r[0] === cur ? "true" : "false") + "\">" + r[1] + "</button>"; }).join("") + "</div>" +
     "<div id=\"evPreview\" style=\"min-height:120px;\"><p class=\"muted-p\">A preparar a imagem…</p></div>" +
     "<div class=\"checkin-field\" style=\"margin-top:10px;\"><label for=\"evMsg\">Mensagem (podes editar)</label><textarea id=\"evMsg\" rows=\"5\"></textarea></div>" +
-    (hasPhone ? "<button type=\"button\" class=\"btn primary\" id=\"evWaLink\" style=\"width:100%; margin:4px 0 8px;\" disabled>Abrir no WhatsApp com ligação à imagem</button>" : "") +
     "<button type=\"button\" class=\"btn" + (hasPhone ? "" : " primary") + "\" id=\"evSendImg\" style=\"width:100%; margin:" + (hasPhone ? "0 0 8px" : "4px 0 8px") + ";\" disabled>Partilhar a imagem (escolher o aluno)</button>" +
     (hasPhone ? "<a class=\"btn\" id=\"evWa\" href=\"#\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:block; text-align:center; text-decoration:none;\">Só a mensagem, sem imagem</a>"
       : "<p class=\"muted-p\">Sem telefone na ficha: acrescenta-o no Perfil para abrir o WhatsApp. A imagem pode ser partilhada na mesma.</p>") +
     "<p class=\"muted-p\" style=\"font-size:0.76rem; margin-top:8px;\">" +
-      (hasPhone ? "«Abrir no WhatsApp com ligação à imagem» abre a conversa do aluno com a mensagem e uma ligação à imagem (o WhatsApp pode mostrar a miniatura antes de enviares). A ligação é privada e dura " + EVOLUTION_LINK_DAYS + " dias: quem a tiver vê a imagem até lá. " : "") +
       "«Partilhar a imagem» envia o próprio ficheiro, mas escolhes o aluno na lista de partilha do telemóvel; a mensagem fica copiada para a colares como legenda.</p>");
-  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), waLink = sheet.querySelector("#evWaLink"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
+  var msg = sheet.querySelector("#evMsg"), wa = sheet.querySelector("#evWa"), sendBtn = sheet.querySelector("#evSendImg"), prev = sheet.querySelector("#evPreview"), token = 0;
   function syncWa(){ if (wa) wa.setAttribute("href", whatsappUrl(s.phone, msg.value.trim())); }
   msg.addEventListener("input", syncWa);
   if (wa) wa.addEventListener("click", function(){ syncWa(); contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); });
   function build(range){
     var my = ++token, sum = evolutionSummary(s, range);
-    blobNow = null; cvNow = null; sendBtn.disabled = true; if (waLink) waLink.disabled = true;
+    blobNow = null; cvNow = null; sendBtn.disabled = true;
     if (!sum){ prev.innerHTML = "<p class=\"muted-p\">Há poucas pesagens neste período: escolhe um período maior.</p>"; msg.value = ""; syncWa(); return; }
     msg.value = evolutionMessage(sum); syncWa();
     evolutionPrepare().then(function(a){
@@ -9677,7 +9675,7 @@ function openEvolutionShare(s){
         if (!b){ prev.innerHTML = "<p class=\"muted-p\" style=\"color:var(--critical);\">Não foi possível gerar a imagem. Tenta novamente.</p>"; return; }
         blobNow = b; cvNow = canvas;
         prev.innerHTML = "<img src=\"" + canvas.toDataURL("image/png") + "\" alt=\"Evolução do peso\" style=\"width:100%; border-radius:12px; background:#000;\">";
-        sendBtn.disabled = false; if (waLink) waLink.disabled = false;
+        sendBtn.disabled = false;
       }, "image/png");
     });
   }
@@ -9693,18 +9691,6 @@ function openEvolutionShare(s){
     // o WhatsApp não abre uma conversa já com imagem: a folha de partilha deixa escolher o WhatsApp e o aluno; a mensagem fica copiada para colar como legenda
     try { if (text && navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ showToast("✓ Mensagem copiada: cola-a como legenda da imagem"); }, function(){}); copied = true; } } catch (e) {}
     deliverComparisonImage([{blob: blobNow, name: "evolucao-" + slug(s.name || s.id) + "-" + todayISO() + ".png"}], null, s.name, text);
-  });
-  // abre a conversa do aluno com a mensagem + a ligação à imagem (guarda o JPEG, cria a ligação privada e só depois abre o WhatsApp)
-  if (waLink) waLink.addEventListener("click", function(){
-    if (!cvNow || waLink.disabled) return;
-    var label = waLink.textContent, text = msg.value.trim();
-    waLink.disabled = true; waLink.textContent = "A preparar a ligação…";
-    evolutionWhatsappUrl(s, cvNow, text).then(function(url){
-      try { contactLogAdd(s, {kind: "contacto", channel: "whatsapp", reason: "generico"}); } catch (e) {}
-      openWhatsappChat(url);
-    }).catch(function(err){
-      showToast("⚠ Não consegui preparar a ligação à imagem" + (err && err.message ? " (" + err.message + ")" : "") + ". Usa «Partilhar a imagem».");
-    }).then(function(){ waLink.textContent = label; waLink.disabled = !cvNow; });
   });
   build(cur);
 }

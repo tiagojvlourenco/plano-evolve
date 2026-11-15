@@ -98,7 +98,7 @@ async function rejects(f){ try { await f(); return null; } catch (e) { return e.
   var e4 = await rejects(function(){ return evolutionWhatsappUrl({phone: "912345678"}, {toBlob: function(cb){ cb(null); }}, "x"); });
   check.check("24. Sem imagem gerada não se guarda nem se cria ligação nenhuma", /não foi possível gerar a imagem/.test(e4) && calls.uploads.length === 1);
 
-  check.check("25. Janela: o botão da ligação só existe com telefone e começa desativado; o clique usa a imagem gerada, regista o contacto, abre a conversa e, se falhar, avisa e deixa a partilha",
-    /\(hasPhone \? "<button type=\\"button\\" class=\\"btn primary\\" id=\\"evWaLink\\"[\s\S]*?disabled>Abrir no WhatsApp com ligação à imagem<\/button>" : ""\)/.test(fn) && /cvNow = canvas;/.test(fn) && /evolutionWhatsappUrl\(s, cvNow, text\)/.test(fn) && /contactLogAdd\(s, \{kind: "contacto", channel: "whatsapp", reason: "generico"\}\)[\s\S]*openWhatsappChat\(url\)/.test(fn) && /Não consegui preparar a ligação à imagem/.test(fn) && /Só a mensagem, sem imagem/.test(fn));
+  check.check("25. Janela: sem o botão «Abrir no WhatsApp com ligação à imagem» (retirado); ficam «Partilhar a imagem» e «Só a mensagem, sem imagem»",
+    !/evWaLink|waLink|Abrir no WhatsApp com ligação à imagem/.test(fn) && /Partilhar a imagem \(escolher o aluno\)/.test(fn) && /Só a mensagem, sem imagem/.test(fn));
   check.summarize();
 })();
